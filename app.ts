@@ -68,6 +68,7 @@ type AppState = {
   currentExerciseIndex: number;
   isResting: boolean;
   timerSeconds: number;
+  preCountdown: number;
   selectedHandRoutine: HandRoutineId | null;
   currentHandExerciseIndex: number;
 };
@@ -381,9 +382,57 @@ const state: AppState = {
   currentExerciseIndex: 0,
   isResting: false,
   timerSeconds: 0,
+  preCountdown: 0,
   selectedHandRoutine: null,
   currentHandExerciseIndex: 0,
 };
+
+let audioCtx: AudioContext | null = null;
+
+function getAudioCtx(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  if (!audioCtx) {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return null;
+    audioCtx = new Ctx();
+  }
+  return audioCtx;
+}
+
+function playBeep(frequency: number, durationMs: number): void {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') {
+    void ctx.resume();
+  }
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.value = frequency;
+  osc.type = 'sine';
+  const now = ctx.currentTime;
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.35, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + durationMs / 1000);
+  osc.start(now);
+  osc.stop(now + durationMs / 1000);
+}
+
+function playCountBeep(): void {
+  playBeep(520, 120);
+}
+
+function playGoBeep(): void {
+  playBeep(880, 200);
+}
+
+function playFinishBeep(): void {
+  playBeep(660, 180);
+  setTimeout(() => playBeep(880, 350), 180);
+}
 
 let timerInterval: number | null = null;
 
@@ -429,12 +478,35 @@ function startTimer(seconds: number, onComplete: () => void): void {
   render();
   timerInterval = window.setInterval(() => {
     state.timerSeconds -= 1;
+    if (state.timerSeconds > 0 && state.timerSeconds <= 3) {
+      playCountBeep();
+    }
     if (state.timerSeconds <= 0) {
       clearTimer();
       state.timerSeconds = 0;
+      playFinishBeep();
       onComplete();
     }
     render();
+  }, 1000);
+}
+
+function startPreCountdown(then: () => void): void {
+  state.preCountdown = 3;
+  playCountBeep();
+  render();
+  const interval = window.setInterval(() => {
+    state.preCountdown -= 1;
+    if (state.preCountdown <= 0) {
+      clearInterval(interval);
+      state.preCountdown = 0;
+      playGoBeep();
+      render();
+      then();
+    } else {
+      playCountBeep();
+      render();
+    }
   }, 1000);
 }
 
@@ -501,10 +573,14 @@ function skipRest(): void {
 function startTimedExercise(): void {
   const ex = getCurrentExercise();
   if (!ex || !ex.durationSec) return;
-  startTimer(ex.durationSec, () => {
-    if (ex.name === 'Wall sit') {
-      state.wallSitSec = Math.max(state.wallSitSec, ex.durationSec ?? 0);
-    }
+  const duration = ex.durationSec;
+  const exerciseName = ex.name;
+  startPreCountdown(() => {
+    startTimer(duration, () => {
+      if (exerciseName === 'Wall sit') {
+        state.wallSitSec = Math.max(state.wallSitSec, duration);
+      }
+    });
   });
 }
 
@@ -541,6 +617,7 @@ function resetState(): void {
   state.currentExerciseIndex = 0;
   state.isResting = false;
   state.timerSeconds = 0;
+  state.preCountdown = 0;
   state.selectedHandRoutine = null;
   state.currentHandExerciseIndex = 0;
 }
@@ -882,10 +959,15 @@ function renderWorkout(): string {
         ${showTempo ? renderTempoBar() : ''}
         ${
           ex.isTimed
-            ? `
-          <div class="timer-display">${state.timerSeconds || ex.durationSec || 0}</div>
-          <button class="btn-large btn-primary" id="start-timed">${state.timerSeconds > 0 ? 'Running…' : 'Start timer'}</button>
-        `
+            ? state.preCountdown > 0
+              ? `
+            <div class="timer-label">Get ready</div>
+            <div class="timer-display countdown-big">${state.preCountdown}</div>
+          `
+              : `
+            <div class="timer-display">${state.timerSeconds || ex.durationSec || 0}</div>
+            <button class="btn-large btn-primary" id="start-timed" ${state.timerSeconds > 0 ? 'disabled' : ''}>${state.timerSeconds > 0 ? 'Running…' : 'Start timer'}</button>
+          `
             : ''
         }
       </div>

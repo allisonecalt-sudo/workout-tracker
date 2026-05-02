@@ -215,6 +215,32 @@ button:active,
   margin: 16px 0;
 }
 
+.countdown-big {
+  font-size: 140px;
+  color: var(--warn);
+  animation: pulse 1s ease-out;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .timer-label {
   font-size: 14px;
   color: var(--text-dim);
