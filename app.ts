@@ -31,9 +31,27 @@ type LogEntry = {
   word: string;
 };
 
-type AppScreen = 'home' | 'pre-log' | 'workout' | 'post-log' | 'history';
+type AppScreen = 'home' | 'pre-log' | 'workout' | 'post-log' | 'history' | 'hand-routine';
 
 type Phase = 'warmup' | 'main' | 'cooldown';
+
+type HandRoutineId = 'left-hand' | 'right-hand';
+
+type HandRoutine = {
+  id: HandRoutineId;
+  name: string;
+  shortName: string;
+  status: 'active' | 'locked';
+  description: string;
+  lockReason?: string;
+  frequency: string;
+  exercises: Exercise[];
+};
+
+type HandLog = {
+  date: string;
+  routine: HandRoutineId;
+};
 
 type AppState = {
   screen: AppScreen;
@@ -50,9 +68,12 @@ type AppState = {
   currentExerciseIndex: number;
   isResting: boolean;
   timerSeconds: number;
+  selectedHandRoutine: HandRoutineId | null;
+  currentHandExerciseIndex: number;
 };
 
 const STORAGE_KEY = 'workout-tracker:logs';
+const HAND_STORAGE_KEY = 'workout-tracker:hand-logs';
 const REST_SEC = 60;
 
 const WORKOUTS: Record<WorkoutId, Workout> = {
@@ -163,6 +184,188 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
   },
 };
 
+const HAND_ROUTINES: Record<HandRoutineId, HandRoutine> = {
+  'left-hand': {
+    id: 'left-hand',
+    name: 'Left hand · tendonitis recovery',
+    shortName: 'Left hand',
+    status: 'active',
+    description: 'Gentle stretches + tendon glides for ulnar-side wrist tendonitis.',
+    frequency: '3x per day · ~5 min each',
+    exercises: [
+      { name: 'Left tendon glides', reps: '5-10 cycles' },
+      { name: 'Left wrist circles', reps: '5 each direction' },
+      { name: 'Wall flexor stretch (left)', reps: '20-30 sec hold · 3 reps' },
+      { name: 'Wall extensor stretch (left)', reps: '20-30 sec hold · 3 reps' },
+      { name: 'Forearm self-massage (left)', reps: '30-60 sec' },
+    ],
+  },
+  'right-hand': {
+    id: 'right-hand',
+    name: 'Right hand · TFCC isometrics (Eliana)',
+    shortName: 'Right hand',
+    status: 'locked',
+    description: 'Isometric exercises from Eliana for TFCC + tennis elbow recovery.',
+    lockReason:
+      "Start ONLY after multiple pain-free days in a row. Day-30 test ~May 10. Confirm with Eliana before starting. You can preview the routine, but don't log it as done yet.",
+    frequency: 'TBD with Eliana',
+    exercises: [
+      { name: 'Ponytail grip', reps: '10 reps · 5-sec hold' },
+      { name: 'Bottle lift — pronated', reps: '10 reps' },
+      { name: 'Bottle lift — supinated', reps: '10 reps' },
+      { name: 'Tennis elbow isometric', reps: '10-sec hold · multiple reps' },
+    ],
+  },
+};
+
+const EXERCISE_GUIDE: Record<string, { howTo: string; videoQuery: string }> = {
+  'Belly breathing': {
+    howTo:
+      'Lie on your back, knees bent. Breathe in through your nose so your belly rises (not your chest). Exhale long and slow through your mouth.',
+    videoQuery: 'diaphragmatic belly breathing exercise',
+  },
+  'Knee-to-chest hugs': {
+    howTo:
+      'On your back, bend one knee and slowly draw the thigh toward your chest. Hook your forearm behind the thigh — no gripping with hands.',
+    videoQuery: 'single knee to chest stretch',
+  },
+  'Pelvic tilts': {
+    howTo:
+      'On your back, knees bent, feet flat. Gently flatten your lower back into the mat by tilting your pelvis. Release to neutral. Small movement.',
+    videoQuery: 'supine pelvic tilt exercise lower back',
+  },
+  'Knee drops side-to-side': {
+    howTo:
+      'On your back, knees bent, feet hip-width apart. Slowly drop both knees a small distance to one side, return to center, then the other side.',
+    videoQuery: 'supine knee drops mobility exercise',
+  },
+  'Glute squeezes': {
+    howTo:
+      'On your back, lightly tighten your butt muscles. Hold 3 seconds, fully relax. That is one rep.',
+    videoQuery: 'glute squeeze isometric exercise',
+  },
+  'Bodyweight squats': {
+    howTo:
+      'Feet hip- to shoulder-width. 3 seconds down into a comfortable squat (no need for deep), 1 sec pause, 3 sec up. Arms crossed over chest.',
+    videoQuery: 'bodyweight squat slow tempo proper form',
+  },
+  'Glute bridges': {
+    howTo:
+      'On your back, knees bent, feet flat, arms at sides. Squeeze glutes and lift hips to a comfortable height. Hold 2 sec at top. Lower slow.',
+    videoQuery: 'glute bridge exercise form beginner',
+  },
+  'Wall sit': {
+    howTo:
+      'Back flat against a wall. Slide down until knees are at 90-120 degrees (whatever feels safe). Hands rest on thighs. Hold.',
+    videoQuery: 'wall sit exercise proper form',
+  },
+  'Side-lying clamshells': {
+    howTo:
+      'Lie on your side, knees bent ~90 degrees, hips stacked. Head on mat (or pillow) — DO NOT prop on your forearm. Open top knee like a clam, close with control.',
+    videoQuery: 'side lying clamshell glute exercise',
+  },
+  'Modified dead bug': {
+    howTo:
+      'On your back, hips and knees at 90 degrees (tabletop). Arms relaxed flat at sides. Slowly extend ONE leg out to hover above the floor, return, switch sides.',
+    videoQuery: 'dead bug exercise beginner legs only',
+  },
+  'Heel taps': {
+    howTo:
+      'On your back, knees bent, feet flat near your butt. Slowly tap one heel to the floor (or extend out further), return, alternate sides. Slow and controlled.',
+    videoQuery: 'lying heel tap ab exercise',
+  },
+  'Knees-to-chest hold': {
+    howTo:
+      'On your back, gently bring both thighs toward your chest. Forearms can rest behind thighs — no pulling with hands. Hold and breathe.',
+    videoQuery: 'double knee to chest stretch',
+  },
+  'Figure-4 stretch': {
+    howTo:
+      'On your back, cross right ankle over left knee. Let the hip open. Optionally use forearms (not hands) to draw the bottom leg closer for more stretch.',
+    videoQuery: 'figure 4 stretch supine',
+  },
+  'Seated forward fold': {
+    howTo:
+      'Sit with legs extended (slight knee bend ok). Arms in lap. Hinge forward gently from the hips until you feel a light stretch. No reaching with hands.',
+    videoQuery: 'seated forward fold hamstring stretch',
+  },
+  'Slow breathing': {
+    howTo:
+      'Same as belly breathing — slow inhale through nose, longer exhale through mouth. 8 rounds to wind down.',
+    videoQuery: 'slow breathing relaxation exercise',
+  },
+  'Side-lying leg raises': {
+    howTo:
+      'On your side, bottom leg bent for stability, top leg straight. Slowly lift top leg ~30-45 degrees, lower with control. Head on mat — no propping forearm.',
+    videoQuery: 'side lying leg raise exercise',
+  },
+  'Single-leg glute bridges': {
+    howTo:
+      'Same as glute bridge but with one foot lifted (knee tucked toward chest or leg straight). Squeeze glutes, lift hips, hold 2 sec. Switch legs.',
+    videoQuery: 'single leg glute bridge form',
+  },
+  'Slow supine bicycle': {
+    howTo:
+      'On your back, hands relaxed at sides (NO hands behind head). Bring one knee up, slowly extend it out as the other knee comes in. Slow alternating.',
+    videoQuery: 'supine bicycle exercise slow no hands behind head',
+  },
+  'Standing calf raises': {
+    howTo:
+      'Stand with feet hip-width. Light fingertip touch on a wall for balance — NO grip, NO weight on hand. Lift heels, slow lower.',
+    videoQuery: 'standing calf raise exercise',
+  },
+  'Outdoor walk': {
+    howTo:
+      'Conversational pace — you can talk in full sentences. 20 minutes outdoors. Tap done when you finish.',
+    videoQuery: 'walking exercise pace',
+  },
+  'Left tendon glides': {
+    howTo:
+      'Cycle slowly through 5 hand positions on your LEFT hand: STRAIGHT (fingers extended) → HOOK (knuckles straight, fingers curled) → FIST (full curl) → TABLETOP (knuckles bent, fingers straight) → STRAIGHT FIST (fingers folded onto palm with knuckles straight). Hold each shape for 1-2 sec. Slow, no pain. 5-10 full cycles.',
+    videoQuery: 'tendon glide exercise hand therapy 5 positions',
+  },
+  'Left wrist circles': {
+    howTo:
+      'Hold your LEFT hand out, no load. Make slow gentle circles with the wrist. 5 clockwise, 5 counterclockwise. Stop if any sharp pain.',
+    videoQuery: 'gentle wrist circle range of motion',
+  },
+  'Wall flexor stretch (left)': {
+    howTo:
+      'Stand near a wall. Place LEFT palm flat on the wall, fingers pointing DOWN. Slowly lean forward to feel a gentle stretch in the front of your forearm. Hold 20-30 sec. 3 reps.',
+    videoQuery: 'wrist flexor stretch wall',
+  },
+  'Wall extensor stretch (left)': {
+    howTo:
+      'Place the BACK of your LEFT hand flat against the wall, fingers pointing DOWN. Slowly lean forward to stretch the back of your forearm. This is the main one for ECU/extensors. Hold 20-30 sec. 3 reps.',
+    videoQuery: 'wrist extensor stretch ECU',
+  },
+  'Forearm self-massage (left)': {
+    howTo:
+      'Press your LEFT forearm muscle (top side, between elbow and wrist) against a tennis ball pressed to a wall, or the edge of a doorframe. Slowly roll/glide for 30-60 sec. Work the MUSCLE BELLY — avoid pressing on the wrist tendon directly.',
+    videoQuery: 'forearm self massage tennis ball',
+  },
+  'Ponytail grip': {
+    howTo:
+      'Hand open. Gently close into a soft fist as if grabbing a ponytail (no real squeeze yet). Hold 5 sec. Open fully. 10 reps.',
+    videoQuery: 'ponytail grip hand therapy exercise',
+  },
+  'Bottle lift — pronated': {
+    howTo:
+      'Shoulder at 90° abduction (arm out to your side at shoulder height). Wrist NEUTRAL. Hold a light bottle with palm facing DOWN. Lift the bottle up and down (small range). 10 reps.',
+    videoQuery: 'wrist bottle lift exercise rehabilitation',
+  },
+  'Bottle lift — supinated': {
+    howTo:
+      'Same setup as pronated, but palm facing UP. Lift the bottle up and down. 10 reps. Stay slow and controlled.',
+    videoQuery: 'wrist supination strengthening bottle',
+  },
+  'Tennis elbow isometric': {
+    howTo:
+      'Elbow flexed (bent at ~90°). Wrist neutral. Press the back of your hand DOWN against resistance (your other hand or a table edge). Hold 10 sec. Multiple reps as Eliana recommends.',
+    videoQuery: 'tennis elbow isometric exercise',
+  },
+};
+
 const state: AppState = {
   screen: 'home',
   selectedWorkout: null,
@@ -178,6 +381,8 @@ const state: AppState = {
   currentExerciseIndex: 0,
   isResting: false,
   timerSeconds: 0,
+  selectedHandRoutine: null,
+  currentHandExerciseIndex: 0,
 };
 
 let timerInterval: number | null = null;
@@ -336,6 +541,74 @@ function resetState(): void {
   state.currentExerciseIndex = 0;
   state.isResting = false;
   state.timerSeconds = 0;
+  state.selectedHandRoutine = null;
+  state.currentHandExerciseIndex = 0;
+}
+
+function loadHandLogs(): HandLog[] {
+  try {
+    const raw = localStorage.getItem(HAND_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as HandLog[];
+  } catch {
+    return [];
+  }
+}
+
+function saveHandLog(routine: HandRoutineId): void {
+  const logs = loadHandLogs();
+  logs.unshift({ date: new Date().toISOString(), routine });
+  localStorage.setItem(HAND_STORAGE_KEY, JSON.stringify(logs.slice(0, 200)));
+}
+
+function getLastHandDone(routine: HandRoutineId): string | null {
+  const logs = loadHandLogs();
+  const found = logs.find((l) => l.routine === routine);
+  return found ? found.date : null;
+}
+
+function getHandTodayCount(routine: HandRoutineId): number {
+  const logs = loadHandLogs();
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return logs.filter((l) => l.routine === routine && new Date(l.date).getTime() >= startOfDay)
+    .length;
+}
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hr ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return 'yesterday';
+  return `${diffDay} days ago`;
+}
+
+function startHandRoutine(id: HandRoutineId): void {
+  state.selectedHandRoutine = id;
+  state.currentHandExerciseIndex = 0;
+  state.screen = 'hand-routine';
+  render();
+}
+
+function advanceHandExercise(): void {
+  if (!state.selectedHandRoutine) return;
+  const routine = HAND_ROUTINES[state.selectedHandRoutine];
+  if (state.currentHandExerciseIndex < routine.exercises.length - 1) {
+    state.currentHandExerciseIndex += 1;
+    render();
+  } else {
+    if (routine.status === 'active') {
+      saveHandLog(routine.id);
+    }
+    resetState();
+    render();
+  }
 }
 
 function formatDate(iso: string): string {
@@ -414,11 +687,38 @@ function renderHome(): string {
         .join('')}
     </div>
 
+    <div class="divider"></div>
+    <h3>Hand care</h3>
+    <div class="workout-picker">
+      ${(['left-hand', 'right-hand'] as HandRoutineId[])
+        .map((id) => {
+          const r = HAND_ROUTINES[id];
+          const lastDone = getLastHandDone(id);
+          const todayCount = getHandTodayCount(id);
+          const lastText = lastDone ? `Last: ${timeAgo(lastDone)}` : 'Not started';
+          const statusBadge =
+            r.status === 'active'
+              ? `<span class="workout-card-badge badge-active">${todayCount}× today</span>`
+              : `<span class="workout-card-badge badge-locked">🔒 not yet</span>`;
+          return `
+        <button class="workout-card hand-card" data-hand="${id}">
+          <div class="workout-card-header">
+            <span class="workout-card-title">${r.shortName}</span>
+            ${statusBadge}
+          </div>
+          <div class="workout-card-desc">${r.description}</div>
+          <div class="hand-card-meta">${r.frequency}${r.status === 'active' ? ` · ${lastText}` : ''}</div>
+        </button>
+      `;
+        })
+        .join('')}
+    </div>
+
     ${
       logs.length > 0
         ? `
       <div class="divider"></div>
-      <h3>Recent</h3>
+      <h3>Recent workouts</h3>
       ${recentHtml}
       <div style="margin-top: 12px;">
         <button class="text-link" id="view-history">View all →</button>
@@ -426,6 +726,65 @@ function renderHome(): string {
     `
         : ''
     }
+  `;
+}
+
+function renderHandRoutine(): string {
+  if (!state.selectedHandRoutine) return '';
+  const routine = HAND_ROUTINES[state.selectedHandRoutine];
+  const ex = routine.exercises[state.currentHandExerciseIndex];
+  if (!ex) return '';
+  const total = routine.exercises.length;
+  const guide = EXERCISE_GUIDE[ex.name];
+  const videoUrl = guide
+    ? `https://www.youtube.com/results?search_query=${encodeURIComponent(guide.videoQuery)}`
+    : null;
+  const isLastExercise = state.currentHandExerciseIndex === total - 1;
+  const nextLabel =
+    routine.status === 'active'
+      ? isLastExercise
+        ? 'Done · Save'
+        : 'Done · Next'
+      : isLastExercise
+        ? 'Done · Back'
+        : 'Done · Next';
+
+  return `
+    <h2>${routine.shortName}</h2>
+    ${
+      routine.status === 'locked'
+        ? `<div class="warning-banner">🔒 ${routine.lockReason ?? 'Not active yet.'}</div>`
+        : ''
+    }
+    <div class="progress-text">Exercise ${state.currentHandExerciseIndex + 1} of ${total}</div>
+    <div class="progress-bar">
+      <div class="progress-bar-fill" style="width: ${((state.currentHandExerciseIndex + 1) / total) * 100}%"></div>
+    </div>
+
+    <div class="card">
+      <div class="exercise-display">
+        <div class="exercise-phase">${routine.shortName}</div>
+        <div class="exercise-name">${ex.name}</div>
+        <div class="exercise-reps">${ex.reps ?? ''}</div>
+      </div>
+    </div>
+
+    ${
+      guide
+        ? `
+      <div class="card how-to-card">
+        <div class="how-to-header">📖 How to do it</div>
+        <p class="how-to-text">${guide.howTo}</p>
+        ${videoUrl ? `<a class="video-link" href="${videoUrl}" target="_blank" rel="noopener noreferrer">🎥 Show me a video</a>` : ''}
+      </div>
+    `
+        : ''
+    }
+
+    <div class="btn-row">
+      <button id="quit-hand">Quit</button>
+      <button class="btn-primary" id="next-hand">${nextLabel}</button>
+    </div>
   `;
 }
 
@@ -501,6 +860,10 @@ function renderWorkout(): string {
   }
 
   const showTempo = ex.reps?.includes('3-1-3') ?? false;
+  const guide = EXERCISE_GUIDE[ex.name];
+  const videoUrl = guide
+    ? `https://www.youtube.com/results?search_query=${encodeURIComponent(guide.videoQuery)}`
+    : null;
 
   return `
     <h2>Workout ${w.id}</h2>
@@ -527,6 +890,18 @@ function renderWorkout(): string {
         }
       </div>
     </div>
+
+    ${
+      guide
+        ? `
+      <div class="card how-to-card">
+        <div class="how-to-header">📖 How to do it</div>
+        <p class="how-to-text">${guide.howTo}</p>
+        ${videoUrl ? `<a class="video-link" href="${videoUrl}" target="_blank" rel="noopener noreferrer">🎥 Show me a video</a>` : ''}
+      </div>
+    `
+        : ''
+    }
 
     <div class="btn-row">
       <button id="quit">Quit</button>
@@ -644,6 +1019,9 @@ function render(): void {
     case 'history':
       html = renderHistory();
       break;
+    case 'hand-routine':
+      html = renderHandRoutine();
+      break;
   }
   root.innerHTML = html;
   attachHandlers();
@@ -655,6 +1033,22 @@ function attachHandlers(): void {
       const id = btn.dataset['workout'] as WorkoutId | undefined;
       if (id) startWorkout(id);
     });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.workout-card[data-hand]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset['hand'] as HandRoutineId | undefined;
+      if (id) startHandRoutine(id);
+    });
+  });
+
+  bindClick('next-hand', () => {
+    advanceHandExercise();
+  });
+
+  bindClick('quit-hand', () => {
+    resetState();
+    render();
   });
 
   bindClick('view-history', () => {
