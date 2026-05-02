@@ -831,7 +831,7 @@ function renderHandRoutine(): string {
     ${
       routine.status === 'locked'
         ? `<div class="warning-banner">🔒 ${routine.lockReason ?? 'Not active yet.'}</div>`
-        : ''
+        : `<div class="warning-banner">⚠️ <strong>2/10 pain ceiling, no sharpness.</strong> Stop signs: pain ramps during a hold · lingers >30 min after · new clicking on ulnar side.</div>`
     }
     <div class="progress-text">Exercise ${state.currentHandExerciseIndex + 1} of ${total}</div>
     <div class="progress-bar">
@@ -883,7 +883,7 @@ function renderPreLog(): string {
     </div>
 
     <div class="warning-banner">
-      ⚠️ If wrist or back pain hits 3/10 during, stop that exercise.
+      ⚠️ Right wrist or back pain at 3/10 → stop that exercise. <strong>Left wrist: 2/10 ceiling, no sharpness</strong> — it's actively healing tendonitis.
     </div>
 
     <div class="btn-row">
