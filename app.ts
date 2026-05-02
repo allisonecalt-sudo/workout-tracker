@@ -222,102 +222,102 @@ const HAND_ROUTINES: Record<HandRoutineId, HandRoutine> = {
 const EXERCISE_GUIDE: Record<string, { howTo: string; videoQuery: string }> = {
   'Belly breathing': {
     howTo:
-      'Lie on your back, knees bent. Breathe in through your nose so your belly rises (not your chest). Exhale long and slow through your mouth.',
+      "Lie on your back, knees bent, feet flat. Rest one arm at your side (no weight on the hand). Inhale through your nose for 4 counts — your BELLY should rise, not your chest. Exhale slowly through your mouth for 6 counts. Common mistake: chest rising instead of belly. If that happens, slow down and put less effort into the inhale. This wakes up your diaphragm and signals your nervous system it's safe to work.",
     videoQuery: 'diaphragmatic belly breathing exercise',
   },
   'Knee-to-chest hugs': {
     howTo:
-      'On your back, bend one knee and slowly draw the thigh toward your chest. Hook your forearm behind the thigh — no gripping with hands.',
+      "On your back, knees bent. Slowly draw ONE thigh toward your chest. Hook your forearm behind the thigh (NOT your hand) and let the leg rest there — don't actively pull. Hold for 2-3 breaths, then switch. Keep the other foot flat on the mat. Common mistake: lifting the head off the mat — let it stay heavy. Wakes up the hips and lower back gently.",
     videoQuery: 'single knee to chest stretch',
   },
   'Pelvic tilts': {
     howTo:
-      'On your back, knees bent, feet flat. Gently flatten your lower back into the mat by tilting your pelvis. Release to neutral. Small movement.',
+      "On your back, knees bent, feet flat hip-width apart. Tilt your pelvis so your lower back gently flattens into the mat (you're tucking your tailbone slightly toward you). Hold 1-2 sec, then release back to neutral. Movement is small — 1-2 inches at the hip. Exhale on the tilt, inhale on the release. Common mistake: over-arching on the release. Just go to neutral, not into a backbend. Trains the pelvis-spine connection your back has been missing.",
     videoQuery: 'supine pelvic tilt exercise lower back',
   },
   'Knee drops side-to-side': {
     howTo:
-      'On your back, knees bent, feet hip-width apart. Slowly drop both knees a small distance to one side, return to center, then the other side.',
+      'On your back, knees bent, feet flat hip-width apart, arms relaxed at sides palms up. Slowly drop both knees a SHORT distance to one side (not all the way to the floor — only as far as feels easy). Pause, breathe, then return to center, then the other side. Keep both shoulders pressed to the mat the whole time. Common mistake: forcing knees too far — that twists the back. Small range = safer + just as effective. Loosens the lower back rotation gently.',
     videoQuery: 'supine knee drops mobility exercise',
   },
   'Glute squeezes': {
     howTo:
-      'On your back, lightly tighten your butt muscles. Hold 3 seconds, fully relax. That is one rep.',
+      "On your back, knees bent, feet flat. Gently tighten your butt muscles like you're holding a coin. Hold 3 sec, fully relax 2 sec, repeat. The goal is awareness, not max effort — aim for 50% squeeze, not 100%. Breathe normally throughout. Common mistake: squeezing the abs or pelvic floor too. Try to isolate ONLY the glutes. Wakes up the muscle group that's about to do most of today's work.",
     videoQuery: 'glute squeeze isometric exercise',
   },
   'Bodyweight squats': {
     howTo:
-      'Feet hip- to shoulder-width. 3 seconds down into a comfortable squat (no need for deep), 1 sec pause, 3 sec up. Arms crossed over chest.',
+      'Feet hip- to shoulder-width apart, toes pointed slightly out. Arms crossed over chest. Slowly lower for 3 SECONDS into a comfortable squat depth (knees can stay above 90° — no need to go deep). Pause 1 SECOND at the bottom. Stand up over 3 SECONDS. Inhale on the way down, exhale on the way up. Common mistakes: knees collapsing inward (push them out toward your pinky toes); chest dropping (stay tall). If balance is wobbly, stand near a wall and let your shoulder lightly touch — NOT your hand.',
     videoQuery: 'bodyweight squat slow tempo proper form',
   },
   'Glute bridges': {
     howTo:
-      'On your back, knees bent, feet flat, arms at sides. Squeeze glutes and lift hips to a comfortable height. Hold 2 sec at top. Lower slow.',
+      "On your back, knees bent, feet flat hip-width apart, arms relaxed at sides. Squeeze glutes FIRST, then lift hips to a comfortable height (don't go super high — your body should make a straight line from knees to shoulders, not an arch). Hold 2 sec at the top, then lower slowly. Exhale on the lift, inhale on the lower. Common mistakes: pushing the lower back into a backbend (drive through your HEELS, not your toes); hips coming up before glutes engage (hence: squeeze first). The single best lower-back-friendly glute exercise.",
     videoQuery: 'glute bridge exercise form beginner',
   },
   'Wall sit': {
     howTo:
-      'Back flat against a wall. Slide down until knees are at 90-120 degrees (whatever feels safe). Hands rest on thighs. Hold.',
+      'Stand with your back flat against a wall. Slide down until your knees are between 90° and 120° (steeper = harder, shallower = easier — pick what feels safe today). Knees should NOT go past your toes. Hands rest on thighs or hang loose at sides — no pushing on the wall. Breathe normally. Common mistake: holding your breath. Stay relaxed in the upper body. This is your weekly progress benchmark — track the time held.',
     videoQuery: 'wall sit exercise proper form',
   },
   'Side-lying clamshells': {
     howTo:
-      'Lie on your side, knees bent ~90 degrees, hips stacked. Head on mat (or pillow) — DO NOT prop on your forearm. Open top knee like a clam, close with control.',
+      "Lie on your SIDE, knees bent ~90°, hips and shoulders stacked vertically (don't roll back). Head rests directly on the mat or on a thin pillow — DO NOT prop up on your forearm. Bottom arm extends along the floor under your head, relaxed. Keep feet together. Open the TOP knee like a clam shell while keeping the bottom knee on the mat — only lift to comfortable range. Lower with control. Inhale up, exhale down. Common mistake: hips rolling backward as the knee opens — keep them stacked.",
     videoQuery: 'side lying clamshell glute exercise',
   },
   'Modified dead bug': {
     howTo:
-      'On your back, hips and knees at 90 degrees (tabletop). Arms relaxed flat at sides. Slowly extend ONE leg out to hover above the floor, return, switch sides.',
+      'On your back, hips and knees both at 90° in the air (shins parallel to ceiling — tabletop position). Arms relaxed FLAT at sides on the mat, palms UP (not down — protects wrists). Slowly extend ONE leg straight out, hovering it above the floor. Bring it back to tabletop. Switch sides. Keep your lower back glued to the mat the whole time — if it arches, your range is too big. Exhale on the leg extension. Common mistake: speed. Slow = harder = better.',
     videoQuery: 'dead bug exercise beginner legs only',
   },
   'Heel taps': {
     howTo:
-      'On your back, knees bent, feet flat near your butt. Slowly tap one heel to the floor (or extend out further), return, alternate sides. Slow and controlled.',
+      "On your back, knees bent, feet flat near your butt. Slowly extend ONE leg out and tap your heel toward the floor (don't slam it down). Return to start. Alternate sides. Arms relaxed at sides, palms up. Lower back stays in contact with the mat — if it arches, reduce the leg extension. Exhale on the tap. Common mistake: bending the back. Keep it steady — this is an anti-arch exercise, not a stretch.",
     videoQuery: 'lying heel tap ab exercise',
   },
   'Knees-to-chest hold': {
     howTo:
-      'On your back, gently bring both thighs toward your chest. Forearms can rest behind thighs — no pulling with hands. Hold and breathe.',
+      'On your back, gently bring BOTH thighs toward your chest. Forearms hook behind the thighs to support — NOT your hands gripping. The leg position should be passive: legs resting on your forearms, not actively pulled. Breathe slowly. If your tailbone lifts off the mat, the angle is too tight — let the legs come a little further from your chest. Common mistake: gripping with hands (defeats the wrist protection). Releases the lower back fully.',
     videoQuery: 'double knee to chest stretch',
   },
   'Figure-4 stretch': {
     howTo:
-      'On your back, cross right ankle over left knee. Let the hip open. Optionally use forearms (not hands) to draw the bottom leg closer for more stretch.',
+      "On your back, knees bent, feet flat. Cross your RIGHT ankle over your LEFT knee (the right leg makes a '4' shape). Let the right knee fall outward — that opens the right hip. To deepen: use your forearms (not your hands) to draw the LEFT leg gently toward you. Hold 45 sec, breathing slowly. Switch sides. Common mistake: forcing the bent knee down with the other hand — let it open passively. Targets piriformis + outer hip — huge for back tightness.",
     videoQuery: 'figure 4 stretch supine',
   },
   'Seated forward fold': {
     howTo:
-      'Sit with legs extended (slight knee bend ok). Arms in lap. Hinge forward gently from the hips until you feel a light stretch. No reaching with hands.',
+      "Sit on the mat with legs extended in front of you (slight knee bend totally fine — don't lock them). Arms rest in your lap, NOT reaching forward. Hinge forward at the HIPS (not by rounding your back) until you feel a gentle stretch in the back of your legs. Stop at 2/10 stretch — this isn't a depth competition. Hold and breathe. Common mistake: rounding the upper back to look like the stretch is deeper. Better to stay tall with a smaller fold than collapse.",
     videoQuery: 'seated forward fold hamstring stretch',
   },
   'Slow breathing': {
     howTo:
-      'Same as belly breathing — slow inhale through nose, longer exhale through mouth. 8 rounds to wind down.',
+      "Sit comfortably or stay lying down. Inhale through your nose for 4 counts, exhale through your mouth for 6 counts (longer exhale than inhale = activates the rest-and-recover nervous system). 8 full rounds. Eyes can close. This is the official 'workout is over' signal — your body needs the cue to switch out of effort mode. Common mistake: rushing because the workout is done. The cool-down is when adaptation actually happens — don't skip it.",
     videoQuery: 'slow breathing relaxation exercise',
   },
   'Side-lying leg raises': {
     howTo:
-      'On your side, bottom leg bent for stability, top leg straight. Slowly lift top leg ~30-45 degrees, lower with control. Head on mat — no propping forearm.',
+      "Lie on your SIDE, hips stacked, head on the mat (or thin pillow) — NOT propped on your forearm. Bottom leg bent for stability, top leg straight. Slowly lift the top leg 30-45° (not super high — height isn't the point). Lower with control over 3 seconds. Keep your toes pointing FORWARD, not toward the ceiling — that targets the right glute muscle (glute medius). Exhale on the lift. Common mistake: rolling the hip backward as you lift, which makes the leg go higher but turns it into a hip flexor exercise instead of a glute one.",
     videoQuery: 'side lying leg raise exercise',
   },
   'Single-leg glute bridges': {
     howTo:
-      'Same as glute bridge but with one foot lifted (knee tucked toward chest or leg straight). Squeeze glutes, lift hips, hold 2 sec. Switch legs.',
+      'Setup like a glute bridge: on your back, knees bent, feet flat, arms at sides palms up. Lift ONE foot off the mat (either knee tucked toward chest or leg extended straight). Squeeze the glute on the standing leg, push through that heel, lift hips. Hold 2 sec. Lower slow. Switch legs after the set. Common mistake: hips dropping toward the lifted-leg side. Keep them level — imagine balancing a glass of water on your pelvis. Bigger glute challenge than the regular bridge.',
     videoQuery: 'single leg glute bridge form',
   },
   'Slow supine bicycle': {
     howTo:
-      'On your back, hands relaxed at sides (NO hands behind head). Bring one knee up, slowly extend it out as the other knee comes in. Slow alternating.',
+      'On your back, knees bent, feet flat. Bring one knee up toward your chest. Arms STAY relaxed at sides — NEVER behind the head (protects the neck and the wrists). As you slowly extend that leg out, bring the OTHER knee up. Continuous slow alternation, like pedaling underwater. Lower back glued to mat the whole time. Exhale on each leg extension. Common mistake: speed (this is supposed to be slow and controlled, not a cardio move).',
     videoQuery: 'supine bicycle exercise slow no hands behind head',
   },
   'Standing calf raises': {
     howTo:
-      'Stand with feet hip-width. Light fingertip touch on a wall for balance — NO grip, NO weight on hand. Lift heels, slow lower.',
+      "Stand tall with feet hip-width apart. Light fingertip touch on a wall for balance — NO grip, NO weight on the hand. Slowly lift your heels until you're on the balls of your feet (3 seconds up). Hold 1 sec at the top. Lower slowly (3 seconds down). Inhale on the lift, exhale on the lower. Common mistake: bouncing for momentum — kills the work the calves are doing. Slow tempo is doing the heavy lifting here.",
     videoQuery: 'standing calf raise exercise',
   },
   'Outdoor walk': {
     howTo:
-      'Conversational pace — you can talk in full sentences. 20 minutes outdoors. Tap done when you finish.',
+      "Conversational pace — you should be able to talk in full sentences without getting breathless. 20 minutes minimum. Walking is genuinely your most underrated exercise: it preserves joint health, supports digestion (especially good with Crohn's), aids GLP-1 medication's effect, and clears mental fog. Take it outdoors when possible — the visual variety and sunlight matter. Tap done when you finish.",
     videoQuery: 'walking exercise pace',
   },
   'Left tendon glides': {
@@ -327,7 +327,7 @@ const EXERCISE_GUIDE: Record<string, { howTo: string; videoQuery: string }> = {
   },
   'Left wrist circles': {
     howTo:
-      'Hold your LEFT hand out, no load. Make slow gentle circles with the wrist. 5 clockwise, 5 counterclockwise. Stop if any sharp pain.',
+      'Hold your LEFT hand out in front of you, fingers relaxed (not making a fist), no load. Slowly draw circles with your wrist — like drawing the outline of a quarter, not a dinner plate. 5 clockwise, then 5 counterclockwise. Range of motion only — no force, no end-range push. Breathe normally. If any motion produces a pinch or sharp pain, reduce the circle size further. Goal: keep the joint mobile without provoking inflammation.',
     videoQuery: 'gentle wrist circle range of motion',
   },
   'Wall flexor stretch (left)': {
@@ -347,22 +347,22 @@ const EXERCISE_GUIDE: Record<string, { howTo: string; videoQuery: string }> = {
   },
   'Ponytail grip': {
     howTo:
-      'Hand open. Gently close into a soft fist as if grabbing a ponytail (no real squeeze yet). Hold 5 sec. Open fully. 10 reps.',
+      "Hand fully open. Gently close into a SOFT fist as if grabbing a ponytail you don't want to break — light squeeze, not a hard grip. Hold 5 seconds. Open fully (fingers all the way extended). That's one rep. 10 reps. Breathe normally throughout — don't hold your breath. Wakes up the finger flexors and extensors with controlled tendon loading. Common mistake: squeezing too hard (defeats the gentle-rehab purpose).",
     videoQuery: 'ponytail grip hand therapy exercise',
   },
   'Bottle lift — pronated': {
     howTo:
-      'Shoulder at 90° abduction (arm out to your side at shoulder height). Wrist NEUTRAL. Hold a light bottle with palm facing DOWN. Lift the bottle up and down (small range). 10 reps.',
+      "Stand or sit with your shoulder at 90° abduction (arm OUT to the side at shoulder height, like making a 'T' shape). Bend the elbow 90° so the forearm points straight up. Wrist NEUTRAL (not bent). Hold a light bottle (start with empty or very light) with palm facing DOWN (pronated). Slowly lift the bottle up by tilting your wrist forward, then lower it. Small range — this is wrist control work, not weight training. 10 reps each side. Common mistake: using shoulder/elbow to do the lift — keep them still, only the wrist moves.",
     videoQuery: 'wrist bottle lift exercise rehabilitation',
   },
   'Bottle lift — supinated': {
     howTo:
-      'Same setup as pronated, but palm facing UP. Lift the bottle up and down. 10 reps. Stay slow and controlled.',
+      "Same setup as pronated: shoulder at 90° abduction, elbow bent 90°, wrist neutral. But now palm faces UP (supinated — like holding a tray). Slowly tilt the wrist back and forward in a small range, lifting the bottle. 10 reps. Slow and controlled. Common mistake: letting the elbow drift — keep it locked at 90° so only the wrist works. This direction is often weaker than pronated for TFCC patients — that's normal and improves with practice.",
     videoQuery: 'wrist supination strengthening bottle',
   },
   'Tennis elbow isometric': {
     howTo:
-      'Elbow flexed (bent at ~90°). Wrist neutral. Press the back of your hand DOWN against resistance (your other hand or a table edge). Hold 10 sec. Multiple reps as Eliana recommends.',
+      "Sit at a table or stand. Elbow bent ~90°, forearm parallel to the floor, wrist neutral (straight, not bent). Place the BACK of your hand under the table edge or against your other hand. Push UP gently against the resistance — this fires the wrist extensors without movement (isometric). Hold 10 seconds at maybe 30-50% effort. Breathe steadily — don't hold your breath. Multiple reps as Eliana prescribes. Common mistake: max-effort push (gentler is more effective for tendon healing). Targets the lateral epicondyle / tennis elbow tendons.",
     videoQuery: 'tennis elbow isometric exercise',
   },
 };
