@@ -509,6 +509,27 @@ input[type='number']:focus {
   letter-spacing: 1px;
 }
 
+.sync-indicator {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: -4px 0 16px;
+  letter-spacing: 0.3px;
+  min-height: 16px;
+}
+
+.sync-indicator.sync-synced {
+  color: var(--accent-dim);
+}
+
+.sync-indicator.sync-offline {
+  color: var(--warn);
+}
+
+.sync-indicator.sync-syncing {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
 @media (min-width: 600px) {
   body {
     font-size: 18px;

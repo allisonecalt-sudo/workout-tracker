@@ -20,6 +20,7 @@ type Workout = {
 };
 
 type LogEntry = {
+  id?: string;
   date: string;
   workout: WorkoutId;
   capacityBefore: number;
@@ -29,6 +30,7 @@ type LogEntry = {
   leftWristPain: number;
   backPain: number;
   word: string;
+  synced?: boolean;
 };
 
 type AppScreen = 'home' | 'pre-log' | 'workout' | 'post-log' | 'history' | 'hand-routine';
@@ -49,9 +51,13 @@ type HandRoutine = {
 };
 
 type HandLog = {
+  id?: string;
   date: string;
   routine: HandRoutineId;
+  synced?: boolean;
 };
+
+type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline';
 
 type AppState = {
   screen: AppScreen;
@@ -71,11 +77,36 @@ type AppState = {
   preCountdown: number;
   selectedHandRoutine: HandRoutineId | null;
   currentHandExerciseIndex: number;
+  syncStatus: SyncStatus;
 };
 
 const STORAGE_KEY = 'workout-tracker:logs';
 const HAND_STORAGE_KEY = 'workout-tracker:hand-logs';
 const REST_SEC = 60;
+
+const SUPABASE_URL = 'https://hpiyvnfhoqnnnotrmwaz.supabase.co';
+const SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwaXl2bmZob3Fubm5vdHJtd2F6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzIwNDEsImV4cCI6MjA4ODA0ODA0MX0.AsGhYitkSnyVMwpJII05UseS_gICaXiCy7d8iHsr6Qw';
+
+function supabaseHeaders(): HeadersInit {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=minimal',
+  };
+}
+
+function syncDisabled(): boolean {
+  return typeof navigator !== 'undefined' && navigator.webdriver === true;
+}
+
+function genId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 const WORKOUTS: Record<WorkoutId, Workout> = {
   A: {
@@ -385,6 +416,7 @@ const state: AppState = {
   preCountdown: 0,
   selectedHandRoutine: null,
   currentHandExerciseIndex: 0,
+  syncStatus: 'idle',
 };
 
 let audioCtx: AudioContext | null = null;
@@ -448,10 +480,58 @@ function loadLogs(): LogEntry[] {
   }
 }
 
-function saveLog(entry: LogEntry): void {
-  const logs = loadLogs();
-  logs.unshift(entry);
+function writeLogs(logs: LogEntry[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(logs.slice(0, 50)));
+}
+
+function saveLog(entry: LogEntry): LogEntry {
+  const stored: LogEntry = { ...entry, id: entry.id ?? genId(), synced: false };
+  const logs = loadLogs();
+  logs.unshift(stored);
+  writeLogs(logs);
+  return stored;
+}
+
+function markLogSynced(id: string): void {
+  const logs = loadLogs();
+  const idx = logs.findIndex((l) => l.id === id);
+  if (idx === -1) return;
+  const entry = logs[idx];
+  if (!entry) return;
+  logs[idx] = { ...entry, synced: true };
+  writeLogs(logs);
+}
+
+async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
+  if (syncDisabled()) return false;
+  if (!entry.id) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/workout_sessions`, {
+      method: 'POST',
+      headers: supabaseHeaders(),
+      body: JSON.stringify([
+        {
+          id: entry.id,
+          date: entry.date,
+          workout_type: entry.workout,
+          capacity_before_1_10: entry.capacityBefore,
+          capacity_after_1_10: entry.capacityAfter,
+          wall_sit_seconds: entry.wallSitSec,
+          pain_left_wrist_0_10: entry.leftWristPain,
+          pain_right_wrist_0_10: entry.rightWristPain,
+          pain_back_0_10: entry.backPain,
+          one_word: entry.word || null,
+        },
+      ]),
+    });
+    if (res.ok) {
+      markLogSynced(entry.id);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 function getCurrentWorkout(): Workout | null {
@@ -586,7 +666,7 @@ function startTimedExercise(): void {
 
 function logCompleteAndHome(): void {
   if (!state.selectedWorkout) return;
-  saveLog({
+  const stored = saveLog({
     date: new Date().toISOString(),
     workout: state.selectedWorkout,
     capacityBefore: state.capacityBefore,
@@ -599,6 +679,12 @@ function logCompleteAndHome(): void {
   });
   resetState();
   render();
+  state.syncStatus = 'syncing';
+  updateSyncIndicator();
+  void pushLogToSupabase(stored).then((ok) => {
+    state.syncStatus = ok ? 'synced' : 'offline';
+    updateSyncIndicator();
+  });
 }
 
 function resetState(): void {
@@ -634,10 +720,90 @@ function loadHandLogs(): HandLog[] {
   }
 }
 
-function saveHandLog(routine: HandRoutineId): void {
-  const logs = loadHandLogs();
-  logs.unshift({ date: new Date().toISOString(), routine });
+function writeHandLogs(logs: HandLog[]): void {
   localStorage.setItem(HAND_STORAGE_KEY, JSON.stringify(logs.slice(0, 200)));
+}
+
+function saveHandLog(routine: HandRoutineId): HandLog {
+  const entry: HandLog = {
+    id: genId(),
+    date: new Date().toISOString(),
+    routine,
+    synced: false,
+  };
+  const logs = loadHandLogs();
+  logs.unshift(entry);
+  writeHandLogs(logs);
+  return entry;
+}
+
+function markHandLogSynced(id: string): void {
+  const logs = loadHandLogs();
+  const idx = logs.findIndex((l) => l.id === id);
+  if (idx === -1) return;
+  const entry = logs[idx];
+  if (!entry) return;
+  logs[idx] = { ...entry, synced: true };
+  writeHandLogs(logs);
+}
+
+async function pushHandLogToSupabase(entry: HandLog): Promise<boolean> {
+  if (syncDisabled()) return false;
+  if (!entry.id) return false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/hand_routine_logs`, {
+      method: 'POST',
+      headers: supabaseHeaders(),
+      body: JSON.stringify([{ id: entry.id, date: entry.date, routine_id: entry.routine }]),
+    });
+    if (res.ok) {
+      markHandLogSynced(entry.id);
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+async function flushPendingSyncs(): Promise<void> {
+  if (syncDisabled()) return;
+  const pendingLogs = loadLogs().filter((l) => !l.synced && l.id);
+  const pendingHand = loadHandLogs().filter((l) => !l.synced && l.id);
+  if (pendingLogs.length === 0 && pendingHand.length === 0) {
+    state.syncStatus = 'synced';
+    updateSyncIndicator();
+    return;
+  }
+  state.syncStatus = 'syncing';
+  updateSyncIndicator();
+  let allOk = true;
+  for (const entry of pendingLogs) {
+    const ok = await pushLogToSupabase(entry);
+    if (!ok) allOk = false;
+  }
+  for (const entry of pendingHand) {
+    const ok = await pushHandLogToSupabase(entry);
+    if (!ok) allOk = false;
+  }
+  state.syncStatus = allOk ? 'synced' : 'offline';
+  updateSyncIndicator();
+}
+
+function updateSyncIndicator(): void {
+  const el = document.getElementById('sync-indicator');
+  if (!el) return;
+  el.textContent = syncIndicatorText();
+  el.className = `sync-indicator sync-${state.syncStatus}`;
+}
+
+function syncIndicatorText(): string {
+  const pending =
+    loadLogs().filter((l) => !l.synced).length + loadHandLogs().filter((l) => !l.synced).length;
+  if (state.syncStatus === 'syncing') return 'syncing…';
+  if (pending > 0) return `offline · ${pending} pending`;
+  if (loadLogs().length === 0 && loadHandLogs().length === 0) return '';
+  return 'synced ✓';
 }
 
 function getLastHandDone(routine: HandRoutineId): string | null {
@@ -680,11 +846,20 @@ function advanceHandExercise(): void {
     state.currentHandExerciseIndex += 1;
     render();
   } else {
+    let stored: HandLog | null = null;
     if (routine.status === 'active') {
-      saveHandLog(routine.id);
+      stored = saveHandLog(routine.id);
     }
     resetState();
     render();
+    if (stored) {
+      state.syncStatus = 'syncing';
+      updateSyncIndicator();
+      void pushHandLogToSupabase(stored).then((ok) => {
+        state.syncStatus = ok ? 'synced' : 'offline';
+        updateSyncIndicator();
+      });
+    }
   }
 }
 
@@ -731,6 +906,7 @@ function renderHome(): string {
   return `
     <h1>Workout Tracker</h1>
     <p class="subtitle">Three rotating sessions. Show up 3x/week.</p>
+    <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
 
     <div class="card">
       <h3>This week</h3>
@@ -1205,4 +1381,7 @@ function bindRange(rangeId: string, valId: string, onChange: (v: number) => void
   });
 }
 
-document.addEventListener('DOMContentLoaded', render);
+document.addEventListener('DOMContentLoaded', () => {
+  render();
+  void flushPendingSyncs();
+});
