@@ -766,6 +766,78 @@ async function pushHandLogToSupabase(entry: HandLog): Promise<boolean> {
   }
 }
 
+type RemoteSession = {
+  id: string;
+  date: string;
+  workout_type: WorkoutId;
+  capacity_before_1_10: number | null;
+  capacity_after_1_10: number | null;
+  wall_sit_seconds: number | null;
+  pain_left_wrist_0_10: number | null;
+  pain_right_wrist_0_10: number | null;
+  pain_back_0_10: number | null;
+  one_word: string | null;
+};
+
+type RemoteHandLog = {
+  id: string;
+  date: string;
+  routine_id: HandRoutineId;
+};
+
+async function pullFromSupabase(): Promise<void> {
+  if (syncDisabled()) return;
+  try {
+    const [sRes, hRes] = await Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/workout_sessions?select=*&order=date.desc&limit=50`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+      }),
+      fetch(`${SUPABASE_URL}/rest/v1/hand_routine_logs?select=*&order=date.desc&limit=200`, {
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+      }),
+    ]);
+    if (sRes.ok) {
+      const remote: RemoteSession[] = await sRes.json();
+      const local = loadLogs();
+      const localIds = new Set(local.filter((l) => l.id).map((l) => l.id as string));
+      const incoming: LogEntry[] = remote
+        .filter((r) => !localIds.has(r.id))
+        .map((r) => ({
+          id: r.id,
+          date: r.date,
+          workout: r.workout_type,
+          capacityBefore: r.capacity_before_1_10 ?? 0,
+          capacityAfter: r.capacity_after_1_10 ?? 0,
+          wallSitSec: r.wall_sit_seconds ?? 0,
+          rightWristPain: r.pain_right_wrist_0_10 ?? 0,
+          leftWristPain: r.pain_left_wrist_0_10 ?? 0,
+          backPain: r.pain_back_0_10 ?? 0,
+          word: r.one_word ?? '',
+          synced: true,
+        }));
+      if (incoming.length > 0) {
+        const merged = [...incoming, ...local].sort((a, b) => b.date.localeCompare(a.date));
+        writeLogs(merged);
+      }
+    }
+    if (hRes.ok) {
+      const remote: RemoteHandLog[] = await hRes.json();
+      const local = loadHandLogs();
+      const localIds = new Set(local.filter((l) => l.id).map((l) => l.id as string));
+      const incoming: HandLog[] = remote
+        .filter((r) => !localIds.has(r.id))
+        .map((r) => ({ id: r.id, date: r.date, routine: r.routine_id, synced: true }));
+      if (incoming.length > 0) {
+        const merged = [...incoming, ...local].sort((a, b) => b.date.localeCompare(a.date));
+        writeHandLogs(merged);
+      }
+    }
+    if (state.screen === 'home') render();
+  } catch {
+    // best-effort; localStorage is canonical
+  }
+}
+
 async function flushPendingSyncs(): Promise<void> {
   if (syncDisabled()) return;
   const pendingLogs = loadLogs().filter((l) => !l.synced && l.id);
@@ -1383,5 +1455,5 @@ function bindRange(rangeId: string, valId: string, onChange: (v: number) => void
 
 document.addEventListener('DOMContentLoaded', () => {
   render();
-  void flushPendingSyncs();
+  void pullFromSupabase().then(() => flushPendingSyncs());
 });
