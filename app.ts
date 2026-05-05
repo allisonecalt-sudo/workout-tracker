@@ -219,33 +219,30 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
 const HAND_ROUTINES: Record<HandRoutineId, HandRoutine> = {
   'left-hand': {
     id: 'left-hand',
-    name: 'Left hand · tendonitis recovery',
+    name: 'Left hand · Lisa Cohen PT protocol',
     shortName: 'Left hand',
     status: 'active',
-    description: 'Gentle stretches + tendon glides for ulnar-side wrist tendonitis.',
-    frequency: '3x per day · ~5 min each',
+    description:
+      'Muscle strain recovery (Lisa Cohen, May 5) — stretch + flexion/extension + radial deviation.',
+    frequency: '1x per day · ~5 min',
     exercises: [
-      { name: 'Left tendon glides', reps: '5-10 cycles' },
-      { name: 'Left wrist circles', reps: '5 each direction' },
-      { name: 'Wall flexor stretch (left)', reps: '20-30 sec hold · 3 reps' },
-      { name: 'Wall extensor stretch (left)', reps: '20-30 sec hold · 3 reps' },
-      { name: 'Forearm self-massage (left)', reps: '30-60 sec' },
+      { name: 'Left wrist stretch', reps: '30-sec hold' },
+      { name: 'Left flexion/extension (tuna can)', reps: '10 reps each direction' },
+      { name: 'Left radial deviation (tuna can)', reps: '10 reps' },
     ],
   },
   'right-hand': {
     id: 'right-hand',
-    name: 'Right hand · TFCC isometrics (Eliana)',
+    name: 'Right hand · Lisa Cohen PT protocol',
     shortName: 'Right hand',
-    status: 'locked',
-    description: 'Isometric exercises from Eliana for TFCC + tennis elbow recovery.',
-    lockReason:
-      "Start ONLY after multiple pain-free days in a row. Day-30 test ~May 10. Confirm with Eliana before starting. You can preview the routine, but don't log it as done yet.",
-    frequency: 'TBD with Eliana',
+    status: 'active',
+    description:
+      'Same protocol as left side — stretch + flexion/extension + radial deviation strengthening.',
+    frequency: '1x per day · ~5 min',
     exercises: [
-      { name: 'Ponytail grip', reps: '10 reps · 5-sec hold' },
-      { name: 'Bottle lift — pronated', reps: '10 reps' },
-      { name: 'Bottle lift — supinated', reps: '10 reps' },
-      { name: 'Tennis elbow isometric', reps: '10-sec hold · multiple reps' },
+      { name: 'Right wrist stretch', reps: '30-sec hold' },
+      { name: 'Right flexion/extension (tuna can)', reps: '10 reps each direction' },
+      { name: 'Right radial deviation (tuna can)', reps: '10 reps' },
     ],
   },
 };
@@ -350,6 +347,36 @@ const EXERCISE_GUIDE: Record<string, { howTo: string; videoQuery: string }> = {
     howTo:
       "Conversational pace — you should be able to talk in full sentences without getting breathless. 20 minutes minimum. Walking is genuinely your most underrated exercise: it preserves joint health, supports digestion (especially good with Crohn's), aids GLP-1 medication's effect, and clears mental fog. Take it outdoors when possible — the visual variety and sunlight matter. Tap done when you finish.",
     videoQuery: 'walking exercise pace',
+  },
+  'Left wrist stretch': {
+    howTo:
+      'Lisa Cohen PT — May 5. Hold your LEFT arm out straight in front of you. With your RIGHT hand, gently pull the LEFT fingers back toward you (palm facing forward) until you feel a mild stretch in the front of your forearm. Then flip — push the LEFT hand DOWN (palm facing you) to stretch the back of the forearm. Hold 30 seconds total, no pain. Once a day.',
+    videoQuery: 'wrist stretch flexor extensor 30 seconds',
+  },
+  'Left flexion/extension (tuna can)': {
+    howTo:
+      "Lisa Cohen PT — May 5. Sit at a table. Rest your LEFT forearm flat on the table with the wrist hanging off the edge. Hold a tuna can (or similar light weight) in your LEFT hand. PALM DOWN: slowly lift the can up by bending the wrist, then lower. That's wrist EXTENSION. Then flip — PALM UP: lift the can up by curling the wrist, then lower. That's wrist FLEXION. 10 reps each direction. Slow and controlled, no pain.",
+    videoQuery: 'wrist flexion extension dumbbell rehab',
+  },
+  'Left radial deviation (tuna can)': {
+    howTo:
+      'Lisa Cohen PT — May 5. Sit at a table. Rest your LEFT forearm on the table on its PINKY-SIDE (ulnar edge), thumb pointing UP toward the ceiling. Hold a tuna can in your LEFT hand. Slowly lift the hand UPWARD toward the thumb (radial deviation), then lower with control. Small range — only the wrist moves, forearm stays put. 10 reps. Slow and pain-free.',
+    videoQuery: 'wrist radial deviation strengthening exercise',
+  },
+  'Right wrist stretch': {
+    howTo:
+      'Lisa Cohen PT — May 5. Hold your RIGHT arm out straight in front of you. With your LEFT hand, gently pull the RIGHT fingers back toward you (palm facing forward) until you feel a mild stretch in the front of your forearm. Then flip — push the RIGHT hand DOWN (palm facing you) to stretch the back of the forearm. Hold 30 seconds total, no pain. Once a day.',
+    videoQuery: 'wrist stretch flexor extensor 30 seconds',
+  },
+  'Right flexion/extension (tuna can)': {
+    howTo:
+      "Lisa Cohen PT — May 5. Sit at a table. Rest your RIGHT forearm flat on the table with the wrist hanging off the edge. Hold a tuna can (or similar light weight) in your RIGHT hand. PALM DOWN: slowly lift the can up by bending the wrist, then lower. That's wrist EXTENSION. Then flip — PALM UP: lift the can up by curling the wrist, then lower. That's wrist FLEXION. 10 reps each direction. Slow and controlled, no pain.",
+    videoQuery: 'wrist flexion extension dumbbell rehab',
+  },
+  'Right radial deviation (tuna can)': {
+    howTo:
+      'Lisa Cohen PT — May 5. Sit at a table. Rest your RIGHT forearm on the table on its PINKY-SIDE (ulnar edge), thumb pointing UP toward the ceiling. Hold a tuna can in your RIGHT hand. Slowly lift the hand UPWARD toward the thumb (radial deviation), then lower with control. Small range — only the wrist moves, forearm stays put. 10 reps. Slow and pain-free.',
+    videoQuery: 'wrist radial deviation strengthening exercise',
   },
   'Left tendon glides': {
     howTo:
@@ -1131,7 +1158,7 @@ function renderPreLog(): string {
     </div>
 
     <div class="warning-banner">
-      ⚠️ Right wrist or back pain at 3/10 → stop that exercise. <strong>Left wrist: 2/10 ceiling, no sharpness</strong> — it's actively healing tendonitis.
+      ⚠️ Wrist or back pain at 3/10 → stop that exercise. <strong>Left wrist: 2/10 ceiling, no sharpness</strong> — actively healing muscle strain (Lisa Cohen PT).
     </div>
 
     <div class="btn-row">

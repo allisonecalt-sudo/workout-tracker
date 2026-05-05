@@ -85,7 +85,6 @@ test('home shows hand care section with both routines', async ({ page }) => {
   await expect(page.locator('h3:has-text("Hand care")')).toBeVisible();
   await expect(page.locator('button[data-hand="left-hand"]')).toBeVisible();
   await expect(page.locator('button[data-hand="right-hand"]')).toBeVisible();
-  await expect(page.locator('text=🔒 not yet')).toBeVisible();
 });
 
 test('left hand routine: walk through all exercises and save log', async ({ page }) => {
@@ -109,9 +108,10 @@ test('left hand routine: walk through all exercises and save log', async ({ page
   await expect(page.locator('text=1× today')).toBeVisible();
 });
 
-test('right hand routine: shows locked banner, does not log on completion', async ({ page }) => {
+test('right hand routine: walk through all exercises and save log', async ({ page }) => {
   await page.locator('button[data-hand="right-hand"]').click();
-  await expect(page.locator('.warning-banner')).toContainText('Eliana');
+  await expect(page.locator('h2')).toContainText('Right hand');
+  await expect(page.locator('.exercise-name')).toBeVisible();
 
   for (let i = 0; i < 10; i++) {
     const onHome = await page
@@ -126,5 +126,4 @@ test('right hand routine: shows locked banner, does not log on completion', asyn
   }
 
   await expect(page.locator('h1')).toHaveText('Workout Tracker');
-  await expect(page.locator('text=🔒 not yet')).toBeVisible();
 });
