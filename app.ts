@@ -30,6 +30,9 @@ type LogEntry = {
   leftWristPain: number;
   backPain: number;
   word: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationSec?: number;
   synced?: boolean;
 };
 
@@ -78,6 +81,7 @@ type AppState = {
   selectedHandRoutine: HandRoutineId | null;
   currentHandExerciseIndex: number;
   syncStatus: SyncStatus;
+  startedAt: string | null;
 };
 
 const STORAGE_KEY = 'workout-tracker:logs';
@@ -444,6 +448,7 @@ const state: AppState = {
   selectedHandRoutine: null,
   currentHandExerciseIndex: 0,
   syncStatus: 'idle',
+  startedAt: null,
 };
 
 let audioCtx: AudioContext | null = null;
@@ -548,6 +553,9 @@ async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
           pain_right_wrist_0_10: entry.rightWristPain,
           pain_back_0_10: entry.backPain,
           one_word: entry.word || null,
+          started_at: entry.startedAt ?? null,
+          completed_at: entry.completedAt ?? null,
+          duration_seconds: entry.durationSec ?? null,
         },
       ]),
     });
@@ -629,6 +637,7 @@ function beginExercises(): void {
   state.currentPhase = 'warmup';
   state.currentExerciseIndex = 0;
   state.isResting = false;
+  state.startedAt = new Date().toISOString();
   render();
 }
 
@@ -693,8 +702,14 @@ function startTimedExercise(): void {
 
 function logCompleteAndHome(): void {
   if (!state.selectedWorkout) return;
+  const completedAt = new Date().toISOString();
+  const startedAt = state.startedAt ?? completedAt;
+  const durationSec = Math.max(
+    0,
+    Math.round((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+  );
   const stored = saveLog({
-    date: new Date().toISOString(),
+    date: completedAt,
     workout: state.selectedWorkout,
     capacityBefore: state.capacityBefore,
     capacityAfter: state.capacityAfter,
@@ -703,6 +718,9 @@ function logCompleteAndHome(): void {
     leftWristPain: state.leftWristPain,
     backPain: state.backPain,
     word: state.word,
+    startedAt,
+    completedAt,
+    durationSec,
   });
   resetState();
   render();
@@ -733,6 +751,7 @@ function resetState(): void {
   state.preCountdown = 0;
   state.selectedHandRoutine = null;
   state.currentHandExerciseIndex = 0;
+  state.startedAt = null;
 }
 
 function loadHandLogs(): HandLog[] {
@@ -804,6 +823,9 @@ type RemoteSession = {
   pain_right_wrist_0_10: number | null;
   pain_back_0_10: number | null;
   one_word: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
 };
 
 type RemoteHandLog = {
@@ -840,6 +862,9 @@ async function pullFromSupabase(): Promise<void> {
           leftWristPain: r.pain_left_wrist_0_10 ?? 0,
           backPain: r.pain_back_0_10 ?? 0,
           word: r.one_word ?? '',
+          startedAt: r.started_at ?? undefined,
+          completedAt: r.completed_at ?? undefined,
+          durationSec: r.duration_seconds ?? undefined,
           synced: true,
         }));
       if (incoming.length > 0) {
@@ -965,6 +990,13 @@ function advanceHandExercise(): void {
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatDuration(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return s === 0 ? `${m} min` : `${m}m ${s}s`;
 }
 
 function getLast7Days(): { count: number; days: number } {
@@ -1339,7 +1371,7 @@ function renderHistory(): string {
     <div class="history-row">
       <span class="history-workout-badge">${l.workout}</span>
       <div>
-        <div class="history-date">${formatDate(l.date)}</div>
+        <div class="history-date">${formatDate(l.date)}${l.durationSec ? ` · ${formatDuration(l.durationSec)}` : ''}</div>
         <div class="history-meta">cap ${l.capacityBefore}→${l.capacityAfter} · wall ${l.wallSitSec}s · pain R${l.rightWristPain} L${l.leftWristPain} B${l.backPain}</div>
         ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
       </div>
