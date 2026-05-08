@@ -12,7 +12,7 @@ test('home screen shows three workout options and zero sessions', async ({ page 
   await expect(page.locator('button[data-workout]')).toHaveCount(3);
   await expect(page.locator('text=A · Lower Body + Core')).toBeVisible();
   await expect(page.locator('text=B · Glutes + Mobility + Core')).toBeVisible();
-  await expect(page.locator('text=C · Walk + Light Core + Stretch')).toBeVisible();
+  await expect(page.locator('text=C · Walk + Core (cardio day)')).toBeVisible();
   await expect(page.locator('.stat-number').first()).toHaveText('0');
 });
 

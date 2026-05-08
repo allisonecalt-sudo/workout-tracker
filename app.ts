@@ -116,31 +116,31 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
   A: {
     id: 'A',
     name: 'Lower Body + Core',
-    description: 'Legs, glutes, abs. ~30 min, fully hands-free.',
+    description: '🚶 10-min walk + lower body strength · ~38 min',
     rounds: 3,
     warmup: [
-      { name: 'Belly breathing', reps: '8 slow breaths' },
       {
-        name: 'Knee-to-chest hugs',
-        reps: '5 each side',
-        notes: 'Forearm hook, no grip',
+        name: 'Outdoor walk',
+        reps: '10 min',
+        notes: 'Conversational pace. Doubles as warmup + cardio.',
+        isWalk: true,
       },
+      { name: 'Belly breathing', reps: '5 slow breaths' },
       { name: 'Pelvic tilts', reps: '10 slow' },
-      { name: 'Knee drops side-to-side', reps: '8 each way', notes: 'Small range' },
       { name: 'Glute squeezes', reps: '10 holds × 3 sec' },
     ],
     main: [
       {
         name: 'Bodyweight squats',
-        reps: '8 reps · 3-1-3 tempo',
+        reps: '10 reps · 3-1-3 tempo',
         notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
       },
       { name: 'Glute bridges', reps: '10 reps · 2-sec hold at top' },
       {
         name: 'Wall sit',
-        reps: '20 sec hold',
+        reps: '25 sec hold',
         notes: 'Hands rest on thighs or hang. No pushing on wall.',
-        durationSec: 20,
+        durationSec: 25,
         isTimed: true,
       },
       {
@@ -169,17 +169,21 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
   B: {
     id: 'B',
     name: 'Glutes + Mobility + Core',
-    description: 'Variety day. ~30 min, hands-free.',
+    description: '🚶 10-min walk + glutes & mobility · ~38 min',
     rounds: 3,
     warmup: [
-      { name: 'Belly breathing', reps: '8 slow breaths' },
-      { name: 'Knee-to-chest hugs', reps: '5 each side' },
+      {
+        name: 'Outdoor walk',
+        reps: '10 min',
+        notes: 'Conversational pace. Doubles as warmup + cardio.',
+        isWalk: true,
+      },
+      { name: 'Belly breathing', reps: '5 slow breaths' },
       { name: 'Pelvic tilts', reps: '10 slow' },
-      { name: 'Knee drops side-to-side', reps: '8 each way' },
       { name: 'Glute squeezes', reps: '10 holds × 3 sec' },
     ],
     main: [
-      { name: 'Side-lying leg raises', reps: '10 each side' },
+      { name: 'Side-lying leg raises', reps: '12 each side' },
       { name: 'Side-lying clamshells', reps: '10 each side' },
       { name: 'Single-leg glute bridges', reps: '8 each side' },
       { name: 'Slow supine bicycle', reps: '8 each side' },
@@ -199,24 +203,32 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
   },
   C: {
     id: 'C',
-    name: 'Walk + Light Core + Stretch',
-    description: 'Low-energy day still counts. ~30 min.',
-    rounds: 1,
-    warmup: [{ name: 'Belly breathing', reps: '8 slow breaths' }],
-    main: [
+    name: 'Walk + Core (cardio day)',
+    description: '🚶 25-min walk + 2-round core block · ~37 min',
+    rounds: 2,
+    warmup: [
       {
         name: 'Outdoor walk',
-        reps: '20 min',
-        notes: 'Conversational pace. Tap done when finished.',
+        reps: '25 min',
+        notes: 'Conversational-to-brisk pace. Tap done when finished.',
         isWalk: true,
       },
+    ],
+    main: [
       { name: 'Glute bridges', reps: '10 reps · 2-sec hold' },
+      { name: 'Side-lying clamshells', reps: '10 each side' },
       { name: 'Modified dead bug', reps: '6 each side' },
-      { name: 'Heel taps', reps: '10 each side' },
+      {
+        name: 'Standing calf raises',
+        reps: '15 reps',
+        notes: 'Fingertip touch on wall for balance only — NO grip.',
+      },
+    ],
+    cooldown: [
       { name: 'Figure-4 stretch', reps: '45 sec each side' },
       { name: 'Knees-to-chest hold', reps: '60 sec' },
+      { name: 'Slow breathing', reps: '8 breaths' },
     ],
-    cooldown: [{ name: 'Slow breathing', reps: '8 breaths' }],
   },
 };
 
