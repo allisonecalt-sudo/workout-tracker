@@ -1011,11 +1011,49 @@ function formatDuration(sec: number): string {
   return s === 0 ? `${m} min` : `${m}m ${s}s`;
 }
 
-function getLast7Days(): { count: number; days: number } {
+const PROGRAM_START_DATE = '2026-05-02';
+
+function getProgramWeek(date: Date = new Date()): { num: number; start: Date; end: Date } {
+  const start = new Date(PROGRAM_START_DATE + 'T00:00:00');
+  const diffDays = Math.floor((date.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  const num = Math.max(1, Math.floor(diffDays / 7) + 1);
+  const weekStart = new Date(start);
+  weekStart.setDate(start.getDate() + (num - 1) * 7);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  return { num, start: weekStart, end: weekEnd };
+}
+
+function formatWeekRange(start: Date, end: Date): string {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const sameMonth = start.getMonth() === end.getMonth();
+  const startStr = `${months[start.getMonth()]} ${start.getDate()}`;
+  const endStr = sameMonth ? `${end.getDate()}` : `${months[end.getMonth()]} ${end.getDate()}`;
+  return `${startStr}–${endStr}`;
+}
+
+function getThisWeekCount(): number {
   const logs = loadLogs();
-  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const recent = logs.filter((l) => new Date(l.date).getTime() > sevenDaysAgo);
-  return { count: recent.length, days: 7 };
+  const { start, end } = getProgramWeek();
+  const startMs = start.getTime();
+  const endMs = end.getTime() + 24 * 60 * 60 * 1000 - 1;
+  return logs.filter((l) => {
+    const t = new Date(l.date).getTime();
+    return t >= startMs && t <= endMs;
+  }).length;
 }
 
 function escapeHtml(s: string): string {
@@ -1029,7 +1067,9 @@ function escapeHtml(s: string): string {
 
 function renderHome(): string {
   const logs = loadLogs();
-  const { count } = getLast7Days();
+  const week = getProgramWeek();
+  const weekRange = formatWeekRange(week.start, week.end);
+  const thisWeekCount = getThisWeekCount();
   const recentHtml = logs
     .slice(0, 5)
     .map(
@@ -1049,14 +1089,15 @@ function renderHome(): string {
   return `
     <h1>Workout Tracker</h1>
     <p class="subtitle">Three rotating sessions. Show up 3x/week.</p>
+    <div class="week-banner">Week ${week.num} · ${weekRange}</div>
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
 
     <div class="card">
-      <h3>This week</h3>
+      <h3>Week ${week.num} progress</h3>
       <div class="streak-stat">
         <div class="stat-block">
-          <div class="stat-number">${count}</div>
-          <div class="stat-label">of 3 done</div>
+          <div class="stat-number">${thisWeekCount}</div>
+          <div class="stat-label">of 3 this week</div>
         </div>
         <div class="stat-block">
           <div class="stat-number">${logs.length}</div>

@@ -63,7 +63,19 @@ h3 {
 
 .subtitle {
   color: var(--text-dim);
-  margin-bottom: 24px;
+  margin-bottom: 12px;
+}
+
+.week-banner {
+  display: inline-block;
+  background: var(--accent, #6366f1);
+  color: white;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  margin-bottom: 20px;
 }
 
 .card {
