@@ -426,3 +426,74 @@ test('ship 4: weekly review empty state for week with no sessions', async ({ pag
   expect(empty?.toLowerCase()).not.toContain('keep going');
   expect(empty?.toLowerCase()).not.toContain('you got');
 });
+
+// --- COOLER-LOOK (2026-05-15 evening) -----------------------------------------
+//
+// Layer of modern visual interest on top of D-1: gradients, restrained glass,
+// spring-physics motion, workout-card monograms. These tests lock in:
+//  - new motion + glass tokens exist on :root
+//  - workout-picker tiles render an aria-hidden monogram with the workout letter
+//  - today's-pick card has the accent-tinted gradient + accent glow
+//
+// If a future change strips the depth tokens or removes the monogram, one of
+// these tests fires.
+
+test('cooler-look: motion + glass design tokens are defined on :root', async ({ page }) => {
+  // Spring easing constant + base duration + glass background must resolve.
+  const tokens = await page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    return {
+      easeSpring: cs.getPropertyValue('--ease-spring').trim(),
+      durBase: cs.getPropertyValue('--dur-base').trim(),
+      glassBg: cs.getPropertyValue('--glass-bg').trim(),
+      gradSurface: cs.getPropertyValue('--grad-surface').trim(),
+      gradHero: cs.getPropertyValue('--grad-hero').trim(),
+    };
+  });
+  expect(tokens.easeSpring).toContain('cubic-bezier');
+  expect(tokens.durBase).toBeTruthy();
+  expect(tokens.glassBg).toContain('rgba');
+  // The hero gradient is the differentiator vs the plain surface gradient.
+  expect(tokens.gradSurface).toBeTruthy();
+  expect(tokens.gradHero).toBeTruthy();
+  expect(tokens.gradHero).not.toBe(tokens.gradSurface);
+});
+
+test('cooler-look: workout-picker tiles render an aria-hidden monogram letter', async ({
+  page,
+}) => {
+  // Each workout-card has a .workout-card-monogram with the workout letter
+  // (A / B / C), positioned behind the text at low opacity. aria-hidden so
+  // screen readers don't double-announce.
+  const monograms = page.locator('.workout-card .workout-card-monogram');
+  await expect(monograms).toHaveCount(3);
+  await expect(monograms.nth(0)).toHaveText('A');
+  await expect(monograms.nth(1)).toHaveText('B');
+  await expect(monograms.nth(2)).toHaveText('C');
+  // aria-hidden so the row's accessible name stays clean.
+  await expect(monograms.first()).toHaveAttribute('aria-hidden', 'true');
+});
+
+test("cooler-look: today's-pick card uses gradient + glow, not flat fill", async ({ page }) => {
+  // Empty history → A is today's pick (per existing test). Its computed
+  // background-image should resolve to a non-"none" gradient (the --grad-hero
+  // accent-tinted surface) AND its box-shadow should be non-"none" (the
+  // --glow-accent inset + soft outer glow).
+  const pick = page.locator('.workout-card-pick');
+  await expect(pick).toBeVisible();
+  const styles = await pick.evaluate((el) => {
+    const cs = window.getComputedStyle(el);
+    return {
+      backgroundImage: cs.backgroundImage,
+      boxShadow: cs.boxShadow,
+      borderRadius: cs.borderRadius,
+    };
+  });
+  // Hero gradient resolves to a CSS image, not "none".
+  expect(styles.backgroundImage).toContain('gradient');
+  // Glow shadow renders (not "none").
+  expect(styles.boxShadow).not.toBe('none');
+  // Hero radius is the bigger lg value (20px) — visually breaks from the
+  // sibling tiles which sit at the default 14px.
+  expect(parseFloat(styles.borderRadius)).toBeGreaterThanOrEqual(18);
+});

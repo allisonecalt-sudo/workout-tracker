@@ -1142,7 +1142,7 @@ function renderHowToCard(exerciseName: string): string {
     <div class="how-to-card ${isOpen ? 'how-to-open' : ''}">
       <button class="how-to-toggle" data-toggle-howto="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isOpen}">
         <span>📖 How to do it</span>
-        <span class="how-to-chev">${isOpen ? '▾' : '▸'}</span>
+        <span class="how-to-chev">▸</span>
       </button>
       ${isOpen ? innerHtml : ''}
     </div>
@@ -1454,6 +1454,7 @@ function renderHome(): string {
           const isPick = id === todaysPick;
           return `
         <button class="workout-card ${isPick ? 'workout-card-pick' : ''}" data-workout="${id}">
+          <span class="workout-card-monogram" aria-hidden="true">${w.id}</span>
           ${isPick ? '<span class="workout-card-pick-badge">Today\'s pick</span>' : ''}
           <div class="workout-card-header">
             <span class="workout-card-title">${w.id} · ${w.name}</span>
