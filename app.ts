@@ -942,32 +942,6 @@ function syncIndicatorText(): string {
   return 'synced ✓';
 }
 
-function getLastHandDone(routine: HandRoutineId): string | null {
-  const logs = loadHandLogs();
-  const found = logs.find((l) => l.routine === routine);
-  return found ? found.date : null;
-}
-
-function getHandTodayCount(routine: HandRoutineId): number {
-  const logs = loadHandLogs();
-  const now = new Date();
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  return logs.filter((l) => l.routine === routine && new Date(l.date).getTime() >= startOfDay)
-    .length;
-}
-
-function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin} min ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hr ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay === 1) return 'yesterday';
-  return `${diffDay} days ago`;
-}
-
 function startHandRoutine(id: HandRoutineId): void {
   state.selectedHandRoutine = id;
   state.currentHandExerciseIndex = 0;
@@ -1118,33 +1092,6 @@ function renderHome(): string {
             <span class="workout-card-badge">${w.rounds === 1 ? 'easy' : `${w.rounds} rounds`}</span>
           </div>
           <div class="workout-card-desc">${w.description}</div>
-        </button>
-      `;
-        })
-        .join('')}
-    </div>
-
-    <div class="divider"></div>
-    <h3>Hand care</h3>
-    <div class="workout-picker">
-      ${(['left-hand', 'right-hand'] as HandRoutineId[])
-        .map((id) => {
-          const r = HAND_ROUTINES[id];
-          const lastDone = getLastHandDone(id);
-          const todayCount = getHandTodayCount(id);
-          const lastText = lastDone ? `Last: ${timeAgo(lastDone)}` : 'Not started';
-          const statusBadge =
-            r.status === 'active'
-              ? `<span class="workout-card-badge badge-active">${todayCount}× today</span>`
-              : `<span class="workout-card-badge badge-locked">🔒 not yet</span>`;
-          return `
-        <button class="workout-card hand-card" data-hand="${id}">
-          <div class="workout-card-header">
-            <span class="workout-card-title">${r.shortName}</span>
-            ${statusBadge}
-          </div>
-          <div class="workout-card-desc">${r.description}</div>
-          <div class="hand-card-meta">${r.frequency}${r.status === 'active' ? ` · ${lastText}` : ''}</div>
         </button>
       `;
         })
@@ -1374,22 +1321,6 @@ function renderPostLog(): string {
       </label>
 
       <label class="field">
-        <span class="label-text">Right wrist pain (0-10)</span>
-        <div class="range-row">
-          <input type="range" id="r-wrist" min="0" max="10" value="${state.rightWristPain}" />
-          <span class="range-value" id="r-wrist-val">${state.rightWristPain}</span>
-        </div>
-      </label>
-
-      <label class="field">
-        <span class="label-text">Left wrist pain (0-10)</span>
-        <div class="range-row">
-          <input type="range" id="l-wrist" min="0" max="10" value="${state.leftWristPain}" />
-          <span class="range-value" id="l-wrist-val">${state.leftWristPain}</span>
-        </div>
-      </label>
-
-      <label class="field">
         <span class="label-text">Back pain (0-10)</span>
         <div class="range-row">
           <input type="range" id="back" min="0" max="10" value="${state.backPain}" />
@@ -1425,7 +1356,7 @@ function renderHistory(): string {
       <span class="history-workout-badge">${l.workout}</span>
       <div>
         <div class="history-date">${formatDate(l.date)}${l.durationSec ? ` · ${formatDuration(l.durationSec)}` : ''}</div>
-        <div class="history-meta">cap ${l.capacityBefore}→${l.capacityAfter} · wall ${l.wallSitSec}s · pain R${l.rightWristPain} L${l.leftWristPain} B${l.backPain}</div>
+        <div class="history-meta">cap ${l.capacityBefore}→${l.capacityAfter} · wall ${l.wallSitSec}s · back pain ${l.backPain}</div>
         ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
       </div>
     </div>
