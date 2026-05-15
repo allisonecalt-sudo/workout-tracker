@@ -2050,6 +2050,267 @@ input[type='number']:focus {
   color: var(--text-dim-2);
 }
 
+/* ----------------------------------------------------------------------------
+ * Ship 5 — Progress screen (2026-05-15)
+ *
+ * Read-only longitudinal view. The screen reports her data — it never
+ * editorializes. Hand-built inline SVG charts, no external libraries, no new
+ * color tokens. Visual register matches cooler-look (gradient surfaces, spring
+ * easing on interactives, monogram-style identity badges in the breakdown).
+ * --------------------------------------------------------------------------- */
+
+/* The "📈 Progress →" link on home — sibling of .weekly-review-link.
+ * Shares the same surface treatment so the two chips read as a pair. */
+.progress-link {
+  /* All visual styling inherits from .weekly-review-link. This selector
+   * exists for forward-extension only (e.g. if Progress ever needs a
+   * different accent). */
+}
+
+.progress-subtitle {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  margin-bottom: 22px;
+  letter-spacing: 0.01em;
+}
+
+.progress-subtitle-num {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.progress-empty {
+  color: var(--text-dim-2);
+  font-size: var(--font-small);
+  text-align: center;
+  font-style: italic;
+  padding: 32px 0;
+}
+
+.progress-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Per-card shell — same gradient surface as cooler-look .card already provides;
+ * we just rename a few inner pieces for readability and tone. */
+.progress-card {
+  /* Inherits .card surface (gradient + border + radius). */
+  padding: 18px 18px 20px;
+}
+
+.progress-card-label {
+  font-size: var(--font-micro);
+  letter-spacing: var(--track-label);
+  color: var(--text-dim-2);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+/* The headline number on the wall-sit card — big display weight, cooler-look
+ * register (650 weight, slight tracking). NOT a "stat" in the streak-card
+ * sense; this is the single hero number for the metric. */
+.progress-stat-big {
+  font-family: var(--font-family);
+  font-size: var(--font-display);
+  font-weight: 650;
+  letter-spacing: var(--track-display);
+  color: color-mix(in srgb, var(--accent) 6%, var(--text));
+  line-height: 1.05;
+  margin: 4px 0 14px;
+}
+
+.progress-chart-wrap {
+  width: 100%;
+  height: 220px;
+  margin: 4px 0 12px;
+  /* Anchor the SVG so preserveAspectRatio="none" stretches cleanly. */
+  display: flex;
+  align-items: stretch;
+}
+
+.progress-chart-wrap-bar {
+  height: 140px;
+}
+
+.progress-chart-wrap-hbar {
+  height: auto;
+  min-height: 80px;
+}
+
+.progress-chart {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.progress-card-meta {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+}
+
+.progress-card-meta strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.progress-card-empty {
+  font-size: var(--font-small);
+  color: var(--text-dim-2);
+  font-style: italic;
+}
+
+/* Calm delta — no shouty colors. Up = sage progress; down = warm dim; same =
+ * dim-2. Per CLAUDE.md design rule: report direction, don't judge. */
+.progress-delta-up {
+  color: var(--accent-progress);
+  font-weight: 600;
+}
+
+.progress-delta-down {
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.progress-delta-same {
+  color: var(--text-dim-2);
+  font-weight: 500;
+}
+
+/* Capacity chart legend — two dots, before / after. Tokens echo the two
+ * series colors in renderCapacityTrendCard so they read as paired. */
+.progress-legend {
+  display: flex;
+  gap: 16px;
+  margin: -4px 0 10px;
+  font-size: var(--font-micro);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--text-dim-2);
+}
+
+.progress-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progress-legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.progress-legend-dot-before {
+  background: var(--text-dim);
+}
+
+.progress-legend-dot-after {
+  background: var(--accent-progress);
+  /* Soft inner ring echoes the emphasized last-point on the chart. */
+  box-shadow: inset 0 0 0 1.5px var(--accent-hover);
+}
+
+/* Exercise-breakdown collapsible card. Closed by default; chevron rotates
+ * on open. Spring easing matches cooler-look how-to chevron. */
+.progress-card-breakdown {
+  padding: 0;
+}
+
+.progress-breakdown-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  border: none;
+  padding: 16px 18px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.progress-breakdown-toggle .progress-card-label {
+  margin-bottom: 0;
+}
+
+.progress-breakdown-chev {
+  color: var(--text-dim-2);
+  font-size: var(--font-body);
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+.progress-card-breakdown-open .progress-breakdown-chev {
+  transform: rotate(90deg);
+}
+
+.progress-breakdown-list {
+  padding: 0 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progress-breakdown-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  font-size: var(--font-small);
+  border-bottom: 1px solid var(--border-divider);
+}
+
+.progress-breakdown-row:last-child {
+  border-bottom: none;
+}
+
+/* Workout-identity badges for the breakdown rows — desaturated dot tokens
+ * (same palette as week-dots / weekly-slot). */
+.progress-breakdown-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-micro);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text);
+}
+
+.progress-breakdown-badge-A {
+  background: color-mix(in srgb, var(--dot-a) 80%, transparent);
+}
+
+.progress-breakdown-badge-B {
+  background: color-mix(in srgb, var(--dot-b) 80%, transparent);
+}
+
+.progress-breakdown-badge-C {
+  background: color-mix(in srgb, var(--dot-c) 80%, transparent);
+}
+
+.progress-breakdown-name {
+  color: var(--text);
+}
+
+.progress-breakdown-count {
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Spring hover on bar / point — cooler-look register but lighter; we don't
+ * want the chart to feel game-y. Hover lift only on the SVG container. */
+.progress-chart-wrap:hover .progress-chart {
+  filter: brightness(1.06);
+  transition: filter var(--dur-base) var(--ease-out);
+}
+
 /* --- Tablet bumps ------------------------------------------------------ */
 
 @media (min-width: 600px) {

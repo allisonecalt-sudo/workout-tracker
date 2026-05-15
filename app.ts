@@ -49,7 +49,8 @@ type AppScreen =
   | 'post-log'
   | 'history'
   | 'history-detail'
-  | 'weekly-review';
+  | 'weekly-review'
+  | 'progress';
 
 type Phase = 'warmup' | 'main' | 'cooldown';
 
@@ -86,6 +87,9 @@ type AppState = {
   videoExpandedFor: string | null;
   // collapse state for "How to do it" — collapsed by default after first-seen-this-week.
   howToOpenFor: string | null;
+  // Ship 5 progress screen: collapsible exercise-breakdown card. Closed by
+  // default — it's reference, not primary.
+  exerciseBreakdownOpen: boolean;
 };
 
 const STORAGE_KEY = 'workout-tracker:logs';
@@ -342,6 +346,7 @@ const state: AppState = {
   historyDetailId: null,
   videoExpandedFor: null,
   howToOpenFor: null,
+  exerciseBreakdownOpen: false,
 };
 
 // ---------- audio ----------
@@ -1446,6 +1451,11 @@ function renderHome(): string {
       <span class="weekly-review-link-chev">→</span>
     </button>
 
+    <button class="weekly-review-link progress-link" id="open-progress-link" type="button">
+      <span>📈 Progress</span>
+      <span class="weekly-review-link-chev">→</span>
+    </button>
+
     <h3>Pick today's workout</h3>
     <div class="workout-picker">
       ${(['A', 'B', 'C'] as WorkoutId[])
@@ -1752,6 +1762,10 @@ function renderHistoryDetail(): string {
       <div class="detail-row"><span class="detail-label">Back pain</span><span>${log.backPain}/10</span></div>
       ${log.word ? `<div class="detail-row"><span class="detail-label">One word</span><span><em>"${escapeHtml(log.word)}"</em></span></div>` : ''}
     </div>
+    <button class="weekly-review-link progress-link" id="open-progress-from-detail" type="button">
+      <span>📈 View progress</span>
+      <span class="weekly-review-link-chev">→</span>
+    </button>
     <button class="btn-large" id="back-history" type="button">Back to history</button>
   `;
 }
@@ -2080,6 +2094,512 @@ function renderWeeklyReview(): string {
   `;
 }
 
+// ---------- Ship 5: Progress screen (2026-05-15) ----------
+//
+// A read-only longitudinal view across her entire history. Reached from home
+// via the "📈 Progress →" link below the weekly-review link, and from any
+// history-detail screen. The screen reports numbers — it does NOT editorialize.
+//
+// Design rules honored (CLAUDE.md design rules + memory):
+//  - No motivational language. No "you should." No goals beyond the 3/week target.
+//  - No paternalism. The system reports state; it never tells.
+//  - Voice rule: charts show the data, not Claude's interpretation of it.
+//  - Archives untouched. Year-grid + hand-routine archives stay in archive/.
+//  - No new external libraries — every chart is hand-built inline SVG.
+//  - No new color tokens — only D-1 + cooler-look additions.
+
+// Oldest → newest array of all logs (loadLogs returns newest-first).
+function getChronologicalLogs(): LogEntry[] {
+  return loadLogs().slice().reverse();
+}
+
+// Generic line-chart helper. Renders one or more series on a shared
+// session-index x-axis. Each series has a color (CSS var name as string),
+// values array, and optional "emph last point" flag. SVG dimensions: 100%
+// width × 220px height via viewBox; the parent container constrains real
+// pixel size.
+type LineSeries = {
+  values: number[];
+  colorVar: string; // e.g. 'var(--accent-progress)'
+  dotFill?: string; // optional fill for non-emph dots
+  emphLast?: boolean;
+};
+
+function renderProgressLineChart(
+  series: LineSeries[],
+  opts: { ariaLabel: string; showMaxGuide?: boolean; maxGuideLabel?: string }
+): string {
+  // Flatten all values to compute shared y-range across series.
+  const allVals: number[] = [];
+  for (const s of series) for (const v of s.values) allVals.push(v);
+  if (allVals.length < 2) return '';
+
+  const W = 320;
+  const H = 220;
+  const PAD_L = 8;
+  const PAD_R = 16;
+  const PAD_T = 16;
+  const PAD_B = 14;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  const dataMin = Math.min(...allVals);
+  const dataMax = Math.max(...allVals);
+  // Pad y-range by 8% on each side so the line doesn't kiss the frame.
+  const span = dataMax - dataMin || 1;
+  const yMin = dataMin - span * 0.08;
+  const yMax = dataMax + span * 0.08;
+  const yRange = yMax - yMin || 1;
+
+  // Use the longest series for x-step.
+  const maxLen = Math.max(...series.map((s) => s.values.length));
+  const stepX = maxLen > 1 ? innerW / (maxLen - 1) : 0;
+
+  function xFor(i: number): number {
+    return PAD_L + i * stepX;
+  }
+  function yFor(v: number): number {
+    return PAD_T + (1 - (v - yMin) / yRange) * innerH;
+  }
+
+  // Optional dashed max guideline.
+  let guide = '';
+  if (opts.showMaxGuide) {
+    const guideY = yFor(dataMax);
+    guide = `
+      <line x1="${PAD_L}" y1="${guideY.toFixed(1)}" x2="${(W - PAD_R).toFixed(1)}" y2="${guideY.toFixed(1)}"
+            stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3" />
+      <text x="${(W - PAD_R).toFixed(1)}" y="${(guideY - 4).toFixed(1)}" text-anchor="end"
+            font-size="9" fill="var(--text-dim-2)" letter-spacing="1.2px">${escapeHtml(opts.maxGuideLabel ?? 'max')}</text>
+    `;
+  }
+
+  // Build a path + circles per series.
+  const seriesHtml = series
+    .map((s) => {
+      if (s.values.length < 2) return '';
+      const pts = s.values.map((v, i) => [xFor(i), yFor(v)] as [number, number]);
+      const path = pts
+        .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`)
+        .join(' ');
+      const dots = pts
+        .map(([x, y], i) => {
+          const isLast = i === pts.length - 1;
+          if (isLast && s.emphLast) {
+            return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="var(--accent-hover)" />`;
+          }
+          const fill = s.dotFill ?? s.colorVar;
+          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${fill}" />`;
+        })
+        .join('');
+      return `
+        <path d="${path}" fill="none" stroke="${s.colorVar}" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" />
+        ${dots}
+      `;
+    })
+    .join('');
+
+  return `
+    <svg class="progress-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+         role="img" aria-label="${escapeHtml(opts.ariaLabel)}">
+      <title>${escapeHtml(opts.ariaLabel)}</title>
+      ${guide}
+      ${seriesHtml}
+    </svg>
+  `;
+}
+
+// Bar chart for back pain — categorical (0-10), bar per session.
+function renderProgressBarChart(
+  values: number[],
+  opts: { ariaLabel: string; yMax: number; barColorVar: string }
+): string {
+  if (values.length === 0) return '';
+  const W = 320;
+  const H = 140;
+  const PAD_L = 8;
+  const PAD_R = 8;
+  const PAD_T = 12;
+  const PAD_B = 12;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  // Bar geometry: target 4px wide, 2px gap. If too many sessions, the bar
+  // shrinks but we keep at least 1px wide.
+  const slot = innerW / values.length;
+  const barW = Math.max(1, Math.min(4, slot - 2));
+
+  const bars = values
+    .map((v, i) => {
+      if (v <= 0) return '';
+      const ratio = Math.min(1, v / opts.yMax);
+      const h = ratio * innerH;
+      const x = PAD_L + i * slot + (slot - barW) / 2;
+      const y = PAD_T + innerH - h;
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}"
+              fill="${opts.barColorVar}" rx="1" />`;
+    })
+    .join('');
+
+  return `
+    <svg class="progress-chart progress-chart-bar" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+         role="img" aria-label="${escapeHtml(opts.ariaLabel)}">
+      <title>${escapeHtml(opts.ariaLabel)}</title>
+      ${bars}
+    </svg>
+  `;
+}
+
+// Horizontal bar chart for sessions-per-week. Each row = one program week,
+// fill width proportional to count (capped at 3). Dashed target line at x=3.
+function renderProgressHorizontalBars(
+  rows: { label: string; value: number }[],
+  opts: { ariaLabel: string; target: number }
+): string {
+  if (rows.length === 0) return '';
+  const W = 320;
+  const rowH = 22;
+  const rowGap = 6;
+  const H = rows.length * (rowH + rowGap) - rowGap + 16;
+  const PAD_L = 56; // room for the week label
+  const PAD_R = 12;
+  const innerW = W - PAD_L - PAD_R;
+
+  const targetX = PAD_L + (opts.target / opts.target) * innerW;
+
+  const barsHtml = rows
+    .map((r, i) => {
+      const y = i * (rowH + rowGap);
+      const ratio = Math.min(1, r.value / opts.target);
+      const barW = ratio * innerW;
+      return `
+        <text x="${(PAD_L - 8).toFixed(1)}" y="${(y + rowH / 2 + 3).toFixed(1)}" text-anchor="end"
+              font-size="11" fill="var(--text-dim-2)" letter-spacing="1.2px">${escapeHtml(r.label)}</text>
+        <rect x="${PAD_L}" y="${y.toFixed(1)}" width="${innerW.toFixed(1)}" height="${rowH}"
+              fill="var(--bg-elev-2)" rx="3" />
+        ${
+          barW > 0
+            ? `<rect x="${PAD_L}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${rowH}"
+                  fill="var(--accent-progress)" rx="3" />`
+            : ''
+        }
+        <text x="${(W - PAD_R - 4).toFixed(1)}" y="${(y + rowH / 2 + 4).toFixed(1)}" text-anchor="end"
+              font-size="11" fill="var(--text-dim)">${r.value} / ${opts.target}</text>
+      `;
+    })
+    .join('');
+
+  return `
+    <svg class="progress-chart progress-chart-hbar" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+         role="img" aria-label="${escapeHtml(opts.ariaLabel)}">
+      <title>${escapeHtml(opts.ariaLabel)}</title>
+      ${barsHtml}
+      <line x1="${targetX.toFixed(1)}" y1="0" x2="${targetX.toFixed(1)}" y2="${(H - 16).toFixed(1)}"
+            stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 3" opacity="0.6" />
+    </svg>
+  `;
+}
+
+// ----- Per-card render helpers -----
+
+function renderWallSitTrendCard(logs: LogEntry[]): string {
+  // Wall-sit values only come from workouts that include a wall sit (A).
+  // Use every log with wallSitSec > 0, chronological.
+  const wallSits = logs.filter((l) => l.wallSitSec > 0).map((l) => l.wallSitSec);
+
+  if (wallSits.length < 2) {
+    if (wallSits.length === 1) {
+      const only = wallSits[0] ?? 0;
+      return `
+        <div class="card progress-card">
+          <div class="progress-card-label">Wall sit · seconds held</div>
+          <div class="progress-stat-big">${only}s</div>
+          <p class="progress-card-empty">One value logged — chart appears after 2+ wall-sit sessions.</p>
+        </div>
+      `;
+    }
+    return '';
+  }
+
+  const first = wallSits[0] ?? 0;
+  const last = wallSits[wallSits.length - 1] ?? 0;
+  const maxVal = Math.max(...wallSits);
+  const diff = last - first;
+
+  let deltaLine: string;
+  if (diff === 0) {
+    deltaLine = `<span class="progress-delta-same">same as first session</span>`;
+  } else if (diff > 0) {
+    deltaLine = `<span class="progress-delta-up">+${diff}s since first session</span>`;
+  } else {
+    deltaLine = `<span class="progress-delta-down">${diff}s since first session</span>`;
+  }
+
+  const chart = renderProgressLineChart(
+    [
+      {
+        values: wallSits,
+        colorVar: 'var(--accent-progress)',
+        dotFill: 'var(--accent)',
+        emphLast: true,
+      },
+    ],
+    {
+      ariaLabel: `Wall sit trend: ${first} to ${last} seconds over ${wallSits.length} sessions, max ${maxVal}`,
+      showMaxGuide: true,
+      maxGuideLabel: 'max',
+    }
+  );
+
+  return `
+    <div class="card progress-card">
+      <div class="progress-card-label">Wall sit · seconds held</div>
+      <div class="progress-stat-big">${maxVal}s</div>
+      <div class="progress-chart-wrap">${chart}</div>
+      <div class="progress-card-meta">${deltaLine}</div>
+    </div>
+  `;
+}
+
+function renderCapacityTrendCard(logs: LogEntry[]): string {
+  if (logs.length < 2) return '';
+
+  const before = logs.map((l) => l.capacityBefore);
+  const after = logs.map((l) => l.capacityAfter);
+
+  const avgBefore = before.reduce((a, b) => a + b, 0) / before.length;
+  const avgAfter = after.reduce((a, b) => a + b, 0) / after.length;
+
+  const chart = renderProgressLineChart(
+    [
+      { values: before, colorVar: 'var(--text-dim)', dotFill: 'var(--text-dim)' },
+      {
+        values: after,
+        colorVar: 'var(--accent-progress)',
+        dotFill: 'var(--accent-progress)',
+        emphLast: true,
+      },
+    ],
+    {
+      ariaLabel: `Capacity trend: avg before ${avgBefore.toFixed(1)}, avg after ${avgAfter.toFixed(1)} over ${logs.length} sessions`,
+    }
+  );
+
+  return `
+    <div class="card progress-card">
+      <div class="progress-card-label">Capacity · before → after</div>
+      <div class="progress-chart-wrap">${chart}</div>
+      <div class="progress-legend">
+        <span class="progress-legend-item">
+          <span class="progress-legend-dot progress-legend-dot-before"></span>before
+        </span>
+        <span class="progress-legend-item">
+          <span class="progress-legend-dot progress-legend-dot-after"></span>after
+        </span>
+      </div>
+      <div class="progress-card-meta">
+        Avg before <strong>${avgBefore.toFixed(1)}</strong> · Avg after <strong>${avgAfter.toFixed(1)}</strong>
+      </div>
+    </div>
+  `;
+}
+
+function renderBackPainTrendCard(logs: LogEntry[]): string {
+  if (logs.length < 2) return '';
+
+  const values = logs.map((l) => l.backPain);
+  const positive = values.filter((v) => v > 0);
+
+  // Pain scale max is 10 per the post-log slider.
+  const chart = renderProgressBarChart(values, {
+    ariaLabel:
+      positive.length === 0
+        ? `Back pain: no pain logged across ${logs.length} sessions`
+        : `Back pain: ${positive.length} of ${logs.length} sessions with pain, avg ${(positive.reduce((a, b) => a + b, 0) / positive.length).toFixed(1)}`,
+    yMax: 10,
+    barColorVar: 'var(--accent-warn)',
+  });
+
+  let metaLine: string;
+  if (positive.length === 0) {
+    metaLine = `No back pain logged across ${logs.length} sessions.`;
+  } else {
+    const avg = positive.reduce((a, b) => a + b, 0) / positive.length;
+    metaLine = `Avg <strong>${avg.toFixed(1)}</strong> across ${positive.length} session${positive.length === 1 ? '' : 's'} where pain logged.`;
+  }
+
+  return `
+    <div class="card progress-card">
+      <div class="progress-card-label">Back pain · 0–10</div>
+      <div class="progress-chart-wrap progress-chart-wrap-bar">${chart}</div>
+      <div class="progress-card-meta">${metaLine}</div>
+    </div>
+  `;
+}
+
+function renderSessionsPerWeekCard(logs: LogEntry[]): string {
+  // Build one entry per program week from PROGRAM_START_DATE forward through
+  // the current week.
+  const programStart = new Date(PROGRAM_START_DATE + 'T00:00:00');
+  // Find Saturday on/before programStart.
+  const startDow = programStart.getDay(); // 0=Sun..6=Sat
+  const daysBackToSat = (startDow + 1) % 7;
+  const firstSat = new Date(programStart);
+  firstSat.setDate(programStart.getDate() - daysBackToSat);
+  firstSat.setHours(0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayDow = today.getDay();
+  const daysSinceSat = (todayDow + 1) % 7;
+  const thisSat = new Date(today);
+  thisSat.setDate(today.getDate() - daysSinceSat);
+  thisSat.setHours(0, 0, 0, 0);
+
+  const rows: { label: string; value: number; isCurrent: boolean }[] = [];
+  const cursor = new Date(firstSat);
+  while (cursor.getTime() <= thisSat.getTime()) {
+    const weekStart = new Date(cursor);
+    const weekEnd = new Date(cursor);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    const count = logs.filter((l) => {
+      const t = new Date(l.date).getTime();
+      return t >= weekStart.getTime() && t < weekEnd.getTime();
+    }).length;
+    const weekNum = getProgramWeek(weekStart).num;
+    const isCurrent = weekStart.getTime() === thisSat.getTime();
+    rows.push({
+      label: isCurrent ? 'now' : `wk ${weekNum}`,
+      value: count,
+      isCurrent,
+    });
+    cursor.setDate(cursor.getDate() + 7);
+  }
+
+  if (rows.length === 0) return '';
+
+  const hits = rows.filter((r) => r.value >= 3).length;
+  const chart = renderProgressHorizontalBars(rows, {
+    ariaLabel: `Sessions per week: hit target ${hits} of ${rows.length} weeks`,
+    target: 3,
+  });
+
+  return `
+    <div class="card progress-card">
+      <div class="progress-card-label">Sessions per week</div>
+      <div class="progress-chart-wrap progress-chart-wrap-hbar">${chart}</div>
+      <div class="progress-card-meta">
+        Hit target <strong>${hits} of ${rows.length}</strong> ${rows.length === 1 ? 'week' : 'weeks'}.
+      </div>
+    </div>
+  `;
+}
+
+function renderExerciseBreakdownCard(logs: LogEntry[]): string {
+  // Count how many times each workout letter appears, then list every
+  // exercise from WORKOUTS with its count (count of sessions where that
+  // workout was logged — each session does each exercise once per round).
+  const workoutCounts: Record<WorkoutId, number> = { A: 0, B: 0, C: 0 };
+  let maxWallSit = 0;
+  for (const l of logs) {
+    workoutCounts[l.workout] += 1;
+    if (l.wallSitSec > maxWallSit) maxWallSit = l.wallSitSec;
+  }
+
+  // For each exercise (warmup + main + cooldown, per workout), how many
+  // sessions has it appeared in?
+  type Row = {
+    name: string;
+    workout: WorkoutId;
+    sessions: number;
+    note: string;
+  };
+  const rows: Row[] = [];
+  for (const id of ['A', 'B', 'C'] as WorkoutId[]) {
+    const w = WORKOUTS[id];
+    const exercises = [...w.warmup, ...w.main, ...w.cooldown];
+    // Dedupe within a single workout in case a name appears twice.
+    const seenInWorkout = new Set<string>();
+    for (const ex of exercises) {
+      if (seenInWorkout.has(ex.name)) continue;
+      seenInWorkout.add(ex.name);
+      const isWallSit = ex.name.toLowerCase() === 'wall sit';
+      rows.push({
+        name: ex.name,
+        workout: id,
+        sessions: workoutCounts[id],
+        note: isWallSit && maxWallSit > 0 ? `max ${maxWallSit}s` : '',
+      });
+    }
+  }
+
+  const isOpen = state.exerciseBreakdownOpen;
+  const inner = isOpen
+    ? `
+      <div class="progress-breakdown-list">
+        ${rows
+          .map(
+            (r) => `
+          <div class="progress-breakdown-row">
+            <span class="progress-breakdown-badge progress-breakdown-badge-${r.workout}">${r.workout}</span>
+            <span class="progress-breakdown-name">${escapeHtml(r.name)}</span>
+            <span class="progress-breakdown-count">${r.sessions}×${r.note ? ` · ${escapeHtml(r.note)}` : ''}</span>
+          </div>
+        `
+          )
+          .join('')}
+      </div>
+    `
+    : '';
+
+  return `
+    <div class="card progress-card progress-card-breakdown ${isOpen ? 'progress-card-breakdown-open' : ''}">
+      <button class="progress-breakdown-toggle" id="toggle-exercise-breakdown" type="button"
+              aria-expanded="${isOpen}">
+        <span class="progress-card-label">Exercise breakdown</span>
+        <span class="progress-breakdown-chev">▸</span>
+      </button>
+      ${inner}
+    </div>
+  `;
+}
+
+function renderProgress(): string {
+  const logs = getChronologicalLogs(); // oldest → newest
+  const count = logs.length;
+
+  // Header: subtitle counts sessions since program start.
+  const subtitle = `<span class="progress-subtitle-num">${count}</span> session${count === 1 ? '' : 's'} since May 2`;
+
+  // Empty state — fewer than 2 sessions.
+  if (count < 2) {
+    return `
+      <div class="screen-header">
+        <h2>Progress</h2>
+        <button class="quit-link" id="back-home" type="button">× Back</button>
+      </div>
+      <div class="progress-subtitle">${subtitle}</div>
+      <p class="progress-empty">Progress shows once you have 2+ sessions logged.</p>
+    `;
+  }
+
+  return `
+    <div class="screen-header">
+      <h2>Progress</h2>
+      <button class="quit-link" id="back-home" type="button">× Back</button>
+    </div>
+    <div class="progress-subtitle">${subtitle}</div>
+    <div class="progress-screen">
+      ${renderWallSitTrendCard(logs)}
+      ${renderCapacityTrendCard(logs)}
+      ${renderBackPainTrendCard(logs)}
+      ${renderSessionsPerWeekCard(logs)}
+      ${renderExerciseBreakdownCard(logs)}
+    </div>
+  `;
+}
+
 function render(): void {
   const root = document.getElementById('app');
   if (!root) return;
@@ -2105,6 +2625,9 @@ function render(): void {
       break;
     case 'weekly-review':
       html = renderWeeklyReview();
+      break;
+    case 'progress':
+      html = renderProgress();
       break;
   }
   root.innerHTML = html;
@@ -2206,6 +2729,23 @@ function attachHandlers(): void {
   });
   bindClick('open-weekly-review-link', () => {
     state.screen = 'weekly-review';
+    render();
+  });
+
+  // Ship 5: Progress screen — full-history longitudinal view. Reached from
+  // home button or the "View progress" link on history-detail.
+  bindClick('open-progress-link', () => {
+    state.screen = 'progress';
+    render();
+  });
+  bindClick('open-progress-from-detail', () => {
+    state.screen = 'progress';
+    render();
+  });
+
+  // Ship 5: collapsible exercise-breakdown card on progress screen.
+  bindClick('toggle-exercise-breakdown', () => {
+    state.exerciseBreakdownOpen = !state.exerciseBreakdownOpen;
     render();
   });
 

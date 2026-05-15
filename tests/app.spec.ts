@@ -497,3 +497,158 @@ test("cooler-look: today's-pick card uses gradient + glow, not flat fill", async
   // sibling tiles which sit at the default 14px.
   expect(parseFloat(styles.borderRadius)).toBeGreaterThanOrEqual(18);
 });
+
+// --- Ship 5 (2026-05-15 Progress screen) -----------------------------------
+//
+// New AppScreen `progress` — read-only longitudinal view. Reached from home
+// via the "📈 Progress →" link below the weekly-review link, and from any
+// history-detail screen via "View progress". The screen reports her data; it
+// does NOT editorialize. Charts are hand-built inline SVG; no libraries.
+//
+// These tests lock in:
+//  - reachable from home button
+//  - wall-sit line chart renders with 2+ data points
+//  - empty state renders for fewer than 2 sessions
+//  - back-pain bars render only for sessions with backPain > 0
+
+test('ship 5: progress screen reachable from home button', async ({ page }) => {
+  const progressBtn = page.locator('#open-progress-link');
+  await expect(progressBtn).toBeVisible();
+  await progressBtn.click();
+  // Header is the progress screen header.
+  await expect(page.locator('h2').first()).toHaveText('Progress');
+  // Subtitle reports session count since program start.
+  await expect(page.locator('.progress-subtitle')).toContainText('since May 2');
+});
+
+test('ship 5: wall-sit line chart renders with 2+ wall-sit values', async ({ page }) => {
+  // Seed three A-workouts with rising wall-sit values across the program.
+  // Progress screen should render the wall-sit chart with a 6px emphasized
+  // last-point and a dashed max guideline.
+  await page.addInitScript(() => {
+    const logs = [
+      {
+        id: 'p-3',
+        date: '2026-05-15T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 5,
+        capacityAfter: 6,
+        wallSitSec: 30,
+        backPain: 1,
+        word: 'strong',
+        durationSec: 600,
+      },
+      {
+        id: 'p-2',
+        date: '2026-05-11T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 5,
+        capacityAfter: 5,
+        wallSitSec: 25,
+        backPain: 0,
+        word: 'ok',
+        durationSec: 580,
+      },
+      {
+        id: 'p-1',
+        date: '2026-05-05T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 4,
+        capacityAfter: 5,
+        wallSitSec: 18,
+        backPain: 2,
+        word: 'tired',
+        durationSec: 540,
+      },
+    ];
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
+  });
+  await page.goto('/');
+  await page.locator('#open-progress-link').click();
+  // Big stat shows max wall-sit (30s) as the headline number.
+  await expect(page.locator('.progress-stat-big')).toContainText('30s');
+  // At least one progress-chart SVG renders for wall sit.
+  await expect(page.locator('.progress-chart').first()).toBeVisible();
+  // Calm delta line — "+12s since first session" (30 - 18). No motivational
+  // language allowed: must NOT contain "great", "amazing", "you", etc.
+  const delta = await page.locator('.progress-card-meta').first().textContent();
+  expect(delta).toContain('+12s');
+  expect(delta?.toLowerCase()).not.toContain('great');
+  expect(delta?.toLowerCase()).not.toContain('you got');
+});
+
+test('ship 5: empty state renders for fewer than 2 sessions', async ({ page }) => {
+  // No logs → empty state. Calm, no nudge.
+  await page.goto('/');
+  await page.locator('#open-progress-link').click();
+  await expect(page.locator('.progress-empty')).toBeVisible();
+  await expect(page.locator('.progress-empty')).toContainText('Progress shows once you have 2+');
+  // No motivational language anywhere on the empty screen.
+  const body = await page.locator('.progress-empty').textContent();
+  expect(body?.toLowerCase()).not.toContain('keep going');
+  expect(body?.toLowerCase()).not.toContain('great');
+  // No chart rendered when empty.
+  await expect(page.locator('.progress-chart')).toHaveCount(0);
+});
+
+test('ship 5: back-pain bars render only for sessions with backPain > 0', async ({ page }) => {
+  // 4 sessions: 2 with pain (3, 1), 2 with no pain (0, 0). Bar chart should
+  // render 2 visible bars (transparent fill omitted for backPain=0 rows).
+  await page.addInitScript(() => {
+    const logs = [
+      {
+        id: 'bp-4',
+        date: '2026-05-15T10:00:00.000Z',
+        workout: 'B',
+        capacityBefore: 5,
+        capacityAfter: 6,
+        wallSitSec: 0,
+        backPain: 0,
+        word: 'fine',
+        durationSec: 500,
+      },
+      {
+        id: 'bp-3',
+        date: '2026-05-13T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 5,
+        capacityAfter: 5,
+        wallSitSec: 20,
+        backPain: 1,
+        word: 'twinge',
+        durationSec: 520,
+      },
+      {
+        id: 'bp-2',
+        date: '2026-05-10T10:00:00.000Z',
+        workout: 'C',
+        capacityBefore: 4,
+        capacityAfter: 5,
+        wallSitSec: 0,
+        backPain: 0,
+        word: 'walked',
+        durationSec: 720,
+      },
+      {
+        id: 'bp-1',
+        date: '2026-05-05T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 4,
+        capacityAfter: 4,
+        wallSitSec: 15,
+        backPain: 3,
+        word: 'sore',
+        durationSec: 540,
+      },
+    ];
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
+  });
+  await page.goto('/');
+  await page.locator('#open-progress-link').click();
+  // Bar chart SVG exists. Its <rect> bars only render for backPain > 0
+  // rows — so we expect exactly 2 bars (backPain = 1 and backPain = 3).
+  const barChart = page.locator('.progress-chart-bar');
+  await expect(barChart).toBeVisible();
+  const barCount = await barChart.locator('rect').count();
+  expect(barCount).toBe(2);
+});
