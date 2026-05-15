@@ -155,15 +155,15 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
     main: [
       {
         name: 'Bodyweight squats',
-        reps: '10 reps · 3-1-3 tempo',
+        reps: '12 reps · 3-1-3 tempo',
         notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
       },
-      { name: 'Glute bridges', reps: '10 reps · 2-sec hold at top' },
+      { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
       {
         name: 'Wall sit',
-        reps: '25 sec hold',
+        reps: '30 sec hold',
         notes: 'Hands rest on thighs or hang. No pushing on wall.',
-        durationSec: 25,
+        durationSec: 30,
         isTimed: true,
       },
       {
@@ -176,7 +176,14 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
         reps: '6 each side',
         notes: 'Arms relaxed at sides on mat. Move only legs.',
       },
-      { name: 'Heel taps', reps: '10 each side', notes: 'Slow.' },
+      {
+        name: 'Forearm plank',
+        reps: '1 set · 15 sec hold',
+        notes:
+          'On forearms only (NOT hands — wrists still off). Start small: day-1 of Lisa Cohen clearance. Bump to 2×15 in week 4 if quiet.',
+        durationSec: 15,
+        isTimed: true,
+      },
     ],
     cooldown: [
       { name: 'Knees-to-chest hold', reps: '60 sec' },
@@ -236,7 +243,7 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
       },
     ],
     main: [
-      { name: 'Glute bridges', reps: '10 reps · 2-sec hold' },
+      { name: 'Glute bridges', reps: '12 reps · 2-sec hold' },
       { name: 'Side-lying clamshells', reps: '10 each side' },
       { name: 'Modified dead bug', reps: '6 each side' },
       {
@@ -1158,20 +1165,19 @@ type WeekDotInfo = { letter: string; logId: string | null; date: Date; workout: 
 
 function getWeekDots(): WeekDotInfo[] {
   const logs = loadLogs();
-  const dotLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  // Show the calendar week (Mon..Sun) containing today. The program-week
-  // numbering still drives the banner ("Week 2"), but the dot strip is
-  // anchored to today's calendar week so the user sees this week's dots.
+  // Allison's week = Sat..Fri (Shabbat-anchored). See memory
+  // `reference_week_definition.md`. Saturday is index 0; Friday is index 6.
+  const dotLabels = ['S', 'S', 'M', 'T', 'W', 'T', 'F'];
   const today = new Date();
   const day = today.getDay(); // 0=Sun..6=Sat
-  const monOffset = (day + 6) % 7; // Mon=0..Sun=6
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - monOffset);
-  monday.setHours(0, 0, 0, 0);
+  const satOffset = (day + 1) % 7; // Sat=0, Sun=1, Mon=2, ..., Fri=6
+  const saturday = new Date(today);
+  saturday.setDate(today.getDate() - satOffset);
+  saturday.setHours(0, 0, 0, 0);
 
   return dotLabels.map((label, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
+    const d = new Date(saturday);
+    d.setDate(saturday.getDate() + i);
     const start = new Date(d);
     start.setHours(0, 0, 0, 0);
     const end = new Date(d);

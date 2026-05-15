@@ -87,10 +87,22 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     attribution: 'Still: yuhonas/free-exercise-db. Video: Hinge Health PT — Dead Bug',
   },
   'Heel taps': {
+    // ARCHIVED 2026-05-15: Heel taps swapped out of Workout A in week 3
+    // (replaced by Forearm plank — Lisa Cohen cleared forearm load May 15).
+    // Entry retained so re-adding heel taps in a future week needs no re-curation.
     youtubeId: 'Xxv-9mA3qLc',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
     attribution: 'Supine Heel Taps — B3 Physical Therapy',
+  },
+  'Forearm plank': {
+    // Added 2026-05-15 for week-3 swap (replaces Heel taps in Workout A).
+    // Forearms only — hands still off per Lisa Cohen wrist protocol.
+    // TODO: content-build pass should curate a specific PT video clip; for
+    // now the placeholder lets the exercise render without a visual.
+    source: 'youtube-only',
+    license: 'TBD — placeholder pending content curation',
+    attribution: 'Pending curation 2026-05-15',
   },
 
   // ----- Cool-down -----
