@@ -314,7 +314,7 @@ button:disabled {
 .workout-card-pick {
   border: 1px solid var(--accent);
   border-radius: var(--radius-lg);
-  padding: 22px 22px 20px;
+  padding: 36px 22px 20px;
   opacity: 1;
 }
 
@@ -322,10 +322,11 @@ button:disabled {
   border-color: var(--accent);
 }
 
+/* Picked-card badge sits at the top-left, NOT overlapping the rounds badge */
 .workout-card-pick-badge {
   position: absolute;
   top: 12px;
-  right: 16px;
+  left: 16px;
   background: transparent;
   color: var(--accent);
   border: 1px solid var(--accent);
@@ -335,12 +336,14 @@ button:disabled {
   font-weight: 600;
   letter-spacing: var(--track-label);
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .workout-card-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 12px;
   margin-bottom: 4px;
 }
 
@@ -348,6 +351,9 @@ button:disabled {
   font-size: var(--font-subheading);
   font-weight: 600;
   letter-spacing: var(--track-tight);
+  line-height: 1.25;
+  flex: 1;
+  min-width: 0;
 }
 
 .workout-card-badge {
@@ -355,10 +361,13 @@ button:disabled {
   background: transparent;
   color: var(--text-dim);
   border: 1px solid var(--border);
-  padding: 2px 9px;
+  padding: 3px 10px;
   border-radius: var(--radius-pill);
   font-weight: 500;
   letter-spacing: 0.02em;
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-top: 4px;
 }
 
 .workout-card-desc {
