@@ -193,129 +193,512 @@ function genId(): string {
   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-const WORKOUTS: Record<WorkoutId, Workout> = {
-  A: {
-    id: 'A',
-    name: 'Lower Body + Core',
-    description: '🚶 10-min walk + lower body strength · ~38 min',
-    rounds: 3,
-    warmup: [
-      {
-        name: 'Outdoor walk',
-        reps: '10 min',
-        notes: 'Conversational pace. Doubles as warmup + cardio.',
-      },
-      { name: 'Belly breathing', reps: '5 slow breaths' },
-      { name: 'Pelvic tilts', reps: '10 slow' },
-      { name: 'Glute squeezes', reps: '10 holds × 3 sec' },
-    ],
-    main: [
-      {
-        name: 'Bodyweight squats',
-        reps: '12 reps · 3-1-3 tempo',
-        notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
-      },
-      { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
-      {
-        name: 'Wall sit',
-        reps: '30 sec hold',
-        notes: 'Hands rest on thighs or hang. No pushing on wall.',
-        durationSec: 30,
-        isTimed: true,
-      },
-      {
-        name: 'Side-lying clamshells',
-        reps: '10 each side',
-        notes: 'Head on mat or pillow. Bottom arm extended on floor, NOT propped on elbow.',
-      },
-      {
-        name: 'Modified dead bug',
-        reps: '6 each side',
-        notes: 'Arms relaxed at sides on mat. Move only legs.',
-      },
-      {
-        name: 'Forearm plank',
-        reps: '1 set · 15 sec hold',
-        notes:
-          'On forearms only (NOT hands — wrists still off). Start small: day-1 of Lisa Cohen clearance. Bump to 2×15 in week 4 if quiet.',
-        durationSec: 15,
-        isTimed: true,
-      },
-    ],
-    cooldown: [
-      { name: 'Knees-to-chest hold', reps: '60 sec' },
-      { name: 'Figure-4 stretch', reps: '45 sec each side' },
-      {
-        name: 'Seated forward fold',
-        reps: '60 sec',
-        notes: 'Arms in lap, no reaching.',
-      },
-      { name: 'Slow breathing', reps: '8 breaths' },
-    ],
-  },
-  B: {
-    id: 'B',
-    name: 'Glutes + Mobility + Core',
-    description: '🚶 10-min walk + glutes & mobility · ~38 min',
-    rounds: 3,
-    warmup: [
-      {
-        name: 'Outdoor walk',
-        reps: '10 min',
-        notes: 'Conversational pace. Doubles as warmup + cardio.',
-      },
-      { name: 'Belly breathing', reps: '5 slow breaths' },
-      { name: 'Pelvic tilts', reps: '10 slow' },
-      { name: 'Glute squeezes', reps: '10 holds × 3 sec' },
-    ],
-    main: [
-      { name: 'Side-lying leg raises', reps: '12 each side' },
-      { name: 'Side-lying clamshells', reps: '10 each side' },
-      { name: 'Single-leg glute bridges', reps: '8 each side' },
-      { name: 'Slow supine bicycle', reps: '8 each side' },
-      { name: 'Modified dead bug', reps: '6 each side' },
-      {
-        name: 'Standing calf raises',
-        reps: '15 reps',
-        notes: 'Light fingertip touch on wall for balance only — NO grip.',
-      },
-    ],
-    cooldown: [
-      { name: 'Knees-to-chest hold', reps: '60 sec' },
-      { name: 'Figure-4 stretch', reps: '45 sec each side' },
-      { name: 'Seated forward fold', reps: '60 sec' },
-      { name: 'Slow breathing', reps: '8 breaths' },
-    ],
-  },
-  C: {
-    id: 'C',
-    name: 'Walk + Core (cardio day)',
-    description: '🚶 25-min walk + 2-round core block · ~37 min',
-    rounds: 2,
-    warmup: [
-      {
-        name: 'Outdoor walk',
-        reps: '25 min',
-        notes: 'Conversational-to-brisk pace. Tap done when finished.',
-      },
-    ],
-    main: [
-      { name: 'Glute bridges', reps: '12 reps · 2-sec hold' },
-      { name: 'Side-lying clamshells', reps: '10 each side' },
-      { name: 'Modified dead bug', reps: '6 each side' },
-      {
-        name: 'Standing calf raises',
-        reps: '15 reps',
-        notes: 'Fingertip touch on wall for balance only — NO grip.',
-      },
-    ],
-    cooldown: [
-      { name: 'Figure-4 stretch', reps: '45 sec each side' },
-      { name: 'Knees-to-chest hold', reps: '60 sec' },
-      { name: 'Slow breathing', reps: '8 breaths' },
-    ],
-  },
+// ---------- Per-week programming (2026-05-15) ----------
+//
+// Before this refactor, WORKOUTS was a single static Record<WorkoutId, Workout>
+// and each week's bumps overwrote the prior week's content in git history.
+// That meant: you could never look at "what did I do in Week 2?" or plan ahead
+// for "what does Week 4 look like?" — they didn't exist as data.
+//
+// Now: PROGRAM is a list of WeekPlan rows, one per Sat-anchored week. Today's
+// date selects which row is active via `getWeekPlan(date)`. Adding Week 5 is
+// literally appending one more row — no other code changes needed.
+//
+// Rules baked in (per Allison + WEEK-3-REGROUP-2026-05-15.md):
+//  - Walks STAY at 10/10/25 min strolling pace across all weeks.
+//  - Cool-down stretches stay placeholder-shaped (no Claude-generated names).
+//  - Week 4 forearm-plank goes 1×15 → 2×15 ONLY (no longer hold).
+//  - 45-min cap per workout — see regroup doc §5.
+//  - No new exercises in Week 4 — same pool as Week 3, just larger numbers.
+//
+// Past weeks (1, 2) recovered from git history (commits bb673e9 + 66e9845).
+
+type WeekPlan = {
+  weekNum: number;
+  // ISO date (YYYY-MM-DD) of the Saturday this week starts on.
+  startsOn: string;
+  // Optional short tag — e.g. "Starter", "Consolidation", "Bump week".
+  label?: string;
+  workouts: Record<WorkoutId, Workout>;
 };
+
+// --- Shared building blocks (so per-week deltas are obvious) -------------
+
+const WALK_WARMUP_AB: Exercise[] = [
+  {
+    name: 'Outdoor walk',
+    reps: '10 min',
+    notes: 'Conversational pace. Doubles as warmup + cardio.',
+  },
+  { name: 'Belly breathing', reps: '5 slow breaths' },
+  { name: 'Pelvic tilts', reps: '10 slow' },
+  { name: 'Glute squeezes', reps: '10 holds × 3 sec' },
+];
+
+const WALK_WARMUP_C: Exercise[] = [
+  {
+    name: 'Outdoor walk',
+    reps: '25 min',
+    notes: 'Conversational-to-brisk pace. Tap done when finished.',
+  },
+];
+
+const COOLDOWN_AB: Exercise[] = [
+  { name: 'Knees-to-chest hold', reps: '60 sec' },
+  { name: 'Figure-4 stretch', reps: '45 sec each side' },
+  {
+    name: 'Seated forward fold',
+    reps: '60 sec',
+    notes: 'Arms in lap, no reaching.',
+  },
+  { name: 'Slow breathing', reps: '8 breaths' },
+];
+
+const COOLDOWN_C: Exercise[] = [
+  { name: 'Figure-4 stretch', reps: '45 sec each side' },
+  { name: 'Knees-to-chest hold', reps: '60 sec' },
+  { name: 'Slow breathing', reps: '8 breaths' },
+];
+
+// Pre-walk-warmup era (Week 1 only). Kept exact for archive fidelity — this
+// is what Allison actually did her first week.
+const WEEK1_WARMUP_AB: Exercise[] = [
+  { name: 'Belly breathing', reps: '8 slow breaths' },
+  {
+    name: 'Knee-to-chest hugs',
+    reps: '5 each side',
+    notes: 'Forearm hook, no grip',
+  },
+  { name: 'Pelvic tilts', reps: '10 slow' },
+  { name: 'Knee drops side-to-side', reps: '8 each way', notes: 'Small range' },
+  { name: 'Glute squeezes', reps: '10 holds × 3 sec' },
+];
+
+// --- PROGRAM: weeks 1-4 --------------------------------------------------
+
+const PROGRAM: WeekPlan[] = [
+  // Week 1 — May 2-8. Starter. No walk warmups in app yet; full supine warmup.
+  // Wall sit was 20s, squats 8 reps. C was a "walk + token floor work" day.
+  {
+    weekNum: 1,
+    startsOn: '2026-05-02',
+    label: 'Starter',
+    workouts: {
+      A: {
+        id: 'A',
+        name: 'Lower Body + Core',
+        description: 'Legs, glutes, abs. ~30 min, fully hands-free.',
+        rounds: 3,
+        warmup: WEEK1_WARMUP_AB,
+        main: [
+          {
+            name: 'Bodyweight squats',
+            reps: '8 reps · 3-1-3 tempo',
+            notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
+          },
+          { name: 'Glute bridges', reps: '10 reps · 2-sec hold at top' },
+          {
+            name: 'Wall sit',
+            reps: '20 sec hold',
+            notes: 'Hands rest on thighs or hang. No pushing on wall.',
+            durationSec: 20,
+            isTimed: true,
+          },
+          {
+            name: 'Side-lying clamshells',
+            reps: '10 each side',
+            notes: 'Head on mat or pillow. Bottom arm extended on floor, NOT propped on elbow.',
+          },
+          {
+            name: 'Modified dead bug',
+            reps: '6 each side',
+            notes: 'Arms relaxed at sides on mat. Move only legs.',
+          },
+          { name: 'Heel taps', reps: '10 each side', notes: 'Slow.' },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      B: {
+        id: 'B',
+        name: 'Glutes + Mobility + Core',
+        description: 'Variety day. ~30 min, hands-free.',
+        rounds: 3,
+        warmup: WEEK1_WARMUP_AB,
+        main: [
+          { name: 'Side-lying leg raises', reps: '10 each side' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Single-leg glute bridges', reps: '8 each side' },
+          { name: 'Slow supine bicycle', reps: '8 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Light fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      C: {
+        id: 'C',
+        name: 'Walk + Light Core + Stretch',
+        description: 'Low-energy day still counts. ~30 min.',
+        rounds: 1,
+        warmup: [{ name: 'Belly breathing', reps: '8 slow breaths' }],
+        main: [
+          {
+            name: 'Outdoor walk',
+            reps: '20 min',
+            notes: 'Conversational pace. Tap done when finished.',
+          },
+          { name: 'Glute bridges', reps: '10 reps · 2-sec hold' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          { name: 'Heel taps', reps: '10 each side' },
+          { name: 'Figure-4 stretch', reps: '45 sec each side' },
+          { name: 'Knees-to-chest hold', reps: '60 sec' },
+        ],
+        cooldown: [{ name: 'Slow breathing', reps: '8 breaths' }],
+      },
+    },
+  },
+  // Week 2 — May 9-15. Walk warmups added to A & B. Squats 8→10, wall sit
+  // 20→25s. B side-lying leg raises 10→12. C restructured to a real cardio
+  // day (25-min walk + 2-round core).
+  {
+    weekNum: 2,
+    startsOn: '2026-05-09',
+    label: 'Walk warmups',
+    workouts: {
+      A: {
+        id: 'A',
+        name: 'Lower Body + Core',
+        description: '🚶 10-min walk + lower body strength · ~38 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          {
+            name: 'Bodyweight squats',
+            reps: '10 reps · 3-1-3 tempo',
+            notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
+          },
+          { name: 'Glute bridges', reps: '10 reps · 2-sec hold at top' },
+          {
+            name: 'Wall sit',
+            reps: '25 sec hold',
+            notes: 'Hands rest on thighs or hang. No pushing on wall.',
+            durationSec: 25,
+            isTimed: true,
+          },
+          {
+            name: 'Side-lying clamshells',
+            reps: '10 each side',
+            notes: 'Head on mat or pillow. Bottom arm extended on floor, NOT propped on elbow.',
+          },
+          {
+            name: 'Modified dead bug',
+            reps: '6 each side',
+            notes: 'Arms relaxed at sides on mat. Move only legs.',
+          },
+          { name: 'Heel taps', reps: '10 each side', notes: 'Slow.' },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      B: {
+        id: 'B',
+        name: 'Glutes + Mobility + Core',
+        description: '🚶 10-min walk + glutes & mobility · ~38 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          { name: 'Side-lying leg raises', reps: '12 each side' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Single-leg glute bridges', reps: '8 each side' },
+          { name: 'Slow supine bicycle', reps: '8 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Light fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      C: {
+        id: 'C',
+        name: 'Walk + Core (cardio day)',
+        description: '🚶 25-min walk + 2-round core block · ~37 min',
+        rounds: 2,
+        warmup: WALK_WARMUP_C,
+        main: [
+          { name: 'Glute bridges', reps: '10 reps · 2-sec hold' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_C,
+      },
+    },
+  },
+  // Week 3 — May 16-22. Per regroup 2026-05-15:
+  //  A: squats 10→12, glute bridges 10→12, wall sit 25→30s,
+  //     heel taps → forearm plank (1×15s — day-1 of Lisa Cohen clearance).
+  //  B: held for consolidation (already-bumped in Week 2).
+  //  C: glute bridges 10→12.
+  // EXACT VALUES SHIPPED to Allison earlier today (commit 66e9845) — do not
+  // change this row without her sign-off.
+  {
+    weekNum: 3,
+    startsOn: '2026-05-16',
+    label: 'Forearm plank in',
+    workouts: {
+      A: {
+        id: 'A',
+        name: 'Lower Body + Core',
+        description: '🚶 10-min walk + lower body strength · ~38 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          {
+            name: 'Bodyweight squats',
+            reps: '12 reps · 3-1-3 tempo',
+            notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
+          },
+          { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
+          {
+            name: 'Wall sit',
+            reps: '30 sec hold',
+            notes: 'Hands rest on thighs or hang. No pushing on wall.',
+            durationSec: 30,
+            isTimed: true,
+          },
+          {
+            name: 'Side-lying clamshells',
+            reps: '10 each side',
+            notes: 'Head on mat or pillow. Bottom arm extended on floor, NOT propped on elbow.',
+          },
+          {
+            name: 'Modified dead bug',
+            reps: '6 each side',
+            notes: 'Arms relaxed at sides on mat. Move only legs.',
+          },
+          {
+            name: 'Forearm plank',
+            reps: '1 set · 15 sec hold',
+            notes:
+              'On forearms only (NOT hands — wrists still off). Start small: day-1 of Lisa Cohen clearance. Bump to 2×15 in week 4 if quiet.',
+            durationSec: 15,
+            isTimed: true,
+          },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      B: {
+        id: 'B',
+        name: 'Glutes + Mobility + Core',
+        description: '🚶 10-min walk + glutes & mobility · ~38 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          { name: 'Side-lying leg raises', reps: '12 each side' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Single-leg glute bridges', reps: '8 each side' },
+          { name: 'Slow supine bicycle', reps: '8 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Light fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      C: {
+        id: 'C',
+        name: 'Walk + Core (cardio day)',
+        description: '🚶 25-min walk + 2-round core block · ~37 min',
+        rounds: 2,
+        warmup: WALK_WARMUP_C,
+        main: [
+          { name: 'Glute bridges', reps: '12 reps · 2-sec hold' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_C,
+      },
+    },
+  },
+  // Week 4 — May 23-29. Slow-progression rule: ≤1-2 bumps per workout, no
+  // new exercises, same exercise pool.
+  //  A: squats 12→14, glute bridges 12→14, wall sit 30→35s, forearm plank
+  //     1×15 → 2×15s (Lisa Cohen plan IF wrist stays quiet — small dose).
+  //  B: side-lying leg raises 12→14, single-leg glute bridges 8→10.
+  //  C: glute bridges 12→14. Walk UNCHANGED (10/10/25 strolling — see regroup).
+  // Walks DO NOT bump — pace + duration rule per Allison + health.md.
+  {
+    weekNum: 4,
+    startsOn: '2026-05-23',
+    label: 'Small bumps',
+    workouts: {
+      A: {
+        id: 'A',
+        name: 'Lower Body + Core',
+        description: '🚶 10-min walk + lower body strength · ~40 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          {
+            name: 'Bodyweight squats',
+            reps: '14 reps · 3-1-3 tempo',
+            notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
+          },
+          { name: 'Glute bridges', reps: '14 reps · 2-sec hold at top' },
+          {
+            name: 'Wall sit',
+            reps: '35 sec hold',
+            notes: 'Hands rest on thighs or hang. No pushing on wall.',
+            durationSec: 35,
+            isTimed: true,
+          },
+          {
+            name: 'Side-lying clamshells',
+            reps: '10 each side',
+            notes: 'Head on mat or pillow. Bottom arm extended on floor, NOT propped on elbow.',
+          },
+          {
+            name: 'Modified dead bug',
+            reps: '6 each side',
+            notes: 'Arms relaxed at sides on mat. Move only legs.',
+          },
+          {
+            name: 'Forearm plank',
+            reps: '2 sets · 15 sec hold',
+            notes:
+              'On forearms only (NOT hands). 2×15s ONLY if Week 3 stayed quiet. Stop if any wrist sensation. Rest ~30s between sets.',
+            durationSec: 15,
+            isTimed: true,
+          },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      B: {
+        id: 'B',
+        name: 'Glutes + Mobility + Core',
+        description: '🚶 10-min walk + glutes & mobility · ~40 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          { name: 'Side-lying leg raises', reps: '14 each side' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Single-leg glute bridges', reps: '10 each side' },
+          { name: 'Slow supine bicycle', reps: '8 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Light fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      C: {
+        id: 'C',
+        name: 'Walk + Core (cardio day)',
+        description: '🚶 25-min walk + 2-round core block · ~37 min',
+        rounds: 2,
+        warmup: WALK_WARMUP_C,
+        main: [
+          { name: 'Glute bridges', reps: '14 reps · 2-sec hold' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_C,
+      },
+    },
+  },
+];
+
+// --- Resolvers -----------------------------------------------------------
+//
+// All "what's the workout today?" logic flows through these two functions.
+// `date` defaults to now so tests can mock the system clock and still get
+// deterministic answers.
+
+function getWeekPlan(date: Date = new Date()): WeekPlan {
+  // Pick the highest-weekNum plan whose startsOn is on or before `date`. If
+  // `date` is before Week 1 (shouldn't happen — PROGRAM_START_DATE is week 1),
+  // fall back to Week 1. If `date` is past the last encoded week, fall back
+  // to the latest plan (we're in "future" territory — keep showing the last
+  // plan rather than a blank screen).
+  const target = date.getTime();
+  let chosen: WeekPlan = PROGRAM[0]!;
+  for (const wp of PROGRAM) {
+    const start = new Date(wp.startsOn + 'T00:00:00').getTime();
+    if (start <= target) {
+      chosen = wp;
+    } else {
+      break;
+    }
+  }
+  return chosen;
+}
+
+function getWorkoutById(id: WorkoutId, date: Date = new Date()): Workout {
+  return getWeekPlan(date).workouts[id];
+}
+
+function getNextWeekPlan(date: Date = new Date()): WeekPlan | null {
+  const current = getWeekPlan(date);
+  const nextIdx = PROGRAM.findIndex((wp) => wp.weekNum === current.weekNum) + 1;
+  return PROGRAM[nextIdx] ?? null;
+}
+
+function getProgramWeekCount(): number {
+  return PROGRAM.length;
+}
+
+// Build a "this exercise: A → B" line for the next-week preview. Returns null
+// if the exercise is unchanged between weeks. Comparison is intentionally
+// stringy + name-keyed (the simplest thing that works for rep/duration bumps).
+function diffExercise(prev: Exercise | undefined, next: Exercise): string | null {
+  if (!prev) return `+ ${next.name} (new) — ${next.reps ?? ''}`;
+  if (prev.reps === next.reps && prev.durationSec === next.durationSec) return null;
+  return `${next.name}: ${prev.reps ?? '—'} → ${next.reps ?? '—'}`;
+}
+
+// All bump lines for a single workout (A/B/C) going current → next. Empty
+// array if no changes.
+function diffWorkout(prev: Workout, next: Workout): string[] {
+  const out: string[] = [];
+  const buckets: Phase[] = ['warmup', 'main', 'cooldown'];
+  for (const phase of buckets) {
+    const prevByName = new Map(prev[phase].map((e) => [e.name, e]));
+    const nextNames = new Set(next[phase].map((e) => e.name));
+    for (const nx of next[phase]) {
+      const line = diffExercise(prevByName.get(nx.name), nx);
+      if (line) out.push(line);
+    }
+    // Dropped exercises (in prev, not in next) — show explicitly.
+    for (const pv of prev[phase]) {
+      if (!nextNames.has(pv.name)) {
+        out.push(`− ${pv.name} (removed)`);
+      }
+    }
+  }
+  return out;
+}
 
 // HAND_ROUTINES retired 2026-05-15 — see archive/hand-routine-2026-05-15/.
 
@@ -707,7 +1090,7 @@ async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
 // ---------- state machine ----------
 
 function getCurrentWorkout(): Workout | null {
-  return state.selectedWorkout ? WORKOUTS[state.selectedWorkout] : null;
+  return state.selectedWorkout ? getWorkoutById(state.selectedWorkout) : null;
 }
 
 function getCurrentExercise(): Exercise | null {
@@ -1454,6 +1837,67 @@ function renderWeeklyTargetGrid(): string {
 
 // ---------- renders ----------
 
+// "Coming next week" — collapsed-by-default <details>. Shows the diff of A/B/C
+// from the current week to the next planned week. Invitational, not pushy:
+// caption gives her the start date so she can ignore it cleanly if she wants.
+// Returns '' if there's no next week encoded yet (i.e. she's on the last
+// planned week).
+function renderComingNextWeek(): string {
+  const current = getWeekPlan();
+  const next = getNextWeekPlan();
+  if (!next) return '';
+
+  const nextStart = new Date(next.startsOn + 'T00:00:00');
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const startLabel = `${months[nextStart.getMonth()]} ${nextStart.getDate()}`;
+
+  const blocks = (['A', 'B', 'C'] as WorkoutId[])
+    .map((id) => {
+      const lines = diffWorkout(current.workouts[id], next.workouts[id]);
+      if (lines.length === 0) {
+        return `
+          <div class="next-week-block">
+            <div class="next-week-block-title">Workout ${id}</div>
+            <div class="next-week-block-empty">unchanged</div>
+          </div>`;
+      }
+      const items = lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('');
+      return `
+        <div class="next-week-block">
+          <div class="next-week-block-title">Workout ${id}</div>
+          <ul class="next-week-block-list">${items}</ul>
+        </div>`;
+    })
+    .join('');
+
+  return `
+    <details class="next-week-preview">
+      <summary class="next-week-summary">
+        <span class="next-week-summary-label">Coming next week</span>
+        <span class="next-week-summary-meta">Week ${next.weekNum} · starts Sat ${startLabel}</span>
+        <span class="next-week-chev">▸</span>
+      </summary>
+      <div class="next-week-body">
+        <div class="next-week-caption">Diff vs Week ${current.weekNum}${next.label ? ` · ${next.label}` : ''}.</div>
+        <div class="next-week-blocks">${blocks}</div>
+      </div>
+    </details>
+  `;
+}
+
 function renderHome(): string {
   const logs = loadLogs();
   const week = getProgramWeek();
@@ -1560,7 +2004,7 @@ function renderHome(): string {
     <div class="workout-picker">
       ${(['A', 'B', 'C'] as WorkoutId[])
         .map((id) => {
-          const w = WORKOUTS[id];
+          const w = getWorkoutById(id);
           const isPick = id === todaysPick;
           return `
         <button class="workout-card ${isPick ? 'workout-card-pick' : ''}" data-workout="${id}">
@@ -1577,6 +2021,8 @@ function renderHome(): string {
         .join('')}
     </div>
     <div class="last-line">${lastLine}</div>
+
+    ${renderComingNextWeek()}
 
     ${
       logs.length > 0
@@ -1659,9 +2105,14 @@ function renderWorkoutOverview(w: Workout): string {
         </details>`;
     })
     .join('');
+  // Week badge in the heading so Allison sees WHICH week of programming this
+  // workout is from. PROGRAM has weeks 1..N — `getWeekPlan()` resolves the
+  // current one from today's date.
+  const wp = getWeekPlan();
+  const weekBadge = `<span class="overview-week-badge">Week ${wp.weekNum}</span>`;
   return `
     <div class="card overview-card">
-      <h3 class="overview-title">What's in this workout</h3>
+      <h3 class="overview-title">What's in this workout ${weekBadge}</h3>
       <div class="overview-phases">${rows}</div>
     </div>
   `;
@@ -2659,7 +3110,7 @@ function renderExerciseBreakdownCard(logs: LogEntry[]): string {
   };
   const rows: Row[] = [];
   for (const id of ['A', 'B', 'C'] as WorkoutId[]) {
-    const w = WORKOUTS[id];
+    const w = getWorkoutById(id);
     const exercises = [...w.warmup, ...w.main, ...w.cooldown];
     // Dedupe within a single workout in case a name appears twice.
     const seenInWorkout = new Set<string>();
@@ -2861,6 +3312,10 @@ function renderSettings(): string {
         <div class="settings-about-row">
           <div class="settings-row-title">Workout Tracker</div>
           <div class="settings-row-caption">Build ${APP_VERSION}.</div>
+        </div>
+        <div class="settings-about-row">
+          <div class="settings-row-title">Program weeks: ${getProgramWeekCount()}</div>
+          <div class="settings-row-caption">Weeks 1–${getProgramWeekCount()} encoded. Add Week ${getProgramWeekCount() + 1}+ in <code>app.ts</code> PROGRAM array.</div>
         </div>
         <div class="settings-about-row">
           <a class="settings-link" href="${GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub →</a>

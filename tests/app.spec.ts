@@ -772,3 +772,104 @@ test('ship 6: clear-data hold-to-confirm wipes localStorage', async ({ page }) =
   // Status banner confirms.
   await expect(page.locator('#data-status')).toContainText('cleared');
 });
+
+// --- Multi-week PROGRAM (2026-05-15) ---------------------------------------
+//
+// The single static WORKOUTS record was replaced by a PROGRAM: WeekPlan[]
+// array with weeks 1-4. Today's date picks which week is active. These tests
+// lock in: weeks 1-4 exist, the right week is chosen for May 16-22 (Week 3)
+// and May 23-29 (Week 4), the Week badge shows on pre-log, and the
+// "Coming next week" preview renders on home with an open diff.
+
+// Helper: mock the system clock via Date.now() override BEFORE the page loads.
+// addInitScript runs in the page context before any of our app code.
+async function mockDate(page: import('@playwright/test').Page, iso: string): Promise<void> {
+  await page.addInitScript((isoArg: string) => {
+    const fixed = new Date(isoArg).getTime();
+    const RealDate = Date;
+    class MockDate extends RealDate {
+      constructor(...args: ConstructorParameters<typeof Date>) {
+        // No-arg form is the case the app uses most (`new Date()` / `Date.now()`).
+        // Forward any explicit args to the real Date so date math still works.
+        if (args.length === 0) {
+          super(fixed);
+        } else {
+          super(...args);
+        }
+      }
+      static override now(): number {
+        return fixed;
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).Date = MockDate;
+  }, iso);
+}
+
+test('multi-week: pre-log overview shows Week 3 badge in May 16-22 range', async ({ page }) => {
+  await mockDate(page, '2026-05-18T10:00:00.000Z'); // Mon May 18 = Week 3
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  // Heading "What's in this workout" plus a Week 3 badge.
+  await expect(page.locator('.overview-week-badge')).toHaveText(/Week 3/);
+});
+
+test('multi-week: Week 4 content active for May 25 (squats 14, plank 2x15s)', async ({ page }) => {
+  await mockDate(page, '2026-05-25T10:00:00.000Z'); // Mon May 25 = Week 4
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  // Badge says Week 4.
+  await expect(page.locator('.overview-week-badge')).toHaveText(/Week 4/);
+  // Open the Main phase and verify Week 4 numbers are encoded.
+  await page.locator('.overview-phase').nth(1).locator('summary').click();
+  const mainNames = await page
+    .locator('.overview-phase')
+    .nth(1)
+    .locator('.overview-phase-items')
+    .innerText();
+  // Forearm plank still in the pool (replaced heel taps in Week 3 — should
+  // persist in Week 4). And Bodyweight squats present.
+  expect(mainNames).toContain('Forearm plank');
+  expect(mainNames).toContain('Bodyweight squats');
+  // Walk into the workout and check the first main exercise reps say 14.
+  await page.locator('button:has-text("Start")').click();
+  // Tap through warmup (4 exercises) to reach Main → Squats.
+  for (let i = 0; i < 4; i++) {
+    await page.locator('button:has-text("Done · Next")').click();
+  }
+  await expect(page.locator('.exercise-name')).toHaveText('Bodyweight squats');
+  await expect(page.locator('.exercise-reps')).toContainText('14');
+});
+
+test('multi-week: "Coming next week" preview renders on home with diff', async ({ page }) => {
+  await mockDate(page, '2026-05-18T10:00:00.000Z'); // Week 3 — next is Week 4
+  await page.goto('/');
+  // Preview is present, collapsed by default.
+  const preview = page.locator('.next-week-preview');
+  await expect(preview).toBeVisible();
+  await expect(preview.locator('.next-week-summary-label')).toHaveText('Coming next week');
+  // Caption shows when next week starts.
+  await expect(preview.locator('.next-week-summary-meta')).toContainText('Week 4');
+  // Expand and check at least one bump line appears for Workout A.
+  await preview.locator('.next-week-summary').click();
+  const aBlock = preview.locator('.next-week-block').first();
+  await expect(aBlock.locator('.next-week-block-title')).toContainText('Workout A');
+  // Week 3 squats 12 → Week 4 squats 14 should be in the list.
+  await expect(aBlock.locator('.next-week-block-list')).toContainText('14');
+});
+
+test('multi-week: Settings About shows Program weeks count (4)', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#open-settings').click();
+  await expect(page.locator('.settings-screen')).toBeVisible();
+  // About section has a "Program weeks: 4" row.
+  await expect(
+    page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
+  ).toContainText('Program weeks: 4');
+});
+
+test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {
+  await mockDate(page, '2026-05-20T10:00:00.000Z'); // Wed in Week 3
+  await page.goto('/');
+  await expect(page.locator('.week-banner')).toContainText('Week 3');
+});
