@@ -1129,6 +1129,91 @@ input[type='number']:focus {
   font-weight: 600;
 }
 
+/* --- Workout overview on pre-log (2026-05-15) ------------------------- */
+
+.overview-card {
+  padding: 16px 18px;
+}
+
+.overview-title {
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  margin: 0 0 12px;
+}
+
+.overview-phases {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.overview-phase {
+  border-top: 1px solid var(--border-divider);
+  padding-top: 8px;
+}
+
+.overview-phase:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.overview-phase-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  padding: 4px 0;
+  font-size: var(--font-small);
+  color: var(--text);
+}
+
+.overview-phase-summary::-webkit-details-marker {
+  display: none;
+}
+
+.overview-phase-summary::after {
+  content: '▸';
+  color: var(--text-dim-2);
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.overview-phase[open] .overview-phase-summary::after {
+  transform: rotate(90deg);
+}
+
+.overview-phase-emoji {
+  font-size: 16px;
+  width: 22px;
+  text-align: center;
+}
+
+.overview-phase-label {
+  font-weight: 500;
+  letter-spacing: var(--track-tight);
+}
+
+.overview-phase-count {
+  font-size: var(--font-micro);
+  color: var(--text-dim-2);
+  background: var(--bg-elev-2);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-variant-numeric: tabular-nums;
+}
+
+.overview-phase-items {
+  padding: 6px 34px 4px;
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
 /* --- Banners — warning is status, not panic ---------------------------- */
 
 .warning-banner {

@@ -687,22 +687,23 @@ test('ship 6: beep toggle persists to localStorage', async ({ page }) => {
 
 test('ship 6: rest duration stepper updates value and persists', async ({ page }) => {
   await page.locator('#open-settings').click();
-  // Default 60s.
-  await expect(page.locator('#rest-val')).toHaveText('60s');
-  // Bump up twice — 60 → 65 → 70.
+  // Default updated 2026-05-15 18:07 to 0s (skip rest entirely) per Allison's
+  // "i do not need the brakes anymore" call.
+  await expect(page.locator('#rest-val')).toHaveText('0s');
+  // Bump up twice — 0 → 5 → 10.
   await page.locator('#rest-inc').click();
   await page.locator('#rest-inc').click();
-  await expect(page.locator('#rest-val')).toHaveText('70s');
+  await expect(page.locator('#rest-val')).toHaveText('10s');
   // Persisted.
   const stored = await page.evaluate(() =>
     window.localStorage.getItem('workout-tracker:setting-rest-sec')
   );
-  expect(stored).toBe('70');
-  // Decrement bounded — go to 5 and stop.
+  expect(stored).toBe('10');
+  // Decrement bounded — go to 0 and stop (no negative rest).
   for (let i = 0; i < 20; i++) {
     await page.locator('#rest-dec').click();
   }
-  await expect(page.locator('#rest-val')).toHaveText('5s');
+  await expect(page.locator('#rest-val')).toHaveText('0s');
 });
 
 test('ship 6: export sessions downloads a JSON file', async ({ page }) => {

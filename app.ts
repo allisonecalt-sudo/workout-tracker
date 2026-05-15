@@ -97,7 +97,10 @@ const STORAGE_KEY = 'workout-tracker:logs';
 const HOWTO_SEEN_KEY_PREFIX = 'workout-tracker:howto-seen-week-';
 // Ship 6: timing defaults — overridable via Settings screen. The constants
 // remain as "defaults" only; runtime values come from getSetting().
-const DEFAULT_REST_SEC = 60;
+// Allison 2026-05-15 18:07: "i do not need the brakes anymore there doesn't
+// need the brakes in between exercises." Default rest is now 0 (skip).
+// Range allows 0-180 in Settings — bump back up if she ever wants it.
+const DEFAULT_REST_SEC = 0;
 const DEFAULT_PRE_COUNT_SEC = 3;
 const COUNT_BEEP_FROM_SEC = 3;
 const HOLD_TO_SKIP_MS = 500;
@@ -144,7 +147,7 @@ function setSetting<T>(key: string, value: T): void {
 
 function getRestSec(): number {
   const v = getSetting<number>(SETTING_KEYS.restSec, DEFAULT_REST_SEC);
-  if (!Number.isFinite(v) || v < 5 || v > 180) return DEFAULT_REST_SEC;
+  if (!Number.isFinite(v) || v < 0 || v > 180) return DEFAULT_REST_SEC;
   return Math.round(v);
 }
 
@@ -568,9 +571,17 @@ function timerLoop(): void {
 }
 
 function startRestTimer(): void {
-  state.isResting = true;
   // Ship 6: rest duration is user-configurable via Settings.
-  startTimerCore('rest', getRestSec(), () => {
+  // 2026-05-15 18:07 update: 0 means skip rest entirely — go straight to
+  // the next exercise. Allison's call: "i do not need the brakes anymore."
+  const rest = getRestSec();
+  if (rest <= 0) {
+    state.isResting = false;
+    render();
+    return;
+  }
+  state.isResting = true;
+  startTimerCore('rest', rest, () => {
     state.isResting = false;
     render();
   });
@@ -1585,12 +1596,17 @@ function renderHome(): string {
 function renderPreLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
+  // 2026-05-15 18:07 — overview block. Allison wants to see the structure at
+  // a glance before starting so she knows what's coming.
+  const overview = renderWorkoutOverview(w);
   return `
     <div class="screen-header">
       <h2>Workout ${w.id} · ${w.name}</h2>
       <button class="quit-link" id="back-home" type="button">× Back</button>
     </div>
     <p class="subtitle">Before we start — how do you feel?</p>
+
+    ${overview}
 
     <div class="card">
       <label class="field">
@@ -1612,6 +1628,42 @@ function renderPreLog(): string {
     </div>
 
     <button class="btn-large btn-primary" id="begin" type="button">Start</button>
+  `;
+}
+
+// Workout overview — three-phase summary shown on pre-log so she sees the
+// structure before starting. Tap a row to expand and see the exercises.
+function renderWorkoutOverview(w: Workout): string {
+  const phases: { key: Phase; label: string; emoji: string; items: Exercise[] }[] = [
+    { key: 'warmup', label: 'Warm-up', emoji: '🚶', items: w.warmup },
+    {
+      key: 'main',
+      label: `Main · ${w.rounds} round${w.rounds === 1 ? '' : 's'}`,
+      emoji: '💪',
+      items: w.main,
+    },
+    { key: 'cooldown', label: 'Stretch', emoji: '🧘', items: w.cooldown },
+  ];
+  const rows = phases
+    .map((p) => {
+      const count = p.items.length;
+      const names = p.items.map((e) => e.name).join(' · ');
+      return `
+        <details class="overview-phase">
+          <summary class="overview-phase-summary">
+            <span class="overview-phase-emoji">${p.emoji}</span>
+            <span class="overview-phase-label">${p.label}</span>
+            <span class="overview-phase-count">${count}</span>
+          </summary>
+          <div class="overview-phase-items">${escapeHtml(names)}</div>
+        </details>`;
+    })
+    .join('');
+  return `
+    <div class="card overview-card">
+      <h3 class="overview-title">What's in this workout</h3>
+      <div class="overview-phases">${rows}</div>
+    </div>
   `;
 }
 
@@ -3301,7 +3353,7 @@ function attachSettingsHandlers(): void {
   // Rest stepper (step = 5s, range 5-180).
   const restVal = document.getElementById('rest-val');
   bindClick('rest-dec', () => {
-    const next = Math.max(5, getRestSec() - 5);
+    const next = Math.max(0, getRestSec() - 5);
     setSetting<number>(SETTING_KEYS.restSec, next);
     if (restVal) restVal.textContent = `${next}s`;
   });
