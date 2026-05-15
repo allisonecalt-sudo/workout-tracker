@@ -1283,7 +1283,152 @@ input[type='number']:focus {
   pointer-events: none; /* row button stays the click target */
 }
 
-/* --- Year-grid heatmap card -------------------------------------------- */
+/* --- 3-per-week target view (replaces year-grid, 2026-05-15) ---------- */
+
+.weekly-target-card {
+  padding: 20px;
+}
+
+.weekly-target-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.weekly-target-title {
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  margin: 0;
+}
+
+.weekly-target-sub {
+  color: var(--text-dim-2);
+}
+
+.weekly-target-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.weekly-target-count {
+  font-size: var(--font-subheading);
+  font-weight: 600;
+  color: var(--accent-progress);
+  letter-spacing: var(--track-tight);
+}
+
+.weekly-target-stat-label {
+  font-size: var(--font-micro);
+  color: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+}
+
+.weekly-target-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weekly-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.weekly-row-current {
+  position: relative;
+}
+
+.weekly-row-current::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.weekly-row-label {
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  flex-shrink: 0;
+  width: 90px;
+  letter-spacing: var(--track-tight);
+}
+
+.weekly-row-current .weekly-row-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.weekly-slots {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.weekly-slot {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--font-small);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: default;
+  color: var(--text);
+}
+
+.weekly-slot-empty {
+  border: 1px dashed var(--border);
+}
+
+.weekly-slot-A {
+  background: color-mix(in srgb, var(--dot-a) 18%, transparent);
+  border-color: var(--dot-a);
+  color: var(--dot-a);
+  cursor: pointer;
+}
+
+.weekly-slot-B {
+  background: color-mix(in srgb, var(--dot-b) 18%, transparent);
+  border-color: var(--dot-b);
+  color: var(--dot-b);
+  cursor: pointer;
+}
+
+.weekly-slot-C {
+  background: color-mix(in srgb, var(--dot-c) 18%, transparent);
+  border-color: var(--dot-c);
+  color: var(--dot-c);
+  cursor: pointer;
+}
+
+.weekly-slot-A:hover,
+.weekly-slot-B:hover,
+.weekly-slot-C:hover {
+  filter: brightness(1.2);
+}
+
+/* --- Year-grid heatmap card (ARCHIVED 2026-05-15 — see app.ts comment) -- */
 
 .year-grid-card {
   padding: 20px;

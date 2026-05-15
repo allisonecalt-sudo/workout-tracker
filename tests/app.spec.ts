@@ -246,16 +246,17 @@ test('redesign: cards use border-elevation, not drop shadow', async ({ page }) =
 //  - sparkline is skipped when a row has 0 or 1 wall-sit value (flat line
 //    reads as broken; better to render nothing)
 
-test('ship 3: year-grid heatmap renders with 7 day-rows on home', async ({ page }) => {
-  // The year-grid uses <text class="year-grid-row-label"> for Sat..Fri labels.
-  // 7 labels = 7 rows of cells. Renders even with zero sessions.
-  const rowLabels = page.locator('.year-grid-row-label');
-  await expect(rowLabels).toHaveCount(7);
-  // Day labels are in her week order (Sat first).
-  await expect(rowLabels.first()).toHaveText('Sat');
-  await expect(rowLabels.last()).toHaveText('Fri');
-  // The card heading is the Consistency callout.
-  await expect(page.locator('.year-grid-title')).toContainText('Consistency');
+test('ship 3 (replaced): weekly-target grid renders with 3 slots per row', async ({ page }) => {
+  // The year-grid was replaced 2026-05-15 with a 3-per-week target view
+  // per Allison's "its 3 a week" call. Each row now shows 3 slot pills.
+  // With empty history, the current week renders one row with 3 empty slots.
+  const slots = page.locator('.weekly-row').first().locator('.weekly-slot');
+  await expect(slots).toHaveCount(3);
+  // The card heading still calls out Consistency, now with "3 per week".
+  await expect(page.locator('.weekly-target-title')).toContainText('Consistency');
+  await expect(page.locator('.weekly-target-sub')).toContainText('3 per week');
+  // The current week is labeled.
+  await expect(page.locator('.weekly-row-current .weekly-row-label')).toHaveText('This week');
 });
 
 test('ship 3: sparkline renders for history row with >=2 wall-sit values', async ({ page }) => {

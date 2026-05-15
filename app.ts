@@ -1246,198 +1246,110 @@ function renderSparkline(values: number[]): string {
   `;
 }
 
-// Year-grid heatmap. Builds the date range from PROGRAM_START_DATE to today
-// (or extends to 52 weeks back if she has enough sessions). Renders 7 rows
-// (Sat → Fri, her week per reference_week_definition.md) × N columns of weeks.
-// Each cell is 6px with 2px gap. Empty days show a 1px --border outline. Today
-// gets a 1px --accent outline. Cells with a session are tappable → history-detail.
-type YearGridCell = {
-  date: Date;
-  iso: string;
-  log: LogEntry | null;
-  isToday: boolean;
-  isFuture: boolean;
+// 3-per-week target view (replaces the 7-cells-per-week year-grid).
+// Allison's words 2026-05-15 15:13 JDT: "i think theres too many sessions"
+// + "its 3 a week" + "go back to 3 per week." The year-grid showed 7 cells
+// per week which implied a daily target — but she's only doing 3/week. This
+// view shows ONE row per week × 3 slot pills, each filled with the workout
+// letter she actually did (or empty outline).
+
+type WeeklyTargetRow = {
+  saturday: Date;
+  weekNum: number;
+  workouts: ('A' | 'B' | 'C')[]; // in order completed (chronological)
+  logs: (LogEntry | null)[]; // parallel to workouts, for click→detail
+  isCurrentWeek: boolean;
 };
 
-type YearGridWeek = {
-  cells: YearGridCell[];
-  monthLabel: string | null; // shown above the first column of a new month
-};
-
-function buildYearGrid(logs: LogEntry[]): YearGridWeek[] {
+function buildWeeklyTargetRows(logs: LogEntry[]): WeeklyTargetRow[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const todayMs = today.getTime();
-
-  // Saturday of the CURRENT week (week column anchor)
-  const todayDow = today.getDay(); // 0=Sun..6=Sat
+  const todayDow = today.getDay();
   const daysSinceSat = (todayDow + 1) % 7;
   const thisSaturday = new Date(today);
   thisSaturday.setDate(today.getDate() - daysSinceSat);
+  thisSaturday.setHours(0, 0, 0, 0);
 
-  // Determine start. If sparse data (< 5 sessions), scope to program start.
-  // Otherwise show up to 52 weeks. Either way we render from the Saturday
-  // before-or-equal to the start date.
   const programStart = new Date(PROGRAM_START_DATE + 'T00:00:00');
-  let startDate: Date;
-  if (logs.length < 5) {
-    startDate = new Date(programStart);
-  } else {
-    startDate = new Date(thisSaturday);
-    startDate.setDate(thisSaturday.getDate() - 51 * 7);
-    if (startDate < programStart) startDate = new Date(programStart);
-  }
-  // Back up to the Saturday before-or-equal startDate
-  const startDow = startDate.getDay();
-  const startSatOffset = (startDow + 1) % 7;
-  startDate.setDate(startDate.getDate() - startSatOffset);
-  startDate.setHours(0, 0, 0, 0);
 
-  // Build log-by-date lookup (ISO date string YYYY-MM-DD)
-  const byDate = new Map<string, LogEntry>();
-  for (const l of logs) {
-    const d = new Date(l.date);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    // first wins (logs are newest-first; for duplicates on same date, show the most-recent one)
-    if (!byDate.has(iso)) byDate.set(iso, l);
+  // Walk back from this Saturday to the Saturday on/before programStart.
+  const rows: WeeklyTargetRow[] = [];
+  const cursor = new Date(thisSaturday);
+  while (cursor.getTime() >= programStart.getTime() - 6 * 24 * 60 * 60 * 1000) {
+    const weekStart = new Date(cursor);
+    const weekEnd = new Date(cursor);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    // Find sessions in this week (chronological — oldest first)
+    const weekLogs = logs
+      .filter((l) => {
+        const t = new Date(l.date).getTime();
+        return t >= weekStart.getTime() && t < weekEnd.getTime();
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 3); // cap at 3 for the 3-slot view
+
+    rows.push({
+      saturday: new Date(weekStart),
+      weekNum: getProgramWeek(weekStart).num,
+      workouts: weekLogs.map((l) => l.workout),
+      logs: weekLogs,
+      isCurrentWeek: weekStart.getTime() === thisSaturday.getTime(),
+    });
+
+    cursor.setDate(cursor.getDate() - 7);
   }
 
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-
-  const weeks: YearGridWeek[] = [];
-  const cursor = new Date(startDate);
-  let prevMonth = -1;
-  // Render through and including the current Saturday's column (full week incl future)
-  const endMs = thisSaturday.getTime() + 7 * 24 * 60 * 60 * 1000;
-  while (cursor.getTime() < endMs) {
-    const cells: YearGridCell[] = [];
-    const weekStartMonth = cursor.getMonth();
-    for (let d = 0; d < 7; d++) {
-      const cellDate = new Date(cursor);
-      cellDate.setDate(cursor.getDate() + d);
-      cellDate.setHours(0, 0, 0, 0);
-      const iso = `${cellDate.getFullYear()}-${String(cellDate.getMonth() + 1).padStart(2, '0')}-${String(cellDate.getDate()).padStart(2, '0')}`;
-      cells.push({
-        date: cellDate,
-        iso,
-        log: byDate.get(iso) ?? null,
-        isToday: cellDate.getTime() === todayMs,
-        isFuture: cellDate.getTime() > todayMs,
-      });
-    }
-    const monthLabel = weekStartMonth !== prevMonth ? (months[weekStartMonth] ?? null) : null;
-    prevMonth = weekStartMonth;
-    weeks.push({ cells, monthLabel });
-    cursor.setDate(cursor.getDate() + 7);
-  }
-  return weeks;
+  return rows;
 }
 
-function renderYearGrid(): string {
-  const logs = loadLogs();
-  const weeks = buildYearGrid(logs);
-  const dayLabels = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+// year-grid heatmap retired 2026-05-15 — Allison's call ("its 3 a week").
+// Full extracted code at archive/year-grid-2026-05-15/year-grid.archived.ts.
 
-  // Sessions this week
+// 3-per-week target view. One row per program week × 3 slot pills.
+function renderWeeklyTargetGrid(): string {
+  const logs = loadLogs();
+  const rows = buildWeeklyTargetRows(logs);
   const currentWeekCount = getWeekCount(0);
 
-  // Cell geometry — kept in sync with .year-grid-cell CSS
-  const CELL = 6;
-  const GAP = 2;
-  const ROW_LABEL_W = 28;
-  const HEADER_H = 14;
-
-  const totalCols = weeks.length;
-  const gridW = totalCols * (CELL + GAP) - GAP;
-  const gridH = 7 * (CELL + GAP) - GAP;
-  const svgW = ROW_LABEL_W + gridW;
-  const svgH = HEADER_H + gridH + 4;
-
-  // Month headers — positioned at column transitions
-  const monthHeaders = weeks
-    .map((w, colIdx) => {
-      if (!w.monthLabel) return '';
-      const x = ROW_LABEL_W + colIdx * (CELL + GAP);
-      return `<text x="${x}" y="10" class="year-grid-month">${w.monthLabel}</text>`;
-    })
-    .join('');
-
-  // Row labels (Sat..Fri)
-  const rowLabels = dayLabels
-    .map((lbl, rowIdx) => {
-      const y = HEADER_H + rowIdx * (CELL + GAP) + CELL - 1;
-      return `<text x="0" y="${y}" class="year-grid-row-label">${lbl}</text>`;
-    })
-    .join('');
-
-  // Cells
-  const cells = weeks
-    .map((w, colIdx) => {
-      const x = ROW_LABEL_W + colIdx * (CELL + GAP);
-      return w.cells
-        .map((c, rowIdx) => {
-          if (c.isFuture) return ''; // don't render future days
-          const y = HEADER_H + rowIdx * (CELL + GAP);
-          const colorVar = c.log
-            ? c.log.workout === 'A'
-              ? 'var(--dot-a)'
-              : c.log.workout === 'B'
-                ? 'var(--dot-b)'
-                : 'var(--dot-c)'
-            : 'transparent';
-          const strokeVar = c.isToday ? 'var(--accent)' : c.log ? colorVar : 'var(--border-strong)';
-          const tooltip = c.log
-            ? `${formatDate(c.iso)} · Workout ${c.log.workout} · capacity ${c.log.capacityBefore}→${c.log.capacityAfter}`
-            : `${formatDate(c.iso)} · no workout`;
-          const clickAttr = c.log?.id ? `data-detail="${escapeHtml(c.log.id)}"` : '';
-          const cls = [
-            'year-grid-cell',
-            c.log ? 'year-grid-cell-active' : 'year-grid-cell-empty',
-            c.isToday ? 'year-grid-cell-today' : '',
-            c.log ? 'year-grid-cell-clickable' : '',
-          ]
-            .filter(Boolean)
-            .join(' ');
-          return `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="1" ry="1"
-                       class="${cls}" fill="${colorVar}" stroke="${strokeVar}"
-                       ${clickAttr}><title>${escapeHtml(tooltip)}</title></rect>`;
+  const rowsHtml = rows
+    .map((r) => {
+      const rangeLabel = `${r.saturday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+      const slots = [0, 1, 2]
+        .map((i) => {
+          const w = r.workouts[i];
+          const log = r.logs[i];
+          if (w && log) {
+            const cls = `weekly-slot weekly-slot-${w}`;
+            const id = log.id ? `data-detail="${escapeHtml(log.id)}"` : '';
+            const tooltip = `${formatDate(log.date)} · Workout ${w} · capacity ${log.capacityBefore}→${log.capacityAfter}`;
+            return `<button class="${cls}" type="button" ${id} aria-label="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}">${w}</button>`;
+          }
+          return `<div class="weekly-slot weekly-slot-empty" aria-label="open slot"></div>`;
         })
         .join('');
+      const cls = r.isCurrentWeek ? 'weekly-row weekly-row-current' : 'weekly-row';
+      const label = r.isCurrentWeek ? 'This week' : `Wk ${r.weekNum} · ${rangeLabel}`;
+      return `
+        <div class="${cls}">
+          <div class="weekly-row-label">${label}</div>
+          <div class="weekly-slots">${slots}</div>
+        </div>`;
     })
     .join('');
 
   return `
-    <div class="card year-grid-card">
-      <div class="year-grid-header">
-        <h3 class="year-grid-title">
-          Consistency · <span class="year-grid-sub">sessions per week</span>
+    <div class="card weekly-target-card">
+      <div class="weekly-target-header">
+        <h3 class="weekly-target-title">
+          Consistency · <span class="weekly-target-sub">3 per week</span>
         </h3>
-        <div class="year-grid-stat">
-          <span class="year-grid-count">${currentWeekCount} of 3</span>
-          <span class="year-grid-stat-label">this week</span>
+        <div class="weekly-target-stat">
+          <span class="weekly-target-count">${currentWeekCount} of 3</span>
+          <span class="weekly-target-stat-label">this week</span>
         </div>
       </div>
-      <div class="year-grid-scroll">
-        <svg class="year-grid" viewBox="0 0 ${svgW} ${svgH}" width="${svgW}" height="${svgH}"
-             role="img" aria-label="Workout consistency heatmap, last ${weeks.length} weeks">
-          ${monthHeaders}
-          ${rowLabels}
-          ${cells}
-        </svg>
-      </div>
+      <div class="weekly-target-rows">${rowsHtml}</div>
     </div>
   `;
 }
@@ -1527,7 +1439,7 @@ function renderHome(): string {
       <div class="week-dots">${dotsHtml}</div>
     </div>
 
-    ${renderYearGrid()}
+    ${renderWeeklyTargetGrid()}
 
     <button class="weekly-review-link" id="open-weekly-review-link" type="button">
       <span>📊 Weekly review</span>
