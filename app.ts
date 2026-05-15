@@ -1160,6 +1160,281 @@ function markHowToSeenThisWeek(exerciseName: string): void {
   }
 }
 
+// ---------- Ship 3: data viz (2026-05-15) ----------
+//
+// Two inline-SVG additions: wall-sit sparkline on history rows, year-grid
+// heatmap on home. No external libraries, no build step changes — just SVG
+// strings rendered through the same template path as everything else.
+//
+// Design rules:
+//  - Sparkline: 80×20px, stroke at 1.5px in --accent-progress, last point a
+//    filled dot in --accent. Skip render if fewer than 2 wall-sit values
+//    exist (a flat line reads broken).
+//  - Year grid: 7 rows × N weeks. Cells colored --dot-a/--dot-b/--dot-c by
+//    workout letter, empty days have a 1px --border. Sparse data → scope to
+//    PROGRAM_START_DATE forward, not a full 52-week back-look.
+
+// Returns the last N wall-sit values from history (oldest → newest), filtered
+// to values > 0. We walk in reverse-history-order (newest first), then reverse
+// back to oldest-first so the sparkline draws left → right chronologically.
+function getWallSitTrend(allLogs: LogEntry[], uptoLogId: string | null, max = 10): number[] {
+  // logs are stored newest-first. We want all logs up-to-and-including the
+  // current row, then take the last N (chronologically).
+  let upto = allLogs;
+  if (uptoLogId) {
+    const idx = allLogs.findIndex((l) => l.id === uptoLogId);
+    if (idx >= 0) upto = allLogs.slice(idx); // newest-first slice from this row backwards in time
+  }
+  const wallSits = upto
+    .filter((l) => l.wallSitSec > 0)
+    .map((l) => l.wallSitSec)
+    .reverse(); // now oldest → newest
+  if (wallSits.length <= max) return wallSits;
+  return wallSits.slice(wallSits.length - max);
+}
+
+// Inline SVG sparkline. Returns '' if fewer than 2 points (flat-line reads
+// broken). The current row's value is the rightmost point and gets a filled
+// --accent dot.
+function renderSparkline(values: number[]): string {
+  if (values.length < 2) return '';
+
+  const W = 80;
+  const H = 20;
+  const PAD = 2; // breathing room so end dot isn't clipped
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+
+  const stepX = (W - 2 * PAD) / (values.length - 1);
+  const points = values.map((v, i) => {
+    const x = PAD + i * stepX;
+    // SVG y axis inverted; higher value = higher on chart = lower y
+    const y = H - PAD - ((v - min) / range) * (H - 2 * PAD);
+    return [x, y];
+  });
+
+  const path = points
+    .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x?.toFixed(1)} ${y?.toFixed(1)}`)
+    .join(' ');
+
+  const lastPoint = points[points.length - 1];
+  if (!lastPoint) return '';
+  const [lx, ly] = lastPoint;
+
+  const first = values[0] ?? 0;
+  const last = values[values.length - 1] ?? 0;
+  const direction = last > first ? 'trending up' : last < first ? 'trending down' : 'holding';
+  const label = `wall sit ${first} to ${last}s, ${direction}`;
+
+  return `
+    <svg class="sparkline" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"
+         role="img" aria-label="${escapeHtml(label)}">
+      <title>${escapeHtml(label)}</title>
+      <path d="${path}" fill="none" stroke="var(--accent-progress)" stroke-width="1.5"
+            stroke-linecap="round" stroke-linejoin="round" />
+      <circle cx="${lx?.toFixed(1)}" cy="${ly?.toFixed(1)}" r="2" fill="var(--accent)" />
+    </svg>
+  `;
+}
+
+// Year-grid heatmap. Builds the date range from PROGRAM_START_DATE to today
+// (or extends to 52 weeks back if she has enough sessions). Renders 7 rows
+// (Sat → Fri, her week per reference_week_definition.md) × N columns of weeks.
+// Each cell is 6px with 2px gap. Empty days show a 1px --border outline. Today
+// gets a 1px --accent outline. Cells with a session are tappable → history-detail.
+type YearGridCell = {
+  date: Date;
+  iso: string;
+  log: LogEntry | null;
+  isToday: boolean;
+  isFuture: boolean;
+};
+
+type YearGridWeek = {
+  cells: YearGridCell[];
+  monthLabel: string | null; // shown above the first column of a new month
+};
+
+function buildYearGrid(logs: LogEntry[]): YearGridWeek[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayMs = today.getTime();
+
+  // Saturday of the CURRENT week (week column anchor)
+  const todayDow = today.getDay(); // 0=Sun..6=Sat
+  const daysSinceSat = (todayDow + 1) % 7;
+  const thisSaturday = new Date(today);
+  thisSaturday.setDate(today.getDate() - daysSinceSat);
+
+  // Determine start. If sparse data (< 5 sessions), scope to program start.
+  // Otherwise show up to 52 weeks. Either way we render from the Saturday
+  // before-or-equal to the start date.
+  const programStart = new Date(PROGRAM_START_DATE + 'T00:00:00');
+  let startDate: Date;
+  if (logs.length < 5) {
+    startDate = new Date(programStart);
+  } else {
+    startDate = new Date(thisSaturday);
+    startDate.setDate(thisSaturday.getDate() - 51 * 7);
+    if (startDate < programStart) startDate = new Date(programStart);
+  }
+  // Back up to the Saturday before-or-equal startDate
+  const startDow = startDate.getDay();
+  const startSatOffset = (startDow + 1) % 7;
+  startDate.setDate(startDate.getDate() - startSatOffset);
+  startDate.setHours(0, 0, 0, 0);
+
+  // Build log-by-date lookup (ISO date string YYYY-MM-DD)
+  const byDate = new Map<string, LogEntry>();
+  for (const l of logs) {
+    const d = new Date(l.date);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    // first wins (logs are newest-first; for duplicates on same date, show the most-recent one)
+    if (!byDate.has(iso)) byDate.set(iso, l);
+  }
+
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  const weeks: YearGridWeek[] = [];
+  const cursor = new Date(startDate);
+  let prevMonth = -1;
+  // Render through and including the current Saturday's column (full week incl future)
+  const endMs = thisSaturday.getTime() + 7 * 24 * 60 * 60 * 1000;
+  while (cursor.getTime() < endMs) {
+    const cells: YearGridCell[] = [];
+    const weekStartMonth = cursor.getMonth();
+    for (let d = 0; d < 7; d++) {
+      const cellDate = new Date(cursor);
+      cellDate.setDate(cursor.getDate() + d);
+      cellDate.setHours(0, 0, 0, 0);
+      const iso = `${cellDate.getFullYear()}-${String(cellDate.getMonth() + 1).padStart(2, '0')}-${String(cellDate.getDate()).padStart(2, '0')}`;
+      cells.push({
+        date: cellDate,
+        iso,
+        log: byDate.get(iso) ?? null,
+        isToday: cellDate.getTime() === todayMs,
+        isFuture: cellDate.getTime() > todayMs,
+      });
+    }
+    const monthLabel = weekStartMonth !== prevMonth ? (months[weekStartMonth] ?? null) : null;
+    prevMonth = weekStartMonth;
+    weeks.push({ cells, monthLabel });
+    cursor.setDate(cursor.getDate() + 7);
+  }
+  return weeks;
+}
+
+function renderYearGrid(): string {
+  const logs = loadLogs();
+  const weeks = buildYearGrid(logs);
+  const dayLabels = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+  // Sessions this week
+  const currentWeekCount = getWeekCount(0);
+
+  // Cell geometry — kept in sync with .year-grid-cell CSS
+  const CELL = 6;
+  const GAP = 2;
+  const ROW_LABEL_W = 28;
+  const HEADER_H = 14;
+
+  const totalCols = weeks.length;
+  const gridW = totalCols * (CELL + GAP) - GAP;
+  const gridH = 7 * (CELL + GAP) - GAP;
+  const svgW = ROW_LABEL_W + gridW;
+  const svgH = HEADER_H + gridH + 4;
+
+  // Month headers — positioned at column transitions
+  const monthHeaders = weeks
+    .map((w, colIdx) => {
+      if (!w.monthLabel) return '';
+      const x = ROW_LABEL_W + colIdx * (CELL + GAP);
+      return `<text x="${x}" y="10" class="year-grid-month">${w.monthLabel}</text>`;
+    })
+    .join('');
+
+  // Row labels (Sat..Fri)
+  const rowLabels = dayLabels
+    .map((lbl, rowIdx) => {
+      const y = HEADER_H + rowIdx * (CELL + GAP) + CELL - 1;
+      return `<text x="0" y="${y}" class="year-grid-row-label">${lbl}</text>`;
+    })
+    .join('');
+
+  // Cells
+  const cells = weeks
+    .map((w, colIdx) => {
+      const x = ROW_LABEL_W + colIdx * (CELL + GAP);
+      return w.cells
+        .map((c, rowIdx) => {
+          if (c.isFuture) return ''; // don't render future days
+          const y = HEADER_H + rowIdx * (CELL + GAP);
+          const colorVar = c.log
+            ? c.log.workout === 'A'
+              ? 'var(--dot-a)'
+              : c.log.workout === 'B'
+                ? 'var(--dot-b)'
+                : 'var(--dot-c)'
+            : 'transparent';
+          const strokeVar = c.isToday ? 'var(--accent)' : c.log ? colorVar : 'var(--border-strong)';
+          const tooltip = c.log
+            ? `${formatDate(c.iso)} · Workout ${c.log.workout} · capacity ${c.log.capacityBefore}→${c.log.capacityAfter}`
+            : `${formatDate(c.iso)} · no workout`;
+          const clickAttr = c.log?.id ? `data-detail="${escapeHtml(c.log.id)}"` : '';
+          const cls = [
+            'year-grid-cell',
+            c.log ? 'year-grid-cell-active' : 'year-grid-cell-empty',
+            c.isToday ? 'year-grid-cell-today' : '',
+            c.log ? 'year-grid-cell-clickable' : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
+          return `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="1" ry="1"
+                       class="${cls}" fill="${colorVar}" stroke="${strokeVar}"
+                       ${clickAttr}><title>${escapeHtml(tooltip)}</title></rect>`;
+        })
+        .join('');
+    })
+    .join('');
+
+  return `
+    <div class="card year-grid-card">
+      <div class="year-grid-header">
+        <h3 class="year-grid-title">
+          Consistency · <span class="year-grid-sub">sessions per week</span>
+        </h3>
+        <div class="year-grid-stat">
+          <span class="year-grid-count">${currentWeekCount} of 3</span>
+          <span class="year-grid-stat-label">this week</span>
+        </div>
+      </div>
+      <div class="year-grid-scroll">
+        <svg class="year-grid" viewBox="0 0 ${svgW} ${svgH}" width="${svgW}" height="${svgH}"
+             role="img" aria-label="Workout consistency heatmap, last ${weeks.length} weeks">
+          ${monthHeaders}
+          ${rowLabels}
+          ${cells}
+        </svg>
+      </div>
+    </div>
+  `;
+}
+
 // ---------- renders ----------
 
 function renderHome(): string {
@@ -1198,11 +1473,13 @@ function renderHome(): string {
     .map((l) => {
       const idAttr = l.id ? `data-detail="${escapeHtml(l.id)}"` : '';
       const duration = l.durationSec ? formatDuration(l.durationSec) : '—';
+      const trend = l.wallSitSec > 0 ? getWallSitTrend(logs, l.id ?? null) : [];
+      const spark = renderSparkline(trend);
       return `
       <button class="history-row history-row-btn" ${idAttr} type="button">
         <span class="history-workout-badge">${l.workout}</span>
         <div>
-          <div class="history-date">${formatDate(l.date)} · ${duration}</div>
+          <div class="history-date">${formatDate(l.date)} · ${duration}${spark ? ` <span class="history-sparkline-wrap" aria-hidden="false">${spark}</span>` : ''}</div>
           ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
         </div>
         <div class="history-meta">›</div>
@@ -1242,6 +1519,8 @@ function renderHome(): string {
       </div>
       <div class="week-dots">${dotsHtml}</div>
     </div>
+
+    ${renderYearGrid()}
 
     <h3>Pick today's workout</h3>
     <div class="workout-picker">
@@ -1496,11 +1775,13 @@ function renderHistory(): string {
   const rowsHtml = logs
     .map((l) => {
       const idAttr = l.id ? `data-detail="${escapeHtml(l.id)}"` : '';
+      const trend = l.wallSitSec > 0 ? getWallSitTrend(logs, l.id ?? null) : [];
+      const spark = renderSparkline(trend);
       return `
     <button class="history-row history-row-btn" ${idAttr} type="button">
       <span class="history-workout-badge">${l.workout}</span>
       <div>
-        <div class="history-date">${formatDate(l.date)}${l.durationSec ? ` · ${formatDuration(l.durationSec)}` : ''}</div>
+        <div class="history-date">${formatDate(l.date)}${l.durationSec ? ` · ${formatDuration(l.durationSec)}` : ''}${spark ? ` <span class="history-sparkline-wrap" aria-hidden="false">${spark}</span>` : ''}</div>
         <div class="history-meta">cap ${l.capacityBefore}→${l.capacityAfter} · wall ${l.wallSitSec}s · back ${l.backPain}</div>
         ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
       </div>
@@ -1671,10 +1952,13 @@ function attachHandlers(): void {
     render();
   });
 
-  // Week dots + history rows — navigate to history-detail
-  document.querySelectorAll<HTMLButtonElement>('[data-detail]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset['detail'];
+  // Week dots + history rows + year-grid cells — navigate to history-detail.
+  // We use Element here (not HTMLButtonElement) so SVG <rect> cells in the
+  // Ship 3 year-grid heatmap also pick up the handler. SVGElement.dataset
+  // exists on all modern browsers.
+  document.querySelectorAll<Element>('[data-detail]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const id = (el as HTMLElement | SVGElement).dataset?.['detail'];
       if (!id) return;
       state.historyDetailId = id;
       state.screen = 'history-detail';

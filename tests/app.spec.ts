@@ -236,3 +236,88 @@ test('redesign: cards use border-elevation, not drop shadow', async ({ page }) =
   // A 1px border = "1px" exactly. Allow >0 to be safe across browsers.
   expect(parseFloat(styles.borderTopWidth)).toBeGreaterThan(0);
 });
+
+// --- Ship 3 (2026-05-15 data viz: sparkline + year-grid) ---------------------
+//
+// Two inline SVG components: wall-sit sparkline on history rows, year-grid
+// heatmap on home. These tests lock in:
+//  - year-grid always renders with 7 day-rows (her week, Sat → Fri)
+//  - sparkline renders when a history row has ≥2 wall-sit values
+//  - sparkline is skipped when a row has 0 or 1 wall-sit value (flat line
+//    reads as broken; better to render nothing)
+
+test('ship 3: year-grid heatmap renders with 7 day-rows on home', async ({ page }) => {
+  // The year-grid uses <text class="year-grid-row-label"> for Sat..Fri labels.
+  // 7 labels = 7 rows of cells. Renders even with zero sessions.
+  const rowLabels = page.locator('.year-grid-row-label');
+  await expect(rowLabels).toHaveCount(7);
+  // Day labels are in her week order (Sat first).
+  await expect(rowLabels.first()).toHaveText('Sat');
+  await expect(rowLabels.last()).toHaveText('Fri');
+  // The card heading is the Consistency callout.
+  await expect(page.locator('.year-grid-title')).toContainText('Consistency');
+});
+
+test('ship 3: sparkline renders for history row with >=2 wall-sit values', async ({ page }) => {
+  // Seed two B-workouts with wall-sit values, then visit history.
+  // localStorage shape is the JSON-stringified array of LogEntry rows.
+  await page.addInitScript(() => {
+    const logs = [
+      {
+        id: 'spark-2',
+        date: '2026-05-14T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 5,
+        capacityAfter: 6,
+        wallSitSec: 28,
+        backPain: 1,
+        word: 'strong',
+        durationSec: 600,
+      },
+      {
+        id: 'spark-1',
+        date: '2026-05-11T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 5,
+        capacityAfter: 5,
+        wallSitSec: 20,
+        backPain: 2,
+        word: 'tired',
+        durationSec: 580,
+      },
+    ];
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
+  });
+  await page.goto('/');
+  // Recent-workouts list on home should now have a sparkline on the newest row
+  // (the one whose trend includes itself + the older value = 2 points).
+  const sparks = page.locator('.history-row .sparkline');
+  expect(await sparks.count()).toBeGreaterThanOrEqual(1);
+  // Aria label encodes the trend direction.
+  const firstSpark = sparks.first();
+  await expect(firstSpark).toHaveAttribute('aria-label', /wall sit/);
+});
+
+test('ship 3: sparkline NOT rendered for row with 0 or 1 wall-sit value', async ({ page }) => {
+  // Single log with wallSitSec=0 (workout C, no wall sit) → no sparkline.
+  await page.addInitScript(() => {
+    const logs = [
+      {
+        id: 'no-spark',
+        date: '2026-05-13T10:00:00.000Z',
+        workout: 'C',
+        capacityBefore: 4,
+        capacityAfter: 5,
+        wallSitSec: 0,
+        backPain: 0,
+        word: 'walked',
+        durationSec: 720,
+      },
+    ];
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
+  });
+  await page.goto('/');
+  // Row exists, but no sparkline (flat-line render would read as broken).
+  await expect(page.locator('.history-row').first()).toBeVisible();
+  await expect(page.locator('.history-row .sparkline')).toHaveCount(0);
+});
