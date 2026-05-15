@@ -1266,6 +1266,133 @@ input[type='number']:focus {
   color: var(--text-dim-2);
 }
 
+/* --- Ship 3 (2026-05-15) data viz: sparkline + year-grid ---------------- *
+ * Inline SVG only. Matches D-1 visual language: no drop shadows, 1px
+ * borders, role-named accent tokens. */
+
+.sparkline {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 8px;
+  /* slight nudge down so it sits on the same baseline as the date text */
+  transform: translateY(2px);
+}
+
+.history-sparkline-wrap {
+  display: inline-block;
+  pointer-events: none; /* row button stays the click target */
+}
+
+/* --- Year-grid heatmap card -------------------------------------------- */
+
+.year-grid-card {
+  padding: 20px;
+}
+
+.year-grid-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 14px;
+  gap: 12px;
+}
+
+.year-grid-title {
+  margin-bottom: 0;
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+}
+
+.year-grid-sub {
+  color: var(--text-dim-2);
+  font-weight: 500;
+}
+
+.year-grid-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+}
+
+.year-grid-count {
+  font-size: var(--font-subheading);
+  font-weight: 600;
+  color: var(--accent-progress);
+  letter-spacing: var(--track-tight);
+}
+
+.year-grid-stat-label {
+  font-size: var(--font-micro);
+  color: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  margin-top: 2px;
+}
+
+.year-grid-scroll {
+  /* horizontally scrollable container so the grid stays usable on narrow viewports */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -4px;
+  padding: 0 4px 4px;
+}
+
+.year-grid-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.year-grid-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 2px;
+}
+
+.year-grid {
+  display: block;
+  height: auto;
+}
+
+.year-grid-month {
+  font-size: 9px;
+  fill: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.year-grid-row-label {
+  font-size: 8px;
+  fill: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.year-grid-cell {
+  stroke-width: 1;
+}
+
+.year-grid-cell-empty {
+  /* transparent fill — the 1px border-token stroke does the visual */
+}
+
+.year-grid-cell-today {
+  stroke-width: 1;
+}
+
+.year-grid-cell-clickable {
+  cursor: pointer;
+}
+
+.year-grid-cell-clickable:hover {
+  /* subtle brightness lift on hover — keeps the workout-letter color identity */
+  filter: brightness(1.2);
+}
+
 /* --- Tablet bumps ------------------------------------------------------ */
 
 @media (min-width: 600px) {
