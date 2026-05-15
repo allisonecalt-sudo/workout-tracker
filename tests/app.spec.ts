@@ -174,3 +174,65 @@ test('how-to falls back to text guide for unmapped exercise', async ({ page }) =
   // Toggle button always renders (whether multi-frame or legacy text).
   await expect(page.locator('[data-toggle-howto]').first()).toBeVisible();
 });
+
+// --- Redesign Ship 1 (2026-05-15 D-1 Calm Tool Minimalism) -------------------
+//
+// The next three tests lock in the visual contract introduced by the redesign:
+//  - stat numbers use the new display size (40px on phone / 56px tablet, not 28px)
+//  - role-named color tokens exist on :root and resolve to sage / amber / blue-gray
+//  - cards no longer carry a drop shadow — elevation is now expressed via border
+//
+// If a future change reintroduces drop shadows or collapses the role tokens
+// back to a single --accent, one of these tests will fail loudly.
+
+test('redesign: stat numbers use the new display type scale (>=36px)', async ({ page }) => {
+  // Pre-redesign: .stat-number was 28px. D-1 ramp puts it at 40px (phone) / 56px (tablet).
+  // The exact pixel is viewport-dependent, so we assert "noticeably larger than the
+  // old 28px ceiling."
+  const statNumber = page.locator('.stat-number').first();
+  await expect(statNumber).toBeVisible();
+  const fontSize = await statNumber.evaluate(
+    (el) => parseFloat(window.getComputedStyle(el).fontSize) || 0
+  );
+  expect(fontSize).toBeGreaterThanOrEqual(36);
+});
+
+test('redesign: role-named accent tokens are defined on :root', async ({ page }) => {
+  // Pre-redesign had a single --accent doing 9 jobs. D-1 splits it into roles.
+  // Verify the new tokens exist and resolve to non-empty values.
+  const tokens = await page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    return {
+      accent: cs.getPropertyValue('--accent').trim(),
+      accentProgress: cs.getPropertyValue('--accent-progress').trim(),
+      accentRest: cs.getPropertyValue('--accent-rest').trim(),
+      accentWarn: cs.getPropertyValue('--accent-warn').trim(),
+      textDim2: cs.getPropertyValue('--text-dim-2').trim(),
+    };
+  });
+  expect(tokens.accent).toBeTruthy();
+  expect(tokens.accentProgress).toBeTruthy();
+  expect(tokens.accentRest).toBeTruthy();
+  expect(tokens.accentWarn).toBeTruthy();
+  expect(tokens.textDim2).toBeTruthy();
+  // accent (primary action) and accent-rest (cool blue-gray) must differ —
+  // that's the whole point of splitting the role.
+  expect(tokens.accent).not.toBe(tokens.accentRest);
+});
+
+test('redesign: cards use border-elevation, not drop shadow', async ({ page }) => {
+  // D-1: shadows replaced with 1px borders. .card on home should have a border
+  // and a "none" (or rgba(0,0,0,0)) box-shadow at the computed-style level.
+  const card = page.locator('.card').first();
+  await expect(card).toBeVisible();
+  const styles = await card.evaluate((el) => {
+    const cs = window.getComputedStyle(el);
+    return {
+      boxShadow: cs.boxShadow,
+      borderTopWidth: cs.borderTopWidth,
+    };
+  });
+  expect(styles.boxShadow).toBe('none');
+  // A 1px border = "1px" exactly. Allow >0 to be safe across browsers.
+  expect(parseFloat(styles.borderTopWidth)).toBeGreaterThan(0);
+});
