@@ -1157,18 +1157,17 @@ function getTodaysPick(): WorkoutId {
 type WeekDotInfo = { letter: string; logId: string | null; date: Date; workout: WorkoutId | null };
 
 function getWeekDots(): WeekDotInfo[] {
-  const week = getProgramWeek();
   const logs = loadLogs();
   const dotLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  // Program week start is Saturday May 2 in `PROGRAM_START_DATE`. For
-  // display we render Mon..Sun of the calendar week containing `week.start`.
-  // Compute the Monday of the week containing week.start.
-  const ws = new Date(week.start);
-  const day = ws.getDay(); // 0=Sun..6=Sat
-  // Convert to Mon=0..Sun=6
-  const monOffset = (day + 6) % 7;
-  const monday = new Date(ws);
-  monday.setDate(ws.getDate() - monOffset);
+  // Show the calendar week (Mon..Sun) containing today. The program-week
+  // numbering still drives the banner ("Week 2"), but the dot strip is
+  // anchored to today's calendar week so the user sees this week's dots.
+  const today = new Date();
+  const day = today.getDay(); // 0=Sun..6=Sat
+  const monOffset = (day + 6) % 7; // Mon=0..Sun=6
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - monOffset);
+  monday.setHours(0, 0, 0, 0);
 
   return dotLabels.map((label, i) => {
     const d = new Date(monday);
