@@ -5,6 +5,7 @@
 // layer (still images + YouTube embeds + collapsible how-to).
 
 import { EXERCISE_VISUALS } from './exercise-visuals.js';
+import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
 
 type WorkoutId = 'A' | 'B' | 'C';
 
@@ -1048,9 +1049,46 @@ function renderExerciseVisual(exerciseName: string): string {
   return '';
 }
 
+function renderHowToFrame(frame: HowToFrame, idx: number, exerciseName: string): string {
+  const safeAlt = escapeHtml(`${exerciseName} — frame ${idx + 1}`);
+  // Visual: either an <img> or inline SVG. SVG is trusted (hand-coded in our
+  // own source) so we render it directly.
+  const visualHtml = frame.svg
+    ? `<div class="howto-frame-visual howto-frame-visual-svg">${frame.svg}</div>`
+    : frame.image
+      ? `<div class="howto-frame-visual"><img src="${escapeHtml(frame.image)}" alt="${safeAlt}" loading="lazy" /></div>`
+      : '<div class="howto-frame-visual howto-frame-visual-empty"></div>';
+
+  return `
+    <div class="howto-frame">
+      ${visualHtml}
+      <div class="howto-frame-text">
+        <div class="howto-cue howto-cue-do">
+          <span class="howto-cue-icon" aria-hidden="true">✓</span>
+          <span class="howto-cue-label">Do:</span>
+          <span class="howto-cue-body">${escapeHtml(frame.do)}</span>
+        </div>
+        ${
+          frame.avoid
+            ? `<div class="howto-cue howto-cue-avoid">
+            <span class="howto-cue-icon" aria-hidden="true">✗</span>
+            <span class="howto-cue-label">Avoid:</span>
+            <span class="howto-cue-body">${escapeHtml(frame.avoid)}</span>
+          </div>`
+            : ''
+        }
+      </div>
+    </div>
+  `;
+}
+
 function renderHowToCard(exerciseName: string): string {
+  // Prefer multi-frame visual how-to. Fall back to legacy EXERCISE_GUIDE text
+  // if the exercise hasn't been mapped to EXERCISE_HOWTO yet (archive-not-
+  // delete principle: EXERCISE_GUIDE stays in source as a permanent fallback).
+  const howto = EXERCISE_HOWTO[exerciseName];
   const guide = EXERCISE_GUIDE[exerciseName];
-  if (!guide) return '';
+  if (!howto && !guide) return '';
 
   // First-time-this-week → open by default. After that, collapsed.
   const week = getProgramWeek();
@@ -1067,13 +1105,21 @@ function renderHowToCard(exerciseName: string): string {
   const userClosed = state.howToOpenFor === `__closed__${exerciseName}`;
   const isOpen = userOpened || (isFirstThisWeek && !userClosed);
 
+  const innerHtml = howto
+    ? `<div class="howto-frames">
+        ${howto.frames.map((f, i) => renderHowToFrame(f, i, exerciseName)).join('')}
+      </div>`
+    : guide
+      ? `<p class="how-to-text">${escapeHtml(guide.howTo)}</p>`
+      : '';
+
   return `
     <div class="how-to-card ${isOpen ? 'how-to-open' : ''}">
       <button class="how-to-toggle" data-toggle-howto="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isOpen}">
         <span>📖 How to do it</span>
         <span class="how-to-chev">${isOpen ? '▾' : '▸'}</span>
       </button>
-      ${isOpen ? `<p class="how-to-text">${escapeHtml(guide.howTo)}</p>` : ''}
+      ${isOpen ? innerHtml : ''}
     </div>
   `;
 }

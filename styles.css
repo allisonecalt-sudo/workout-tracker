@@ -854,6 +854,130 @@ input[type='number']:focus {
   margin: 0;
 }
 
+/* Multi-frame how-to (2026-05-15 content build) */
+.howto-frames {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 14px 16px;
+}
+
+.howto-frame {
+  display: flex;
+  flex-direction: row;
+  gap: 14px;
+  align-items: stretch;
+  background: var(--bg-elev);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.howto-frame-visual {
+  flex: 0 0 38%;
+  max-width: 180px;
+  background: var(--bg);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+}
+
+.howto-frame-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.howto-frame-visual-svg .howto-svg,
+.howto-frame-visual-svg svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.howto-frame-visual-empty {
+  background: var(--bg-elev-2);
+}
+
+.howto-frame-text {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  min-width: 0;
+}
+
+.howto-cue {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.howto-cue-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+  line-height: 1;
+}
+
+.howto-cue-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+
+.howto-cue-body {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.howto-cue-do .howto-cue-icon {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.howto-cue-do .howto-cue-label {
+  color: var(--accent);
+}
+
+.howto-cue-avoid .howto-cue-icon {
+  background: var(--warn);
+  color: var(--bg);
+}
+
+.howto-cue-avoid .howto-cue-label {
+  color: var(--warn);
+}
+
+/* Narrow phones — stack image on top */
+@media (max-width: 480px) {
+  .howto-frame {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .howto-frame-visual {
+    flex: 0 0 auto;
+    max-width: 100%;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+  }
+}
+
 /* Stats */
 .streak-stat {
   display: flex;
