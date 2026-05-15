@@ -652,3 +652,122 @@ test('ship 5: back-pain bars render only for sessions with backPain > 0', async 
   const barCount = await barChart.locator('rect').count();
   expect(barCount).toBe(2);
 });
+
+// ============================================================================
+// Ship 6 — Settings screen + motion polish (2026-05-15)
+// ============================================================================
+
+test('ship 6: settings reachable from gear icon in home header', async ({ page }) => {
+  // Gear button visible top-right of home header.
+  await expect(page.locator('#open-settings')).toBeVisible();
+  await page.locator('#open-settings').click();
+  // Lands on Settings screen.
+  await expect(page.locator('h2')).toHaveText('Settings');
+  // Five section cards (Audio, Timing, Display, Data, About).
+  await expect(page.locator('.settings-section-label')).toHaveCount(5);
+  // Back returns to home.
+  await page.locator('#back-home').click();
+  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+});
+
+test('ship 6: beep toggle persists to localStorage', async ({ page }) => {
+  await page.locator('#open-settings').click();
+  // Default = on. Toggle off via the input (force-click bypasses the visual
+  // thumb overlay which sits above the input for styling).
+  const input = page.locator('#setting-beeps');
+  await expect(input).toBeChecked();
+  await input.click({ force: true });
+  await expect(input).not.toBeChecked();
+  // Setting persists in localStorage as JSON literal `false`.
+  const stored = await page.evaluate(() =>
+    window.localStorage.getItem('workout-tracker:setting-beeps')
+  );
+  expect(stored).toBe('false');
+});
+
+test('ship 6: rest duration stepper updates value and persists', async ({ page }) => {
+  await page.locator('#open-settings').click();
+  // Default 60s.
+  await expect(page.locator('#rest-val')).toHaveText('60s');
+  // Bump up twice — 60 → 65 → 70.
+  await page.locator('#rest-inc').click();
+  await page.locator('#rest-inc').click();
+  await expect(page.locator('#rest-val')).toHaveText('70s');
+  // Persisted.
+  const stored = await page.evaluate(() =>
+    window.localStorage.getItem('workout-tracker:setting-rest-sec')
+  );
+  expect(stored).toBe('70');
+  // Decrement bounded — go to 5 and stop.
+  for (let i = 0; i < 20; i++) {
+    await page.locator('#rest-dec').click();
+  }
+  await expect(page.locator('#rest-val')).toHaveText('5s');
+});
+
+test('ship 6: export sessions downloads a JSON file', async ({ page }) => {
+  await page.addInitScript(() => {
+    const logs = [
+      {
+        id: 'export-1',
+        date: '2026-05-15T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 5,
+        capacityAfter: 6,
+        wallSitSec: 25,
+        backPain: 0,
+        word: 'ok',
+        durationSec: 540,
+      },
+    ];
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
+  });
+  await page.goto('/');
+  await page.locator('#open-settings').click();
+  await page.locator('#export-sessions').scrollIntoViewIfNeeded();
+  // Trigger download. Playwright's waitForEvent captures the file.
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#export-sessions').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^workout-tracker-export-\d{4}-\d{2}-\d{2}\.json$/);
+});
+
+test('ship 6: clear-data hold-to-confirm wipes localStorage', async ({ page }) => {
+  await page.addInitScript(() => {
+    const logs = [
+      {
+        id: 'clear-1',
+        date: '2026-05-14T10:00:00.000Z',
+        workout: 'B',
+        capacityBefore: 5,
+        capacityAfter: 6,
+        wallSitSec: 20,
+        backPain: 0,
+        word: 'fine',
+        durationSec: 520,
+      },
+    ];
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
+  });
+  await page.goto('/');
+  await page.locator('#open-settings').click();
+  // Hold the clear button for 700ms (HOLD_TO_CLEAR_MS = 500ms). Scroll into
+  // view first — the Data card lives near the bottom of the screen so on a
+  // 1280×720 viewport the mouse coordinates would otherwise be outside it.
+  const clearBtn = page.locator('#clear-local');
+  await clearBtn.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(150);
+  const box = await clearBtn.boundingBox();
+  if (!box) throw new Error('clear-local button not visible');
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+  // localStorage cleared.
+  const remaining = await page.evaluate(() => window.localStorage.getItem('workout-tracker:logs'));
+  expect(remaining).toBeNull();
+  // Status banner confirms.
+  await expect(page.locator('#data-status')).toContainText('cleared');
+});
