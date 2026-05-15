@@ -41,37 +41,14 @@ type LogEntry = {
   synced?: boolean;
 };
 
-type AppScreen =
-  | 'home'
-  | 'pre-log'
-  | 'workout'
-  | 'post-log'
-  | 'history'
-  | 'history-detail'
-  | 'hand-routine';
+type AppScreen = 'home' | 'pre-log' | 'workout' | 'post-log' | 'history' | 'history-detail';
 
 type Phase = 'warmup' | 'main' | 'cooldown';
 
-type HandRoutineId = 'left-hand' | 'right-hand';
-
-// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
-type HandRoutine = {
-  id: HandRoutineId;
-  name: string;
-  shortName: string;
-  status: 'active';
-  description: string;
-  frequency: string;
-  exercises: Exercise[];
-};
-
-// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
-type HandLog = {
-  id?: string;
-  date: string;
-  routine: HandRoutineId;
-  synced?: boolean;
-};
+// Hand routine retired 2026-05-15 per Allison. All hand-routine types,
+// constants, persistence, sync, state machine, render, and event handlers
+// moved to archive/hand-routine-2026-05-15/. See that folder's README.md
+// for the timeline and re-enable instructions.
 
 type SyncStatus = 'syncing' | 'synced' | 'offline';
 
@@ -89,8 +66,6 @@ type AppState = {
   isResting: boolean;
   timerSeconds: number;
   preCountdown: number;
-  selectedHandRoutine: HandRoutineId | null;
-  currentHandExerciseIndex: number;
   syncStatus: SyncStatus;
   startedAt: string | null;
   // Wall-sit timing capture (group 1D): when the user starts a timed wall sit
@@ -106,7 +81,6 @@ type AppState = {
 };
 
 const STORAGE_KEY = 'workout-tracker:logs';
-const HAND_STORAGE_KEY = 'workout-tracker:hand-logs';
 const HOWTO_SEEN_KEY_PREFIX = 'workout-tracker:howto-seen-week-';
 const REST_SEC = 60;
 const COUNT_BEEP_FROM_SEC = 3;
@@ -260,40 +234,11 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
   },
 };
 
-// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
-const HAND_ROUTINES: Record<HandRoutineId, HandRoutine> = {
-  'left-hand': {
-    id: 'left-hand',
-    name: 'Left hand · Lisa Cohen PT protocol',
-    shortName: 'Left hand',
-    status: 'active',
-    description:
-      'Muscle strain recovery (Lisa Cohen, May 5) — stretch + flexion/extension + radial deviation.',
-    frequency: '1x per day · ~5 min',
-    exercises: [
-      { name: 'Left wrist stretch', reps: '30-sec hold' },
-      { name: 'Left flexion/extension (tuna can)', reps: '10 reps each direction' },
-      { name: 'Left radial deviation (tuna can)', reps: '10 reps' },
-    ],
-  },
-  'right-hand': {
-    id: 'right-hand',
-    name: 'Right hand · Lisa Cohen PT protocol',
-    shortName: 'Right hand',
-    status: 'active',
-    description:
-      'Same protocol as left side — stretch + flexion/extension + radial deviation strengthening.',
-    frequency: '1x per day · ~5 min',
-    exercises: [
-      { name: 'Right wrist stretch', reps: '30-sec hold' },
-      { name: 'Right flexion/extension (tuna can)', reps: '10 reps each direction' },
-      { name: 'Right radial deviation (tuna can)', reps: '10 reps' },
-    ],
-  },
-};
+// HAND_ROUTINES retired 2026-05-15 — see archive/hand-routine-2026-05-15/.
 
-// EXERCISE_GUIDE is now keyed only by exercise names actually referenced in
-// WORKOUTS or HAND_ROUTINES. Eliana-era entries removed per audit §8 (group 3P).
+// EXERCISE_GUIDE is keyed only by exercise names referenced in WORKOUTS.
+// Eliana-era entries removed per audit §8 (group 3P); Lisa Cohen wrist
+// entries moved to archive/hand-routine-2026-05-15/ on 2026-05-15.
 const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   'Belly breathing': {
     howTo:
@@ -367,30 +312,6 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
     howTo:
       "Conversational pace — you should be able to talk in full sentences without getting breathless. 20 minutes minimum. Walking is genuinely your most underrated exercise: it preserves joint health, supports digestion (especially good with Crohn's), aids GLP-1 medication's effect, and clears mental fog. Take it outdoors when possible — the visual variety and sunlight matter. Tap done when you finish.",
   },
-  'Left wrist stretch': {
-    howTo:
-      'Lisa Cohen PT — May 5. Hold your LEFT arm out straight in front of you. With your RIGHT hand, gently pull the LEFT fingers back toward you (palm facing forward) until you feel a mild stretch in the front of your forearm. Then flip — push the LEFT hand DOWN (palm facing you) to stretch the back of the forearm. Hold 30 seconds total, no pain. Once a day.',
-  },
-  'Left flexion/extension (tuna can)': {
-    howTo:
-      "Lisa Cohen PT — May 5. Sit at a table. Rest your LEFT forearm flat on the table with the wrist hanging off the edge. Hold a tuna can (or similar light weight) in your LEFT hand. PALM DOWN: slowly lift the can up by bending the wrist, then lower. That's wrist EXTENSION. Then flip — PALM UP: lift the can up by curling the wrist, then lower. That's wrist FLEXION. 10 reps each direction. Slow and controlled, no pain.",
-  },
-  'Left radial deviation (tuna can)': {
-    howTo:
-      'Lisa Cohen PT — May 5. Sit at a table. Rest your LEFT forearm on the table on its PINKY-SIDE (ulnar edge), thumb pointing UP toward the ceiling. Hold a tuna can in your LEFT hand. Slowly lift the hand UPWARD toward the thumb (radial deviation), then lower with control. Small range — only the wrist moves, forearm stays put. 10 reps. Slow and pain-free.',
-  },
-  'Right wrist stretch': {
-    howTo:
-      'Lisa Cohen PT — May 5. Hold your RIGHT arm out straight in front of you. With your LEFT hand, gently pull the RIGHT fingers back toward you (palm facing forward) until you feel a mild stretch in the front of your forearm. Then flip — push the RIGHT hand DOWN (palm facing you) to stretch the back of the forearm. Hold 30 seconds total, no pain. Once a day.',
-  },
-  'Right flexion/extension (tuna can)': {
-    howTo:
-      "Lisa Cohen PT — May 5. Sit at a table. Rest your RIGHT forearm flat on the table with the wrist hanging off the edge. Hold a tuna can (or similar light weight) in your RIGHT hand. PALM DOWN: slowly lift the can up by bending the wrist, then lower. That's wrist EXTENSION. Then flip — PALM UP: lift the can up by curling the wrist, then lower. That's wrist FLEXION. 10 reps each direction. Slow and controlled, no pain.",
-  },
-  'Right radial deviation (tuna can)': {
-    howTo:
-      'Lisa Cohen PT — May 5. Sit at a table. Rest your RIGHT forearm on the table on its PINKY-SIDE (ulnar edge), thumb pointing UP toward the ceiling. Hold a tuna can in your RIGHT hand. Slowly lift the hand UPWARD toward the thumb (radial deviation), then lower with control. Small range — only the wrist moves, forearm stays put. 10 reps. Slow and pain-free.',
-  },
 };
 
 const state: AppState = {
@@ -407,8 +328,6 @@ const state: AppState = {
   isResting: false,
   timerSeconds: 0,
   preCountdown: 0,
-  selectedHandRoutine: null,
-  currentHandExerciseIndex: 0,
   syncStatus: 'syncing',
   startedAt: null,
   wallSitStartedAt: null,
@@ -823,82 +742,11 @@ function resetState(): void {
   state.isResting = false;
   state.timerSeconds = 0;
   state.preCountdown = 0;
-  state.selectedHandRoutine = null;
-  state.currentHandExerciseIndex = 0;
   state.startedAt = null;
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
   state.howToOpenFor = null;
   state.historyDetailId = null;
-}
-
-// ---------- hand routine persistence ----------
-// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
-
-function loadHandLogs(): HandLog[] {
-  try {
-    const raw = localStorage.getItem(HAND_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as HandLog[];
-  } catch {
-    return [];
-  }
-}
-
-function writeHandLogs(logs: HandLog[]): void {
-  const sorted = [...logs].sort((a, b) => {
-    const aUn = a.synced ? 1 : 0;
-    const bUn = b.synced ? 1 : 0;
-    if (aUn !== bUn) return aUn - bUn;
-    return b.date.localeCompare(a.date);
-  });
-  localStorage.setItem(HAND_STORAGE_KEY, JSON.stringify(sorted.slice(0, 200)));
-}
-
-function saveHandLog(routine: HandRoutineId): HandLog {
-  const entry: HandLog = {
-    id: genId(),
-    date: new Date().toISOString(),
-    routine,
-    synced: false,
-  };
-  const logs = loadHandLogs();
-  logs.unshift(entry);
-  writeHandLogs(logs);
-  return entry;
-}
-
-function markHandLogSynced(id: string): void {
-  const logs = loadHandLogs();
-  const idx = logs.findIndex((l) => l.id === id);
-  if (idx === -1) return;
-  const entry = logs[idx];
-  if (!entry) return;
-  logs[idx] = { ...entry, synced: true };
-  writeHandLogs(logs);
-}
-
-async function pushHandLogToSupabase(entry: HandLog): Promise<boolean> {
-  if (syncDisabled()) return false;
-  if (!entry.id) return false;
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/hand_routine_logs`, {
-      method: 'POST',
-      headers: supabaseHeaders(),
-      body: JSON.stringify([{ id: entry.id, date: entry.date, routine_id: entry.routine }]),
-    });
-    if (res.ok) {
-      markHandLogSynced(entry.id);
-      return true;
-    }
-    console.warn('[sync] hand push failed:', res.status);
-    return false;
-  } catch (err) {
-    console.warn('[sync] hand push threw:', err);
-    return false;
-  }
 }
 
 // ---------- sync ----------
@@ -917,23 +765,15 @@ type RemoteSession = {
   duration_seconds: number | null;
 };
 
-type RemoteHandLog = {
-  id: string;
-  date: string;
-  routine_id: HandRoutineId;
-};
-
 async function pullFromSupabase(): Promise<void> {
   if (syncDisabled()) return;
   try {
-    const [sRes, hRes] = await Promise.all([
-      fetch(`${SUPABASE_URL}/rest/v1/workout_sessions?select=*&order=date.desc&limit=50`, {
+    const sRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/workout_sessions?select=*&order=date.desc&limit=50`,
+      {
         headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-      }),
-      fetch(`${SUPABASE_URL}/rest/v1/hand_routine_logs?select=*&order=date.desc&limit=200`, {
-        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
-      }),
-    ]);
+      }
+    );
     if (sRes.ok) {
       const remote: RemoteSession[] = await sRes.json();
       const local = loadLogs();
@@ -967,23 +807,6 @@ async function pullFromSupabase(): Promise<void> {
     } else {
       console.warn('[sync] pull sessions failed:', sRes.status);
     }
-    if (hRes.ok) {
-      const remote: RemoteHandLog[] = await hRes.json();
-      const local = loadHandLogs();
-      const byId = new Map<string, HandLog>();
-      for (const l of local) {
-        if (l.id) byId.set(l.id, l);
-      }
-      for (const r of remote) {
-        const existing = byId.get(r.id);
-        if (existing && !existing.synced) continue;
-        byId.set(r.id, { id: r.id, date: r.date, routine: r.routine_id, synced: true });
-      }
-      const merged = Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date));
-      writeHandLogs(merged);
-    } else {
-      console.warn('[sync] pull hand failed:', hRes.status);
-    }
     if (state.screen === 'home') render();
   } catch (err) {
     console.warn('[sync] pull threw:', err);
@@ -993,8 +816,7 @@ async function pullFromSupabase(): Promise<void> {
 async function flushPendingSyncs(): Promise<void> {
   if (syncDisabled()) return;
   const pendingLogs = loadLogs().filter((l) => !l.synced && l.id);
-  const pendingHand = loadHandLogs().filter((l) => !l.synced && l.id);
-  if (pendingLogs.length === 0 && pendingHand.length === 0) {
+  if (pendingLogs.length === 0) {
     state.syncStatus = 'synced';
     updateSyncIndicator();
     return;
@@ -1004,10 +826,6 @@ async function flushPendingSyncs(): Promise<void> {
   let allOk = true;
   for (const entry of pendingLogs) {
     const ok = await pushLogToSupabase(entry);
-    if (!ok) allOk = false;
-  }
-  for (const entry of pendingHand) {
-    const ok = await pushHandLogToSupabase(entry);
     if (!ok) allOk = false;
   }
   state.syncStatus = allOk ? 'synced' : 'offline';
@@ -1022,48 +840,11 @@ function updateSyncIndicator(): void {
 }
 
 function syncIndicatorText(): string {
-  const pending =
-    loadLogs().filter((l) => !l.synced).length + loadHandLogs().filter((l) => !l.synced).length;
+  const pending = loadLogs().filter((l) => !l.synced).length;
   if (state.syncStatus === 'syncing') return 'syncing…';
   if (pending > 0) return `offline · ${pending} pending`;
-  if (loadLogs().length === 0 && loadHandLogs().length === 0) return '';
+  if (loadLogs().length === 0) return '';
   return 'synced ✓';
-}
-
-// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending
-// Allison's call. The function is intentionally unreferenced from the home
-// screen (the entry buttons were removed pre-May-15); we keep it exported on
-// window so the code path is reachable from the browser console if Allison
-// wants to re-enable temporarily.
-function startHandRoutine(id: HandRoutineId): void {
-  state.selectedHandRoutine = id;
-  state.currentHandExerciseIndex = 0;
-  state.screen = 'hand-routine';
-  render();
-}
-if (typeof window !== 'undefined') {
-  (window as unknown as { startHandRoutine: typeof startHandRoutine }).startHandRoutine =
-    startHandRoutine;
-}
-
-// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
-function advanceHandExercise(): void {
-  if (!state.selectedHandRoutine) return;
-  const routine = HAND_ROUTINES[state.selectedHandRoutine];
-  if (state.currentHandExerciseIndex < routine.exercises.length - 1) {
-    state.currentHandExerciseIndex += 1;
-    render();
-  } else {
-    const stored = saveHandLog(routine.id);
-    resetState();
-    render();
-    state.syncStatus = 'syncing';
-    updateSyncIndicator();
-    void pushHandLogToSupabase(stored).then((ok) => {
-      state.syncStatus = ok ? 'synced' : 'offline';
-      updateSyncIndicator();
-    });
-  }
 }
 
 // ---------- formatting ----------
@@ -1418,42 +1199,6 @@ function renderHome(): string {
   `;
 }
 
-// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
-function renderHandRoutine(): string {
-  if (!state.selectedHandRoutine) return '';
-  const routine = HAND_ROUTINES[state.selectedHandRoutine];
-  const ex = routine.exercises[state.currentHandExerciseIndex];
-  if (!ex) return '';
-  const total = routine.exercises.length;
-  const isLastExercise = state.currentHandExerciseIndex === total - 1;
-  const nextLabel = isLastExercise ? 'Done · Save' : 'Done · Next';
-
-  return `
-    <div class="screen-header">
-      <h2>${routine.shortName}</h2>
-      <button class="quit-link" id="quit-hand" type="button">× Quit</button>
-    </div>
-    <div class="warning-banner">⚠️ <strong>2/10 pain ceiling, no sharpness.</strong> Stop signs: pain ramps during a hold · lingers >30 min after · new clicking on ulnar side.</div>
-    <div class="progress-text">Exercise ${state.currentHandExerciseIndex + 1} of ${total}</div>
-    <div class="progress-bar">
-      <div class="progress-bar-fill" style="width: ${((state.currentHandExerciseIndex + 1) / total) * 100}%"></div>
-    </div>
-
-    <div class="card">
-      <div class="exercise-display">
-        <div class="exercise-phase">${routine.shortName}</div>
-        <div class="exercise-name">${ex.name}</div>
-        <div class="exercise-reps">${ex.reps ?? ''}</div>
-      </div>
-    </div>
-
-    ${renderExerciseVisual(ex.name)}
-    ${renderHowToCard(ex.name)}
-
-    <button class="btn-large btn-primary" id="next-hand" type="button">${nextLabel}</button>
-  `;
-}
-
 function renderPreLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
@@ -1748,9 +1493,6 @@ function render(): void {
     case 'history-detail':
       html = renderHistoryDetail();
       break;
-    case 'hand-routine':
-      html = renderHandRoutine();
-      break;
   }
   root.innerHTML = html;
   attachHandlers();
@@ -1819,17 +1561,6 @@ function attachHandlers(): void {
         startWorkout(id);
       }
     });
-  });
-
-  // PENDING DECISION: hand routine UI hidden 2026-05-15 — these handlers fire
-  // on hand-routine screens which are unreachable from home until the UI
-  // returns. Code retained pending Allison's call.
-  bindClick('next-hand', () => {
-    advanceHandExercise();
-  });
-  bindClick('quit-hand', () => {
-    resetState();
-    render();
   });
 
   bindClick('view-history', () => {
