@@ -1,10 +1,22 @@
 /* ----------------------------------------------------------------------------
  * workout-tracker — D-1 Calm Tool Minimalism (2026-05-15 redesign Ship 1)
+ * + COOLER-LOOK pass (2026-05-15 evening): modern depth, spring motion,
+ *   restrained glassmorphism. Linear 2025 / Stripe 2025 / Apple Liquid Glass
+ *   register WITHOUT crossing into gamified / motivational territory.
  *
  * Design direction: Things-3 / Linear-2025 axis. Calm, dark, dense info > whitespace,
  * single accent reserved for one role at a time, no drop shadows (borders instead),
  * wider type ramp with -0.02em letter-spacing on display sizes and 1.5px tracking
  * on all-caps labels. See REDESIGN-RESEARCH-2026-05-15.md §D-1 for the full rationale.
+ *
+ * What COOLER-LOOK layers on top of D-1:
+ *  - subtle same-hue gradients on hero surfaces (no flashy color)
+ *  - 2-3 elements with restrained backdrop-filter glass (banner, sync, pick badge)
+ *  - cubic-bezier(0.34, 1.56, 0.64, 1) overshoot spring on every interactive
+ *  - workout-card monogram in identity color at 12% opacity (tile feel)
+ *  - today's-pick distinct: 22px radius + accent-tinted gradient + soft inset glow
+ *  - heavier display-weight stat numbers + 1% accent hue-mix on h1
+ *  - micro-interactions: active scale 0.96 spring-back, chevron rotation
  *
  * The pre-redesign stylesheet is preserved at
  * archive/redesign-pre-2026-05-15/styles.before-redesign.css (archive-not-delete).
@@ -84,6 +96,37 @@
    * and accessibility. Inter Variable is an optional later upgrade. */
   --font-family:
     -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, system-ui, sans-serif;
+
+  /* --- COOLER-LOOK additions (2026-05-15 evening) ---------------------- */
+
+  /* Same-hue gradients — depth, NOT color. Used on hero card surfaces. */
+  --grad-surface: linear-gradient(180deg, var(--bg-elev) 0%, var(--bg-elev-2) 100%);
+  --grad-hero: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 6%, var(--bg-elev)) 0%,
+    var(--bg-elev) 60%,
+    var(--bg-elev-2) 100%
+  );
+  --grad-primary: linear-gradient(180deg, var(--accent-hover) 0%, var(--accent) 100%);
+
+  /* Glass — Apple Liquid Glass on a strict diet. Used on 3 elements max. */
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-bg-strong: rgba(255, 255, 255, 0.06);
+  --glass-blur: blur(10px) saturate(140%);
+
+  /* Glow / inset stroke — used on today's-pick hero card for premium feel.
+   * Two-stop inset: subtle accent glow + 1px highlight at the top edge. */
+  --glow-accent:
+    0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent) inset,
+    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
+    0 8px 24px -8px color-mix(in srgb, var(--accent) 18%, transparent);
+
+  /* Motion — spring overshoot (Linear / Apple Fitness+ register, NOT bouncy).
+   * 0.34, 1.56, 0.64, 1 = 8% overshoot on settle. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 0.16s;
+  --dur-base: 0.22s;
 }
 
 * {
@@ -120,6 +163,8 @@ h1 {
   letter-spacing: var(--track-heading);
   line-height: 1.1;
   margin-bottom: 6px;
+  /* Subtle warmth — 1% sage hue mix on the warm-white. Reads "alive," never green. */
+  color: color-mix(in srgb, var(--accent) 1%, var(--text));
 }
 
 h2 {
@@ -147,10 +192,14 @@ h3 {
 
 /* Week banner — was a fat saturated pill; now a quiet inline label.
  * Per §C move 2 ("reserve accent for one role") this is NOT an action; it's
- * metadata. So it doesn't get sage. */
+ * metadata. So it doesn't get sage.
+ * COOLER-LOOK: restrained glass — 4% white over a 10px backdrop blur.
+ * Reads "premium chip" without competing with the cards below. */
 .week-banner {
   display: inline-block;
-  background: transparent;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   color: var(--text-dim);
   border: 1px solid var(--border);
   padding: 5px 12px;
@@ -161,14 +210,19 @@ h3 {
   margin-bottom: 20px;
 }
 
-/* --- Cards: no drop shadow, subtle border ------------------------------ */
+/* --- Cards: no drop shadow, subtle border ------------------------------ *
+ * COOLER-LOOK: same-hue vertical gradient (top brighter, bottom recedes)
+ * for depth without color. Border still does the visual elevation. */
 
 .card {
-  background: var(--bg-elev);
+  background: var(--grad-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 20px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring);
 }
 
 /* --- Buttons ----------------------------------------------------------- */
@@ -183,10 +237,12 @@ button,
   font-weight: 600;
   font-size: var(--font-small);
   letter-spacing: var(--track-tight);
+  /* COOLER-LOOK: spring-physics ease on both fade + transform so press feels alive. */
   transition:
-    background 0.15s,
-    border-color 0.15s,
-    transform 0.08s;
+    background var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    transform var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-out);
   background: var(--bg-elev-2);
   color: var(--text);
 }
@@ -198,7 +254,7 @@ button:hover,
 
 button:active,
 .btn:active {
-  transform: scale(0.98);
+  transform: scale(0.96);
 }
 
 button:disabled {
@@ -206,15 +262,17 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Primary action — the one place sage means "tap me to advance" */
+/* Primary action — the one place sage means "tap me to advance".
+ * COOLER-LOOK: very subtle within-sage gradient (hover→base) reads premium. */
 .btn-primary {
-  background: var(--accent);
+  background: var(--grad-primary);
   color: var(--bg);
   border-color: var(--accent);
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.12) inset;
 }
 
 .btn-primary:hover {
-  background: var(--accent-hover);
+  background: linear-gradient(180deg, var(--accent-hover) 0%, var(--accent-hover) 100%);
   border-color: var(--accent-hover);
 }
 
@@ -278,65 +336,116 @@ button:disabled {
   background: var(--bg-elev-2);
 }
 
-/* --- Workout picker ----------------------------------------------------- */
+/* --- Workout picker ----------------------------------------------------- *
+ * COOLER-LOOK: gap bumped 12→14px so each card has more breathing room and
+ * reads as its own object (not a list item). */
 
 .workout-picker {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 14px;
   margin-top: 14px;
   margin-bottom: 16px;
 }
 
 .workout-card {
-  background: var(--bg-elev);
+  background: var(--grad-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 18px 20px;
   text-align: left;
   position: relative;
-  opacity: 0.85;
+  overflow: hidden; /* clip the monogram letter */
+  opacity: 0.9;
   width: 100%;
+  /* COOLER-LOOK: spring-eased lift on hover (translateY + border brighten).
+   * Active 0.96 inherited from base button. */
   transition:
-    border-color 0.15s,
-    opacity 0.15s,
-    background 0.15s;
+    border-color var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out),
+    background var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-spring);
 }
 
 .workout-card:hover {
   border-color: var(--border-strong);
   opacity: 1;
-  background: var(--bg-elev);
+  transform: translateY(-2px);
 }
 
-/* Today's pick — slight bump to radius + brighter border + full opacity. NOT
- * a fill change; that would over-claim the sage role. */
+/* Monogram — workout letter at 60px+ in identity color at low opacity, behind
+ * the text. Gives each tile a quiet visual identity without taking space.
+ * Positioned bottom-right so it doesn't fight the title or badge. */
+.workout-card-monogram {
+  position: absolute;
+  right: 14px;
+  bottom: -10px;
+  font-size: 88px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: var(--track-display);
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.12;
+  font-variant-numeric: tabular-nums;
+}
+
+.workout-card[data-workout='A'] .workout-card-monogram {
+  color: var(--dot-a);
+}
+.workout-card[data-workout='B'] .workout-card-monogram {
+  color: var(--dot-b);
+}
+.workout-card[data-workout='C'] .workout-card-monogram {
+  color: var(--dot-c);
+}
+
+/* Today's pick — full hero treatment.
+ *  - radius bumped (lg) so it visually breaks from the other tiles
+ *  - accent-tinted gradient (6% sage in the surface; not a fill grab)
+ *  - 1px accent stroke + soft inset glow (--glow-accent) — premium without shouty
+ *  - more padding above so the badge sits in its own space
+ *  - monogram brighter (opacity 18%) — picked tile gets more identity */
 .workout-card-pick {
-  border: 1px solid var(--accent);
+  background: var(--grad-hero);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
   border-radius: var(--radius-lg);
-  padding: 36px 22px 20px;
+  padding: 38px 22px 22px;
   opacity: 1;
+  box-shadow: var(--glow-accent);
 }
 
 .workout-card-pick:hover {
   border-color: var(--accent);
+  transform: translateY(-2px);
 }
 
-/* Picked-card badge sits at the top-left, NOT overlapping the rounds badge */
+.workout-card-pick .workout-card-monogram {
+  opacity: 0.18;
+  bottom: -14px;
+  font-size: 104px;
+}
+
+/* Picked-card badge sits at the top-left, NOT overlapping the rounds badge.
+ * COOLER-LOOK: glass backdrop + soft sage glow gives it the Apple-watch
+ * "now playing" chip feel. */
 .workout-card-pick-badge {
   position: absolute;
   top: 12px;
   left: 16px;
-  background: transparent;
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   color: var(--accent);
-  border: 1px solid var(--accent);
-  padding: 2px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  padding: 3px 10px;
   border-radius: var(--radius-pill);
   font-size: var(--font-micro);
   font-weight: 600;
   letter-spacing: var(--track-label);
   text-transform: uppercase;
   white-space: nowrap;
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .workout-card-header {
@@ -345,6 +454,9 @@ button:disabled {
   align-items: flex-start;
   gap: 12px;
   margin-bottom: 4px;
+  /* Above the monogram (which is absolutely positioned at opacity ~12%). */
+  position: relative;
+  z-index: 1;
 }
 
 .workout-card-title {
@@ -373,6 +485,8 @@ button:disabled {
 .workout-card-desc {
   color: var(--text-dim);
   font-size: var(--font-small);
+  position: relative;
+  z-index: 1;
 }
 
 .last-line {
@@ -950,6 +1064,10 @@ input[type='number']:focus {
   border-radius: var(--radius-sm);
   padding: 12px 10px;
   border: 1px solid transparent;
+  transition:
+    background var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-spring);
 }
 
 .history-row-btn:hover {
@@ -1076,6 +1194,14 @@ input[type='number']:focus {
 .how-to-chev {
   font-size: var(--font-meta);
   color: var(--accent-do);
+  display: inline-block;
+  /* COOLER-LOOK: spring-eased chevron rotation when expander opens. */
+  transition: transform var(--dur-base) var(--ease-spring);
+  transform-origin: center;
+}
+
+.how-to-card.how-to-open .how-to-chev {
+  transform: rotate(90deg);
 }
 
 .how-to-text {
@@ -1226,7 +1352,9 @@ input[type='number']:focus {
 
 .stat-number {
   font-size: var(--font-display);
-  font-weight: 500;
+  /* COOLER-LOOK: 500→650 brings the big number into the modern display-weight
+   * register (Linear / Stripe) without crossing into the "shouty" 700+ zone. */
+  font-weight: 650;
   color: var(--text);
   font-variant-numeric: tabular-nums;
   letter-spacing: var(--track-display);
@@ -1242,7 +1370,10 @@ input[type='number']:focus {
   font-weight: 600;
 }
 
-/* --- Sync indicator: quiet, role-named token --------------------------- */
+/* --- Sync indicator: quiet, role-named token --------------------------- *
+ * COOLER-LOOK: when the indicator is showing a state (synced / syncing /
+ * offline), it gets the same restrained glass treatment as the week-banner.
+ * Renders as an inline status chip rather than a floating text line. */
 
 .sync-indicator {
   font-size: var(--font-micro);
@@ -1252,6 +1383,17 @@ input[type='number']:focus {
   text-transform: uppercase;
   font-weight: 600;
   min-height: 14px;
+}
+
+.sync-indicator:not(:empty) {
+  display: inline-block;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 4px 10px;
+  margin-bottom: 18px;
 }
 
 .sync-indicator.sync-synced {
@@ -1276,6 +1418,16 @@ input[type='number']:focus {
   margin-left: 8px;
   /* slight nudge down so it sits on the same baseline as the date text */
   transform: translateY(2px);
+  /* COOLER-LOOK: spring-eased scale + brighten when the parent row is hovered.
+   * Sparkline itself has pointer-events: none, so the row button drives the state. */
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    filter var(--dur-base) var(--ease-out);
+}
+
+.history-row-btn:hover .sparkline {
+  transform: translateY(2px) scale(1.08);
+  filter: brightness(1.15);
 }
 
 .history-sparkline-wrap {
@@ -1395,28 +1547,47 @@ input[type='number']:focus {
   padding: 0;
   cursor: default;
   color: var(--text);
+  /* COOLER-LOOK: spring-eased transform so filled pills feel responsive. */
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    filter var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
 }
 
 .weekly-slot-empty {
   border: 1px dashed var(--border);
 }
 
+/* Filled slots — gradient inside the workout's identity color for depth.
+ * color-mix gives the soft tint floor, gradient gives the highlight stripe. */
 .weekly-slot-A {
-  background: color-mix(in srgb, var(--dot-a) 18%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--dot-a) 28%, transparent) 0%,
+    color-mix(in srgb, var(--dot-a) 14%, transparent) 100%
+  );
   border-color: var(--dot-a);
   color: var(--dot-a);
   cursor: pointer;
 }
 
 .weekly-slot-B {
-  background: color-mix(in srgb, var(--dot-b) 18%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--dot-b) 28%, transparent) 0%,
+    color-mix(in srgb, var(--dot-b) 14%, transparent) 100%
+  );
   border-color: var(--dot-b);
   color: var(--dot-b);
   cursor: pointer;
 }
 
 .weekly-slot-C {
-  background: color-mix(in srgb, var(--dot-c) 18%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--dot-c) 28%, transparent) 0%,
+    color-mix(in srgb, var(--dot-c) 14%, transparent) 100%
+  );
   border-color: var(--dot-c);
   color: var(--dot-c);
   cursor: pointer;
@@ -1425,7 +1596,18 @@ input[type='number']:focus {
 .weekly-slot-A:hover,
 .weekly-slot-B:hover,
 .weekly-slot-C:hover {
-  filter: brightness(1.2);
+  filter: brightness(1.15);
+  transform: scale(1.06);
+}
+
+.weekly-slot-A:hover {
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--dot-a) 35%, transparent);
+}
+.weekly-slot-B:hover {
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--dot-b) 35%, transparent);
+}
+.weekly-slot-C:hover {
+  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--dot-c) 35%, transparent);
 }
 
 /* --- Year-grid heatmap card (ARCHIVED 2026-05-15 — see app.ts comment) -- */
@@ -1559,26 +1741,39 @@ input[type='number']:focus {
   background: var(--bg-elev-2);
 }
 
-/* "Weekly review →" link on home — sits below the consistency card */
+/* "Weekly review →" link on home — sits below the consistency card.
+ * COOLER-LOOK: same-hue gradient surface + spring lift on hover. */
 .weekly-review-link {
   width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: transparent;
+  background: var(--grad-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 14px 18px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   color: var(--text);
   font-size: var(--font-small);
   font-weight: 500;
   text-align: left;
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    background var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-spring);
 }
 
 .weekly-review-link:hover {
   border-color: var(--border-strong);
-  background: var(--bg-elev-2);
+  transform: translateY(-1px);
+}
+
+.weekly-review-link-chev {
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+.weekly-review-link:hover .weekly-review-link-chev {
+  transform: translateX(4px);
 }
 
 .weekly-review-link-chev {
