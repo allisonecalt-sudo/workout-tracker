@@ -50,7 +50,8 @@ type AppScreen =
   | 'history'
   | 'history-detail'
   | 'weekly-review'
-  | 'progress';
+  | 'progress'
+  | 'settings';
 
 type Phase = 'warmup' | 'main' | 'cooldown';
 
@@ -94,9 +95,76 @@ type AppState = {
 
 const STORAGE_KEY = 'workout-tracker:logs';
 const HOWTO_SEEN_KEY_PREFIX = 'workout-tracker:howto-seen-week-';
-const REST_SEC = 60;
+// Ship 6: timing defaults — overridable via Settings screen. The constants
+// remain as "defaults" only; runtime values come from getSetting().
+const DEFAULT_REST_SEC = 60;
+const DEFAULT_PRE_COUNT_SEC = 3;
 const COUNT_BEEP_FROM_SEC = 3;
 const HOLD_TO_SKIP_MS = 500;
+const HOLD_TO_QUIT_MS = 500;
+const HOLD_TO_CLEAR_MS = 500;
+
+// ---------- Ship 6 settings helpers ----------
+//
+// localStorage-backed per-key settings. Safe defaults: if a value is missing,
+// corrupt, or out-of-range, fall back to the supplied default. NEVER crash the
+// app on a bad setting value (hard rule from the brief).
+const SETTING_KEYS = {
+  beeps: 'workout-tracker:setting-beeps',
+  restSec: 'workout-tracker:setting-rest-sec',
+  preCount: 'workout-tracker:setting-pre-count',
+  howToFirstExpand: 'workout-tracker:setting-howto-first-expand',
+  autoSuggest: 'workout-tracker:setting-auto-suggest',
+} as const;
+
+function getSetting<T>(key: string, defaultValue: T): T {
+  try {
+    if (typeof localStorage === 'undefined') return defaultValue;
+    const raw = localStorage.getItem(key);
+    if (raw === null) return defaultValue;
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || parsed === undefined) return defaultValue;
+    // Type-match against defaultValue. If types diverge (e.g. corrupt write),
+    // fall back to default rather than crash.
+    if (typeof parsed !== typeof defaultValue) return defaultValue;
+    return parsed as T;
+  } catch {
+    return defaultValue;
+  }
+}
+
+function setSetting<T>(key: string, value: T): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // localStorage full / unavailable — non-fatal.
+  }
+}
+
+function getRestSec(): number {
+  const v = getSetting<number>(SETTING_KEYS.restSec, DEFAULT_REST_SEC);
+  if (!Number.isFinite(v) || v < 5 || v > 180) return DEFAULT_REST_SEC;
+  return Math.round(v);
+}
+
+function getPreCountSec(): number {
+  const v = getSetting<number>(SETTING_KEYS.preCount, DEFAULT_PRE_COUNT_SEC);
+  if (!Number.isFinite(v) || v < 0 || v > 10) return DEFAULT_PRE_COUNT_SEC;
+  return Math.round(v);
+}
+
+function getBeepsEnabled(): boolean {
+  return getSetting<boolean>(SETTING_KEYS.beeps, true);
+}
+
+function getHowToFirstExpand(): boolean {
+  return getSetting<boolean>(SETTING_KEYS.howToFirstExpand, true);
+}
+
+function getAutoSuggestEnabled(): boolean {
+  return getSetting<boolean>(SETTING_KEYS.autoSuggest, true);
+}
 
 const SUPABASE_URL = 'https://hpiyvnfhoqnnnotrmwaz.supabase.co';
 const SUPABASE_ANON_KEY =
@@ -377,6 +445,8 @@ function unlockAudio(): void {
 }
 
 function playBeep(frequency: number, durationMs: number): void {
+  // Ship 6: beeps toggle. When off, skip silently — timer logic still runs.
+  if (!getBeepsEnabled()) return;
   const ctx = getAudioCtx();
   if (!ctx) return;
   if (ctx.state !== 'running') return;
@@ -499,7 +569,8 @@ function timerLoop(): void {
 
 function startRestTimer(): void {
   state.isResting = true;
-  startTimerCore('rest', REST_SEC, () => {
+  // Ship 6: rest duration is user-configurable via Settings.
+  startTimerCore('rest', getRestSec(), () => {
     state.isResting = false;
     render();
   });
@@ -513,7 +584,15 @@ function skipRest(): void {
 }
 
 function startPreCountdown(then: () => void): void {
-  startTimerCore('pre-countdown', 3, () => {
+  // Ship 6: pre-countdown duration is user-configurable. If set to 0, skip
+  // the countdown entirely and proceed directly to the next phase.
+  const pre = getPreCountSec();
+  if (pre <= 0) {
+    state.preCountdown = 0;
+    then();
+    return;
+  }
+  startTimerCore('pre-countdown', pre, () => {
     state.preCountdown = 0;
     then();
   });
@@ -1133,7 +1212,10 @@ function renderHowToCard(exerciseName: string): string {
   const isFirstThisWeek = !seen[exerciseName];
   const userOpened = state.howToOpenFor === exerciseName;
   const userClosed = state.howToOpenFor === `__closed__${exerciseName}`;
-  const isOpen = userOpened || (isFirstThisWeek && !userClosed);
+  // Ship 6: respect "Show how-to expanded first time per week" setting (default
+  // on). If off, never auto-expand — only show when user explicitly opens.
+  const autoExpand = getHowToFirstExpand();
+  const isOpen = userOpened || (autoExpand && isFirstThisWeek && !userClosed);
 
   const innerHtml = howto
     ? `<div class="howto-frames">
@@ -1370,7 +1452,9 @@ function renderHome(): string {
   const viewedWeek = getViewedProgramWeek(viewedWeekOffset);
   const viewedWeekRange = formatWeekRange(viewedWeek.start, viewedWeek.end);
   const viewedWeekCount = getWeekCount(viewedWeekOffset);
-  const todaysPick = getTodaysPick();
+  // Ship 6: respect "Auto-suggest today's workout" setting. When off, no card
+  // is marked as the pick — all three render with the quieter treatment.
+  const todaysPick: WorkoutId | null = getAutoSuggestEnabled() ? getTodaysPick() : null;
   const lastLog = logs[0];
   const weekDots = getWeekDots(viewedWeekOffset);
   const canGoBack = logs.some((l) => {
@@ -1417,7 +1501,12 @@ function renderHome(): string {
     : 'No sessions yet — pick A to start.';
 
   return `
-    <h1>Workout Tracker</h1>
+    <div class="home-header">
+      <h1>Workout Tracker</h1>
+      <button class="settings-icon-btn" id="open-settings" type="button" aria-label="Open settings" title="Settings">
+        <span class="settings-icon-glyph" aria-hidden="true">⚙</span>
+      </button>
+    </div>
     <p class="subtitle">Three rotating sessions. Show up 3x/week.</p>
     <div class="week-banner">Week ${week.num} · ${weekRange}</div>
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
@@ -1540,7 +1629,8 @@ function renderTempoBar(): string {
 // Group 2H: rest screen now leads with a large countdown ring/arc; Skip is a
 // hold-to-confirm button.
 function renderRestScreen(workoutId: WorkoutId, phaseLabel: string): string {
-  const total = REST_SEC;
+  // Ship 6: read user-configured rest length (default 60).
+  const total = getRestSec();
   const remaining = state.timerSeconds;
   const pct = total > 0 ? Math.max(0, Math.min(1, remaining / total)) : 0;
   // SVG ring (radius 90, circumference ~565)
@@ -2600,6 +2690,285 @@ function renderProgress(): string {
   `;
 }
 
+// ---------- Ship 6: Settings screen ----------
+//
+// Reachable via the small gear icon in the home header (top-right). NOT a
+// primary CTA — settings is reference, not action. Six sections (cards):
+// Audio, Timing, Display, Data, About.
+//
+// All toggles persist to localStorage via setSetting/getSetting. Data section
+// has export / import / hold-to-confirm clear. Import is merge-only; Clear
+// is local-only (Supabase rows preserved) per the archive-not-delete rule.
+
+const APP_VERSION = '2026-05-15 build';
+const GITHUB_REPO_URL = 'https://github.com/allisonecalt-sudo/workout-tracker';
+
+function renderSettings(): string {
+  const beepsOn = getBeepsEnabled();
+  const restSec = getRestSec();
+  const preCount = getPreCountSec();
+  const howToOn = getHowToFirstExpand();
+  const autoSuggestOn = getAutoSuggestEnabled();
+  const logCount = loadLogs().length;
+
+  return `
+    <div class="screen-header">
+      <h2>Settings</h2>
+      <button class="quit-link" id="back-home" type="button">× Back</button>
+    </div>
+
+    <div class="settings-screen">
+
+      <div class="card settings-card">
+        <div class="settings-section-label">Audio</div>
+        <label class="settings-row">
+          <div class="settings-row-text">
+            <div class="settings-row-title">Beep sounds</div>
+            <div class="settings-row-caption">Timer count-downs and finish chime.</div>
+          </div>
+          <span class="settings-toggle ${beepsOn ? 'on' : 'off'}">
+            <input type="checkbox" id="setting-beeps" ${beepsOn ? 'checked' : ''} />
+            <span class="settings-toggle-track"><span class="settings-toggle-thumb"></span></span>
+          </span>
+        </label>
+      </div>
+
+      <div class="card settings-card">
+        <div class="settings-section-label">Timing</div>
+        <div class="settings-stepper-row">
+          <div class="settings-row-text">
+            <div class="settings-row-title">Rest duration</div>
+            <div class="settings-row-caption">Between exercises in main sets. 5–180 seconds.</div>
+          </div>
+          <div class="settings-stepper" data-stepper="rest">
+            <button class="settings-stepper-btn" id="rest-dec" type="button" aria-label="Decrease rest by 5 seconds">−</button>
+            <span class="settings-stepper-val" id="rest-val">${restSec}s</span>
+            <button class="settings-stepper-btn" id="rest-inc" type="button" aria-label="Increase rest by 5 seconds">+</button>
+          </div>
+        </div>
+        <div class="settings-stepper-row">
+          <div class="settings-row-text">
+            <div class="settings-row-title">Pre-countdown</div>
+            <div class="settings-row-caption">3-2-1 before a timed exercise. 0–10 seconds; 0 skips.</div>
+          </div>
+          <div class="settings-stepper" data-stepper="pre">
+            <button class="settings-stepper-btn" id="pre-dec" type="button" aria-label="Decrease pre-countdown by 1 second">−</button>
+            <span class="settings-stepper-val" id="pre-val">${preCount}s</span>
+            <button class="settings-stepper-btn" id="pre-inc" type="button" aria-label="Increase pre-countdown by 1 second">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card settings-card">
+        <div class="settings-section-label">Display</div>
+        <label class="settings-row">
+          <div class="settings-row-text">
+            <div class="settings-row-title">Expand "How to do it" first time per week</div>
+            <div class="settings-row-caption">Off = always start collapsed.</div>
+          </div>
+          <span class="settings-toggle ${howToOn ? 'on' : 'off'}">
+            <input type="checkbox" id="setting-howto" ${howToOn ? 'checked' : ''} />
+            <span class="settings-toggle-track"><span class="settings-toggle-thumb"></span></span>
+          </span>
+        </label>
+        <label class="settings-row">
+          <div class="settings-row-text">
+            <div class="settings-row-title">Auto-suggest today's workout</div>
+            <div class="settings-row-caption">Off = all three workout cards render equally.</div>
+          </div>
+          <span class="settings-toggle ${autoSuggestOn ? 'on' : 'off'}">
+            <input type="checkbox" id="setting-suggest" ${autoSuggestOn ? 'checked' : ''} />
+            <span class="settings-toggle-track"><span class="settings-toggle-thumb"></span></span>
+          </span>
+        </label>
+      </div>
+
+      <div class="card settings-card">
+        <div class="settings-section-label">Data</div>
+        <div class="settings-data-row">
+          <button class="btn settings-data-btn" id="export-sessions" type="button">Export sessions</button>
+          <div class="settings-row-caption">Downloads a JSON file of all local logs (${logCount} session${logCount === 1 ? '' : 's'}).</div>
+        </div>
+        <div class="settings-data-row">
+          <button class="btn settings-data-btn" id="import-sessions-btn" type="button">Import sessions</button>
+          <input type="file" id="import-sessions-input" accept="application/json,.json" style="display:none" />
+          <div class="settings-row-caption">Merges by id. Existing local entries win on conflict.</div>
+        </div>
+        <div class="settings-data-row">
+          <button class="btn settings-destructive-btn hold-to-confirm" id="clear-local" type="button" data-hold-ms="${HOLD_TO_CLEAR_MS}">
+            <span class="hold-fill"></span>
+            <span class="hold-label">Hold to clear local sessions</span>
+          </button>
+          <div class="settings-row-caption">Wipes localStorage only. Your Supabase rows are preserved.</div>
+        </div>
+        <div class="settings-data-status" id="data-status" aria-live="polite"></div>
+      </div>
+
+      <div class="card settings-card">
+        <div class="settings-section-label">About</div>
+        <div class="settings-about-row">
+          <div class="settings-row-title">Workout Tracker</div>
+          <div class="settings-row-caption">Build ${APP_VERSION}.</div>
+        </div>
+        <div class="settings-about-row">
+          <a class="settings-link" href="${GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub →</a>
+        </div>
+        <div class="settings-about-row">
+          <div class="settings-row-caption">Made by Allison + Claude.</div>
+        </div>
+      </div>
+
+    </div>
+  `;
+}
+
+// ---------- Ship 6: data helpers ----------
+
+function exportSessionsToFile(): void {
+  const logs = loadLogs();
+  const stamp = new Date().toISOString().slice(0, 10);
+  const filename = `workout-tracker-export-${stamp}.json`;
+  const blob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showDataStatus(`Exported ${logs.length} session${logs.length === 1 ? '' : 's'}.`);
+}
+
+function isValidLogEntry(x: unknown): x is LogEntry {
+  if (!x || typeof x !== 'object') return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o['date'] === 'string' &&
+    (o['workout'] === 'A' || o['workout'] === 'B' || o['workout'] === 'C') &&
+    typeof o['capacityBefore'] === 'number' &&
+    typeof o['capacityAfter'] === 'number' &&
+    typeof o['wallSitSec'] === 'number' &&
+    typeof o['backPain'] === 'number'
+  );
+}
+
+function importSessionsFromFile(file: File): void {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const raw = reader.result;
+      if (typeof raw !== 'string') {
+        showDataStatus('Import failed: could not read file.');
+        return;
+      }
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        showDataStatus('Import failed: file is not a session array.');
+        return;
+      }
+      const incoming: LogEntry[] = [];
+      for (const item of parsed) {
+        if (isValidLogEntry(item)) {
+          incoming.push({
+            ...item,
+            id: item.id ?? genId(),
+            word: typeof item.word === 'string' ? item.word : '',
+          });
+        }
+      }
+      // Merge by id. Existing local entries win on conflict.
+      const local = loadLogs();
+      const byId = new Map<string, LogEntry>();
+      for (const e of incoming) {
+        if (e.id) byId.set(e.id, e);
+      }
+      for (const e of local) {
+        if (e.id) byId.set(e.id, e); // local overrides incoming
+      }
+      const merged = Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date));
+      writeLogs(merged);
+      const added = merged.length - local.length;
+      // Re-render so log-count caption updates, THEN surface the status
+      // (the new DOM has a fresh #data-status node).
+      render();
+      showDataStatus(
+        `Imported ${incoming.length} entr${incoming.length === 1 ? 'y' : 'ies'}, ${added} new.`
+      );
+    } catch {
+      showDataStatus('Import failed: file is not valid JSON.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function clearLocalSessions(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    // Re-render first (DOM gets recreated, log-count caption updates), THEN
+    // surface the status. If we showed status before render(), the freshly-
+    // rendered DOM would have no status node and the message would vanish.
+    render();
+    showDataStatus('Local sessions cleared. Supabase preserved.');
+  } catch {
+    showDataStatus('Clear failed.');
+  }
+}
+
+function showDataStatus(msg: string): void {
+  const el = document.getElementById('data-status');
+  if (el) {
+    el.textContent = msg;
+    el.classList.add('settings-data-status-visible');
+    window.setTimeout(() => {
+      if (el.textContent === msg) {
+        el.classList.remove('settings-data-status-visible');
+      }
+    }, 4000);
+  }
+}
+
+// ---------- Ship 6: hold-to-confirm panel (slide-out, not window.confirm) ----------
+//
+// Used by Quit during workout (in-app, replaces window.confirm for pointer
+// users) and by destructive settings actions.
+
+function showQuitConfirmPanel(): void {
+  if (document.getElementById('quit-confirm-panel')) return;
+  const panel = document.createElement('div');
+  panel.id = 'quit-confirm-panel';
+  panel.className = 'quit-confirm-panel';
+  panel.innerHTML = `
+    <div class="quit-confirm-card">
+      <div class="quit-confirm-title">Quit this workout?</div>
+      <div class="quit-confirm-sub">Progress so far won't save.</div>
+      <div class="quit-confirm-row">
+        <button class="btn quit-confirm-cancel" id="quit-cancel" type="button">Cancel</button>
+        <button class="btn quit-confirm-yes" id="quit-yes" type="button">Quit</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(panel);
+  requestAnimationFrame(() => panel.classList.add('quit-confirm-open'));
+
+  const dismiss = (): void => {
+    panel.classList.remove('quit-confirm-open');
+    setTimeout(() => {
+      if (panel.parentNode) panel.parentNode.removeChild(panel);
+    }, 220);
+  };
+
+  panel.querySelector('#quit-cancel')?.addEventListener('click', dismiss);
+  panel.querySelector('#quit-yes')?.addEventListener('click', () => {
+    dismiss();
+    resetState();
+    render();
+  });
+  panel.addEventListener('click', (e) => {
+    if (e.target === panel) dismiss();
+  });
+}
+
 function render(): void {
   const root = document.getElementById('app');
   if (!root) return;
@@ -2629,8 +2998,22 @@ function render(): void {
     case 'progress':
       html = renderProgress();
       break;
+    case 'settings':
+      html = renderSettings();
+      break;
   }
+  // Ship 6: screen transitions — apply enter-animation class except on
+  // workout/timer screens where it would feel laggy mid-rep. The class
+  // triggers a 220ms fade + 8px translateY with the spring ease curve.
   root.innerHTML = html;
+  if (state.screen !== 'workout' && state.screen !== 'pre-log' && state.screen !== 'post-log') {
+    root.classList.remove('screen-enter');
+    // Force reflow so re-adding triggers the animation.
+    void root.offsetWidth;
+    root.classList.add('screen-enter');
+  } else {
+    root.classList.remove('screen-enter');
+  }
   attachHandlers();
 }
 
@@ -2721,6 +3104,15 @@ function attachHandlers(): void {
     render();
   });
 
+  // Ship 6: Settings entry from home header.
+  bindClick('open-settings', () => {
+    state.screen = 'settings';
+    render();
+  });
+
+  // Ship 6: Settings interactions — toggles, steppers, data buttons.
+  attachSettingsHandlers();
+
   // Ship 4: open weekly-review screen — preserves viewedWeekOffset so tapping
   // the label on a past week opens that week's review (not always current).
   bindClick('open-weekly-review', () => {
@@ -2778,12 +3170,44 @@ function attachHandlers(): void {
     advanceExercise();
   });
 
-  bindClick('quit', () => {
-    if (confirmQuit()) {
-      resetState();
-      render();
-    }
-  });
+  // Ship 6: Quit retains its native window.confirm() flow on regular click
+  // (keyboard users, headless tests, screen readers all still work). NEW:
+  // a long-press (pointerdown ≥ HOLD_TO_QUIT_MS) opens an in-app slide-out
+  // confirm panel instead, suppressing the subsequent click.
+  const quitBtn = document.getElementById('quit');
+  if (quitBtn) {
+    let holdTimer: number | null = null;
+    let suppressClick = false;
+    quitBtn.addEventListener('pointerdown', () => {
+      suppressClick = false;
+      if (holdTimer !== null) window.clearTimeout(holdTimer);
+      holdTimer = window.setTimeout(() => {
+        suppressClick = true;
+        showQuitConfirmPanel();
+      }, HOLD_TO_QUIT_MS);
+    });
+    const cancelHold = (): void => {
+      if (holdTimer !== null) {
+        window.clearTimeout(holdTimer);
+        holdTimer = null;
+      }
+    };
+    quitBtn.addEventListener('pointerup', cancelHold);
+    quitBtn.addEventListener('pointercancel', cancelHold);
+    quitBtn.addEventListener('pointerleave', cancelHold);
+    quitBtn.addEventListener('click', (e) => {
+      if (suppressClick) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        suppressClick = false;
+        return;
+      }
+      if (confirmQuit()) {
+        resetState();
+        render();
+      }
+    });
+  }
 
   // Hold-to-skip rest (group 2H)
   const skipBtn = document.getElementById('skip-rest');
@@ -2843,6 +3267,89 @@ function attachHandlers(): void {
   bindRange('back', 'back-val', (v) => {
     state.backPain = v;
   });
+}
+
+// Ship 6: settings handlers — toggles persist immediately; steppers clamp and
+// re-render label; data buttons drive export/import/clear.
+function attachSettingsHandlers(): void {
+  // Toggles
+  const wireToggle = (
+    inputId: string,
+    key: string,
+    onChange?: (v: boolean) => void,
+    defaultVal: boolean = true
+  ): void => {
+    const input = document.getElementById(inputId) as HTMLInputElement | null;
+    if (!input) return;
+    input.addEventListener('change', () => {
+      const v = input.checked;
+      setSetting<boolean>(key, v);
+      const wrap = input.closest('.settings-toggle');
+      if (wrap) {
+        wrap.classList.toggle('on', v);
+        wrap.classList.toggle('off', !v);
+      }
+      if (onChange) onChange(v);
+      // Read back to confirm the value persisted; ignore if default.
+      void defaultVal;
+    });
+  };
+  wireToggle('setting-beeps', SETTING_KEYS.beeps);
+  wireToggle('setting-howto', SETTING_KEYS.howToFirstExpand);
+  wireToggle('setting-suggest', SETTING_KEYS.autoSuggest);
+
+  // Rest stepper (step = 5s, range 5-180).
+  const restVal = document.getElementById('rest-val');
+  bindClick('rest-dec', () => {
+    const next = Math.max(5, getRestSec() - 5);
+    setSetting<number>(SETTING_KEYS.restSec, next);
+    if (restVal) restVal.textContent = `${next}s`;
+  });
+  bindClick('rest-inc', () => {
+    const next = Math.min(180, getRestSec() + 5);
+    setSetting<number>(SETTING_KEYS.restSec, next);
+    if (restVal) restVal.textContent = `${next}s`;
+  });
+
+  // Pre-countdown stepper (step = 1s, range 0-10).
+  const preVal = document.getElementById('pre-val');
+  bindClick('pre-dec', () => {
+    const next = Math.max(0, getPreCountSec() - 1);
+    setSetting<number>(SETTING_KEYS.preCount, next);
+    if (preVal) preVal.textContent = `${next}s`;
+  });
+  bindClick('pre-inc', () => {
+    const next = Math.min(10, getPreCountSec() + 1);
+    setSetting<number>(SETTING_KEYS.preCount, next);
+    if (preVal) preVal.textContent = `${next}s`;
+  });
+
+  // Data: Export
+  bindClick('export-sessions', () => {
+    exportSessionsToFile();
+  });
+
+  // Data: Import (file picker)
+  bindClick('import-sessions-btn', () => {
+    const input = document.getElementById('import-sessions-input') as HTMLInputElement | null;
+    input?.click();
+  });
+  const importInput = document.getElementById('import-sessions-input') as HTMLInputElement | null;
+  if (importInput) {
+    importInput.addEventListener('change', () => {
+      const file = importInput.files?.[0];
+      if (file) importSessionsFromFile(file);
+      importInput.value = ''; // allow re-import of same filename
+    });
+  }
+
+  // Data: Clear — hold-to-confirm via the same wireHoldToSkip helper.
+  const clearBtn = document.getElementById('clear-local');
+  if (clearBtn) {
+    wireHoldToSkip(clearBtn, () => {
+      clearLocalSessions();
+    });
+  }
 }
 
 function bindClick(id: string, fn: () => void): void {
