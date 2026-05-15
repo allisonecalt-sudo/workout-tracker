@@ -321,3 +321,107 @@ test('ship 3: sparkline NOT rendered for row with 0 or 1 wall-sit value', async 
   await expect(page.locator('.history-row').first()).toBeVisible();
   await expect(page.locator('.history-row .sparkline')).toHaveCount(0);
 });
+
+// --- Ship 4 (2026-05-15 Weekly review screen) -------------------------------
+//
+// New AppScreen `weekly-review` reached from home via the "Weekly review →"
+// button (below the consistency card) or by tapping the week-nav label.
+// Respects viewedWeekOffset so a past-week label tap opens THAT week's review.
+//
+// These tests lock in:
+//  - reachable from home button
+//  - header shows session count for the viewed week
+//  - empty state renders calmly for a week with no sessions
+//  - per-session cards render her one-word entry verbatim (voice rule —
+//    typos preserved, never paraphrased)
+
+test('ship 4: weekly review reachable from home button', async ({ page }) => {
+  // The "Weekly review →" link sits below the consistency card.
+  const reviewBtn = page.locator('#open-weekly-review-link');
+  await expect(reviewBtn).toBeVisible();
+  await reviewBtn.click();
+  // Header should now be the weekly-review screen header.
+  await expect(page.locator('h2').first()).toContainText('Week of');
+  // Subtitle reports session count.
+  await expect(page.locator('.weekly-review-subtitle')).toContainText('Sessions:');
+});
+
+test('ship 4: weekly review header shows session count for current week', async ({ page }) => {
+  // Seed two sessions inside the current Sat–Fri window. Today is 2026-05-15
+  // (Fri) per CLAUDE.md currentDate; week is Sat May 9 → Fri May 15.
+  await page.addInitScript(() => {
+    const logs = [
+      {
+        id: 's-1',
+        date: '2026-05-12T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 5,
+        capacityAfter: 6,
+        wallSitSec: 25,
+        backPain: 0,
+        word: 'good',
+        durationSec: 420,
+      },
+      {
+        id: 's-2',
+        date: '2026-05-14T10:00:00.000Z',
+        workout: 'B',
+        capacityBefore: 5,
+        capacityAfter: 5,
+        wallSitSec: 0,
+        backPain: 0,
+        word: 'tired',
+        durationSec: 480,
+      },
+    ];
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
+  });
+  await page.goto('/');
+  await page.locator('#open-weekly-review-link').click();
+  // 2 of 3 — the count number in the subtitle.
+  const subtitle = page.locator('.weekly-review-subtitle');
+  await expect(subtitle).toContainText('Sessions:');
+  await expect(subtitle.locator('strong')).toHaveText('2');
+  // Two session cards rendered.
+  await expect(page.locator('.weekly-review-session')).toHaveCount(2);
+});
+
+test('ship 4: weekly review shows one-word verbatim including typos', async ({ page }) => {
+  // Voice rule (CLAUDE.md): her one-word entries must appear VERBATIM, never
+  // edited or omitted. Even if she typed a typo, render the typo.
+  await page.addInitScript(() => {
+    const logs = [
+      {
+        id: 'verbatim',
+        date: '2026-05-13T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 4,
+        capacityAfter: 6,
+        wallSitSec: 30,
+        backPain: 0,
+        word: 'gooood start', // intentional typo — must survive untouched
+        durationSec: 450,
+      },
+    ];
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
+  });
+  await page.goto('/');
+  await page.locator('#open-weekly-review-link').click();
+  const wordEl = page.locator('.weekly-review-session-word').first();
+  await expect(wordEl).toBeVisible();
+  await expect(wordEl).toContainText('gooood start');
+});
+
+test('ship 4: weekly review empty state for week with no sessions', async ({ page }) => {
+  // No logs → empty state. Subtle line, no nudge, no motivational language.
+  await page.goto('/');
+  await page.locator('#open-weekly-review-link').click();
+  await expect(page.locator('.weekly-review-empty')).toBeVisible();
+  await expect(page.locator('.weekly-review-empty')).toContainText('No sessions this week');
+  // No motivational language — the empty state should NOT contain "great",
+  // "keep going", "you got this", etc. The system reports, doesn't judge.
+  const empty = await page.locator('.weekly-review-empty').textContent();
+  expect(empty?.toLowerCase()).not.toContain('great');
+  expect(empty?.toLowerCase()).not.toContain('keep going');
+  expect(empty?.toLowerCase()).not.toContain('you got');
+});

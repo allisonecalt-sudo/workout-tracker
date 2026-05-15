@@ -1393,6 +1393,323 @@ input[type='number']:focus {
   filter: brightness(1.2);
 }
 
+/* --- Ship 4 (2026-05-15) Weekly review screen -------------------------- *
+ * Per-week debrief reached from home — either via the "Weekly review →"
+ * button or by tapping the week-nav label. Honors --viewedWeekOffset so a
+ * past-week tap opens that week's review. No paternalism in the visual
+ * language: deltas are direction-aware but never shouty. */
+
+/* Tappable week-nav label (was a static <div>) */
+.week-nav-label-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.week-nav-label-btn:hover {
+  border-color: var(--border);
+  background: var(--bg-elev-2);
+}
+
+/* "Weekly review →" link on home — sits below the consistency card */
+.weekly-review-link {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  color: var(--text);
+  font-size: var(--font-small);
+  font-weight: 500;
+  text-align: left;
+}
+
+.weekly-review-link:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-elev-2);
+}
+
+.weekly-review-link-chev {
+  color: var(--text-dim-2);
+  font-size: var(--font-body);
+}
+
+/* Subtitle under the weekly-review h2 */
+.weekly-review-subtitle {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  margin-bottom: 18px;
+  letter-spacing: 0.01em;
+}
+
+.weekly-review-subtitle strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.weekly-review-subtitle .weekly-review-count-met strong {
+  color: var(--accent-progress);
+}
+
+.weekly-review-subtitle .weekly-review-count strong {
+  color: var(--text-dim);
+}
+
+/* Empty state — single subtle line, no nudge */
+.weekly-review-empty {
+  color: var(--text-dim-2);
+  font-size: var(--font-small);
+  text-align: center;
+  font-style: italic;
+  padding: 32px 0;
+}
+
+/* Per-session cards */
+.weekly-review-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.weekly-review-session {
+  width: 100%;
+  text-align: left;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: border-color 0.15s;
+}
+
+.weekly-review-session:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-elev);
+}
+
+.weekly-review-session-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.weekly-review-session-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-small);
+  font-weight: 700;
+  color: var(--bg);
+  flex-shrink: 0;
+}
+
+.weekly-review-session-badge-A {
+  background: var(--dot-a);
+}
+
+.weekly-review-session-badge-B {
+  background: var(--dot-b);
+}
+
+.weekly-review-session-badge-C {
+  background: var(--dot-c);
+}
+
+.weekly-review-session-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.weekly-review-session-date {
+  font-size: var(--font-small);
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: var(--track-tight);
+}
+
+.weekly-review-session-dur {
+  font-size: var(--font-micro);
+  color: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+}
+
+.weekly-review-session-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding-left: 44px; /* line up under the date, past the badge */
+}
+
+.weekly-review-session-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.weekly-review-session-stat-num {
+  font-size: var(--font-small);
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.weekly-review-session-stat-lbl {
+  font-size: var(--font-micro);
+  color: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  font-weight: 600;
+}
+
+.weekly-review-session-stat-warn .weekly-review-session-stat-num {
+  color: var(--accent-warn);
+}
+
+.weekly-review-cap-arrow {
+  font-weight: 500;
+  margin: 0 4px;
+}
+
+.cap-arrow-up {
+  color: var(--accent-progress);
+}
+
+.cap-arrow-down {
+  color: var(--accent-warn);
+}
+
+.cap-arrow-same {
+  color: var(--text-dim);
+}
+
+/* Voice rule: her word verbatim, italic blockquote */
+.weekly-review-session-word {
+  margin: 0;
+  margin-left: 44px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+/* Week totals card */
+.weekly-review-totals h3 {
+  margin-bottom: 14px;
+}
+
+.weekly-review-totals-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.weekly-review-total {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.weekly-review-total-num {
+  font-size: var(--font-subheading);
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--track-tight);
+  line-height: 1.1;
+}
+
+.weekly-review-total-lbl {
+  font-size: var(--font-micro);
+  color: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  font-weight: 600;
+}
+
+/* Delta card — vs previous week */
+.weekly-review-delta h3 {
+  margin-bottom: 14px;
+}
+
+.weekly-review-delta-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.weekly-review-delta-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: baseline;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-divider);
+}
+
+.weekly-review-delta-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.weekly-review-delta-row-emph .weekly-review-delta-lbl {
+  color: var(--text);
+}
+
+.weekly-review-delta-lbl {
+  font-size: var(--font-micro);
+  color: var(--text-dim-2);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  font-weight: 600;
+}
+
+.weekly-review-delta-vals {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.weekly-review-delta-num {
+  font-size: var(--font-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--track-tight);
+  min-width: 56px;
+  text-align: right;
+}
+
+.weekly-review-delta-num.delta-up {
+  color: var(--accent-progress);
+}
+
+.weekly-review-delta-num.delta-down {
+  color: var(--text-dim);
+}
+
+.weekly-review-delta-num.delta-same {
+  color: var(--text-dim-2);
+}
+
 /* --- Tablet bumps ------------------------------------------------------ */
 
 @media (min-width: 600px) {
