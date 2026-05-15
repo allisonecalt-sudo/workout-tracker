@@ -42,7 +42,14 @@ type LogEntry = {
   synced?: boolean;
 };
 
-type AppScreen = 'home' | 'pre-log' | 'workout' | 'post-log' | 'history' | 'history-detail';
+type AppScreen =
+  | 'home'
+  | 'pre-log'
+  | 'workout'
+  | 'post-log'
+  | 'history'
+  | 'history-detail'
+  | 'weekly-review';
 
 type Phase = 'warmup' | 'main' | 'cooldown';
 
@@ -1501,10 +1508,10 @@ function renderHome(): string {
     <div class="card">
       <div class="week-nav">
         <button class="week-nav-btn" id="prev-week" type="button" ${canGoBack ? '' : 'disabled'} aria-label="Previous week">‹</button>
-        <div class="week-nav-label">
+        <button class="week-nav-label week-nav-label-btn" id="open-weekly-review" type="button" aria-label="Open weekly review for ${isCurrentWeek ? 'this week' : `week ${viewedWeek.num}`}">
           <div class="week-nav-title">${isCurrentWeek ? 'This week' : `Week ${viewedWeek.num}`}</div>
           <div class="week-nav-range">${viewedWeekRange}</div>
-        </div>
+        </button>
         <button class="week-nav-btn" id="next-week" type="button" ${isCurrentWeek ? 'disabled' : ''} aria-label="${isCurrentWeek ? 'Already at current week' : 'Next week'}">›</button>
       </div>
       <div class="streak-stat">
@@ -1521,6 +1528,11 @@ function renderHome(): string {
     </div>
 
     ${renderYearGrid()}
+
+    <button class="weekly-review-link" id="open-weekly-review-link" type="button">
+      <span>📊 Weekly review</span>
+      <span class="weekly-review-link-chev">→</span>
+    </button>
 
     <h3>Pick today's workout</h3>
     <div class="workout-picker">
@@ -1831,6 +1843,330 @@ function renderHistoryDetail(): string {
   `;
 }
 
+// ---------- Ship 4: weekly review (2026-05-15) ----------
+//
+// A per-week debrief screen reached from home — either via the "Weekly review →"
+// button below the consistency card, or by tapping the week-nav label. The
+// screen respects `viewedWeekOffset`, so tapping the label on a past week opens
+// the review for THAT week.
+//
+// Design rules honored:
+//  - No paternalism. No motivational language. The screen reports the week;
+//    it doesn't judge it. (`feedback_no_capacity_paternalism.md` + CLAUDE.md
+//    agency rule.)
+//  - Voice rule: her one-word entries appear verbatim, never edited.
+//  - All data reads from existing loadLogs(). No new Supabase queries.
+//  - D-1 visual tokens only (no new color vars).
+
+type WeekSession = {
+  log: LogEntry;
+  durationStr: string;
+};
+
+function getWeekSessions(offset: number): WeekSession[] {
+  const logs = loadLogs();
+  const saturday = saturdayForOffset(offset);
+  const startMs = saturday.getTime();
+  const endMs = startMs + 7 * 24 * 60 * 60 * 1000 - 1;
+  return logs
+    .filter((l) => {
+      const t = new Date(l.date).getTime();
+      return t >= startMs && t <= endMs;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date)) // chronological within the week
+    .map((log) => ({
+      log,
+      durationStr: log.durationSec ? formatDuration(log.durationSec) : '—',
+    }));
+}
+
+type WeekTotals = {
+  count: number;
+  totalSec: number;
+  avgCapBefore: number | null;
+  avgCapAfter: number | null;
+  maxWallSit: number;
+  avgBackPain: number | null; // averaged only over sessions with backPain > 0
+};
+
+function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
+  if (sessions.length === 0) {
+    return {
+      count: 0,
+      totalSec: 0,
+      avgCapBefore: null,
+      avgCapAfter: null,
+      maxWallSit: 0,
+      avgBackPain: null,
+    };
+  }
+  let totalSec = 0;
+  let capBeforeSum = 0;
+  let capAfterSum = 0;
+  let maxWallSit = 0;
+  let backPainSum = 0;
+  let backPainCount = 0;
+  for (const { log } of sessions) {
+    totalSec += log.durationSec ?? 0;
+    capBeforeSum += log.capacityBefore;
+    capAfterSum += log.capacityAfter;
+    if (log.wallSitSec > maxWallSit) maxWallSit = log.wallSitSec;
+    if (log.backPain > 0) {
+      backPainSum += log.backPain;
+      backPainCount += 1;
+    }
+  }
+  return {
+    count: sessions.length,
+    totalSec,
+    avgCapBefore: capBeforeSum / sessions.length,
+    avgCapAfter: capAfterSum / sessions.length,
+    maxWallSit,
+    avgBackPain: backPainCount > 0 ? backPainSum / backPainCount : null,
+  };
+}
+
+function formatAvg(n: number | null, digits = 1): string {
+  if (n === null) return '—';
+  return n.toFixed(digits);
+}
+
+function formatTotalDuration(sec: number): string {
+  if (sec <= 0) return '0m';
+  const m = Math.floor(sec / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem === 0 ? `${h}h` : `${h}h ${rem}m`;
+}
+
+// Calmly directional delta. NOT shouty — per agency rule. Show direction with
+// muted progress/dim tokens; a "worse" delta gets --text-dim, NOT a warn color.
+function renderDelta(curr: number, prev: number, kind: 'higher-better' | 'lower-better'): string {
+  const diff = curr - prev;
+  if (diff === 0) {
+    return `<span class="weekly-review-delta-num delta-same">±0</span>`;
+  }
+  const arrow = diff > 0 ? '↑' : '↓';
+  const sign = diff > 0 ? '+' : '';
+  const isImprovement =
+    (kind === 'higher-better' && diff > 0) || (kind === 'lower-better' && diff < 0);
+  const cls = isImprovement ? 'delta-up' : 'delta-down';
+  return `<span class="weekly-review-delta-num ${cls}">${arrow} ${sign}${diff}</span>`;
+}
+
+function renderDeltaDecimal(
+  curr: number | null,
+  prev: number | null,
+  kind: 'higher-better' | 'lower-better'
+): string {
+  if (curr === null || prev === null) {
+    return `<span class="weekly-review-delta-num delta-same">—</span>`;
+  }
+  const diff = curr - prev;
+  if (Math.abs(diff) < 0.05) {
+    return `<span class="weekly-review-delta-num delta-same">±0</span>`;
+  }
+  const arrow = diff > 0 ? '↑' : '↓';
+  const sign = diff > 0 ? '+' : '';
+  const isImprovement =
+    (kind === 'higher-better' && diff > 0) || (kind === 'lower-better' && diff < 0);
+  const cls = isImprovement ? 'delta-up' : 'delta-down';
+  return `<span class="weekly-review-delta-num ${cls}">${arrow} ${sign}${diff.toFixed(1)}</span>`;
+}
+
+function formatCapArrowColor(before: number, after: number): string {
+  if (after > before) return 'cap-arrow-up';
+  if (after < before) return 'cap-arrow-down';
+  return 'cap-arrow-same';
+}
+
+function renderWeeklyReviewSession(s: WeekSession): string {
+  const { log } = s;
+  const idAttr = log.id ? `data-detail="${escapeHtml(log.id)}"` : '';
+  const dateStr = formatDateLong(log.date);
+  const capCls = formatCapArrowColor(log.capacityBefore, log.capacityAfter);
+
+  const wallSitLine =
+    log.wallSitSec > 0
+      ? `<div class="weekly-review-session-stat"><span class="weekly-review-session-stat-num">${log.wallSitSec}s</span><span class="weekly-review-session-stat-lbl">wall sit</span></div>`
+      : '';
+
+  const backPainLine =
+    log.backPain > 0
+      ? `<div class="weekly-review-session-stat weekly-review-session-stat-warn"><span class="weekly-review-session-stat-num">${log.backPain}/10</span><span class="weekly-review-session-stat-lbl">back pain</span></div>`
+      : '';
+
+  // Voice rule: render her word verbatim, including any typos. Never paraphrase
+  // or omit. Empty string → skip the blockquote entirely (no placeholder).
+  const wordBlock = log.word
+    ? `<blockquote class="weekly-review-session-word">&ldquo;${escapeHtml(log.word)}&rdquo;</blockquote>`
+    : '';
+
+  return `
+    <button class="weekly-review-session" ${idAttr} type="button">
+      <div class="weekly-review-session-head">
+        <span class="weekly-review-session-badge weekly-review-session-badge-${log.workout}">${log.workout}</span>
+        <div class="weekly-review-session-meta">
+          <div class="weekly-review-session-date">${dateStr}</div>
+          <div class="weekly-review-session-dur">${s.durationStr}</div>
+        </div>
+      </div>
+      <div class="weekly-review-session-stats">
+        <div class="weekly-review-session-stat">
+          <span class="weekly-review-session-stat-num">
+            ${log.capacityBefore}
+            <span class="weekly-review-cap-arrow ${capCls}">→</span>
+            ${log.capacityAfter}
+          </span>
+          <span class="weekly-review-session-stat-lbl">capacity</span>
+        </div>
+        ${wallSitLine}
+        ${backPainLine}
+      </div>
+      ${wordBlock}
+    </button>
+  `;
+}
+
+function renderWeeklyReview(): string {
+  const offset = viewedWeekOffset;
+  const saturday = saturdayForOffset(offset);
+  const friday = new Date(saturday);
+  friday.setDate(saturday.getDate() + 6);
+  friday.setHours(23, 59, 59, 999);
+
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const satStr = `${months[saturday.getMonth()]} ${saturday.getDate()}`;
+  const friStr =
+    saturday.getMonth() === friday.getMonth()
+      ? `${friday.getDate()}`
+      : `${months[friday.getMonth()]} ${friday.getDate()}`;
+  const rangeStr = `${satStr} — ${friStr}`;
+
+  const sessions = getWeekSessions(offset);
+  const totals = computeWeekTotals(sessions);
+  const prevSessions = getWeekSessions(offset + 1);
+  const prev = computeWeekTotals(prevSessions);
+
+  const sessionCountClass = totals.count >= 3 ? 'weekly-review-count-met' : 'weekly-review-count';
+
+  // Empty state — single subtle line, no nudge.
+  if (sessions.length === 0) {
+    return `
+      <div class="screen-header">
+        <h2>Week of ${rangeStr}</h2>
+        <button class="quit-link" id="back-home" type="button">× Back</button>
+      </div>
+      <div class="weekly-review-subtitle">
+        Sessions: <span class="${sessionCountClass}"><strong>0</strong> of 3</span>
+      </div>
+      <p class="weekly-review-empty">No sessions this week.</p>
+    `;
+  }
+
+  const sessionCards = sessions.map(renderWeeklyReviewSession).join('');
+
+  const totalsCard = `
+    <div class="card weekly-review-totals">
+      <h3>Week totals</h3>
+      <div class="weekly-review-totals-grid">
+        <div class="weekly-review-total">
+          <div class="weekly-review-total-num">${formatTotalDuration(totals.totalSec)}</div>
+          <div class="weekly-review-total-lbl">total time</div>
+        </div>
+        <div class="weekly-review-total">
+          <div class="weekly-review-total-num">${formatAvg(totals.avgCapBefore)}</div>
+          <div class="weekly-review-total-lbl">avg capacity before</div>
+        </div>
+        <div class="weekly-review-total">
+          <div class="weekly-review-total-num">${formatAvg(totals.avgCapAfter)}</div>
+          <div class="weekly-review-total-lbl">avg capacity after</div>
+        </div>
+        <div class="weekly-review-total">
+          <div class="weekly-review-total-num">${totals.maxWallSit > 0 ? `${totals.maxWallSit}s` : '—'}</div>
+          <div class="weekly-review-total-lbl">max wall sit</div>
+        </div>
+        ${
+          totals.avgBackPain !== null
+            ? `<div class="weekly-review-total">
+                <div class="weekly-review-total-num">${formatAvg(totals.avgBackPain)}</div>
+                <div class="weekly-review-total-lbl">avg back pain</div>
+              </div>`
+            : ''
+        }
+      </div>
+    </div>
+  `;
+
+  const deltaCard =
+    prev.count > 0
+      ? `
+        <div class="card weekly-review-delta">
+          <h3>vs previous week</h3>
+          <div class="weekly-review-delta-grid">
+            <div class="weekly-review-delta-row">
+              <span class="weekly-review-delta-lbl">sessions</span>
+              <span class="weekly-review-delta-vals">${prev.count} → ${totals.count}</span>
+              ${renderDelta(totals.count, prev.count, 'higher-better')}
+            </div>
+            <div class="weekly-review-delta-row">
+              <span class="weekly-review-delta-lbl">total time</span>
+              <span class="weekly-review-delta-vals">${formatTotalDuration(prev.totalSec)} → ${formatTotalDuration(totals.totalSec)}</span>
+              ${renderDelta(Math.round(totals.totalSec / 60), Math.round(prev.totalSec / 60), 'higher-better')}
+            </div>
+            ${
+              prev.maxWallSit > 0 || totals.maxWallSit > 0
+                ? `<div class="weekly-review-delta-row weekly-review-delta-row-emph">
+                    <span class="weekly-review-delta-lbl">max wall sit</span>
+                    <span class="weekly-review-delta-vals">${prev.maxWallSit}s → ${totals.maxWallSit}s</span>
+                    ${renderDelta(totals.maxWallSit, prev.maxWallSit, 'higher-better')}
+                  </div>`
+                : ''
+            }
+            ${
+              prev.avgBackPain !== null || totals.avgBackPain !== null
+                ? `<div class="weekly-review-delta-row">
+                    <span class="weekly-review-delta-lbl">avg back pain</span>
+                    <span class="weekly-review-delta-vals">${formatAvg(prev.avgBackPain)} → ${formatAvg(totals.avgBackPain)}</span>
+                    ${renderDeltaDecimal(totals.avgBackPain, prev.avgBackPain, 'lower-better')}
+                  </div>`
+                : ''
+            }
+          </div>
+        </div>
+      `
+      : '';
+
+  return `
+    <div class="screen-header">
+      <h2>Week of ${rangeStr}</h2>
+      <button class="quit-link" id="back-home" type="button">× Back</button>
+    </div>
+    <div class="weekly-review-subtitle">
+      Sessions: <span class="${sessionCountClass}"><strong>${totals.count}</strong> of 3</span>
+    </div>
+    <div class="weekly-review-sessions">
+      ${sessionCards}
+    </div>
+    ${totalsCard}
+    ${deltaCard}
+  `;
+}
+
 function render(): void {
   const root = document.getElementById('app');
   if (!root) return;
@@ -1853,6 +2189,9 @@ function render(): void {
       break;
     case 'history-detail':
       html = renderHistoryDetail();
+      break;
+    case 'weekly-review':
+      html = renderWeeklyReview();
       break;
   }
   root.innerHTML = html;
@@ -1943,6 +2282,17 @@ function attachHandlers(): void {
 
   bindClick('back-home', () => {
     resetState();
+    render();
+  });
+
+  // Ship 4: open weekly-review screen — preserves viewedWeekOffset so tapping
+  // the label on a past week opens that week's review (not always current).
+  bindClick('open-weekly-review', () => {
+    state.screen = 'weekly-review';
+    render();
+  });
+  bindClick('open-weekly-review-link', () => {
+    state.screen = 'weekly-review';
     render();
   });
 
