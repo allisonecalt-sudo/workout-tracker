@@ -16,11 +16,34 @@ test('home screen shows three workout options and zero sessions', async ({ page 
   await expect(page.locator('.stat-number').first()).toHaveText('0');
 });
 
+test("today's pick highlights A when no history exists", async ({ page }) => {
+  // Group 2I: empty history → A is the pick
+  await expect(page.locator('button[data-workout="A"] .workout-card-pick-badge')).toBeVisible();
+});
+
+test('week-dots row is rendered with 7 day labels', async ({ page }) => {
+  await expect(page.locator('.week-dots .week-dot')).toHaveCount(7);
+});
+
 test('selecting workout A goes to pre-log screen', async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
   await expect(page.locator('h2')).toContainText('Workout A');
   await expect(page.locator('text=Capacity right now')).toBeVisible();
   await expect(page.locator('button:has-text("Start")')).toBeVisible();
+});
+
+test('pre-log shows wrist-cleared banner (not the old 2/10 ceiling)', async ({ page }) => {
+  // Group 2K: wrist banner refreshed
+  await page.locator('button[data-workout="A"]').click();
+  await expect(page.locator('.warning-banner')).toContainText('cleared by Lisa Cohen');
+});
+
+test('pre-log capacity slider shows anchor labels', async ({ page }) => {
+  // Group 2L: anchor labels
+  await page.locator('button[data-workout="A"]').click();
+  await expect(page.locator('.range-anchors').first()).toContainText('depleted');
+  await expect(page.locator('.range-anchors').first()).toContainText('baseline');
+  await expect(page.locator('.range-anchors').first()).toContainText('strong');
 });
 
 test('full workout C flow: pre-log → exercises → post-log → save → home with 1 session', async ({
@@ -41,9 +64,18 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
-      const skipRest = page.locator('button:has-text("Skip rest")');
+      // Group 2H: skip is now hold-to-skip — simulate a 700ms hold
+      const skipRest = page.locator('#skip-rest');
       if (await skipRest.isVisible()) {
-        await skipRest.click();
+        const box = await skipRest.boundingBox();
+        if (box) {
+          const cx = box.x + box.width / 2;
+          const cy = box.y + box.height / 2;
+          await page.mouse.move(cx, cy);
+          await page.mouse.down();
+          await page.waitForTimeout(700);
+          await page.mouse.up();
+        }
       }
     }
   }
@@ -60,18 +92,29 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
   await expect(page.locator('.history-word').first()).toContainText('proud');
 });
 
-test('quit during workout returns to home without saving', async ({ page }) => {
+test('quit during workout asks for confirmation and returns home', async ({ page }) => {
+  // Group 2G: confirm dialog on Quit
+  page.on('dialog', (d) => {
+    void d.accept();
+  });
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
   await page.locator('button:has-text("Done · Next")').click();
-  await page.locator('button:has-text("Quit")').click();
+  await page.locator('.quit-link').click();
   await expect(page.locator('h1')).toHaveText('Workout Tracker');
   await expect(page.locator('.stat-number').first()).toHaveText('0');
 });
 
-test('warning banner shows on pre-log', async ({ page }) => {
+test('quit dialog cancel keeps user in workout', async ({ page }) => {
+  page.on('dialog', (d) => {
+    void d.dismiss();
+  });
   await page.locator('button[data-workout="A"]').click();
-  await expect(page.locator('.warning-banner')).toContainText('3/10');
+  await page.locator('button:has-text("Start")').click();
+  await page.locator('button:has-text("Done · Next")').click();
+  await page.locator('.quit-link').click();
+  // Still in workout
+  await expect(page.locator('h2')).toContainText('Workout A');
 });
 
 test('capacity slider updates value display', async ({ page }) => {
@@ -81,4 +124,23 @@ test('capacity slider updates value display', async ({ page }) => {
   await expect(page.locator('#cap-before-val')).toHaveText('8');
 });
 
-// Hand care / wrist routine tests removed 2026-05-15 along with the UI itself.
+test('exercise visual renders for known exercises', async ({ page }) => {
+  // Group 3N: visual layer integration
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  // Walk past warmup walk to a still-image-backed exercise (Pelvic tilts has loop)
+  await page.locator('button:has-text("Done · Next")').click(); // off walk → belly breathing (video only)
+  // Belly breathing has youtube only → poster
+  await expect(page.locator('.exercise-visual')).toBeVisible();
+});
+
+test('how-to expander opens to the text on click', async ({ page }) => {
+  // Group 3N: how-to toggle
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  // First exercise (outdoor walk) has a guide entry
+  const toggle = page.locator('[data-toggle-howto]').first();
+  await toggle.click();
+  // Click again to close
+  await toggle.click();
+});

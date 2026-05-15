@@ -1,3 +1,11 @@
+// app.ts — workout-tracker
+// Lead-dev pass 2026-05-15 consolidates: code-correctness fixes (timer rewrite,
+// audio unlock, sync hygiene), UX restructure (Done·Next primary, Quit demoted,
+// hold-to-skip rest, today's pick, week-dots, history-detail), and visual
+// layer (still images + YouTube embeds + collapsible how-to).
+
+import { EXERCISE_VISUALS } from './exercise-visuals.js';
+
 type WorkoutId = 'A' | 'B' | 'C';
 
 type Exercise = {
@@ -6,7 +14,6 @@ type Exercise = {
   notes?: string;
   durationSec?: number;
   isTimed?: boolean;
-  isWalk?: boolean;
 };
 
 type Workout = {
@@ -26,8 +33,6 @@ type LogEntry = {
   capacityBefore: number;
   capacityAfter: number;
   wallSitSec: number;
-  rightWristPain: number;
-  leftWristPain: number;
   backPain: number;
   word: string;
   startedAt?: string;
@@ -36,23 +41,31 @@ type LogEntry = {
   synced?: boolean;
 };
 
-type AppScreen = 'home' | 'pre-log' | 'workout' | 'post-log' | 'history' | 'hand-routine';
+type AppScreen =
+  | 'home'
+  | 'pre-log'
+  | 'workout'
+  | 'post-log'
+  | 'history'
+  | 'history-detail'
+  | 'hand-routine';
 
 type Phase = 'warmup' | 'main' | 'cooldown';
 
 type HandRoutineId = 'left-hand' | 'right-hand';
 
+// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
 type HandRoutine = {
   id: HandRoutineId;
   name: string;
   shortName: string;
-  status: 'active' | 'locked';
+  status: 'active';
   description: string;
-  lockReason?: string;
   frequency: string;
   exercises: Exercise[];
 };
 
+// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
 type HandLog = {
   id?: string;
   date: string;
@@ -60,7 +73,7 @@ type HandLog = {
   synced?: boolean;
 };
 
-type SyncStatus = 'idle' | 'syncing' | 'synced' | 'offline';
+type SyncStatus = 'syncing' | 'synced' | 'offline';
 
 type AppState = {
   screen: AppScreen;
@@ -68,8 +81,6 @@ type AppState = {
   capacityBefore: number;
   capacityAfter: number;
   wallSitSec: number;
-  rightWristPain: number;
-  leftWristPain: number;
   backPain: number;
   word: string;
   currentRound: number;
@@ -82,11 +93,24 @@ type AppState = {
   currentHandExerciseIndex: number;
   syncStatus: SyncStatus;
   startedAt: string | null;
+  // Wall-sit timing capture (group 1D): when the user starts a timed wall sit
+  // we stash the start timestamp here so we can compute actual held duration
+  // even if she taps Done before the timer expires.
+  wallSitStartedAt: number | null;
+  // history-detail navigation target (group 2J)
+  historyDetailId: string | null;
+  // expander state for visual layer (group 3N) — per-render; not persisted.
+  videoExpandedFor: string | null;
+  // collapse state for "How to do it" — collapsed by default after first-seen-this-week.
+  howToOpenFor: string | null;
 };
 
 const STORAGE_KEY = 'workout-tracker:logs';
 const HAND_STORAGE_KEY = 'workout-tracker:hand-logs';
+const HOWTO_SEEN_KEY_PREFIX = 'workout-tracker:howto-seen-week-';
 const REST_SEC = 60;
+const COUNT_BEEP_FROM_SEC = 3;
+const HOLD_TO_SKIP_MS = 500;
 
 const SUPABASE_URL = 'https://hpiyvnfhoqnnnotrmwaz.supabase.co';
 const SUPABASE_ANON_KEY =
@@ -123,7 +147,6 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
         name: 'Outdoor walk',
         reps: '10 min',
         notes: 'Conversational pace. Doubles as warmup + cardio.',
-        isWalk: true,
       },
       { name: 'Belly breathing', reps: '5 slow breaths' },
       { name: 'Pelvic tilts', reps: '10 slow' },
@@ -176,7 +199,6 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
         name: 'Outdoor walk',
         reps: '10 min',
         notes: 'Conversational pace. Doubles as warmup + cardio.',
-        isWalk: true,
       },
       { name: 'Belly breathing', reps: '5 slow breaths' },
       { name: 'Pelvic tilts', reps: '10 slow' },
@@ -211,7 +233,6 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
         name: 'Outdoor walk',
         reps: '25 min',
         notes: 'Conversational-to-brisk pace. Tap done when finished.',
-        isWalk: true,
       },
     ],
     main: [
@@ -232,6 +253,7 @@ const WORKOUTS: Record<WorkoutId, Workout> = {
   },
 };
 
+// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
 const HAND_ROUTINES: Record<HandRoutineId, HandRoutine> = {
   'left-hand': {
     id: 'left-hand',
@@ -263,181 +285,104 @@ const HAND_ROUTINES: Record<HandRoutineId, HandRoutine> = {
   },
 };
 
-const EXERCISE_GUIDE: Record<string, { howTo: string; videoQuery: string }> = {
+// EXERCISE_GUIDE is now keyed only by exercise names actually referenced in
+// WORKOUTS or HAND_ROUTINES. Eliana-era entries removed per audit §8 (group 3P).
+const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   'Belly breathing': {
     howTo:
       "Lie on your back, knees bent, feet flat. Rest one arm at your side (no weight on the hand). Inhale through your nose for 4 counts — your BELLY should rise, not your chest. Exhale slowly through your mouth for 6 counts. Common mistake: chest rising instead of belly. If that happens, slow down and put less effort into the inhale. This wakes up your diaphragm and signals your nervous system it's safe to work.",
-    videoQuery: 'diaphragmatic belly breathing exercise',
-  },
-  'Knee-to-chest hugs': {
-    howTo:
-      "On your back, knees bent. Slowly draw ONE thigh toward your chest. Hook your forearm behind the thigh (NOT your hand) and let the leg rest there — don't actively pull. Hold for 2-3 breaths, then switch. Keep the other foot flat on the mat. Common mistake: lifting the head off the mat — let it stay heavy. Wakes up the hips and lower back gently.",
-    videoQuery: 'single knee to chest stretch',
   },
   'Pelvic tilts': {
     howTo:
       "On your back, knees bent, feet flat hip-width apart. Tilt your pelvis so your lower back gently flattens into the mat (you're tucking your tailbone slightly toward you). Hold 1-2 sec, then release back to neutral. Movement is small — 1-2 inches at the hip. Exhale on the tilt, inhale on the release. Common mistake: over-arching on the release. Just go to neutral, not into a backbend. Trains the pelvis-spine connection your back has been missing.",
-    videoQuery: 'supine pelvic tilt exercise lower back',
-  },
-  'Knee drops side-to-side': {
-    howTo:
-      'On your back, knees bent, feet flat hip-width apart, arms relaxed at sides palms up. Slowly drop both knees a SHORT distance to one side (not all the way to the floor — only as far as feels easy). Pause, breathe, then return to center, then the other side. Keep both shoulders pressed to the mat the whole time. Common mistake: forcing knees too far — that twists the back. Small range = safer + just as effective. Loosens the lower back rotation gently.',
-    videoQuery: 'supine knee drops mobility exercise',
   },
   'Glute squeezes': {
     howTo:
       "On your back, knees bent, feet flat. Gently tighten your butt muscles like you're holding a coin. Hold 3 sec, fully relax 2 sec, repeat. The goal is awareness, not max effort — aim for 50% squeeze, not 100%. Breathe normally throughout. Common mistake: squeezing the abs or pelvic floor too. Try to isolate ONLY the glutes. Wakes up the muscle group that's about to do most of today's work.",
-    videoQuery: 'glute squeeze isometric exercise',
   },
   'Bodyweight squats': {
     howTo:
       'Feet hip- to shoulder-width apart, toes pointed slightly out. Arms crossed over chest. Slowly lower for 3 SECONDS into a comfortable squat depth (knees can stay above 90° — no need to go deep). Pause 1 SECOND at the bottom. Stand up over 3 SECONDS. Inhale on the way down, exhale on the way up. Common mistakes: knees collapsing inward (push them out toward your pinky toes); chest dropping (stay tall). If balance is wobbly, stand near a wall and let your shoulder lightly touch — NOT your hand.',
-    videoQuery: 'bodyweight squat slow tempo proper form',
   },
   'Glute bridges': {
     howTo:
       "On your back, knees bent, feet flat hip-width apart, arms relaxed at sides. Squeeze glutes FIRST, then lift hips to a comfortable height (don't go super high — your body should make a straight line from knees to shoulders, not an arch). Hold 2 sec at the top, then lower slowly. Exhale on the lift, inhale on the lower. Common mistakes: pushing the lower back into a backbend (drive through your HEELS, not your toes); hips coming up before glutes engage (hence: squeeze first). The single best lower-back-friendly glute exercise.",
-    videoQuery: 'glute bridge exercise form beginner',
   },
   'Wall sit': {
     howTo:
       'Stand with your back flat against a wall. Slide down until your knees are between 90° and 120° (steeper = harder, shallower = easier — pick what feels safe today). Knees should NOT go past your toes. Hands rest on thighs or hang loose at sides — no pushing on the wall. Breathe normally. Common mistake: holding your breath. Stay relaxed in the upper body. This is your weekly progress benchmark — track the time held.',
-    videoQuery: 'wall sit exercise proper form',
   },
   'Side-lying clamshells': {
     howTo:
       "Lie on your SIDE, knees bent ~90°, hips and shoulders stacked vertically (don't roll back). Head rests directly on the mat or on a thin pillow — DO NOT prop up on your forearm. Bottom arm extends along the floor under your head, relaxed. Keep feet together. Open the TOP knee like a clam shell while keeping the bottom knee on the mat — only lift to comfortable range. Lower with control. Inhale up, exhale down. Common mistake: hips rolling backward as the knee opens — keep them stacked.",
-    videoQuery: 'side lying clamshell glute exercise',
   },
   'Modified dead bug': {
     howTo:
       'On your back, hips and knees both at 90° in the air (shins parallel to ceiling — tabletop position). Arms relaxed FLAT at sides on the mat, palms UP (not down — protects wrists). Slowly extend ONE leg straight out, hovering it above the floor. Bring it back to tabletop. Switch sides. Keep your lower back glued to the mat the whole time — if it arches, your range is too big. Exhale on the leg extension. Common mistake: speed. Slow = harder = better.',
-    videoQuery: 'dead bug exercise beginner legs only',
   },
   'Heel taps': {
     howTo:
       "On your back, knees bent, feet flat near your butt. Slowly extend ONE leg out and tap your heel toward the floor (don't slam it down). Return to start. Alternate sides. Arms relaxed at sides, palms up. Lower back stays in contact with the mat — if it arches, reduce the leg extension. Exhale on the tap. Common mistake: bending the back. Keep it steady — this is an anti-arch exercise, not a stretch.",
-    videoQuery: 'lying heel tap ab exercise',
   },
   'Knees-to-chest hold': {
     howTo:
       'On your back, gently bring BOTH thighs toward your chest. Forearms hook behind the thighs to support — NOT your hands gripping. The leg position should be passive: legs resting on your forearms, not actively pulled. Breathe slowly. If your tailbone lifts off the mat, the angle is too tight — let the legs come a little further from your chest. Common mistake: gripping with hands (defeats the wrist protection). Releases the lower back fully.',
-    videoQuery: 'double knee to chest stretch',
   },
   'Figure-4 stretch': {
     howTo:
       "On your back, knees bent, feet flat. Cross your RIGHT ankle over your LEFT knee (the right leg makes a '4' shape). Let the right knee fall outward — that opens the right hip. To deepen: use your forearms (not your hands) to draw the LEFT leg gently toward you. Hold 45 sec, breathing slowly. Switch sides. Common mistake: forcing the bent knee down with the other hand — let it open passively. Targets piriformis + outer hip — huge for back tightness.",
-    videoQuery: 'figure 4 stretch supine',
   },
   'Seated forward fold': {
     howTo:
       "Sit on the mat with legs extended in front of you (slight knee bend totally fine — don't lock them). Arms rest in your lap, NOT reaching forward. Hinge forward at the HIPS (not by rounding your back) until you feel a gentle stretch in the back of your legs. Stop at 2/10 stretch — this isn't a depth competition. Hold and breathe. Common mistake: rounding the upper back to look like the stretch is deeper. Better to stay tall with a smaller fold than collapse.",
-    videoQuery: 'seated forward fold hamstring stretch',
   },
   'Slow breathing': {
     howTo:
       "Sit comfortably or stay lying down. Inhale through your nose for 4 counts, exhale through your mouth for 6 counts (longer exhale than inhale = activates the rest-and-recover nervous system). 8 full rounds. Eyes can close. This is the official 'workout is over' signal — your body needs the cue to switch out of effort mode. Common mistake: rushing because the workout is done. The cool-down is when adaptation actually happens — don't skip it.",
-    videoQuery: 'slow breathing relaxation exercise',
   },
   'Side-lying leg raises': {
     howTo:
       "Lie on your SIDE, hips stacked, head on the mat (or thin pillow) — NOT propped on your forearm. Bottom leg bent for stability, top leg straight. Slowly lift the top leg 30-45° (not super high — height isn't the point). Lower with control over 3 seconds. Keep your toes pointing FORWARD, not toward the ceiling — that targets the right glute muscle (glute medius). Exhale on the lift. Common mistake: rolling the hip backward as you lift, which makes the leg go higher but turns it into a hip flexor exercise instead of a glute one.",
-    videoQuery: 'side lying leg raise exercise',
   },
   'Single-leg glute bridges': {
     howTo:
       'Setup like a glute bridge: on your back, knees bent, feet flat, arms at sides palms up. Lift ONE foot off the mat (either knee tucked toward chest or leg extended straight). Squeeze the glute on the standing leg, push through that heel, lift hips. Hold 2 sec. Lower slow. Switch legs after the set. Common mistake: hips dropping toward the lifted-leg side. Keep them level — imagine balancing a glass of water on your pelvis. Bigger glute challenge than the regular bridge.',
-    videoQuery: 'single leg glute bridge form',
   },
   'Slow supine bicycle': {
     howTo:
       'On your back, knees bent, feet flat. Bring one knee up toward your chest. Arms STAY relaxed at sides — NEVER behind the head (protects the neck and the wrists). As you slowly extend that leg out, bring the OTHER knee up. Continuous slow alternation, like pedaling underwater. Lower back glued to mat the whole time. Exhale on each leg extension. Common mistake: speed (this is supposed to be slow and controlled, not a cardio move).',
-    videoQuery: 'supine bicycle exercise slow no hands behind head',
   },
   'Standing calf raises': {
     howTo:
       "Stand tall with feet hip-width apart. Light fingertip touch on a wall for balance — NO grip, NO weight on the hand. Slowly lift your heels until you're on the balls of your feet (3 seconds up). Hold 1 sec at the top. Lower slowly (3 seconds down). Inhale on the lift, exhale on the lower. Common mistake: bouncing for momentum — kills the work the calves are doing. Slow tempo is doing the heavy lifting here.",
-    videoQuery: 'standing calf raise exercise',
   },
   'Outdoor walk': {
     howTo:
       "Conversational pace — you should be able to talk in full sentences without getting breathless. 20 minutes minimum. Walking is genuinely your most underrated exercise: it preserves joint health, supports digestion (especially good with Crohn's), aids GLP-1 medication's effect, and clears mental fog. Take it outdoors when possible — the visual variety and sunlight matter. Tap done when you finish.",
-    videoQuery: 'walking exercise pace',
   },
   'Left wrist stretch': {
     howTo:
       'Lisa Cohen PT — May 5. Hold your LEFT arm out straight in front of you. With your RIGHT hand, gently pull the LEFT fingers back toward you (palm facing forward) until you feel a mild stretch in the front of your forearm. Then flip — push the LEFT hand DOWN (palm facing you) to stretch the back of the forearm. Hold 30 seconds total, no pain. Once a day.',
-    videoQuery: 'wrist stretch flexor extensor 30 seconds',
   },
   'Left flexion/extension (tuna can)': {
     howTo:
       "Lisa Cohen PT — May 5. Sit at a table. Rest your LEFT forearm flat on the table with the wrist hanging off the edge. Hold a tuna can (or similar light weight) in your LEFT hand. PALM DOWN: slowly lift the can up by bending the wrist, then lower. That's wrist EXTENSION. Then flip — PALM UP: lift the can up by curling the wrist, then lower. That's wrist FLEXION. 10 reps each direction. Slow and controlled, no pain.",
-    videoQuery: 'wrist flexion extension dumbbell rehab',
   },
   'Left radial deviation (tuna can)': {
     howTo:
       'Lisa Cohen PT — May 5. Sit at a table. Rest your LEFT forearm on the table on its PINKY-SIDE (ulnar edge), thumb pointing UP toward the ceiling. Hold a tuna can in your LEFT hand. Slowly lift the hand UPWARD toward the thumb (radial deviation), then lower with control. Small range — only the wrist moves, forearm stays put. 10 reps. Slow and pain-free.',
-    videoQuery: 'wrist radial deviation strengthening exercise',
   },
   'Right wrist stretch': {
     howTo:
       'Lisa Cohen PT — May 5. Hold your RIGHT arm out straight in front of you. With your LEFT hand, gently pull the RIGHT fingers back toward you (palm facing forward) until you feel a mild stretch in the front of your forearm. Then flip — push the RIGHT hand DOWN (palm facing you) to stretch the back of the forearm. Hold 30 seconds total, no pain. Once a day.',
-    videoQuery: 'wrist stretch flexor extensor 30 seconds',
   },
   'Right flexion/extension (tuna can)': {
     howTo:
       "Lisa Cohen PT — May 5. Sit at a table. Rest your RIGHT forearm flat on the table with the wrist hanging off the edge. Hold a tuna can (or similar light weight) in your RIGHT hand. PALM DOWN: slowly lift the can up by bending the wrist, then lower. That's wrist EXTENSION. Then flip — PALM UP: lift the can up by curling the wrist, then lower. That's wrist FLEXION. 10 reps each direction. Slow and controlled, no pain.",
-    videoQuery: 'wrist flexion extension dumbbell rehab',
   },
   'Right radial deviation (tuna can)': {
     howTo:
       'Lisa Cohen PT — May 5. Sit at a table. Rest your RIGHT forearm on the table on its PINKY-SIDE (ulnar edge), thumb pointing UP toward the ceiling. Hold a tuna can in your RIGHT hand. Slowly lift the hand UPWARD toward the thumb (radial deviation), then lower with control. Small range — only the wrist moves, forearm stays put. 10 reps. Slow and pain-free.',
-    videoQuery: 'wrist radial deviation strengthening exercise',
-  },
-  'Left tendon glides': {
-    howTo:
-      'Cycle slowly through 5 hand positions on your LEFT hand: STRAIGHT (fingers extended) → HOOK (knuckles straight, fingers curled) → FIST (full curl) → TABLETOP (knuckles bent, fingers straight) → STRAIGHT FIST (fingers folded onto palm with knuckles straight). Hold each shape for 1-2 sec. Slow, no pain. 5-10 full cycles.',
-    videoQuery: 'tendon glide exercise hand therapy 5 positions',
-  },
-  'Left wrist circles': {
-    howTo:
-      'Hold your LEFT hand out in front of you, fingers relaxed (not making a fist), no load. Slowly draw circles with your wrist — like drawing the outline of a quarter, not a dinner plate. 5 clockwise, then 5 counterclockwise. Range of motion only — no force, no end-range push. Breathe normally. If any motion produces a pinch or sharp pain, reduce the circle size further. Goal: keep the joint mobile without provoking inflammation.',
-    videoQuery: 'gentle wrist circle range of motion',
-  },
-  'Wall flexor stretch (left)': {
-    howTo:
-      'Stand near a wall. Place LEFT palm flat on the wall, fingers pointing DOWN. Slowly lean forward to feel a gentle stretch in the front of your forearm. Hold 20-30 sec. 3 reps.',
-    videoQuery: 'wrist flexor stretch wall',
-  },
-  'Wall extensor stretch (left)': {
-    howTo:
-      'Place the BACK of your LEFT hand flat against the wall, fingers pointing DOWN. Slowly lean forward to stretch the back of your forearm. This is the main one for ECU/extensors. Hold 20-30 sec. 3 reps.',
-    videoQuery: 'wrist extensor stretch ECU',
-  },
-  'Forearm self-massage (left)': {
-    howTo:
-      'Press your LEFT forearm muscle (top side, between elbow and wrist) against a tennis ball pressed to a wall, or the edge of a doorframe. Slowly roll/glide for 30-60 sec. Work the MUSCLE BELLY — avoid pressing on the wrist tendon directly.',
-    videoQuery: 'forearm self massage tennis ball',
-  },
-  'Ponytail grip': {
-    howTo:
-      "Hand fully open. Gently close into a SOFT fist as if grabbing a ponytail you don't want to break — light squeeze, not a hard grip. Hold 5 seconds. Open fully (fingers all the way extended). That's one rep. 10 reps. Breathe normally throughout — don't hold your breath. Wakes up the finger flexors and extensors with controlled tendon loading. Common mistake: squeezing too hard (defeats the gentle-rehab purpose).",
-    videoQuery: 'ponytail grip hand therapy exercise',
-  },
-  'Bottle lift — pronated': {
-    howTo:
-      "Stand or sit with your shoulder at 90° abduction (arm OUT to the side at shoulder height, like making a 'T' shape). Bend the elbow 90° so the forearm points straight up. Wrist NEUTRAL (not bent). Hold a light bottle (start with empty or very light) with palm facing DOWN (pronated). Slowly lift the bottle up by tilting your wrist forward, then lower it. Small range — this is wrist control work, not weight training. 10 reps each side. Common mistake: using shoulder/elbow to do the lift — keep them still, only the wrist moves.",
-    videoQuery: 'wrist bottle lift exercise rehabilitation',
-  },
-  'Bottle lift — supinated': {
-    howTo:
-      "Same setup as pronated: shoulder at 90° abduction, elbow bent 90°, wrist neutral. But now palm faces UP (supinated — like holding a tray). Slowly tilt the wrist back and forward in a small range, lifting the bottle. 10 reps. Slow and controlled. Common mistake: letting the elbow drift — keep it locked at 90° so only the wrist works. This direction is often weaker than pronated for TFCC patients — that's normal and improves with practice.",
-    videoQuery: 'wrist supination strengthening bottle',
-  },
-  'Tennis elbow isometric': {
-    howTo:
-      "Sit at a table or stand. Elbow bent ~90°, forearm parallel to the floor, wrist neutral (straight, not bent). Place the BACK of your hand under the table edge or against your other hand. Push UP gently against the resistance — this fires the wrist extensors without movement (isometric). Hold 10 seconds at maybe 30-50% effort. Breathe steadily — don't hold your breath. Multiple reps as Eliana prescribes. Common mistake: max-effort push (gentler is more effective for tendon healing). Targets the lateral epicondyle / tennis elbow tendons.",
-    videoQuery: 'tennis elbow isometric exercise',
   },
 };
 
@@ -447,8 +392,6 @@ const state: AppState = {
   capacityBefore: 5,
   capacityAfter: 5,
   wallSitSec: 0,
-  rightWristPain: 0,
-  leftWristPain: 0,
   backPain: 0,
   word: '',
   currentRound: 1,
@@ -459,9 +402,15 @@ const state: AppState = {
   preCountdown: 0,
   selectedHandRoutine: null,
   currentHandExerciseIndex: 0,
-  syncStatus: 'idle',
+  syncStatus: 'syncing',
   startedAt: null,
+  wallSitStartedAt: null,
+  historyDetailId: null,
+  videoExpandedFor: null,
+  howToOpenFor: null,
 };
+
+// ---------- audio ----------
 
 let audioCtx: AudioContext | null = null;
 
@@ -477,12 +426,21 @@ function getAudioCtx(): AudioContext | null {
   return audioCtx;
 }
 
-function playBeep(frequency: number, durationMs: number): void {
+// Group 1C: must be called synchronously from a user-gesture handler. The Web
+// Audio autoplay policy will leave the context suspended until a real click
+// resumes it. Calling this from inside a setInterval/rAF callback is too late.
+function unlockAudio(): void {
   const ctx = getAudioCtx();
   if (!ctx) return;
   if (ctx.state === 'suspended') {
     void ctx.resume();
   }
+}
+
+function playBeep(frequency: number, durationMs: number): void {
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  if (ctx.state !== 'running') return;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.connect(gain);
@@ -510,7 +468,129 @@ function playFinishBeep(): void {
   setTimeout(() => playBeep(880, 350), 180);
 }
 
-let timerInterval: number | null = null;
+// ---------- timer (clock-anchored, group 1B) ----------
+//
+// Why this design (audit §3): the previous setInterval-based countdown was
+// throttled when the phone screen slept (iOS Safari pauses background
+// intervals entirely), so a 25-sec wall-sit would freeze and never finish.
+// Pre-countdown had its own closure-local interval, leaking a "ghost timer"
+// on Quit. This replaces all of that with a single rAF loop reading the
+// wall-clock — endsAt is captured once, every frame computes
+// `endsAt - Date.now()`. Survives sleep/wake; pause is trivial.
+
+type TimerKind = 'pre-countdown' | 'rest' | 'timed-exercise';
+
+type TimerHandle = {
+  kind: TimerKind;
+  endsAt: number;
+  onComplete: () => void;
+  lastSecRendered: number;
+};
+
+let activeTimer: TimerHandle | null = null;
+let rafHandle: number | null = null;
+
+function stopTimer(): void {
+  if (rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
+    cancelAnimationFrame(rafHandle);
+  }
+  rafHandle = null;
+  activeTimer = null;
+  state.timerSeconds = 0;
+  state.preCountdown = 0;
+}
+
+function startTimerCore(kind: TimerKind, seconds: number, onComplete: () => void): void {
+  stopTimer();
+  activeTimer = {
+    kind,
+    endsAt: Date.now() + seconds * 1000,
+    onComplete,
+    lastSecRendered: seconds + 1, // force first render
+  };
+  if (kind === 'pre-countdown') {
+    state.preCountdown = seconds;
+  } else {
+    state.timerSeconds = seconds;
+  }
+  render();
+  timerLoop();
+}
+
+function timerLoop(): void {
+  if (!activeTimer) return;
+  const remainMs = activeTimer.endsAt - Date.now();
+  const remainSec = Math.max(0, Math.ceil(remainMs / 1000));
+
+  if (remainSec !== activeTimer.lastSecRendered) {
+    activeTimer.lastSecRendered = remainSec;
+    if (activeTimer.kind === 'pre-countdown') {
+      state.preCountdown = remainSec;
+    } else {
+      state.timerSeconds = remainSec;
+    }
+    // Count beeps at the last COUNT_BEEP_FROM_SEC seconds (audit T6 fix:
+    // only the count beep, not finish beep, fires on the way down).
+    if (remainSec > 0 && remainSec <= COUNT_BEEP_FROM_SEC) {
+      playCountBeep();
+    }
+    render();
+  }
+
+  if (remainMs <= 0) {
+    const t = activeTimer;
+    activeTimer = null;
+    rafHandle = null;
+    if (t.kind === 'pre-countdown') {
+      playGoBeep();
+    } else {
+      playFinishBeep();
+    }
+    t.onComplete();
+    return;
+  }
+
+  if (typeof requestAnimationFrame !== 'undefined') {
+    rafHandle = requestAnimationFrame(timerLoop);
+  } else {
+    // Fallback for environments without rAF (e.g. some test runners): poll @100ms.
+    rafHandle = window.setTimeout(timerLoop, 100) as unknown as number;
+  }
+}
+
+function startRestTimer(): void {
+  state.isResting = true;
+  startTimerCore('rest', REST_SEC, () => {
+    state.isResting = false;
+    render();
+  });
+}
+
+function skipRest(): void {
+  stopTimer();
+  state.isResting = false;
+  state.timerSeconds = 0; // Group 1A: ensure no stale value blocks next "Start timer"
+  render();
+}
+
+function startPreCountdown(then: () => void): void {
+  startTimerCore('pre-countdown', 3, () => {
+    state.preCountdown = 0;
+    then();
+  });
+}
+
+// Recompute on tab visibility — if the user backgrounded the app the rAF
+// loop pauses and the timer would freeze. On return we fast-forward.
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && activeTimer) {
+      timerLoop();
+    }
+  });
+}
+
+// ---------- persistence ----------
 
 function loadLogs(): LogEntry[] {
   try {
@@ -524,8 +604,18 @@ function loadLogs(): LogEntry[] {
   }
 }
 
+// Group 1E: don't silently drop unsynced records. When the 50-entry cap is
+// reached, sort so unsynced rows survive first, then keep newest synced.
+// This is upsert-style merge semantics with local-newer winning — see audit
+// C2 + C3. Real tombstone tracking is deferred (Session C).
 function writeLogs(logs: LogEntry[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(logs.slice(0, 50)));
+  const sorted = [...logs].sort((a, b) => {
+    const aUn = a.synced ? 1 : 0;
+    const bUn = b.synced ? 1 : 0;
+    if (aUn !== bUn) return aUn - bUn; // unsynced first
+    return b.date.localeCompare(a.date); // newest first
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted.slice(0, 50)));
 }
 
 function saveLog(entry: LogEntry): LogEntry {
@@ -546,6 +636,10 @@ function markLogSynced(id: string): void {
   writeLogs(logs);
 }
 
+// Group 1F: wrist columns dropped from POST payload — Lisa Cohen cleared the
+// wrist May 10. App was silently writing 0s for two columns the user no
+// longer fills. Schema still has the columns (no Supabase change) so existing
+// rows survive; new inserts just omit them and let the DB use NULL/default.
 async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
   if (syncDisabled()) return false;
   if (!entry.id) return false;
@@ -561,8 +655,6 @@ async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
           capacity_before_1_10: entry.capacityBefore,
           capacity_after_1_10: entry.capacityAfter,
           wall_sit_seconds: entry.wallSitSec,
-          pain_left_wrist_0_10: entry.leftWristPain,
-          pain_right_wrist_0_10: entry.rightWristPain,
           pain_back_0_10: entry.backPain,
           one_word: entry.word || null,
           started_at: entry.startedAt ?? null,
@@ -575,11 +667,15 @@ async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
       markLogSynced(entry.id);
       return true;
     }
+    console.warn('[sync] push failed:', res.status, await res.text().catch(() => ''));
     return false;
-  } catch {
+  } catch (err) {
+    console.warn('[sync] push threw:', err);
     return false;
   }
 }
+
+// ---------- state machine ----------
 
 function getCurrentWorkout(): Workout | null {
   return state.selectedWorkout ? WORKOUTS[state.selectedWorkout] : null;
@@ -590,51 +686,6 @@ function getCurrentExercise(): Exercise | null {
   if (!w) return null;
   const list = w[state.currentPhase];
   return list[state.currentExerciseIndex] ?? null;
-}
-
-function clearTimer(): void {
-  if (timerInterval !== null) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
-}
-
-function startTimer(seconds: number, onComplete: () => void): void {
-  clearTimer();
-  state.timerSeconds = seconds;
-  render();
-  timerInterval = window.setInterval(() => {
-    state.timerSeconds -= 1;
-    if (state.timerSeconds > 0 && state.timerSeconds <= 3) {
-      playCountBeep();
-    }
-    if (state.timerSeconds <= 0) {
-      clearTimer();
-      state.timerSeconds = 0;
-      playFinishBeep();
-      onComplete();
-    }
-    render();
-  }, 1000);
-}
-
-function startPreCountdown(then: () => void): void {
-  state.preCountdown = 3;
-  playCountBeep();
-  render();
-  const interval = window.setInterval(() => {
-    state.preCountdown -= 1;
-    if (state.preCountdown <= 0) {
-      clearInterval(interval);
-      state.preCountdown = 0;
-      playGoBeep();
-      render();
-      then();
-    } else {
-      playCountBeep();
-      render();
-    }
-  }, 1000);
 }
 
 function startWorkout(id: WorkoutId): void {
@@ -650,19 +701,28 @@ function beginExercises(): void {
   state.currentExerciseIndex = 0;
   state.isResting = false;
   state.startedAt = new Date().toISOString();
+  state.howToOpenFor = null;
+  state.videoExpandedFor = null;
   render();
 }
 
 function advanceExercise(): void {
   const w = getCurrentWorkout();
   if (!w) return;
-  clearTimer();
+
+  // Group 1D: if we're leaving a timed wall-sit and the user tapped Done
+  // before the timer ran out, capture actual held duration.
+  captureWallSitIfPending();
+
+  stopTimer();
   state.isResting = false;
+  state.videoExpandedFor = null; // collapse video when moving on
+
   const list = w[state.currentPhase];
   if (state.currentExerciseIndex < list.length - 1) {
     state.currentExerciseIndex += 1;
     if (state.currentPhase === 'main') {
-      startRest();
+      startRestTimer();
       return;
     }
   } else if (state.currentPhase === 'warmup') {
@@ -672,7 +732,7 @@ function advanceExercise(): void {
     if (state.currentRound < w.rounds) {
       state.currentRound += 1;
       state.currentExerciseIndex = 0;
-      startRest();
+      startRestTimer();
       return;
     } else {
       state.currentPhase = 'cooldown';
@@ -684,18 +744,12 @@ function advanceExercise(): void {
   render();
 }
 
-function startRest(): void {
-  state.isResting = true;
-  startTimer(REST_SEC, () => {
-    state.isResting = false;
-    render();
-  });
-}
-
-function skipRest(): void {
-  clearTimer();
-  state.isResting = false;
-  render();
+function captureWallSitIfPending(): void {
+  if (state.wallSitStartedAt !== null) {
+    const heldSec = Math.max(0, Math.round((Date.now() - state.wallSitStartedAt) / 1000));
+    state.wallSitSec = Math.max(state.wallSitSec, heldSec);
+    state.wallSitStartedAt = null;
+  }
 }
 
 function startTimedExercise(): void {
@@ -703,11 +757,16 @@ function startTimedExercise(): void {
   if (!ex || !ex.durationSec) return;
   const duration = ex.durationSec;
   const exerciseName = ex.name;
+  unlockAudio(); // Group 1C: synchronous resume in user-gesture handler
+  if (exerciseName === 'Wall sit') {
+    state.wallSitStartedAt = Date.now();
+  }
   startPreCountdown(() => {
-    startTimer(duration, () => {
+    startTimerCore('timed-exercise', duration, () => {
       if (exerciseName === 'Wall sit') {
-        state.wallSitSec = Math.max(state.wallSitSec, duration);
+        captureWallSitIfPending();
       }
+      render();
     });
   });
 }
@@ -726,8 +785,6 @@ function logCompleteAndHome(): void {
     capacityBefore: state.capacityBefore,
     capacityAfter: state.capacityAfter,
     wallSitSec: state.wallSitSec,
-    rightWristPain: state.rightWristPain,
-    leftWristPain: state.leftWristPain,
     backPain: state.backPain,
     word: state.word,
     startedAt,
@@ -745,14 +802,12 @@ function logCompleteAndHome(): void {
 }
 
 function resetState(): void {
-  clearTimer();
+  stopTimer();
   state.screen = 'home';
   state.selectedWorkout = null;
   state.capacityBefore = 5;
   state.capacityAfter = 5;
   state.wallSitSec = 0;
-  state.rightWristPain = 0;
-  state.leftWristPain = 0;
   state.backPain = 0;
   state.word = '';
   state.currentRound = 1;
@@ -764,7 +819,14 @@ function resetState(): void {
   state.selectedHandRoutine = null;
   state.currentHandExerciseIndex = 0;
   state.startedAt = null;
+  state.wallSitStartedAt = null;
+  state.videoExpandedFor = null;
+  state.howToOpenFor = null;
+  state.historyDetailId = null;
 }
+
+// ---------- hand routine persistence ----------
+// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
 
 function loadHandLogs(): HandLog[] {
   try {
@@ -779,7 +841,13 @@ function loadHandLogs(): HandLog[] {
 }
 
 function writeHandLogs(logs: HandLog[]): void {
-  localStorage.setItem(HAND_STORAGE_KEY, JSON.stringify(logs.slice(0, 200)));
+  const sorted = [...logs].sort((a, b) => {
+    const aUn = a.synced ? 1 : 0;
+    const bUn = b.synced ? 1 : 0;
+    if (aUn !== bUn) return aUn - bUn;
+    return b.date.localeCompare(a.date);
+  });
+  localStorage.setItem(HAND_STORAGE_KEY, JSON.stringify(sorted.slice(0, 200)));
 }
 
 function saveHandLog(routine: HandRoutineId): HandLog {
@@ -818,11 +886,15 @@ async function pushHandLogToSupabase(entry: HandLog): Promise<boolean> {
       markHandLogSynced(entry.id);
       return true;
     }
+    console.warn('[sync] hand push failed:', res.status);
     return false;
-  } catch {
+  } catch (err) {
+    console.warn('[sync] hand push threw:', err);
     return false;
   }
 }
+
+// ---------- sync ----------
 
 type RemoteSession = {
   id: string;
@@ -831,8 +903,6 @@ type RemoteSession = {
   capacity_before_1_10: number | null;
   capacity_after_1_10: number | null;
   wall_sit_seconds: number | null;
-  pain_left_wrist_0_10: number | null;
-  pain_right_wrist_0_10: number | null;
   pain_back_0_10: number | null;
   one_word: string | null;
   started_at: string | null;
@@ -860,45 +930,56 @@ async function pullFromSupabase(): Promise<void> {
     if (sRes.ok) {
       const remote: RemoteSession[] = await sRes.json();
       const local = loadLogs();
-      const localIds = new Set(local.filter((l) => l.id).map((l) => l.id as string));
-      const incoming: LogEntry[] = remote
-        .filter((r) => !localIds.has(r.id))
-        .map((r) => ({
+      // Group 1E: id-keyed merge. Remote-synced rows replace local-synced
+      // rows with same id; local-unsynced never lose their write. Tombstone
+      // handling deferred (audit §11 Session C).
+      const byId = new Map<string, LogEntry>();
+      for (const l of local) {
+        if (l.id) byId.set(l.id, l);
+      }
+      for (const r of remote) {
+        const existing = byId.get(r.id);
+        if (existing && !existing.synced) continue; // local-unsynced wins
+        byId.set(r.id, {
           id: r.id,
           date: r.date,
           workout: r.workout_type,
           capacityBefore: r.capacity_before_1_10 ?? 0,
           capacityAfter: r.capacity_after_1_10 ?? 0,
           wallSitSec: r.wall_sit_seconds ?? 0,
-          rightWristPain: r.pain_right_wrist_0_10 ?? 0,
-          leftWristPain: r.pain_left_wrist_0_10 ?? 0,
           backPain: r.pain_back_0_10 ?? 0,
           word: r.one_word ?? '',
           startedAt: r.started_at ?? undefined,
           completedAt: r.completed_at ?? undefined,
           durationSec: r.duration_seconds ?? undefined,
           synced: true,
-        }));
-      if (incoming.length > 0) {
-        const merged = [...incoming, ...local].sort((a, b) => b.date.localeCompare(a.date));
-        writeLogs(merged);
+        });
       }
+      const merged = Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date));
+      writeLogs(merged);
+    } else {
+      console.warn('[sync] pull sessions failed:', sRes.status);
     }
     if (hRes.ok) {
       const remote: RemoteHandLog[] = await hRes.json();
       const local = loadHandLogs();
-      const localIds = new Set(local.filter((l) => l.id).map((l) => l.id as string));
-      const incoming: HandLog[] = remote
-        .filter((r) => !localIds.has(r.id))
-        .map((r) => ({ id: r.id, date: r.date, routine: r.routine_id, synced: true }));
-      if (incoming.length > 0) {
-        const merged = [...incoming, ...local].sort((a, b) => b.date.localeCompare(a.date));
-        writeHandLogs(merged);
+      const byId = new Map<string, HandLog>();
+      for (const l of local) {
+        if (l.id) byId.set(l.id, l);
       }
+      for (const r of remote) {
+        const existing = byId.get(r.id);
+        if (existing && !existing.synced) continue;
+        byId.set(r.id, { id: r.id, date: r.date, routine: r.routine_id, synced: true });
+      }
+      const merged = Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date));
+      writeHandLogs(merged);
+    } else {
+      console.warn('[sync] pull hand failed:', hRes.status);
     }
     if (state.screen === 'home') render();
-  } catch {
-    // best-effort; localStorage is canonical
+  } catch (err) {
+    console.warn('[sync] pull threw:', err);
   }
 }
 
@@ -942,13 +1023,23 @@ function syncIndicatorText(): string {
   return 'synced ✓';
 }
 
+// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending
+// Allison's call. The function is intentionally unreferenced from the home
+// screen (the entry buttons were removed pre-May-15); we keep it exported on
+// window so the code path is reachable from the browser console if Allison
+// wants to re-enable temporarily.
 function startHandRoutine(id: HandRoutineId): void {
   state.selectedHandRoutine = id;
   state.currentHandExerciseIndex = 0;
   state.screen = 'hand-routine';
   render();
 }
+if (typeof window !== 'undefined') {
+  (window as unknown as { startHandRoutine: typeof startHandRoutine }).startHandRoutine =
+    startHandRoutine;
+}
 
+// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
 function advanceHandExercise(): void {
   if (!state.selectedHandRoutine) return;
   const routine = HAND_ROUTINES[state.selectedHandRoutine];
@@ -956,26 +1047,38 @@ function advanceHandExercise(): void {
     state.currentHandExerciseIndex += 1;
     render();
   } else {
-    let stored: HandLog | null = null;
-    if (routine.status === 'active') {
-      stored = saveHandLog(routine.id);
-    }
+    const stored = saveHandLog(routine.id);
     resetState();
     render();
-    if (stored) {
-      state.syncStatus = 'syncing';
+    state.syncStatus = 'syncing';
+    updateSyncIndicator();
+    void pushHandLogToSupabase(stored).then((ok) => {
+      state.syncStatus = ok ? 'synced' : 'offline';
       updateSyncIndicator();
-      void pushHandLogToSupabase(stored).then((ok) => {
-        state.syncStatus = ok ? 'synced' : 'offline';
-        updateSyncIndicator();
-      });
-    }
+    });
   }
 }
+
+// ---------- formatting ----------
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function formatDateLong(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
 function formatDuration(sec: number): string {
@@ -1039,26 +1142,219 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#039;');
 }
 
+// Today's pick rotation (group 2I): A→B→C→A.
+function getTodaysPick(): WorkoutId {
+  const logs = loadLogs();
+  if (logs.length === 0) return 'A';
+  const last = logs[0];
+  if (!last) return 'A';
+  if (last.workout === 'A') return 'B';
+  if (last.workout === 'B') return 'C';
+  return 'A';
+}
+
+// Week dots (group 2J): one entry per weekday. Color is the workout letter.
+type WeekDotInfo = { letter: string; logId: string | null; date: Date; workout: WorkoutId | null };
+
+function getWeekDots(): WeekDotInfo[] {
+  const week = getProgramWeek();
+  const logs = loadLogs();
+  const dotLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  // Program week start is Saturday May 2 in `PROGRAM_START_DATE`. For
+  // display we render Mon..Sun of the calendar week containing `week.start`.
+  // Compute the Monday of the week containing week.start.
+  const ws = new Date(week.start);
+  const day = ws.getDay(); // 0=Sun..6=Sat
+  // Convert to Mon=0..Sun=6
+  const monOffset = (day + 6) % 7;
+  const monday = new Date(ws);
+  monday.setDate(ws.getDate() - monOffset);
+
+  return dotLabels.map((label, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const start = new Date(d);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(d);
+    end.setHours(23, 59, 59, 999);
+    const hit = logs.find((l) => {
+      const t = new Date(l.date).getTime();
+      return t >= start.getTime() && t <= end.getTime();
+    });
+    return {
+      letter: label,
+      logId: hit?.id ?? null,
+      date: d,
+      workout: hit?.workout ?? null,
+    };
+  });
+}
+
+// ---------- visual layer (group 3) ----------
+
+function renderExerciseVisual(exerciseName: string): string {
+  const v = EXERCISE_VISUALS[exerciseName];
+  if (!v) return '';
+
+  const isExpanded = state.videoExpandedFor === exerciseName;
+  const safeAlt = escapeHtml(`${exerciseName} — exercise demonstration`);
+  const attribution = v.attribution ? escapeHtml(v.attribution) : '';
+
+  if (v.loop) {
+    // Primary = still image. Video is behind an expander.
+    const videoBlock = v.youtubeId
+      ? `
+      <button class="visual-video-toggle" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isExpanded}">
+        ${isExpanded ? '× Hide video' : '▶ Watch full video'}
+      </button>
+      ${
+        isExpanded
+          ? `<div class="visual-video-wrap">
+              <iframe
+                src="https://www.youtube.com/embed/${escapeHtml(v.youtubeId)}?rel=0&modestbranding=1"
+                title="${safeAlt}"
+                frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen
+                loading="lazy"
+              ></iframe>
+            </div>`
+          : ''
+      }`
+      : '';
+    return `
+      <div class="exercise-visual">
+        <img src="${escapeHtml(v.loop)}" alt="${safeAlt}" loading="lazy" />
+        ${videoBlock}
+        ${attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
+      </div>
+    `;
+  }
+
+  // No still — iframe is primary, behind an expander still (autoplay-off is
+  // intentional; YouTube embeds can't autoplay on mobile without user gesture
+  // and we don't want unrequested data downloads).
+  if (v.youtubeId) {
+    return `
+      <div class="exercise-visual exercise-visual-video-only">
+        ${
+          isExpanded
+            ? `<div class="visual-video-wrap">
+                <iframe
+                  src="https://www.youtube.com/embed/${escapeHtml(v.youtubeId)}?rel=0&modestbranding=1"
+                  title="${safeAlt}"
+                  frameborder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowfullscreen
+                  loading="lazy"
+                ></iframe>
+              </div>`
+            : `<button class="visual-video-poster" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="false">
+                <span class="visual-video-poster-icon">▶</span>
+                <span class="visual-video-poster-label">Watch how it looks</span>
+              </button>`
+        }
+        ${attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
+      </div>
+    `;
+  }
+
+  return '';
+}
+
+function renderHowToCard(exerciseName: string): string {
+  const guide = EXERCISE_GUIDE[exerciseName];
+  if (!guide) return '';
+
+  // First-time-this-week → open by default. After that, collapsed.
+  const week = getProgramWeek();
+  const seenKey = `${HOWTO_SEEN_KEY_PREFIX}${week.num}`;
+  let seen: Record<string, boolean> = {};
+  try {
+    const raw = localStorage.getItem(seenKey);
+    if (raw) seen = JSON.parse(raw) as Record<string, boolean>;
+  } catch {
+    seen = {};
+  }
+  const isFirstThisWeek = !seen[exerciseName];
+  const userOpened = state.howToOpenFor === exerciseName;
+  const userClosed = state.howToOpenFor === `__closed__${exerciseName}`;
+  const isOpen = userOpened || (isFirstThisWeek && !userClosed);
+
+  return `
+    <div class="how-to-card ${isOpen ? 'how-to-open' : ''}">
+      <button class="how-to-toggle" data-toggle-howto="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isOpen}">
+        <span>📖 How to do it</span>
+        <span class="how-to-chev">${isOpen ? '▾' : '▸'}</span>
+      </button>
+      ${isOpen ? `<p class="how-to-text">${escapeHtml(guide.howTo)}</p>` : ''}
+    </div>
+  `;
+}
+
+function markHowToSeenThisWeek(exerciseName: string): void {
+  const week = getProgramWeek();
+  const seenKey = `${HOWTO_SEEN_KEY_PREFIX}${week.num}`;
+  let seen: Record<string, boolean> = {};
+  try {
+    const raw = localStorage.getItem(seenKey);
+    if (raw) seen = JSON.parse(raw) as Record<string, boolean>;
+  } catch {
+    seen = {};
+  }
+  seen[exerciseName] = true;
+  try {
+    localStorage.setItem(seenKey, JSON.stringify(seen));
+  } catch {
+    // localStorage full or unavailable — non-fatal
+  }
+}
+
+// ---------- renders ----------
+
 function renderHome(): string {
   const logs = loadLogs();
   const week = getProgramWeek();
   const weekRange = formatWeekRange(week.start, week.end);
   const thisWeekCount = getThisWeekCount();
+  const todaysPick = getTodaysPick();
+  const lastLog = logs[0];
+  const weekDots = getWeekDots();
+
+  const dotsHtml = weekDots
+    .map((d) => {
+      const cls = d.workout ? `dot dot-${d.workout}` : 'dot dot-empty';
+      const clickAttr = d.logId ? `data-detail="${escapeHtml(d.logId)}"` : '';
+      return `
+        <button class="week-dot ${cls}" ${clickAttr} type="button" aria-label="${d.letter} ${formatDate(d.date.toISOString())}${d.workout ? ` workout ${d.workout}` : ' no workout'}">
+          <span class="week-dot-label">${d.letter}</span>
+          <span class="week-dot-bubble">${d.workout ?? ''}</span>
+        </button>
+      `;
+    })
+    .join('');
+
   const recentHtml = logs
     .slice(0, 5)
-    .map(
-      (l) => `
-    <div class="history-row">
-      <span class="history-workout-badge">${l.workout}</span>
-      <div>
-        <div class="history-date">${formatDate(l.date)}</div>
-        ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
-      </div>
-      <div class="history-meta">${l.wallSitSec}s wall sit</div>
-    </div>
-  `
-    )
+    .map((l) => {
+      const idAttr = l.id ? `data-detail="${escapeHtml(l.id)}"` : '';
+      const duration = l.durationSec ? formatDuration(l.durationSec) : '—';
+      return `
+      <button class="history-row history-row-btn" ${idAttr} type="button">
+        <span class="history-workout-badge">${l.workout}</span>
+        <div>
+          <div class="history-date">${formatDate(l.date)} · ${duration}</div>
+          ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
+        </div>
+        <div class="history-meta">›</div>
+      </button>
+    `;
+    })
     .join('');
+
+  const lastLine = lastLog
+    ? `Last: ${lastLog.workout} · ${formatDate(lastLog.date)} · capacity ${lastLog.capacityBefore}→${lastLog.capacityAfter}`
+    : 'No sessions yet — pick A to start.';
 
   return `
     <h1>Workout Tracker</h1>
@@ -1078,6 +1374,7 @@ function renderHome(): string {
           <div class="stat-label">total sessions</div>
         </div>
       </div>
+      <div class="week-dots">${dotsHtml}</div>
     </div>
 
     <h3>Pick today's workout</h3>
@@ -1085,8 +1382,10 @@ function renderHome(): string {
       ${(['A', 'B', 'C'] as WorkoutId[])
         .map((id) => {
           const w = WORKOUTS[id];
+          const isPick = id === todaysPick;
           return `
-        <button class="workout-card" data-workout="${id}">
+        <button class="workout-card ${isPick ? 'workout-card-pick' : ''}" data-workout="${id}">
+          ${isPick ? '<span class="workout-card-pick-badge">Today\'s pick</span>' : ''}
           <div class="workout-card-header">
             <span class="workout-card-title">${w.id} · ${w.name}</span>
             <span class="workout-card-badge">${w.rounds === 1 ? 'easy' : `${w.rounds} rounds`}</span>
@@ -1097,49 +1396,39 @@ function renderHome(): string {
         })
         .join('')}
     </div>
+    <div class="last-line">${lastLine}</div>
 
     ${
       logs.length > 0
         ? `
       <div class="divider"></div>
-      <h3>Recent workouts</h3>
-      ${recentHtml}
-      <div style="margin-top: 12px;">
-        <button class="text-link" id="view-history">View all →</button>
+      <div class="history-header-row">
+        <h3>Recent workouts</h3>
+        <button class="btn-chip" id="view-history" type="button">📊 All workouts</button>
       </div>
+      ${recentHtml}
     `
         : ''
     }
   `;
 }
 
+// PENDING DECISION: hand routine UI hidden 2026-05-15, code retained pending Allison's call.
 function renderHandRoutine(): string {
   if (!state.selectedHandRoutine) return '';
   const routine = HAND_ROUTINES[state.selectedHandRoutine];
   const ex = routine.exercises[state.currentHandExerciseIndex];
   if (!ex) return '';
   const total = routine.exercises.length;
-  const guide = EXERCISE_GUIDE[ex.name];
-  const videoUrl = guide
-    ? `https://www.youtube.com/results?search_query=${encodeURIComponent(guide.videoQuery)}`
-    : null;
   const isLastExercise = state.currentHandExerciseIndex === total - 1;
-  const nextLabel =
-    routine.status === 'active'
-      ? isLastExercise
-        ? 'Done · Save'
-        : 'Done · Next'
-      : isLastExercise
-        ? 'Done · Back'
-        : 'Done · Next';
+  const nextLabel = isLastExercise ? 'Done · Save' : 'Done · Next';
 
   return `
-    <h2>${routine.shortName}</h2>
-    ${
-      routine.status === 'locked'
-        ? `<div class="warning-banner">🔒 ${routine.lockReason ?? 'Not active yet.'}</div>`
-        : `<div class="warning-banner">⚠️ <strong>2/10 pain ceiling, no sharpness.</strong> Stop signs: pain ramps during a hold · lingers >30 min after · new clicking on ulnar side.</div>`
-    }
+    <div class="screen-header">
+      <h2>${routine.shortName}</h2>
+      <button class="quit-link" id="quit-hand" type="button">× Quit</button>
+    </div>
+    <div class="warning-banner">⚠️ <strong>2/10 pain ceiling, no sharpness.</strong> Stop signs: pain ramps during a hold · lingers >30 min after · new clicking on ulnar side.</div>
     <div class="progress-text">Exercise ${state.currentHandExerciseIndex + 1} of ${total}</div>
     <div class="progress-bar">
       <div class="progress-bar-fill" style="width: ${((state.currentHandExerciseIndex + 1) / total) * 100}%"></div>
@@ -1153,22 +1442,10 @@ function renderHandRoutine(): string {
       </div>
     </div>
 
-    ${
-      guide
-        ? `
-      <div class="card how-to-card">
-        <div class="how-to-header">📖 How to do it</div>
-        <p class="how-to-text">${guide.howTo}</p>
-        ${videoUrl ? `<a class="video-link" href="${videoUrl}" target="_blank" rel="noopener noreferrer">🎥 Show me a video</a>` : ''}
-      </div>
-    `
-        : ''
-    }
+    ${renderExerciseVisual(ex.name)}
+    ${renderHowToCard(ex.name)}
 
-    <div class="btn-row">
-      <button id="quit-hand">Quit</button>
-      <button class="btn-primary" id="next-hand">${nextLabel}</button>
-    </div>
+    <button class="btn-large btn-primary" id="next-hand" type="button">${nextLabel}</button>
   `;
 }
 
@@ -1176,7 +1453,10 @@ function renderPreLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
   return `
-    <h2>Workout ${w.id} · ${w.name}</h2>
+    <div class="screen-header">
+      <h2>Workout ${w.id} · ${w.name}</h2>
+      <button class="quit-link" id="back-home" type="button">× Back</button>
+    </div>
     <p class="subtitle">Before we start — how do you feel?</p>
 
     <div class="card">
@@ -1186,17 +1466,19 @@ function renderPreLog(): string {
           <input type="range" id="cap-before" min="1" max="10" value="${state.capacityBefore}" />
           <span class="range-value" id="cap-before-val">${state.capacityBefore}</span>
         </div>
+        <div class="range-anchors">
+          <span>1 — depleted</span>
+          <span>5 — baseline</span>
+          <span>10 — strong</span>
+        </div>
       </label>
     </div>
 
     <div class="warning-banner">
-      ⚠️ Wrist or back pain at 3/10 → stop that exercise. <strong>Left wrist: 2/10 ceiling, no sharpness</strong> — actively healing muscle strain (Lisa Cohen PT).
+      ⚠️ <strong>Wrist: cleared by Lisa Cohen (May 10).</strong> Stop if anything pings. Back pain at 3/10 → stop that exercise.
     </div>
 
-    <div class="btn-row">
-      <button id="back-home">Back</button>
-      <button class="btn-primary" id="begin">Start</button>
-    </div>
+    <button class="btn-large btn-primary" id="begin" type="button">Start</button>
   `;
 }
 
@@ -1208,6 +1490,44 @@ function renderTempoBar(): string {
       <div class="tempo-segment" style="flex: 3;"></div>
     </div>
     <div style="font-size: 12px; color: var(--text-dim); text-align: center;">3 sec down · 1 sec hold · 3 sec up</div>
+  `;
+}
+
+// Group 2H: rest screen now leads with a large countdown ring/arc; Skip is a
+// hold-to-confirm button.
+function renderRestScreen(workoutId: WorkoutId, phaseLabel: string): string {
+  const total = REST_SEC;
+  const remaining = state.timerSeconds;
+  const pct = total > 0 ? Math.max(0, Math.min(1, remaining / total)) : 0;
+  // SVG ring (radius 90, circumference ~565)
+  const r = 90;
+  const C = 2 * Math.PI * r;
+  const offset = C * (1 - pct);
+  return `
+    <div class="screen-header">
+      <h2>Workout ${workoutId}</h2>
+      <button class="quit-link" id="quit" type="button">× Quit workout</button>
+    </div>
+    <span class="round-indicator">${phaseLabel}</span>
+    <div class="card rest-card">
+      <div class="rest-ring-wrap">
+        <svg class="rest-ring" viewBox="0 0 200 200">
+          <circle cx="100" cy="100" r="${r}" class="rest-ring-bg"></circle>
+          <circle cx="100" cy="100" r="${r}" class="rest-ring-fg"
+            stroke-dasharray="${C}" stroke-dashoffset="${offset}"
+            transform="rotate(-90 100 100)"></circle>
+        </svg>
+        <div class="rest-ring-label">
+          <div class="rest-ring-num">${remaining}</div>
+          <div class="rest-ring-sub">rest</div>
+        </div>
+      </div>
+      <p class="exercise-notes">Breathe. Sip water if you have it.</p>
+      <button class="btn-ghost hold-to-skip" id="skip-rest" type="button" data-hold-ms="${HOLD_TO_SKIP_MS}">
+        <span class="hold-fill"></span>
+        <span class="hold-label">Hold to skip rest</span>
+      </button>
+    </div>
   `;
 }
 
@@ -1225,18 +1545,7 @@ function renderWorkout(): string {
         : 'Cool-down';
 
   if (state.isResting) {
-    return `
-      <h2>Workout ${w.id}</h2>
-      <span class="round-indicator">${phaseLabel}</span>
-      <div class="card">
-        <div class="rest-display">
-          <div class="timer-label">Rest</div>
-          <div class="timer-display">${state.timerSeconds}</div>
-          <p class="exercise-notes">Breathe. Sip water if you have it.</p>
-          <button class="btn-large btn-primary" id="skip-rest">Skip rest</button>
-        </div>
-      </div>
-    `;
+    return renderRestScreen(w.id, phaseLabel);
   }
 
   if (!ex) {
@@ -1244,13 +1553,12 @@ function renderWorkout(): string {
   }
 
   const showTempo = ex.reps?.includes('3-1-3') ?? false;
-  const guide = EXERCISE_GUIDE[ex.name];
-  const videoUrl = guide
-    ? `https://www.youtube.com/results?search_query=${encodeURIComponent(guide.videoQuery)}`
-    : null;
 
   return `
-    <h2>Workout ${w.id}</h2>
+    <div class="screen-header">
+      <h2>Workout ${w.id}</h2>
+      <button class="quit-link" id="quit" type="button">× Quit workout</button>
+    </div>
     <span class="round-indicator">${phaseLabel}</span>
     <div class="progress-text">Exercise ${state.currentExerciseIndex + 1} of ${total}</div>
     <div class="progress-bar">
@@ -1263,45 +1571,48 @@ function renderWorkout(): string {
         <div class="exercise-name">${ex.name}</div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${ex.notes ? `<p class="exercise-notes">${ex.notes}</p>` : ''}
-        ${showTempo ? renderTempoBar() : ''}
-        ${
-          ex.isTimed
-            ? state.preCountdown > 0
-              ? `
-            <div class="timer-label">Get ready</div>
-            <div class="timer-display countdown-big">${state.preCountdown}</div>
-          `
-              : `
-            <div class="timer-display">${state.timerSeconds || ex.durationSec || 0}</div>
-            <button class="btn-large btn-primary" id="start-timed" ${state.timerSeconds > 0 ? 'disabled' : ''}>${state.timerSeconds > 0 ? 'Running…' : 'Start timer'}</button>
-          `
-            : ''
-        }
       </div>
     </div>
+
+    ${renderExerciseVisual(ex.name)}
 
     ${
-      guide
+      ex.isTimed
         ? `
-      <div class="card how-to-card">
-        <div class="how-to-header">📖 How to do it</div>
-        <p class="how-to-text">${guide.howTo}</p>
-        ${videoUrl ? `<a class="video-link" href="${videoUrl}" target="_blank" rel="noopener noreferrer">🎥 Show me a video</a>` : ''}
+      <div class="card timer-card">
+        ${
+          state.preCountdown > 0
+            ? `
+          <div class="timer-label">Get ready</div>
+          <div class="timer-display countdown-big">${state.preCountdown}</div>
+        `
+            : `
+          <div class="timer-label">${state.timerSeconds > 0 ? 'Hold' : 'Ready'}</div>
+          <div class="timer-display">${state.timerSeconds || ex.durationSec || 0}</div>
+          <button class="btn-large btn-primary" id="start-timed" type="button" ${state.timerSeconds > 0 ? 'disabled' : ''}>${state.timerSeconds > 0 ? 'Running…' : 'Start timer'}</button>
+        `
+        }
+        ${showTempo ? renderTempoBar() : ''}
       </div>
     `
-        : ''
+        : showTempo
+          ? `<div class="card">${renderTempoBar()}</div>`
+          : ''
     }
 
-    <div class="btn-row">
-      <button id="quit">Quit</button>
-      <button class="btn-primary" id="next">Done · Next</button>
-    </div>
+    ${renderHowToCard(ex.name)}
+
+    <button class="btn-large btn-primary" id="next" type="button">Done · Next</button>
   `;
 }
 
 function renderPostLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
+  const wallSitDisplay =
+    state.wallSitSec > 0
+      ? `Wall sit: <strong>${state.wallSitSec}s</strong> (tap to adjust)`
+      : 'Wall sit time held (seconds)';
   return `
     <h2>Nice. Workout ${w.id} done.</h2>
     <p class="subtitle">Quick log — takes 30 seconds.</p>
@@ -1313,10 +1624,15 @@ function renderPostLog(): string {
           <input type="range" id="cap-after" min="1" max="10" value="${state.capacityAfter}" />
           <span class="range-value" id="cap-after-val">${state.capacityAfter}</span>
         </div>
+        <div class="range-anchors">
+          <span>1 — depleted</span>
+          <span>5 — baseline</span>
+          <span>10 — strong</span>
+        </div>
       </label>
 
       <label class="field">
-        <span class="label-text">Wall sit time held (seconds)</span>
+        <span class="label-text">${wallSitDisplay}</span>
         <input type="number" id="wallsit" min="0" max="600" value="${state.wallSitSec}" />
       </label>
 
@@ -1334,7 +1650,7 @@ function renderPostLog(): string {
       </label>
     </div>
 
-    <button class="btn-large btn-primary" id="save-log">Save & finish</button>
+    <button class="btn-large btn-primary" id="save-log" type="button">Save & finish</button>
   `;
 }
 
@@ -1344,31 +1660,63 @@ function renderHistory(): string {
     return `
       <h2>History</h2>
       <p class="empty">No sessions yet. Do a workout!</p>
-      <div class="btn-row">
-        <button id="back-home">Back</button>
-      </div>
+      <button class="btn-large" id="back-home" type="button">Back</button>
     `;
   }
   const rowsHtml = logs
-    .map(
-      (l) => `
-    <div class="history-row">
+    .map((l) => {
+      const idAttr = l.id ? `data-detail="${escapeHtml(l.id)}"` : '';
+      return `
+    <button class="history-row history-row-btn" ${idAttr} type="button">
       <span class="history-workout-badge">${l.workout}</span>
       <div>
         <div class="history-date">${formatDate(l.date)}${l.durationSec ? ` · ${formatDuration(l.durationSec)}` : ''}</div>
-        <div class="history-meta">cap ${l.capacityBefore}→${l.capacityAfter} · wall ${l.wallSitSec}s · back pain ${l.backPain}</div>
+        <div class="history-meta">cap ${l.capacityBefore}→${l.capacityAfter} · wall ${l.wallSitSec}s · back ${l.backPain}</div>
         ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
       </div>
-    </div>
-  `
-    )
+      <div class="history-meta">›</div>
+    </button>
+  `;
+    })
     .join('');
   return `
     <h2>History</h2>
     <div class="card">${rowsHtml}</div>
-    <div class="btn-row">
-      <button id="back-home">Back</button>
+    <button class="btn-large" id="back-home" type="button">Back</button>
+  `;
+}
+
+function renderHistoryDetail(): string {
+  const logs = loadLogs();
+  const log = logs.find((l) => l.id === state.historyDetailId);
+  if (!log) {
+    return `
+      <h2>Not found</h2>
+      <p class="empty">That session isn't here anymore.</p>
+      <button class="btn-large" id="back-history" type="button">Back to history</button>
+    `;
+  }
+  const startedAt = log.startedAt ? formatTime(log.startedAt) : '—';
+  const completedAt = log.completedAt ? formatTime(log.completedAt) : '—';
+  const duration = log.durationSec ? formatDuration(log.durationSec) : '—';
+  return `
+    <div class="screen-header">
+      <h2>Session detail</h2>
+      <button class="quit-link" id="back-history" type="button">× Back</button>
     </div>
+    <div class="card detail-card">
+      <div class="detail-row"><span class="detail-label">Date</span><span>${formatDateLong(log.date)}</span></div>
+      <div class="detail-row"><span class="detail-label">Workout</span><span>${log.workout}</span></div>
+      <div class="detail-row"><span class="detail-label">Started</span><span>${startedAt}</span></div>
+      <div class="detail-row"><span class="detail-label">Finished</span><span>${completedAt}</span></div>
+      <div class="detail-row"><span class="detail-label">Duration</span><span>${duration}</span></div>
+      <div class="detail-row"><span class="detail-label">Capacity before</span><span>${log.capacityBefore}</span></div>
+      <div class="detail-row"><span class="detail-label">Capacity after</span><span>${log.capacityAfter}</span></div>
+      <div class="detail-row"><span class="detail-label">Wall sit</span><span>${log.wallSitSec}s</span></div>
+      <div class="detail-row"><span class="detail-label">Back pain</span><span>${log.backPain}/10</span></div>
+      ${log.word ? `<div class="detail-row"><span class="detail-label">One word</span><span><em>"${escapeHtml(log.word)}"</em></span></div>` : ''}
+    </div>
+    <button class="btn-large" id="back-history" type="button">Back to history</button>
   `;
 }
 
@@ -1392,6 +1740,9 @@ function render(): void {
     case 'history':
       html = renderHistory();
       break;
+    case 'history-detail':
+      html = renderHistoryDetail();
+      break;
     case 'hand-routine':
       html = renderHandRoutine();
       break;
@@ -1400,25 +1751,77 @@ function render(): void {
   attachHandlers();
 }
 
+// Group 2G: confirm dialog on Quit during workout.
+function confirmQuit(): boolean {
+  if (typeof window === 'undefined') return true;
+  return window.confirm('Quit this workout? Your progress so far will be lost.');
+}
+
+// Group 2H: hold-to-skip implementation. The button shows a fill that
+// progresses over HOLD_TO_SKIP_MS; on release before complete, fill resets.
+function wireHoldToSkip(btn: HTMLElement, onSkip: () => void): void {
+  const holdMs = parseInt(btn.dataset['holdMs'] ?? `${HOLD_TO_SKIP_MS}`, 10) || HOLD_TO_SKIP_MS;
+  const fill = btn.querySelector<HTMLElement>('.hold-fill');
+  let holdStart: number | null = null;
+  let raf: number | null = null;
+  let fired = false;
+
+  function tick(): void {
+    if (holdStart === null) return;
+    const elapsed = Date.now() - holdStart;
+    const pct = Math.min(1, elapsed / holdMs);
+    if (fill) fill.style.width = `${pct * 100}%`;
+    if (pct >= 1 && !fired) {
+      fired = true;
+      reset();
+      onSkip();
+      return;
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function reset(): void {
+    holdStart = null;
+    if (raf !== null) cancelAnimationFrame(raf);
+    raf = null;
+    if (fill) fill.style.width = '0%';
+  }
+
+  function down(e: Event): void {
+    e.preventDefault();
+    if (fired) return;
+    holdStart = Date.now();
+    tick();
+  }
+
+  function up(): void {
+    if (fired) return;
+    reset();
+  }
+
+  btn.addEventListener('pointerdown', down);
+  btn.addEventListener('pointerup', up);
+  btn.addEventListener('pointercancel', up);
+  btn.addEventListener('pointerleave', up);
+}
+
 function attachHandlers(): void {
   document.querySelectorAll<HTMLButtonElement>('.workout-card[data-workout]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.dataset['workout'] as WorkoutId | undefined;
-      if (id) startWorkout(id);
+      if (id) {
+        unlockAudio(); // Group 1C: gesture-anchored audio unlock
+        startWorkout(id);
+      }
     });
   });
 
-  document.querySelectorAll<HTMLButtonElement>('.workout-card[data-hand]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = btn.dataset['hand'] as HandRoutineId | undefined;
-      if (id) startHandRoutine(id);
-    });
-  });
-
+  // PENDING DECISION: hand routine UI hidden 2026-05-15 — these handlers fire
+  // on hand-routine screens which are unreachable from home until the UI
+  // returns. Code retained pending Allison's call.
   bindClick('next-hand', () => {
     advanceHandExercise();
   });
-
   bindClick('quit-hand', () => {
     resetState();
     render();
@@ -1434,7 +1837,25 @@ function attachHandlers(): void {
     render();
   });
 
+  bindClick('back-history', () => {
+    state.screen = 'history';
+    state.historyDetailId = null;
+    render();
+  });
+
+  // Week dots + history rows — navigate to history-detail
+  document.querySelectorAll<HTMLButtonElement>('[data-detail]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset['detail'];
+      if (!id) return;
+      state.historyDetailId = id;
+      state.screen = 'history-detail';
+      render();
+    });
+  });
+
   bindClick('begin', () => {
+    unlockAudio(); // Group 1C
     beginExercises();
   });
 
@@ -1443,13 +1864,19 @@ function attachHandlers(): void {
   });
 
   bindClick('quit', () => {
-    resetState();
-    render();
+    if (confirmQuit()) {
+      resetState();
+      render();
+    }
   });
 
-  bindClick('skip-rest', () => {
-    skipRest();
-  });
+  // Hold-to-skip rest (group 2H)
+  const skipBtn = document.getElementById('skip-rest');
+  if (skipBtn) {
+    wireHoldToSkip(skipBtn, () => {
+      skipRest();
+    });
+  }
 
   bindClick('start-timed', () => {
     startTimedExercise();
@@ -1457,10 +1884,39 @@ function attachHandlers(): void {
 
   bindClick('save-log', () => {
     const wallsitEl = document.getElementById('wallsit') as HTMLInputElement | null;
-    if (wallsitEl) state.wallSitSec = parseInt(wallsitEl.value, 10) || 0;
+    if (wallsitEl) {
+      const raw = parseInt(wallsitEl.value, 10);
+      state.wallSitSec = Math.max(0, Math.min(600, Number.isFinite(raw) ? raw : 0));
+    }
     const wordEl = document.getElementById('word') as HTMLInputElement | null;
     if (wordEl) state.word = wordEl.value.trim();
     logCompleteAndHome();
+  });
+
+  // Video expanders (group 3N)
+  document.querySelectorAll<HTMLButtonElement>('[data-expand-video]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset['expandVideo'];
+      if (!name) return;
+      state.videoExpandedFor = state.videoExpandedFor === name ? null : name;
+      render();
+    });
+  });
+
+  // How-to toggles (group 3N)
+  document.querySelectorAll<HTMLButtonElement>('[data-toggle-howto]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset['toggleHowto'];
+      if (!name) return;
+      const isOpenNow = btn.getAttribute('aria-expanded') === 'true';
+      if (isOpenNow) {
+        state.howToOpenFor = `__closed__${name}`;
+      } else {
+        state.howToOpenFor = name;
+        markHowToSeenThisWeek(name);
+      }
+      render();
+    });
   });
 
   bindRange('cap-before', 'cap-before-val', (v) => {
@@ -1468,12 +1924,6 @@ function attachHandlers(): void {
   });
   bindRange('cap-after', 'cap-after-val', (v) => {
     state.capacityAfter = v;
-  });
-  bindRange('r-wrist', 'r-wrist-val', (v) => {
-    state.rightWristPain = v;
-  });
-  bindRange('l-wrist', 'l-wrist-val', (v) => {
-    state.leftWristPain = v;
   });
   bindRange('back', 'back-val', (v) => {
     state.backPain = v;
