@@ -731,6 +731,8 @@ function logCompleteAndHome(): void {
 function resetState(): void {
   stopTimer();
   state.screen = 'home';
+  // Reset viewed week to current when returning to home from a session.
+  viewedWeekOffset = 0;
   state.selectedWorkout = null;
   state.capacityBefore = 5;
   state.capacityAfter = 5;
@@ -911,17 +913,6 @@ function formatWeekRange(start: Date, end: Date): string {
   return `${startStr}–${endStr}`;
 }
 
-function getThisWeekCount(): number {
-  const logs = loadLogs();
-  const { start, end } = getProgramWeek();
-  const startMs = start.getTime();
-  const endMs = end.getTime() + 24 * 60 * 60 * 1000 - 1;
-  return logs.filter((l) => {
-    const t = new Date(l.date).getTime();
-    return t >= startMs && t <= endMs;
-  }).length;
-}
-
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -945,17 +936,27 @@ function getTodaysPick(): WorkoutId {
 // Week dots (group 2J): one entry per weekday. Color is the workout letter.
 type WeekDotInfo = { letter: string; logId: string | null; date: Date; workout: WorkoutId | null };
 
-function getWeekDots(): WeekDotInfo[] {
-  const logs = loadLogs();
-  // Allison's week = Sat..Fri (Shabbat-anchored). See memory
-  // `reference_week_definition.md`. Saturday is index 0; Friday is index 6.
-  const dotLabels = ['S', 'S', 'M', 'T', 'W', 'T', 'F'];
+// Which week the user is currently looking at on the home screen. 0 = this
+// (current) Sat-Fri week. 1 = one week ago. Etc. Module-level — purely UI state.
+let viewedWeekOffset = 0;
+
+// Saturday of the Sat-Fri week that's `offset` weeks before today.
+function saturdayForOffset(offset: number): Date {
   const today = new Date();
   const day = today.getDay(); // 0=Sun..6=Sat
   const satOffset = (day + 1) % 7; // Sat=0, Sun=1, Mon=2, ..., Fri=6
   const saturday = new Date(today);
-  saturday.setDate(today.getDate() - satOffset);
+  saturday.setDate(today.getDate() - satOffset - offset * 7);
   saturday.setHours(0, 0, 0, 0);
+  return saturday;
+}
+
+function getWeekDots(offset = 0): WeekDotInfo[] {
+  const logs = loadLogs();
+  // Allison's week = Sat..Fri (Shabbat-anchored). See memory
+  // `reference_week_definition.md`. Saturday is index 0; Friday is index 6.
+  const dotLabels = ['S', 'S', 'M', 'T', 'W', 'T', 'F'];
+  const saturday = saturdayForOffset(offset);
 
   return dotLabels.map((label, i) => {
     const d = new Date(saturday);
@@ -975,6 +976,23 @@ function getWeekDots(): WeekDotInfo[] {
       workout: hit?.workout ?? null,
     };
   });
+}
+
+// Count sessions in the Sat-Fri week `offset` weeks back.
+function getWeekCount(offset = 0): number {
+  const logs = loadLogs();
+  const saturday = saturdayForOffset(offset);
+  const startMs = saturday.getTime();
+  const endMs = startMs + 7 * 24 * 60 * 60 * 1000 - 1;
+  return logs.filter((l) => {
+    const t = new Date(l.date).getTime();
+    return t >= startMs && t <= endMs;
+  }).length;
+}
+
+// Program week info anchored on the Saturday of the viewed Sat-Fri week.
+function getViewedProgramWeek(offset = 0): { num: number; start: Date; end: Date } {
+  return getProgramWeek(saturdayForOffset(offset));
 }
 
 // ---------- visual layer (group 3) ----------
@@ -1148,10 +1166,19 @@ function renderHome(): string {
   const logs = loadLogs();
   const week = getProgramWeek();
   const weekRange = formatWeekRange(week.start, week.end);
-  const thisWeekCount = getThisWeekCount();
+  // Progress card + dot strip follow viewedWeekOffset so the user can step
+  // back through past weeks. Default offset 0 = current Sat-Fri week.
+  const viewedWeek = getViewedProgramWeek(viewedWeekOffset);
+  const viewedWeekRange = formatWeekRange(viewedWeek.start, viewedWeek.end);
+  const viewedWeekCount = getWeekCount(viewedWeekOffset);
   const todaysPick = getTodaysPick();
   const lastLog = logs[0];
-  const weekDots = getWeekDots();
+  const weekDots = getWeekDots(viewedWeekOffset);
+  const canGoBack = logs.some((l) => {
+    const t = new Date(l.date).getTime();
+    return t < saturdayForOffset(viewedWeekOffset).getTime();
+  });
+  const isCurrentWeek = viewedWeekOffset === 0;
 
   const dotsHtml = weekDots
     .map((d) => {
@@ -1195,11 +1222,18 @@ function renderHome(): string {
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
 
     <div class="card">
-      <h3>Week ${week.num} progress</h3>
+      <div class="week-nav">
+        <button class="week-nav-btn" id="prev-week" type="button" ${canGoBack ? '' : 'disabled'} aria-label="Previous week">‹</button>
+        <div class="week-nav-label">
+          <div class="week-nav-title">${isCurrentWeek ? 'This week' : `Week ${viewedWeek.num}`}</div>
+          <div class="week-nav-range">${viewedWeekRange}</div>
+        </div>
+        <button class="week-nav-btn" id="next-week" type="button" ${isCurrentWeek ? 'disabled' : ''} aria-label="${isCurrentWeek ? 'Already at current week' : 'Next week'}">›</button>
+      </div>
       <div class="streak-stat">
         <div class="stat-block">
-          <div class="stat-number">${thisWeekCount}</div>
-          <div class="stat-label">of 3 this week</div>
+          <div class="stat-number">${viewedWeekCount}</div>
+          <div class="stat-label">${isCurrentWeek ? 'of 3 this week' : 'sessions that week'}</div>
         </div>
         <div class="stat-block">
           <div class="stat-number">${logs.length}</div>
@@ -1612,6 +1646,18 @@ function attachHandlers(): void {
   bindClick('view-history', () => {
     state.screen = 'history';
     render();
+  });
+
+  // Week navigation on home — prev/next step through past weeks of the dot strip.
+  bindClick('prev-week', () => {
+    viewedWeekOffset += 1;
+    render();
+  });
+  bindClick('next-week', () => {
+    if (viewedWeekOffset > 0) {
+      viewedWeekOffset -= 1;
+      render();
+    }
   });
 
   bindClick('back-home', () => {

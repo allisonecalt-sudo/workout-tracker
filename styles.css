@@ -256,6 +256,60 @@ button:active,
   text-align: center;
 }
 
+/* Week navigation (prev/next around the dot strip, 2026-05-15) */
+.week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.week-nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.week-nav-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.week-nav-btn:not(:disabled):hover {
+  background: var(--bg-elev-3, var(--bg-elev-2));
+  border-color: var(--accent);
+}
+
+.week-nav-label {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.week-nav-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.week-nav-range {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
 /* Group 2J: week-at-a-glance dots */
 .week-dots {
   display: flex;
