@@ -833,7 +833,9 @@ test('multi-week: pre-log overview shows Week 3 badge in May 16-22 range', async
   await expect(page.locator('.overview-week-badge')).toHaveText(/Week 3/);
 });
 
-test('multi-week: Week 4 content active for May 25 (squats 14, plank 2x15s)', async ({ page }) => {
+test('multi-week: Week 4 content active for May 25 (Session A holds — squats 12, plank 1x15s)', async ({
+  page,
+}) => {
   await mockDate(page, '2026-05-25T10:00:00.000Z'); // Mon May 25 = Week 4
   await page.goto('/');
   await page.locator('button[data-workout="A"]').click();
@@ -850,14 +852,15 @@ test('multi-week: Week 4 content active for May 25 (squats 14, plank 2x15s)', as
   // persist in Week 4). And Bodyweight squats present.
   expect(mainNames).toContain('Forearm plank');
   expect(mainNames).toContain('Bodyweight squats');
-  // Walk into the workout and check the first main exercise reps say 14.
+  // Walk into the workout and check Session A HELD at Week-3 numbers (decision
+  // 2026-05-21: hold A, bump only B & C). Squats stay at 12, not 14.
   await page.locator('button:has-text("Start")').click();
   // Tap through warmup (4 exercises) to reach Main → Squats.
   for (let i = 0; i < 4; i++) {
     await page.locator('button:has-text("Done · Next")').click();
   }
   await expect(page.locator('.exercise-name')).toHaveText('Bodyweight squats');
-  await expect(page.locator('.exercise-reps')).toContainText('14');
+  await expect(page.locator('.exercise-reps')).toContainText('12');
 });
 
 test('multi-week: "Coming next week" preview renders on home with diff', async ({ page }) => {
@@ -869,12 +872,17 @@ test('multi-week: "Coming next week" preview renders on home with diff', async (
   await expect(preview.locator('.next-week-summary-label')).toHaveText('Coming next week');
   // Caption shows when next week starts.
   await expect(preview.locator('.next-week-summary-meta')).toContainText('Week 4');
-  // Expand and check at least one bump line appears for Workout A.
+  // Expand and check the diff. Decision 2026-05-21: Session A HOLDS, only B & C
+  // bump — so Workout A reads "unchanged" and the bump (leg raises → 14) lives
+  // in Workout B.
   await preview.locator('.next-week-summary').click();
-  const aBlock = preview.locator('.next-week-block').first();
+  const aBlock = preview.locator('.next-week-block').nth(0);
   await expect(aBlock.locator('.next-week-block-title')).toContainText('Workout A');
-  // Week 3 squats 12 → Week 4 squats 14 should be in the list.
-  await expect(aBlock.locator('.next-week-block-list')).toContainText('14');
+  await expect(aBlock.locator('.next-week-block-empty')).toContainText('unchanged');
+  const bBlock = preview.locator('.next-week-block').nth(1);
+  await expect(bBlock.locator('.next-week-block-title')).toContainText('Workout B');
+  // Week 3 leg raises 12 → Week 4 14 should be in Workout B's list.
+  await expect(bBlock.locator('.next-week-block-list')).toContainText('14');
 });
 
 test('multi-week: Settings About shows Program weeks count (4)', async ({ page }) => {

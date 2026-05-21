@@ -535,36 +535,40 @@ const PROGRAM: WeekPlan[] = [
       },
     },
   },
-  // Week 4 — May 23-29. Slow-progression rule: ≤1-2 bumps per workout, no
-  // new exercises, same exercise pool.
-  //  A: squats 12→14, glute bridges 12→14, wall sit 30→35s, forearm plank
-  //     1×15 → 2×15s (Lisa Cohen plan IF wrist stays quiet — small dose).
+  // Week 4 — May 23-29. DECISION 2026-05-21 (Allison, "Hold A, bump B & C"):
+  // progress only where the body had headroom. Session A was hard in Week 3;
+  // B & C were easy. So A HOLDS at Week-3 numbers (incl. forearm plank stays
+  // 1×15s — NOT doubled), and only B & C bump. Rationale: her own program rule
+  // is "change one variable at a time," and doubling a brand-new wrist-loading
+  // plank after a single exposure (with no logged wrist-pain data — the app
+  // only tracks back pain) was the riskiest move. Revisit A in Week 5.
+  //  A: HOLD — squats 12, glute bridges 12, wall sit 30s, forearm plank 1×15s.
   //  B: side-lying leg raises 12→14, single-leg glute bridges 8→10.
   //  C: glute bridges 12→14. Walk UNCHANGED (10/10/25 strolling — see regroup).
   // Walks DO NOT bump — pace + duration rule per Allison + health.md.
   {
     weekNum: 4,
     startsOn: '2026-05-23',
-    label: 'Small bumps',
+    label: 'B & C bumps · A holds',
     workouts: {
       A: {
         id: 'A',
         name: 'Lower Body + Core',
-        description: '🚶 10-min walk + lower body strength · ~40 min',
+        description: '🚶 10-min walk + lower body strength · ~38 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
           {
             name: 'Bodyweight squats',
-            reps: '14 reps · 3-1-3 tempo',
+            reps: '12 reps · 3-1-3 tempo',
             notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
           },
-          { name: 'Glute bridges', reps: '14 reps · 2-sec hold at top' },
+          { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
           {
             name: 'Wall sit',
-            reps: '35 sec hold',
+            reps: '30 sec hold',
             notes: 'Hands rest on thighs or hang. No pushing on wall.',
-            durationSec: 35,
+            durationSec: 30,
             isTimed: true,
           },
           {
@@ -579,9 +583,9 @@ const PROGRAM: WeekPlan[] = [
           },
           {
             name: 'Forearm plank',
-            reps: '2 sets · 15 sec hold',
+            reps: '1 set · 15 sec hold',
             notes:
-              'On forearms only (NOT hands). 2×15s ONLY if Week 3 stayed quiet. Stop if any wrist sensation. Rest ~30s between sets.',
+              'On forearms only (NOT hands — wrists still off). HELD at 1×15s for Week 4 (not doubled): consolidate the new movement first. Stop if any wrist sensation. Revisit a 2nd set in Week 5 if quiet + Lisa Cohen signs off.',
             durationSec: 15,
             isTimed: true,
           },
