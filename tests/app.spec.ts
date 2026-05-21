@@ -348,13 +348,25 @@ test('ship 4: weekly review reachable from home button', async ({ page }) => {
 });
 
 test('ship 4: weekly review header shows session count for current week', async ({ page }) => {
-  // Seed two sessions inside the current Sat–Fri window. Today is 2026-05-15
-  // (Fri) per CLAUDE.md currentDate; week is Sat May 9 → Fri May 15.
+  // Seed two sessions inside the CURRENT Sat–Fri window, computed at runtime so
+  // the test doesn't rot as the calendar advances (it formerly hardcoded the
+  // week of 2026-05-15). The app anchors weeks to Saturday (Shabbat); mirror
+  // saturdayForOffset(0) here and place sessions on Sat+2 and Sat+4 (noon).
   await page.addInitScript(() => {
+    const now = new Date();
+    const satOffset = (now.getDay() + 1) % 7; // Sat=0, Sun=1, ..., Fri=6
+    const saturday = new Date(now);
+    saturday.setDate(now.getDate() - satOffset);
+    saturday.setHours(12, 0, 0, 0);
+    const dayInWeek = (add: number): string => {
+      const d = new Date(saturday);
+      d.setDate(saturday.getDate() + add);
+      return d.toISOString();
+    };
     const logs = [
       {
         id: 's-1',
-        date: '2026-05-12T10:00:00.000Z',
+        date: dayInWeek(2),
         workout: 'A',
         capacityBefore: 5,
         capacityAfter: 6,
@@ -365,7 +377,7 @@ test('ship 4: weekly review header shows session count for current week', async 
       },
       {
         id: 's-2',
-        date: '2026-05-14T10:00:00.000Z',
+        date: dayInWeek(4),
         workout: 'B',
         capacityBefore: 5,
         capacityAfter: 5,
@@ -391,10 +403,17 @@ test('ship 4: weekly review shows one-word verbatim including typos', async ({ p
   // Voice rule (CLAUDE.md): her one-word entries must appear VERBATIM, never
   // edited or omitted. Even if she typed a typo, render the typo.
   await page.addInitScript(() => {
+    // Seed inside the current Sat–Fri week (computed at runtime, not hardcoded)
+    // so the weekly-review screen actually surfaces this session.
+    const now = new Date();
+    const satOffset = (now.getDay() + 1) % 7; // Sat=0..Fri=6
+    const saturday = new Date(now);
+    saturday.setDate(now.getDate() - satOffset);
+    saturday.setHours(12, 0, 0, 0);
     const logs = [
       {
         id: 'verbatim',
-        date: '2026-05-13T10:00:00.000Z',
+        date: saturday.toISOString(),
         workout: 'A',
         capacityBefore: 4,
         capacityAfter: 6,
