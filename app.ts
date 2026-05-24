@@ -211,6 +211,15 @@ function genId(): string {
 //  - 45-min cap per workout — see regroup doc §5.
 //  - No new exercises in Week 4 — same pool as Week 3, just larger numbers.
 //
+// OPERATING PRINCIPLE for any future week (2026-05-24, Allison's words):
+//  "we don't wanna jump too fast or too far we're growing our ability to
+//   workout slowly the goal is to workout more than anything else."
+//  → Adherence > intensity. ONE change per week, max. The workout itself
+//    is the win. Stacking bumps (multiple axes on same session, or new
+//    exercise + load bump in same week) is the failure mode. The May 21
+//    Week-4 decision (hold A, bump B & C only) is the canonical example.
+//  → When research recommends N additions, queue them — do not stack.
+//
 // Past weeks (1, 2) recovered from git history (commits bb673e9 + 66e9845).
 
 type WeekPlan = {
