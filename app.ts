@@ -269,6 +269,126 @@ const COOLDOWN_C: Exercise[] = [
   { name: 'Slow breathing', reps: '8 breaths' },
 ];
 
+// Allison's own stretching routine, added 2026-05-29. Replaces COOLDOWN_AB
+// and COOLDOWN_C from Week 5 onward. Her words: "i dont do yur stretches i
+// do this." 9 stretches, ~11 min total. Each-side stretches split into two
+// timed entries so the per-side timer runs cleanly. Weeks 1-4 keep their
+// original cooldowns for historical fidelity.
+const STRETCH_COOLDOWN: Exercise[] = [
+  {
+    name: 'Wrist extension — right',
+    reps: '45 sec',
+    notes:
+      'Right arm extended forward, palm down. Use left hand to gently pull fingers UP toward you.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Wrist extension — left',
+    reps: '45 sec',
+    notes:
+      'Left arm extended forward, palm down. Use right hand to gently pull fingers UP toward you.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Wrist flexion — right',
+    reps: '45 sec',
+    notes: 'Right arm extended forward, palm down. Use left hand to gently press fingers DOWN.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Wrist flexion — left',
+    reps: '45 sec',
+    notes: 'Left arm extended forward, palm down. Use right hand to gently press fingers DOWN.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Neck stretch',
+    reps: '45 sec',
+    notes: 'Your usual neck stretch.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Shoulder stretch',
+    reps: '45 sec',
+    notes: 'Your usual shoulder stretch.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Leg cross — right',
+    reps: '45 sec',
+    notes: 'Lying on back. Right ankle on opposite knee (figure-4). Gentle hold.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Leg cross — left',
+    reps: '45 sec',
+    notes: 'Lying on back. Left ankle on opposite knee (figure-4). Gentle hold.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Leg up in air — right',
+    reps: '45 sec',
+    notes:
+      'Lying on back. Right leg straight up toward ceiling. Hamstring stretch. Strap or hand on thigh if needed.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Leg up in air — left',
+    reps: '45 sec',
+    notes: 'Lying on back. Left leg straight up toward ceiling. Hamstring stretch.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Both knees to chest',
+    reps: '45 sec',
+    notes: 'Pull BOTH knees in toward chest, hands around shins.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Calf stretch on wall — right',
+    reps: '45 sec',
+    notes:
+      'Hands on wall. Right leg back, straight, heel pressed down. Bend left front knee, lean in.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Calf stretch on wall — left',
+    reps: '45 sec',
+    notes:
+      'Hands on wall. Left leg back, straight, heel pressed down. Bend right front knee, lean in.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Hip flexor — right knee in, left leg dangles',
+    reps: '45 sec',
+    notes:
+      'Lie on edge of couch/bed. Pull RIGHT knee to chest with hands. Let LEFT leg dangle off the edge — the dangling leg is the stretch (front of hip).',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Hip flexor — left knee in, right leg dangles',
+    reps: '45 sec',
+    notes:
+      'Lie on edge of couch/bed. Pull LEFT knee to chest with hands. Let RIGHT leg dangle off the edge — the dangling leg is the stretch (front of hip).',
+    durationSec: 45,
+    isTimed: true,
+  },
+];
+
 // Pre-walk-warmup era (Week 1 only). Kept exact for archive fidelity — this
 // is what Allison actually did her first week.
 const WEEK1_WARMUP_AB: Exercise[] = [
@@ -696,7 +816,7 @@ const PROGRAM: WeekPlan[] = [
             isTimed: true,
           },
         ],
-        cooldown: COOLDOWN_AB,
+        cooldown: STRETCH_COOLDOWN,
       },
       B: {
         id: 'B',
@@ -716,7 +836,7 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Light fingertip touch on wall for balance only — NO grip.',
           },
         ],
-        cooldown: COOLDOWN_AB,
+        cooldown: STRETCH_COOLDOWN,
       },
       C: {
         id: 'C',
@@ -734,7 +854,7 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Fingertip touch on wall for balance only — NO grip.',
           },
         ],
-        cooldown: COOLDOWN_C,
+        cooldown: STRETCH_COOLDOWN,
       },
     },
   },
@@ -788,7 +908,7 @@ const PROGRAM: WeekPlan[] = [
             isTimed: true,
           },
         ],
-        cooldown: COOLDOWN_AB,
+        cooldown: STRETCH_COOLDOWN,
       },
       B: {
         id: 'B',
@@ -808,7 +928,7 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Light fingertip touch on wall for balance only — NO grip.',
           },
         ],
-        cooldown: COOLDOWN_AB,
+        cooldown: STRETCH_COOLDOWN,
       },
       C: {
         id: 'C',
@@ -826,7 +946,7 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Fingertip touch on wall for balance only — NO grip.',
           },
         ],
-        cooldown: COOLDOWN_C,
+        cooldown: STRETCH_COOLDOWN,
       },
     },
   },
