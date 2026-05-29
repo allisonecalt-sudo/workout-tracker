@@ -866,8 +866,8 @@ test('multi-week: Week 4 content active for May 25 (Session A holds — squats 1
 test('multi-week: "Coming next week" preview renders on home with diff', async ({ page }) => {
   await mockDate(page, '2026-05-18T10:00:00.000Z'); // Week 3 — next is Week 4
   await page.goto('/');
-  // Preview is present, collapsed by default.
-  const preview = page.locator('.next-week-preview');
+  // First preview is the immediate-next week. Multiple may render for future weeks.
+  const preview = page.locator('.next-week-preview').first();
   await expect(preview).toBeVisible();
   await expect(preview.locator('.next-week-summary-label')).toHaveText('Coming next week');
   // Caption shows when next week starts.
@@ -885,14 +885,14 @@ test('multi-week: "Coming next week" preview renders on home with diff', async (
   await expect(bBlock.locator('.next-week-block-list')).toContainText('14');
 });
 
-test('multi-week: Settings About shows Program weeks count (5)', async ({ page }) => {
+test('multi-week: Settings About shows Program weeks count (6)', async ({ page }) => {
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 5" row.
+  // About section has a "Program weeks: 6" row.
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 5');
+  ).toContainText('Program weeks: 6');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {

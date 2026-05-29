@@ -738,6 +738,98 @@ const PROGRAM: WeekPlan[] = [
       },
     },
   },
+  // Week 6 — Jun 6-12. HOLD Week 5 numbers. Per the 2-week cadence decision
+  // (2026-05-29): each load gets 2 weeks of evidence before next bump. So
+  // Week 6 is structurally identical to Week 5 (wall sit 33s in A, B and C
+  // unchanged from Week 4). After Week 6 closes (~Jun 13), review combined
+  // Weeks 5+6 data (6 sessions) before deciding Week 7.
+  {
+    weekNum: 6,
+    startsOn: '2026-06-06',
+    label: 'Stabilize at Week 5',
+    workouts: {
+      A: {
+        id: 'A',
+        name: 'Lower Body + Core',
+        description: '🚶 10-min walk + lower body strength · ~38 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          {
+            name: 'Bodyweight squats',
+            reps: '12 reps · 3-1-3 tempo',
+            notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
+          },
+          { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
+          {
+            name: 'Wall sit',
+            reps: '33 sec hold',
+            notes:
+              'Hands rest on thighs or hang. No pushing on wall. Held at 33s from Week 5 — stabilization week before next decision.',
+            durationSec: 33,
+            isTimed: true,
+          },
+          {
+            name: 'Side-lying clamshells',
+            reps: '10 each side',
+            notes: 'Head on mat or pillow. Bottom arm extended on floor, NOT propped on elbow.',
+          },
+          {
+            name: 'Modified dead bug',
+            reps: '6 each side',
+            notes: 'Arms relaxed at sides on mat. Move only legs.',
+          },
+          {
+            name: 'Forearm plank',
+            reps: '1 set · 15 sec hold',
+            notes:
+              'On forearms only (NOT hands — wrists still off). HELD at 1×15s. Stop if any wrist sensation.',
+            durationSec: 15,
+            isTimed: true,
+          },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      B: {
+        id: 'B',
+        name: 'Glutes + Mobility + Core',
+        description: '🚶 10-min walk + glutes & mobility · ~40 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          { name: 'Side-lying leg raises', reps: '14 each side' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Single-leg glute bridges', reps: '10 each side' },
+          { name: 'Slow supine bicycle', reps: '8 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Light fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      C: {
+        id: 'C',
+        name: 'Walk + Core (cardio day)',
+        description: '🚶 25-min walk + 2-round core block · ~37 min',
+        rounds: 2,
+        warmup: WALK_WARMUP_C,
+        main: [
+          { name: 'Glute bridges', reps: '14 reps · 2-sec hold' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_C,
+      },
+    },
+  },
 ];
 
 // --- Resolvers -----------------------------------------------------------
@@ -769,10 +861,10 @@ function getWorkoutById(id: WorkoutId, date: Date = new Date()): Workout {
   return getWeekPlan(date).workouts[id];
 }
 
-function getNextWeekPlan(date: Date = new Date()): WeekPlan | null {
+function getFutureWeekPlans(date: Date = new Date()): WeekPlan[] {
   const current = getWeekPlan(date);
-  const nextIdx = PROGRAM.findIndex((wp) => wp.weekNum === current.weekNum) + 1;
-  return PROGRAM[nextIdx] ?? null;
+  const currentIdx = PROGRAM.findIndex((wp) => wp.weekNum === current.weekNum);
+  return PROGRAM.slice(currentIdx + 1);
 }
 
 function getProgramWeekCount(): number {
@@ -1954,10 +2046,9 @@ function renderWeeklyTargetGrid(): string {
 // planned week).
 function renderComingNextWeek(): string {
   const current = getWeekPlan();
-  const next = getNextWeekPlan();
-  if (!next) return '';
+  const futures = getFutureWeekPlans();
+  if (futures.length === 0) return '';
 
-  const nextStart = new Date(next.startsOn + 'T00:00:00');
   const months = [
     'Jan',
     'Feb',
@@ -1972,40 +2063,55 @@ function renderComingNextWeek(): string {
     'Nov',
     'Dec',
   ];
-  const startLabel = `${months[nextStart.getMonth()]} ${nextStart.getDate()}`;
 
-  const blocks = (['A', 'B', 'C'] as WorkoutId[])
-    .map((id) => {
-      const lines = diffWorkout(current.workouts[id], next.workouts[id]);
-      if (lines.length === 0) {
-        return `
-          <div class="next-week-block">
-            <div class="next-week-block-title">Workout ${id}</div>
-            <div class="next-week-block-empty">unchanged</div>
-          </div>`;
-      }
-      const items = lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('');
+  // Each future week diffs against its predecessor (Week 5 vs Week 4,
+  // Week 6 vs Week 5, etc.). Header label remains "Coming next week"
+  // for the immediate next; further weeks just listed below.
+  const sections = futures
+    .map((wp, idx) => {
+      const prev = idx === 0 ? current : futures[idx - 1]!;
+      const start = new Date(wp.startsOn + 'T00:00:00');
+      const startLabel = `${months[start.getMonth()]} ${start.getDate()}`;
+
+      const blocks = (['A', 'B', 'C'] as WorkoutId[])
+        .map((id) => {
+          const lines = diffWorkout(prev.workouts[id], wp.workouts[id]);
+          if (lines.length === 0) {
+            return `
+              <div class="next-week-block">
+                <div class="next-week-block-title">Workout ${id}</div>
+                <div class="next-week-block-empty">unchanged</div>
+              </div>`;
+          }
+          const items = lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('');
+          return `
+            <div class="next-week-block">
+              <div class="next-week-block-title">Workout ${id}</div>
+              <ul class="next-week-block-list">${items}</ul>
+            </div>`;
+        })
+        .join('');
+
+      const summaryLabel = idx === 0 ? 'Coming next week' : `Then Week ${wp.weekNum}`;
+      const caption = `Diff vs Week ${prev.weekNum}${wp.label ? ` · ${wp.label}` : ''}.`;
+
       return `
-        <div class="next-week-block">
-          <div class="next-week-block-title">Workout ${id}</div>
-          <ul class="next-week-block-list">${items}</ul>
-        </div>`;
+        <details class="next-week-preview" ${idx === 0 ? '' : ''}>
+          <summary class="next-week-summary">
+            <span class="next-week-summary-label">${summaryLabel}</span>
+            <span class="next-week-summary-meta">Week ${wp.weekNum} · starts Sat ${startLabel}</span>
+            <span class="next-week-chev">▸</span>
+          </summary>
+          <div class="next-week-body">
+            <div class="next-week-caption">${caption}</div>
+            <div class="next-week-blocks">${blocks}</div>
+          </div>
+        </details>
+      `;
     })
     .join('');
 
-  return `
-    <details class="next-week-preview">
-      <summary class="next-week-summary">
-        <span class="next-week-summary-label">Coming next week</span>
-        <span class="next-week-summary-meta">Week ${next.weekNum} · starts Sat ${startLabel}</span>
-        <span class="next-week-chev">▸</span>
-      </summary>
-      <div class="next-week-body">
-        <div class="next-week-caption">Diff vs Week ${current.weekNum}${next.label ? ` · ${next.label}` : ''}.</div>
-        <div class="next-week-blocks">${blocks}</div>
-      </div>
-    </details>
-  `;
+  return sections;
 }
 
 function renderHome(): string {
