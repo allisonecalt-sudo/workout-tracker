@@ -641,6 +641,103 @@ const PROGRAM: WeekPlan[] = [
       },
     },
   },
+  // Week 5 — May 30 - Jun 5. DECISION 2026-05-29 (Allison, after careful
+  // analysis): only one bump, on the safest axis. Wall sit prescription
+  // 30→33s in Workout A — formalizes what her body has organically been
+  // doing (33s recorded in Supabase both May 19 and May 26, 0/10 back both
+  // times). B and C HOLD at Week-4 numbers — they just got bumped last week
+  // and need a stabilization window. Forearm plank stays 1×15s (Lisa Cohen
+  // has not signed off on 2nd set). Cadence slowed: Week 5 and Week 6 will
+  // be identical (2 weeks per load) — buys 6 sessions of evidence per load
+  // instead of 3 before next decision. Conditional gates: if Mounjaro dose
+  // changes at Jun 1 nutritionist visit, hold Week 5 = Week 4 instead.
+  {
+    weekNum: 5,
+    startsOn: '2026-05-30',
+    label: 'Wall sit 33s',
+    workouts: {
+      A: {
+        id: 'A',
+        name: 'Lower Body + Core',
+        description: '🚶 10-min walk + lower body strength · ~38 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          {
+            name: 'Bodyweight squats',
+            reps: '12 reps · 3-1-3 tempo',
+            notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
+          },
+          { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
+          {
+            name: 'Wall sit',
+            reps: '33 sec hold',
+            notes:
+              'Hands rest on thighs or hang. No pushing on wall. Bumped from 30s → 33s — formalizing what your body has already been doing (May 19 + May 26 both logged 33s).',
+            durationSec: 33,
+            isTimed: true,
+          },
+          {
+            name: 'Side-lying clamshells',
+            reps: '10 each side',
+            notes: 'Head on mat or pillow. Bottom arm extended on floor, NOT propped on elbow.',
+          },
+          {
+            name: 'Modified dead bug',
+            reps: '6 each side',
+            notes: 'Arms relaxed at sides on mat. Move only legs.',
+          },
+          {
+            name: 'Forearm plank',
+            reps: '1 set · 15 sec hold',
+            notes:
+              'On forearms only (NOT hands — wrists still off). HELD at 1×15s again for Week 5: Lisa Cohen has not signed off on 2nd set. Stop if any wrist sensation.',
+            durationSec: 15,
+            isTimed: true,
+          },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      B: {
+        id: 'B',
+        name: 'Glutes + Mobility + Core',
+        description: '🚶 10-min walk + glutes & mobility · ~40 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          { name: 'Side-lying leg raises', reps: '14 each side' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Single-leg glute bridges', reps: '10 each side' },
+          { name: 'Slow supine bicycle', reps: '8 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Light fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_AB,
+      },
+      C: {
+        id: 'C',
+        name: 'Walk + Core (cardio day)',
+        description: '🚶 25-min walk + 2-round core block · ~37 min',
+        rounds: 2,
+        warmup: WALK_WARMUP_C,
+        main: [
+          { name: 'Glute bridges', reps: '14 reps · 2-sec hold' },
+          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Modified dead bug', reps: '6 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: COOLDOWN_C,
+      },
+    },
+  },
 ];
 
 // --- Resolvers -----------------------------------------------------------

@@ -885,14 +885,14 @@ test('multi-week: "Coming next week" preview renders on home with diff', async (
   await expect(bBlock.locator('.next-week-block-list')).toContainText('14');
 });
 
-test('multi-week: Settings About shows Program weeks count (4)', async ({ page }) => {
+test('multi-week: Settings About shows Program weeks count (5)', async ({ page }) => {
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 4" row.
+  // About section has a "Program weeks: 5" row.
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 4');
+  ).toContainText('Program weeks: 5');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {
