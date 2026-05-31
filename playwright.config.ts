@@ -7,8 +7,12 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'list',
+  // Port 3100 (not 3000): on this Windows dev box the Gmail MCP server holds
+  // port 3000, so `serve -l 3000` silently falls back to a random port and the
+  // webServer wait times out. 3100 is free locally and in CI. (food-log hit the
+  // same conflict and moved to 4321.)
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:3100',
     trace: 'on-first-retry',
   },
   projects: [
@@ -18,9 +22,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npx serve -l 3000 .',
-    url: 'http://localhost:3000',
+    command: 'npx serve -l 3100 .',
+    url: 'http://localhost:3100',
     reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
+    timeout: 120_000,
   },
 });

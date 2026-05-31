@@ -23,6 +23,9 @@ type Workout = {
   description: string;
   warmup: Exercise[];
   main: Exercise[];
+  // Optional once-per-session block run AFTER main rounds, BEFORE cooldown (not
+  // multiplied by rounds). Upper-back strengthening (Lisa Cohen, May 31 2026).
+  upperBack?: Exercise[];
   cooldown: Exercise[];
   rounds: number;
 };
@@ -53,7 +56,7 @@ type AppScreen =
   | 'progress'
   | 'settings';
 
-type Phase = 'warmup' | 'main' | 'cooldown';
+type Phase = 'warmup' | 'main' | 'upperBack' | 'cooldown';
 
 // Hand routine retired 2026-05-15 per Allison. All hand-routine types,
 // constants, persistence, sync, state machine, render, and event handlers
@@ -386,6 +389,54 @@ const STRETCH_COOLDOWN: Exercise[] = [
       'Lie on edge of couch/bed. Pull LEFT knee to chest with hands. Let RIGHT leg dangle off the edge — the dangling leg is the stretch (front of hip).',
     durationSec: 45,
     isTimed: true,
+  },
+  // Pec + biceps stretches — Lisa Cohen, May 31 2026 (counter the rounded-
+  // shoulder / upper-crossed pattern she flagged). Wrist stays neutral.
+  {
+    name: 'Doorway pec stretch',
+    reps: '45 sec',
+    notes:
+      'Stand in a doorway, forearms on the frame at shoulder height, elbows bent ~90° (an "L" / T-shape). Step one foot through slowly until you feel a stretch across the chest. Chest forward, head neutral (no chin poke), spine tall. Don\'t let elbows drop below shoulder height.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Biceps stretch — right',
+    reps: '45 sec',
+    notes:
+      'Stand sideways to a wall, RIGHT arm nearest. Raise arm to shoulder height, rotate palm up, place it flat on the wall (fingers spread). Slowly turn your body AWAY from the wall — feel it in the biceps + front of the shoulder. This is NOT a wrist stretch: keep the wrist comfortable; if it complains, bend the elbow slightly. Stop on any wrist pain.',
+    durationSec: 45,
+    isTimed: true,
+  },
+  {
+    name: 'Biceps stretch — left',
+    reps: '45 sec',
+    notes:
+      'Stand sideways to a wall, LEFT arm nearest. Raise arm to shoulder height, rotate palm up, place it flat on the wall (fingers spread). Slowly turn your body AWAY from the wall — feel it in the biceps + front of the shoulder. NOT a wrist stretch: keep the wrist comfortable; bend the elbow slightly if needed. Stop on any wrist pain.',
+    durationSec: 45,
+    isTimed: true,
+  },
+];
+
+// Upper-back strengthening block — Lisa Cohen prescription, May 31 2026. Runs
+// ONCE per session (not ×rounds), after the main block, in workouts A + B only
+// (C stays the walk day). Starts UNLOADED — bodyweight, zero wrist load — per
+// the beginner scapular progression (setting → wall slides → squeezes → THEN
+// light dumbbell). The 1 kg prone row phases in at the next change point once
+// these feel clean and the wrist stays quiet. Wrist neutral on everything;
+// stop on any wrist signal (Lisa owns the clinical call — not logged here).
+const UPPER_BACK: Exercise[] = [
+  {
+    name: 'Wall angels',
+    reps: '2 sets · 10 slow reps',
+    notes:
+      "Back against the wall, ribs down, chin gently tucked. Slide both arms up the wall keeping elbows AND wrists in light contact; if the wrists lift off, stop there — no forcing. Slide back down with control. Don't shrug or arch your low back to reach higher.",
+  },
+  {
+    name: 'Scapular squeezes',
+    reps: '2 sets · 10 reps · 5-sec hold',
+    notes:
+      "Sit or stand tall, arms relaxed at your sides. Gently squeeze your shoulder blades together (like pinching a pencil between them), hold 5 sec, release. Feel it BETWEEN the shoulder blades — don't shrug up toward your ears. No grip; wrists fully neutral.",
   },
 ];
 
@@ -816,6 +867,7 @@ const PROGRAM: WeekPlan[] = [
             isTimed: true,
           },
         ],
+        upperBack: UPPER_BACK,
         cooldown: STRETCH_COOLDOWN,
       },
       B: {
@@ -836,6 +888,7 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Light fingertip touch on wall for balance only — NO grip.',
           },
         ],
+        upperBack: UPPER_BACK,
         cooldown: STRETCH_COOLDOWN,
       },
       C: {
@@ -908,6 +961,7 @@ const PROGRAM: WeekPlan[] = [
             isTimed: true,
           },
         ],
+        upperBack: UPPER_BACK,
         cooldown: STRETCH_COOLDOWN,
       },
       B: {
@@ -928,6 +982,7 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Light fingertip touch on wall for balance only — NO grip.',
           },
         ],
+        upperBack: UPPER_BACK,
         cooldown: STRETCH_COOLDOWN,
       },
       C: {
@@ -1004,16 +1059,18 @@ function diffExercise(prev: Exercise | undefined, next: Exercise): string | null
 // array if no changes.
 function diffWorkout(prev: Workout, next: Workout): string[] {
   const out: string[] = [];
-  const buckets: Phase[] = ['warmup', 'main', 'cooldown'];
+  const buckets: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
   for (const phase of buckets) {
-    const prevByName = new Map(prev[phase].map((e) => [e.name, e]));
-    const nextNames = new Set(next[phase].map((e) => e.name));
-    for (const nx of next[phase]) {
+    const prevItems = prev[phase] ?? [];
+    const nextItems = next[phase] ?? [];
+    const prevByName = new Map(prevItems.map((e) => [e.name, e]));
+    const nextNames = new Set(nextItems.map((e) => e.name));
+    for (const nx of nextItems) {
       const line = diffExercise(prevByName.get(nx.name), nx);
       if (line) out.push(line);
     }
     // Dropped exercises (in prev, not in next) — show explicitly.
-    for (const pv of prev[phase]) {
+    for (const pv of prevItems) {
       if (!nextNames.has(pv.name)) {
         out.push(`− ${pv.name} (removed)`);
       }
@@ -1418,7 +1475,7 @@ function getCurrentWorkout(): Workout | null {
 function getCurrentExercise(): Exercise | null {
   const w = getCurrentWorkout();
   if (!w) return null;
-  const list = w[state.currentPhase];
+  const list = w[state.currentPhase] ?? [];
   return list[state.currentExerciseIndex] ?? null;
 }
 
@@ -1452,7 +1509,7 @@ function advanceExercise(): void {
   state.isResting = false;
   state.videoExpandedFor = null; // collapse video when moving on
 
-  const list = w[state.currentPhase];
+  const list = w[state.currentPhase] ?? [];
   if (state.currentExerciseIndex < list.length - 1) {
     state.currentExerciseIndex += 1;
     if (state.currentPhase === 'main') {
@@ -1469,9 +1526,13 @@ function advanceExercise(): void {
       startRestTimer();
       return;
     } else {
-      state.currentPhase = 'cooldown';
+      // Upper-back block (once, straight sets) sits between main and cooldown.
+      state.currentPhase = w.upperBack?.length ? 'upperBack' : 'cooldown';
       state.currentExerciseIndex = 0;
     }
+  } else if (state.currentPhase === 'upperBack') {
+    state.currentPhase = 'cooldown';
+    state.currentExerciseIndex = 0;
   } else {
     state.screen = 'post-log';
   }
@@ -2234,6 +2295,37 @@ function renderComingNextWeek(): string {
   return sections;
 }
 
+// Gear & recovery card. Equipment is ownership-gated: a move only appears in a
+// workout once Allison says she owns the kit. Until then it lives here as a
+// "worth getting" item with what it unlocks. Also holds Lisa's neck-release.
+function renderGearCard(): string {
+  return `
+    <details class="card gear-card">
+      <summary class="gear-summary">🎒 Gear &amp; recovery</summary>
+      <div class="gear-body">
+        <div class="gear-section">
+          <div class="gear-label">You have</div>
+          <ul class="gear-list">
+            <li>✅ 1 kg weight</li>
+          </ul>
+        </div>
+        <div class="gear-section">
+          <div class="gear-label">Worth getting — unlocks more (not in your workout yet)</div>
+          <ul class="gear-list">
+            <li>⬜ Resistance band — unlocks band pull-aparts + band rows</li>
+            <li>⬜ 2 tennis balls in a sock (“the peanut”) — for the neck release below</li>
+          </ul>
+          <p class="gear-note">Tell Claude when you’ve got one and the moves it unlocks get added. Nothing shows up in your workout until you own it.</p>
+        </div>
+        <div class="gear-section">
+          <div class="gear-label">Neck release — Lisa · ~10 min, anytime (not part of the workout)</div>
+          <p class="gear-note">Two tennis balls in a sock at the base of your skull — where the skull meets the neck, one ball either side of your spine. Lie back, let your head’s weight rest on them, breathe slow (3 deep breaths), and relax ~10 min. Releases the neck/shoulder tension Lisa flagged. Do it separately from your session.</p>
+        </div>
+      </div>
+    </details>
+  `;
+}
+
 function renderHome(): string {
   const logs = loadLogs();
   const week = getProgramWeek();
@@ -2358,6 +2450,8 @@ function renderHome(): string {
     </div>
     <div class="last-line">${lastLine}</div>
 
+    ${renderGearCard()}
+
     ${renderComingNextWeek()}
 
     ${
@@ -2424,6 +2518,9 @@ function renderWorkoutOverview(w: Workout): string {
       emoji: '💪',
       items: w.main,
     },
+    ...(w.upperBack?.length
+      ? [{ key: 'upperBack' as Phase, label: 'Upper back', emoji: '🔼', items: w.upperBack }]
+      : []),
     { key: 'cooldown', label: 'Stretch', emoji: '🧘', items: w.cooldown },
   ];
   const rows = phases
@@ -2508,14 +2605,16 @@ function renderWorkout(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
   const ex = getCurrentExercise();
-  const phaseList = w[state.currentPhase];
+  const phaseList = w[state.currentPhase] ?? [];
   const total = phaseList.length;
   const phaseLabel =
     state.currentPhase === 'main'
       ? `Main · Round ${state.currentRound}/${w.rounds}`
       : state.currentPhase === 'warmup'
         ? 'Warm-up'
-        : 'Cool-down';
+        : state.currentPhase === 'upperBack'
+          ? 'Upper back'
+          : 'Cool-down';
 
   if (state.isResting) {
     return renderRestScreen(w.id, phaseLabel);
@@ -3447,7 +3546,7 @@ function renderExerciseBreakdownCard(logs: LogEntry[]): string {
   const rows: Row[] = [];
   for (const id of ['A', 'B', 'C'] as WorkoutId[]) {
     const w = getWorkoutById(id);
-    const exercises = [...w.warmup, ...w.main, ...w.cooldown];
+    const exercises = [...w.warmup, ...w.main, ...(w.upperBack ?? []), ...w.cooldown];
     // Dedupe within a single workout in case a name appears twice.
     const seenInWorkout = new Set<string>();
     for (const ex of exercises) {

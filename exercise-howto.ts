@@ -1023,4 +1023,92 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
       },
     ],
   },
+
+  // Upper-back prescription — Lisa Cohen May 31 2026. Text-only cue frames
+  // (no SVG yet). Wrist stays neutral on all of these.
+  'Wall angels': {
+    exercise: 'Wall angels',
+    sourceNotes: 'Lisa Cohen May 31 — scapular control, bodyweight, wrist-neutral.',
+    frames: [
+      {
+        do: 'Back flat on wall, ribs down, chin gently tucked.',
+        avoid: "Don't arch your low back to reach higher.",
+      },
+      {
+        do: 'Slide arms up the wall, elbows + wrists lightly touching.',
+        avoid: 'If wrists lift off the wall — stop there, no forcing.',
+      },
+      {
+        do: 'Lower slowly with control. 2 sets of 10.',
+        avoid: "Don't shrug your shoulders up toward your ears.",
+      },
+    ],
+  },
+
+  'Scapular squeezes': {
+    exercise: 'Scapular squeezes',
+    sourceNotes: 'Lisa Cohen May 31 — scapular retraction, no equipment.',
+    frames: [
+      {
+        do: 'Sit or stand tall, arms relaxed at your sides.',
+        avoid: 'No grip — wrists stay completely neutral.',
+      },
+      {
+        do: 'Squeeze shoulder blades together, hold 5 seconds.',
+        avoid: "Don't shrug up toward your ears.",
+      },
+      {
+        do: 'Release slowly. 2 sets of 10, 5-sec holds.',
+        avoid: 'Feel it between the blades, not in the neck.',
+      },
+    ],
+  },
+
+  'Doorway pec stretch': {
+    exercise: 'Doorway pec stretch',
+    sourceNotes: 'Lisa Cohen May 31 — ~90° abduction, sternal fibers.',
+    frames: [
+      {
+        do: 'Forearms on the door frame, elbows ~90° (T-shape).',
+        avoid: "Don't let elbows drop below shoulder height.",
+      },
+      {
+        do: 'Step one foot through until the chest stretches.',
+        avoid: "Don't poke your chin forward — head stays neutral.",
+      },
+      { do: 'Hold ~30–45 sec, breathe, spine tall.', avoid: "Don't arch your low back." },
+    ],
+  },
+
+  'Biceps stretch — right': {
+    exercise: 'Biceps stretch — right',
+    sourceNotes: 'Lisa Cohen May 31 — wrist-neutral biceps stretch.',
+    frames: [
+      {
+        do: 'Side to wall, palm flat at shoulder height, fingers spread.',
+        avoid: "Not a wrist stretch — don't force the wrist back.",
+      },
+      {
+        do: 'Turn your body away from the wall until the biceps stretches.',
+        avoid: 'Wrist complains? Bend the elbow slightly, or stop.',
+      },
+      { do: 'Hold ~30 sec, breathe.', avoid: "Don't rotate the palm down." },
+    ],
+  },
+
+  'Biceps stretch — left': {
+    exercise: 'Biceps stretch — left',
+    sourceNotes: 'Lisa Cohen May 31 — wrist-neutral biceps stretch.',
+    frames: [
+      {
+        do: 'Side to wall, palm flat at shoulder height, fingers spread.',
+        avoid: "Not a wrist stretch — don't force the wrist back.",
+      },
+      {
+        do: 'Turn your body away from the wall until the biceps stretches.',
+        avoid: 'Wrist complains? Bend the elbow slightly, or stop.',
+      },
+      { do: 'Hold ~30 sec, breathe.', avoid: "Don't rotate the palm down." },
+    ],
+  },
 };

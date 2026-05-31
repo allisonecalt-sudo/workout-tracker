@@ -92,6 +92,56 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
   await expect(page.locator('.history-word').first()).toContainText('proud');
 });
 
+// Upper-back block (Lisa Cohen May 31) — a once-per-session phase between main
+// and cooldown, in workouts A + B only. Workout B has no timed exercises before
+// it, so we can drive straight through with Done·Next / skip-rest.
+test('workout B reaches the upper-back phase after main (wall angels, unloaded)', async ({
+  page,
+}) => {
+  await page.locator('button[data-workout="B"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await expect(page.locator('.exercise-name')).toBeVisible();
+
+  let reachedUpperBack = false;
+  for (let i = 0; i < 40; i++) {
+    const phase =
+      (await page
+        .locator('.round-indicator')
+        .textContent()
+        .catch(() => '')) ?? '';
+    if (phase.includes('Upper back')) {
+      reachedUpperBack = true;
+      break;
+    }
+    const nextBtn = page.locator('button:has-text("Done · Next")');
+    if (await nextBtn.isVisible()) {
+      await nextBtn.click();
+    } else {
+      const skipRest = page.locator('#skip-rest');
+      if (await skipRest.isVisible()) {
+        const box = await skipRest.boundingBox();
+        if (box) {
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          await page.mouse.down();
+          await page.waitForTimeout(700);
+          await page.mouse.up();
+        }
+      }
+    }
+  }
+
+  expect(reachedUpperBack).toBe(true);
+  // First upper-back move is the unloaded wall angels — no 1 kg yet.
+  await expect(page.locator('.exercise-name')).toHaveText('Wall angels');
+});
+
+// Workout C is the walk day — it must NOT get the upper-back block.
+test('workout C has no upper-back phase in its overview', async ({ page }) => {
+  await page.locator('button[data-workout="C"]').click();
+  const labels = await page.locator('.overview-phase-label').allTextContents();
+  expect(labels).not.toContain('Upper back');
+});
+
 test('quit during workout asks for confirmation and returns home', async ({ page }) => {
   // Group 2G: confirm dialog on Quit
   page.on('dialog', (d) => {
