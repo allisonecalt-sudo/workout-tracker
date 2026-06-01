@@ -1,11 +1,13 @@
 // Workout Tracker — service worker
 // Strategy (deliberately simpler than the budget app — this app has NO offline-write queue):
-//   - App shell (HTML/CSS/JS/manifest/icons + local exercise images): cache-first,
-//     refreshed in the background so workouts work fully offline.
+//   - Code (HTML navigation + dist/app.js): network-first, cache fallback. Online
+//     users always get the freshest build; a stale cached build can't strand the app.
+//   - Static shell (CSS/manifest/icons + local exercise images): cache-first,
+//     refreshed in the background so workouts render fully offline at the gym.
 //   - Supabase REST GET: network-first, fall back to cache, fall back to empty array.
 //   - Everything else: passthrough (default browser behavior).
 
-const VERSION = 'workout-tracker-v1';
+const VERSION = 'workout-tracker-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -96,6 +98,13 @@ function isSupabaseRest(url) {
   return url.pathname.includes(SUPABASE_REST_HINT);
 }
 
+// Code = the HTML document + the app bundle. These must stay fresh when online
+// so a stale cached build can't strand the app. Images/CSS/icons stay cache-first.
+function isCodeRequest(url, request) {
+  if (request.mode === 'navigate') return true;
+  return url.pathname.endsWith('/dist/app.js') || url.pathname.endsWith('/index.html');
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method.toUpperCase() !== 'GET') return; // only GETs handled; rest passthrough
@@ -107,14 +116,36 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2) Same-origin shell requests — cache-first.
+  // 2) Same-origin requests. Code (HTML + app bundle) network-first; everything
+  //    else in the shell (CSS/icons/images) cache-first for offline workouts.
   if (isShellRequest(url)) {
-    event.respondWith(handleShell(request));
+    if (isCodeRequest(url, request)) {
+      event.respondWith(handleCodeNetworkFirst(request));
+    } else {
+      event.respondWith(handleShell(request));
+    }
     return;
   }
 
   // Anything else: passthrough.
 });
+
+async function handleCodeNetworkFirst(request) {
+  const cache = await caches.open(SHELL_CACHE);
+  try {
+    const res = await fetch(request);
+    if (res && res.ok) cache.put(request, res.clone());
+    return res;
+  } catch (err) {
+    const cached = await cache.match(request, { ignoreSearch: false });
+    if (cached) return cached;
+    if (request.mode === 'navigate') {
+      const fallback = await cache.match('./index.html');
+      if (fallback) return fallback;
+    }
+    throw err;
+  }
+}
 
 async function handleShell(request) {
   const cache = await caches.open(SHELL_CACHE);
