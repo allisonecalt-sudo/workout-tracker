@@ -425,6 +425,179 @@ const SVG_TUNA_RADIAL = sNoMat(`
 
 const EX_DIR = 'assets/exercises';
 
+// ---------- Cooldown / upper-back stretch SVGs (added 2026-06-03) ----------
+// Fills the visual gap in the stretch block + upper-back drills, which used to
+// render text-only or blank. Same grammar as above: green = body, gold =
+// the active stretch, orange = the common mistake, grey = wall/floor/mat.
+
+// Reusable "hold for N" cue card (mirrors the existing 45s/60s text frames).
+function holdCard(title: string, sub: string, secs = '45s'): string {
+  return sNoMat(`
+    <text x="26" y="58" fill="#8fbc8f" font-size="14" font-family="sans-serif" font-weight="700">${title}</text>
+    <text x="26" y="86" fill="#a8a59c" font-size="12.5" font-family="sans-serif">${sub}</text>
+    <circle cx="120" cy="132" r="24" fill="none" stroke="#e6b450" stroke-width="3" />
+    <text x="120" y="139" text-anchor="middle" fill="#e6b450" font-size="16" font-family="sans-serif" font-weight="700">${secs}</text>
+  `);
+}
+
+// Wrist extension — forearm palm-down, fingers lifted UP toward you
+const SVG_WRIST_EXTENSION = sNoMat(`
+  <rect x="40" y="92" width="108" height="18" rx="9" fill="#8fbc8f" />
+  <path d="M148 92 L150 60 L168 62 L166 110 Z" fill="#8fbc8f" />
+  <line x1="159" y1="62" x2="162" y2="44" stroke="#8fbc8f" stroke-width="5" stroke-linecap="round" />
+  <line x1="195" y1="95" x2="172" y2="55" stroke="#e6b450" stroke-width="2.5" stroke-dasharray="4 3" />
+  <polygon points="170,50 170,64 180,58" fill="#e6b450" />
+  <text x="26" y="142" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">palm down · pull fingers UP</text>
+`);
+
+// Wrist flexion — forearm palm-down, fingers pressed DOWN
+const SVG_WRIST_FLEXION = sNoMat(`
+  <rect x="40" y="82" width="108" height="18" rx="9" fill="#8fbc8f" />
+  <path d="M148 82 L168 108 L154 118 L138 96 Z" fill="#8fbc8f" />
+  <line x1="161" y1="108" x2="170" y2="126" stroke="#8fbc8f" stroke-width="5" stroke-linecap="round" />
+  <line x1="190" y1="80" x2="168" y2="118" stroke="#e6b450" stroke-width="2.5" stroke-dasharray="4 3" />
+  <polygon points="166,123 178,116 168,108" fill="#e6b450" />
+  <text x="26" y="150" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">palm down · press fingers DOWN</text>
+`);
+
+// Neck stretch — head tilted toward a shoulder, light hand over the head
+const SVG_NECK_STRETCH = sNoMat(`
+  <line x1="70" y1="150" x2="170" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="150" x2="135" y2="95" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="140" cy="80" r="16" fill="#8fbc8f" />
+  <path d="M150 66 q14 -2 18 8" fill="none" stroke="#e6b450" stroke-width="4" stroke-linecap="round" />
+  <path d="M118 110 q-10 -18 6 -34" fill="none" stroke="#e6b450" stroke-width="2.5" stroke-dasharray="3 3" />
+  <text x="22" y="38" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">ear toward shoulder · light hand</text>
+  <text x="22" y="172" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">don't pull hard · no shoulder shrug</text>
+`);
+
+// Shoulder stretch — cross-body, opposite forearm cradles above the elbow
+const SVG_SHOULDER_STRETCH = sNoMat(`
+  <circle cx="120" cy="45" r="15" fill="#8fbc8f" />
+  <line x1="120" y1="60" x2="120" y2="120" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="78" x2="70" y2="92" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="95" x2="78" y2="100" stroke="#8fbc8f" stroke-width="5" stroke-linecap="round" />
+  <line x1="78" y1="100" x2="74" y2="88" stroke="#8fbc8f" stroke-width="5" stroke-linecap="round" />
+  <line x1="92" y1="86" x2="74" y2="90" stroke="#e6b450" stroke-width="2" />
+  <polygon points="70,91 80,86 80,95" fill="#e6b450" />
+  <text x="22" y="150" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">arm across · cradle above the elbow</text>
+  <text x="22" y="170" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">don't pull on the elbow joint</text>
+`);
+
+// Figure-4 supine (Leg cross) — lying, ankle over the opposite bent knee
+const SVG_FIGURE4_SUPINE = s(`
+  <circle cx="36" cy="140" r="10" fill="#8fbc8f" />
+  <line x1="44" y1="146" x2="120" y2="146" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="146" x2="150" y2="100" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="150" y1="100" x2="158" y2="70" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="128" y1="120" x2="174" y2="106" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <line x1="174" y1="106" x2="170" y2="78" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <text x="40" y="48" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">ankle over opposite knee · draw in</text>
+`);
+
+// Leg up in air (supine hamstring) — one leg straight to the ceiling
+const SVG_LEG_UP = s(`
+  <circle cx="36" cy="146" r="10" fill="#8fbc8f" />
+  <line x1="44" y1="150" x2="120" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="150" x2="200" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.5" />
+  <line x1="120" y1="150" x2="128" y2="58" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <line x1="112" y1="100" x2="128" y2="96" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <text x="40" y="44" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">leg to ceiling · soft knee ok</text>
+  <text x="40" y="172" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">hands behind THIGH — not the knee</text>
+`);
+
+// Both knees to chest — supine double-knee hug, low back rounds
+const SVG_DOUBLE_KNEE = s(`
+  <circle cx="44" cy="142" r="10" fill="#8fbc8f" />
+  <line x1="52" y1="146" x2="120" y2="146" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="146" x2="106" y2="100" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <line x1="106" y1="100" x2="150" y2="116" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <line x1="122" y1="148" x2="110" y2="104" stroke="#e6b450" stroke-width="6" stroke-linecap="round" stroke-opacity="0.7" />
+  <line x1="74" y1="146" x2="118" y2="118" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <text x="40" y="48" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">hug both shins · let low back round</text>
+`);
+
+// Calf stretch on wall — back leg straight, heel pressed down, lean in
+const SVG_CALF_WALL = sNoMat(`
+  <line x1="200" y1="20" x2="200" y2="160" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
+  <line x1="20" y1="160" x2="200" y2="160" stroke="#4a544c" stroke-width="4" stroke-linecap="round" />
+  <circle cx="120" cy="50" r="12" fill="#8fbc8f" />
+  <line x1="120" y1="62" x2="150" y2="105" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="135" y1="82" x2="195" y2="70" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <line x1="150" y1="105" x2="160" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="150" y1="105" x2="80" y2="158" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <circle cx="80" cy="158" r="4" fill="#e6b450" />
+  <text x="18" y="38" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">back leg straight · heel pressed down</text>
+`);
+
+// Hip flexor — on a couch edge, near knee hugged in, far leg dangles = stretch
+const SVG_HIP_FLEXOR = sNoMat(`
+  <rect x="20" y="92" width="150" height="14" rx="3" fill="#4a544c" />
+  <circle cx="40" cy="80" r="11" fill="#8fbc8f" />
+  <line x1="50" y1="92" x2="120" y2="92" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="92" x2="100" y2="58" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="100" y1="58" x2="74" y2="78" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="70" y1="90" x2="98" y2="62" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <line x1="158" y1="100" x2="158" y2="158" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <text x="16" y="38" fill="#e6b450" font-size="10.5" font-family="sans-serif" font-weight="600">knee hugged in · other leg hangs = stretch</text>
+`);
+
+// Wall angels — back to wall, arms slide up in a Y, wrists stay on the wall
+const SVG_WALL_ANGEL = sNoMat(`
+  <line x1="60" y1="14" x2="60" y2="168" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
+  <circle cx="74" cy="40" r="13" fill="#8fbc8f" />
+  <line x1="74" y1="53" x2="74" y2="120" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="74" y1="120" x2="70" y2="160" stroke="#8fbc8f" stroke-width="5" stroke-linecap="round" />
+  <line x1="74" y1="66" x2="96" y2="46" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
+  <line x1="96" y1="46" x2="104" y2="22" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
+  <line x1="120" y1="70" x2="120" y2="40" stroke="#e6b450" stroke-width="2" stroke-dasharray="3 3" />
+  <polygon points="120,34 115,46 125,46" fill="#e6b450" />
+  <text x="16" y="172" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">wrists stay on wall · no low-back arch</text>
+`);
+
+// Scapular squeezes — back view, blades drawing toward the spine
+const SVG_SCAP_SQUEEZE = sNoMat(`
+  <rect x="92" y="50" width="56" height="86" rx="14" fill="#8fbc8f" opacity="0.5" />
+  <line x1="120" y1="52" x2="120" y2="134" stroke="#4a544c" stroke-width="2" stroke-dasharray="3 3" />
+  <path d="M112 70 L96 64 L100 96 Z" fill="#e6b450" />
+  <path d="M128 70 L144 64 L140 96 Z" fill="#e6b450" />
+  <line x1="86" y1="80" x2="104" y2="80" stroke="#e6b450" stroke-width="2" />
+  <polygon points="107,80 97,75 97,85" fill="#e6b450" />
+  <line x1="154" y1="80" x2="136" y2="80" stroke="#e6b450" stroke-width="2" />
+  <polygon points="133,80 143,75 143,85" fill="#e6b450" />
+  <text x="22" y="36" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">squeeze blades together · hold 5s</text>
+  <text x="22" y="160" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">feel it between blades, not the neck</text>
+`);
+
+// Doorway pec stretch — forearm up the frame (T-shape), step through
+const SVG_DOORWAY_PEC = sNoMat(`
+  <line x1="150" y1="14" x2="150" y2="168" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
+  <circle cx="96" cy="48" r="13" fill="#8fbc8f" />
+  <line x1="96" y1="61" x2="96" y2="122" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="96" y1="74" x2="148" y2="74" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
+  <line x1="148" y1="74" x2="148" y2="44" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
+  <line x1="96" y1="122" x2="132" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="96" y1="122" x2="84" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
+  <line x1="108" y1="138" x2="128" y2="138" stroke="#e6b450" stroke-width="2" />
+  <polygon points="131,138 121,133 121,143" fill="#e6b450" />
+  <text x="16" y="36" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">elbow at shoulder height · step through</text>
+`);
+
+// Biceps stretch — side to wall, palm flat, turn body AWAY from the wall
+const SVG_BICEPS_WALL = sNoMat(`
+  <line x1="40" y1="14" x2="40" y2="168" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
+  <circle cx="96" cy="48" r="13" fill="#8fbc8f" />
+  <line x1="96" y1="61" x2="96" y2="122" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="96" y1="74" x2="46" y2="74" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
+  <line x1="46" y1="66" x2="46" y2="82" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
+  <line x1="96" y1="122" x2="110" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="96" y1="122" x2="92" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
+  <path d="M120 100 a 26 26 0 0 1 18 22" fill="none" stroke="#e6b450" stroke-width="2" stroke-dasharray="3 3" />
+  <polygon points="138,124 134,112 144,116" fill="#e6b450" />
+  <text x="22" y="150" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">palm on wall · turn body AWAY</text>
+  <text x="22" y="168" fill="#d97757" font-size="10.5" font-family="sans-serif" font-weight="600">not a wrist stretch — wrist stays comfy</text>
+`);
+
 // ---------- THE DATA ----------
 
 export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
@@ -1031,6 +1204,7 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
     sourceNotes: 'Lisa Cohen May 31 — scapular control, bodyweight, wrist-neutral.',
     frames: [
       {
+        svg: SVG_WALL_ANGEL,
         do: 'Back flat on wall, ribs down, chin gently tucked.',
         avoid: "Don't arch your low back to reach higher.",
       },
@@ -1050,6 +1224,7 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
     sourceNotes: 'Lisa Cohen May 31 — scapular retraction, no equipment.',
     frames: [
       {
+        svg: SVG_SCAP_SQUEEZE,
         do: 'Sit or stand tall, arms relaxed at your sides.',
         avoid: 'No grip — wrists stay completely neutral.',
       },
@@ -1069,6 +1244,7 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
     sourceNotes: 'Lisa Cohen May 31 — ~90° abduction, sternal fibers.',
     frames: [
       {
+        svg: SVG_DOORWAY_PEC,
         do: 'Forearms on the door frame, elbows ~90° (T-shape).',
         avoid: "Don't let elbows drop below shoulder height.",
       },
@@ -1085,6 +1261,7 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
     sourceNotes: 'Lisa Cohen May 31 — wrist-neutral biceps stretch.',
     frames: [
       {
+        svg: SVG_BICEPS_WALL,
         do: 'Side to wall, palm flat at shoulder height, fingers spread.',
         avoid: "Not a wrist stretch — don't force the wrist back.",
       },
@@ -1101,6 +1278,7 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
     sourceNotes: 'Lisa Cohen May 31 — wrist-neutral biceps stretch.',
     frames: [
       {
+        svg: SVG_BICEPS_WALL,
         do: 'Side to wall, palm flat at shoulder height, fingers spread.',
         avoid: "Not a wrist stretch — don't force the wrist back.",
       },
@@ -1109,6 +1287,264 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
         avoid: 'Wrist complains? Bend the elbow slightly, or stop.',
       },
       { do: 'Hold ~30 sec, breathe.', avoid: "Don't rotate the palm down." },
+    ],
+  },
+
+  // ===== STRETCH COOLDOWN (Week 5+) — added 2026-06-03 to fill the blank
+  // stretch block. Keyed to the exact STRETCH_COOLDOWN names in app.ts. =====
+
+  'Wrist extension — right': {
+    exercise: 'Wrist extension — right',
+    sourceNotes: 'Hand-coded SVG. Right palm down, left hand pulls fingers up.',
+    frames: [
+      {
+        svg: SVG_WRIST_EXTENSION,
+        do: 'Right arm forward, palm DOWN · left hand pulls fingers UP.',
+        avoid: 'Gentle. Mild stretch on the underside of the forearm only.',
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'breathe · keep the elbow soft'),
+        do: 'Easy, steady hold — no bouncing.',
+        avoid: 'Any pain or pins-and-needles → ease off.',
+      },
+    ],
+  },
+
+  'Wrist extension — left': {
+    exercise: 'Wrist extension — left',
+    sourceNotes: 'Hand-coded SVG. Left palm down, right hand pulls fingers up.',
+    frames: [
+      {
+        svg: SVG_WRIST_EXTENSION,
+        do: 'Left arm forward, palm DOWN · right hand pulls fingers UP.',
+        avoid: 'Gentle. Mild stretch on the underside of the forearm only.',
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'breathe · keep the elbow soft'),
+        do: 'Easy, steady hold — no bouncing.',
+        avoid: 'Any pain or pins-and-needles → ease off.',
+      },
+    ],
+  },
+
+  'Wrist flexion — right': {
+    exercise: 'Wrist flexion — right',
+    sourceNotes: 'Hand-coded SVG. Right palm down, left hand presses fingers down.',
+    frames: [
+      {
+        svg: SVG_WRIST_FLEXION,
+        do: 'Right arm forward, palm DOWN · left hand presses fingers DOWN.',
+        avoid: 'Stretch on the TOP of the forearm. Stay gentle.',
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'breathe · keep the elbow soft'),
+        do: 'Easy, steady hold — no bouncing.',
+        avoid: 'Any pain or pins-and-needles → ease off.',
+      },
+    ],
+  },
+
+  'Wrist flexion — left': {
+    exercise: 'Wrist flexion — left',
+    sourceNotes: 'Hand-coded SVG. Left palm down, right hand presses fingers down.',
+    frames: [
+      {
+        svg: SVG_WRIST_FLEXION,
+        do: 'Left arm forward, palm DOWN · right hand presses fingers DOWN.',
+        avoid: 'Stretch on the TOP of the forearm. Stay gentle.',
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'breathe · keep the elbow soft'),
+        do: 'Easy, steady hold — no bouncing.',
+        avoid: 'Any pain or pins-and-needles → ease off.',
+      },
+    ],
+  },
+
+  'Neck stretch': {
+    exercise: 'Neck stretch',
+    sourceNotes: 'Hand-coded SVG — lateral neck stretch, ear toward shoulder.',
+    frames: [
+      {
+        svg: SVG_NECK_STRETCH,
+        do: 'Tilt ear gently toward one shoulder · light hand for weight only.',
+        avoid: "Don't yank — let the head's weight do the work.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'then switch sides · shoulders down'),
+        do: 'Keep the opposite shoulder relaxed and down.',
+        avoid: "Don't shrug the stretched side up toward the ear.",
+      },
+    ],
+  },
+
+  'Shoulder stretch': {
+    exercise: 'Shoulder stretch',
+    sourceNotes: 'Hand-coded SVG — cross-body shoulder stretch.',
+    frames: [
+      {
+        svg: SVG_SHOULDER_STRETCH,
+        do: 'Bring one arm across the body · cradle it above the elbow.',
+        avoid: "Don't pull on the elbow joint itself.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'then switch arms · breathe'),
+        do: 'Feel it in the back/outside of the shoulder.',
+        avoid: "Don't rotate the torso to fake more range.",
+      },
+    ],
+  },
+
+  'Leg cross — right': {
+    exercise: 'Leg cross — right',
+    sourceNotes: 'Hand-coded SVG — supine figure-4 (glute / piriformis).',
+    frames: [
+      {
+        svg: SVG_FIGURE4_SUPINE,
+        do: 'On back · RIGHT ankle over the opposite bent knee (figure-4).',
+        avoid: "Don't grip — forearm-hook the thigh, wrists stay off.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'draw the support leg gently in'),
+        do: 'Let the crossed knee open passively toward the floor.',
+        avoid: "Don't force the knee down with your hand.",
+      },
+    ],
+  },
+
+  'Leg cross — left': {
+    exercise: 'Leg cross — left',
+    sourceNotes: 'Hand-coded SVG — supine figure-4 (glute / piriformis).',
+    frames: [
+      {
+        svg: SVG_FIGURE4_SUPINE,
+        do: 'On back · LEFT ankle over the opposite bent knee (figure-4).',
+        avoid: "Don't grip — forearm-hook the thigh, wrists stay off.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'draw the support leg gently in'),
+        do: 'Let the crossed knee open passively toward the floor.',
+        avoid: "Don't force the knee down with your hand.",
+      },
+    ],
+  },
+
+  'Leg up in air — right': {
+    exercise: 'Leg up in air — right',
+    sourceNotes: 'Hand-coded SVG — supine hamstring stretch.',
+    frames: [
+      {
+        svg: SVG_LEG_UP,
+        do: 'On back · RIGHT leg straight up · hands behind the THIGH.',
+        avoid: "Don't lock the knee — a soft bend is fine.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'strap behind thigh if it helps'),
+        do: 'Keep the down-leg relaxed along the floor.',
+        avoid: "Don't pull on the back of the knee.",
+      },
+    ],
+  },
+
+  'Leg up in air — left': {
+    exercise: 'Leg up in air — left',
+    sourceNotes: 'Hand-coded SVG — supine hamstring stretch.',
+    frames: [
+      {
+        svg: SVG_LEG_UP,
+        do: 'On back · LEFT leg straight up · hands behind the THIGH.',
+        avoid: "Don't lock the knee — a soft bend is fine.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'strap behind thigh if it helps'),
+        do: 'Keep the down-leg relaxed along the floor.',
+        avoid: "Don't pull on the back of the knee.",
+      },
+    ],
+  },
+
+  'Both knees to chest': {
+    exercise: 'Both knees to chest',
+    sourceNotes: 'Hand-coded SVG — supine double-knee hug, low-back release.',
+    frames: [
+      {
+        svg: SVG_DOUBLE_KNEE,
+        do: 'Pull BOTH knees gently toward the chest, hands around shins.',
+        avoid: "Don't grip hard — let the low back round and soften.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'breathe into the low back'),
+        do: 'Gentle rock side-to-side is fine if it feels good.',
+        avoid: "Don't lift the head/neck off the mat to pull harder.",
+      },
+    ],
+  },
+
+  'Calf stretch on wall — right': {
+    exercise: 'Calf stretch on wall — right',
+    sourceNotes: 'Hand-coded SVG — standing wall calf stretch.',
+    frames: [
+      {
+        svg: SVG_CALF_WALL,
+        do: 'Hands on wall · RIGHT leg back, straight · heel pressed DOWN.',
+        avoid: "Don't let the back heel lift — that loses the stretch.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'bend the front knee, lean in'),
+        do: 'Keep the back leg straight and toes pointing forward.',
+        avoid: "Don't bounce — steady lean only.",
+      },
+    ],
+  },
+
+  'Calf stretch on wall — left': {
+    exercise: 'Calf stretch on wall — left',
+    sourceNotes: 'Hand-coded SVG — standing wall calf stretch.',
+    frames: [
+      {
+        svg: SVG_CALF_WALL,
+        do: 'Hands on wall · LEFT leg back, straight · heel pressed DOWN.',
+        avoid: "Don't let the back heel lift — that loses the stretch.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'bend the front knee, lean in'),
+        do: 'Keep the back leg straight and toes pointing forward.',
+        avoid: "Don't bounce — steady lean only.",
+      },
+    ],
+  },
+
+  'Hip flexor — right knee in, left leg dangles': {
+    exercise: 'Hip flexor — right knee in, left leg dangles',
+    sourceNotes: 'Hand-coded SVG — couch-edge hip flexor stretch.',
+    frames: [
+      {
+        svg: SVG_HIP_FLEXOR,
+        do: 'On a couch edge · hug RIGHT knee in · LEFT leg dangles off = stretch.',
+        avoid: "Don't arch the low back — let the dangling thigh drop.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'the dangling leg is the stretch'),
+        do: 'Relax the hanging leg toward the floor.',
+        avoid: "Don't grip the wall/couch — stay relaxed.",
+      },
+    ],
+  },
+
+  'Hip flexor — left knee in, right leg dangles': {
+    exercise: 'Hip flexor — left knee in, right leg dangles',
+    sourceNotes: 'Hand-coded SVG — couch-edge hip flexor stretch.',
+    frames: [
+      {
+        svg: SVG_HIP_FLEXOR,
+        do: 'On a couch edge · hug LEFT knee in · RIGHT leg dangles off = stretch.',
+        avoid: "Don't arch the low back — let the dangling thigh drop.",
+      },
+      {
+        svg: holdCard('Hold 45 sec', 'the dangling leg is the stretch'),
+        do: 'Relax the hanging leg toward the floor.',
+        avoid: "Don't grip the wall/couch — stay relaxed.",
+      },
     ],
   },
 };

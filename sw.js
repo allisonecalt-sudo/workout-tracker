@@ -7,7 +7,7 @@
 //   - Supabase REST GET: network-first, fall back to cache, fall back to empty array.
 //   - Everything else: passthrough (default browser behavior).
 
-const VERSION = 'workout-tracker-v2';
+const VERSION = 'workout-tracker-v3';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -16,6 +16,11 @@ const SHELL_ASSETS = [
   './index.html',
   './styles.css',
   './dist/app.js',
+  // app.js imports these as separate ES modules — they MUST be cached too or
+  // the app fails to boot offline, and stay network-first or visual/how-to
+  // data updates never reach an installed PWA.
+  './dist/exercise-howto.js',
+  './dist/exercise-visuals.js',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
@@ -102,7 +107,12 @@ function isSupabaseRest(url) {
 // so a stale cached build can't strand the app. Images/CSS/icons stay cache-first.
 function isCodeRequest(url, request) {
   if (request.mode === 'navigate') return true;
-  return url.pathname.endsWith('/dist/app.js') || url.pathname.endsWith('/index.html');
+  return (
+    url.pathname.endsWith('/dist/app.js') ||
+    url.pathname.endsWith('/dist/exercise-howto.js') ||
+    url.pathname.endsWith('/dist/exercise-visuals.js') ||
+    url.pathname.endsWith('/index.html')
+  );
 }
 
 self.addEventListener('fetch', (event) => {
