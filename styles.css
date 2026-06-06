@@ -715,7 +715,8 @@ button:disabled {
   margin-bottom: 16px;
 }
 
-.exercise-visual img {
+.exercise-visual img,
+.exercise-visual-still {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -723,6 +724,22 @@ button:disabled {
   object-fit: contain;
   background: #0f1311;
   border-radius: var(--radius-sm);
+}
+
+/* Promoted how-to illustration shown as the primary still (no curated JPG). */
+.exercise-visual-still-svg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+}
+
+.exercise-visual-still-svg .howto-svg,
+.exercise-visual-still-svg svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 240px;
 }
 
 .exercise-visual-video-only {

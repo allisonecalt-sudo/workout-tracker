@@ -98,6 +98,11 @@ type AppState = {
 
 const STORAGE_KEY = 'workout-tracker:logs';
 const HOWTO_SEEN_KEY_PREFIX = 'workout-tracker:howto-seen-week-';
+// Resume support (Allison 2026-06-06): "when i leave the page i want it to open
+// on the workout im in unless i exit." We snapshot the live position of an
+// in-progress session so reopening the app lands back on that workout. Quitting
+// or finishing clears it (those go through resetState()).
+const ACTIVE_SESSION_KEY = 'workout-tracker:active-session';
 // Ship 6: timing defaults — overridable via Settings screen. The constants
 // remain as "defaults" only; runtime values come from getSetting().
 // Allison 2026-05-15 18:07: "i do not need the brakes anymore there doesn't
@@ -1604,8 +1609,114 @@ function logCompleteAndHome(): void {
   });
 }
 
+// Screens that count as "in a workout" for resume purposes.
+const RESUMABLE_SCREENS: readonly AppScreen[] = ['workout', 'post-log'];
+
+type ActiveSessionSnapshot = {
+  screen: AppScreen;
+  selectedWorkout: WorkoutId;
+  capacityBefore: number;
+  capacityAfter: number;
+  wallSitSec: number;
+  backPain: number;
+  word: string;
+  currentRound: number;
+  currentPhase: Phase;
+  currentExerciseIndex: number;
+  startedAt: string | null;
+};
+
+function saveActiveSession(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (!state.selectedWorkout || !RESUMABLE_SCREENS.includes(state.screen)) return;
+    const snap: ActiveSessionSnapshot = {
+      screen: state.screen,
+      selectedWorkout: state.selectedWorkout,
+      capacityBefore: state.capacityBefore,
+      capacityAfter: state.capacityAfter,
+      wallSitSec: state.wallSitSec,
+      backPain: state.backPain,
+      word: state.word,
+      currentRound: state.currentRound,
+      currentPhase: state.currentPhase,
+      currentExerciseIndex: state.currentExerciseIndex,
+      startedAt: state.startedAt,
+    };
+    localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
+  } catch {
+    // Non-fatal — resume is a convenience, never block the app on it.
+  }
+}
+
+function clearActiveSession(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+  } catch {
+    // Non-fatal.
+  }
+}
+
+// Rehydrate an in-progress session on load. Validates the snapshot against the
+// live program (a workout she was mid-way through must still exist, and the
+// phase/index must be in range) — a stale or corrupt snapshot is discarded, not
+// crashed on. Transient bits (timers, expanders) reset; she lands on the
+// exercise she left, not mid-countdown.
+function restoreActiveSession(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
+    if (!raw) return false;
+    const snap = JSON.parse(raw) as Partial<ActiveSessionSnapshot>;
+    if (!snap || typeof snap !== 'object') return false;
+    if (!snap.selectedWorkout || !RESUMABLE_SCREENS.includes(snap.screen as AppScreen)) {
+      clearActiveSession();
+      return false;
+    }
+    const w = getWorkoutById(snap.selectedWorkout);
+    if (!w) {
+      clearActiveSession();
+      return false;
+    }
+    const phase = (snap.currentPhase ?? 'warmup') as Phase;
+    const phaseList = w[phase] ?? [];
+    const idx = snap.currentExerciseIndex ?? 0;
+    // cooldown is a single list (index always 0); other phases need an in-range index.
+    const idxOk = phase === 'cooldown' || (idx >= 0 && idx < phaseList.length);
+    if (!idxOk) {
+      clearActiveSession();
+      return false;
+    }
+
+    state.screen = snap.screen as AppScreen;
+    state.selectedWorkout = snap.selectedWorkout;
+    state.currentPhase = phase;
+    state.currentExerciseIndex = phase === 'cooldown' ? 0 : idx;
+    state.currentRound = snap.currentRound ?? 1;
+    state.capacityBefore = snap.capacityBefore ?? 5;
+    state.capacityAfter = snap.capacityAfter ?? 5;
+    state.wallSitSec = snap.wallSitSec ?? 0;
+    state.backPain = snap.backPain ?? 0;
+    state.word = snap.word ?? '';
+    state.startedAt = snap.startedAt ?? new Date().toISOString();
+    // Transient — never restore a running timer or open expander.
+    state.isResting = false;
+    state.timerSeconds = 0;
+    state.preCountdown = 0;
+    state.wallSitStartedAt = null;
+    state.videoExpandedFor = null;
+    state.howToOpenFor = null;
+    return true;
+  } catch {
+    clearActiveSession();
+    return false;
+  }
+}
+
 function resetState(): void {
   stopTimer();
+  clearActiveSession();
   state.screen = 'home';
   // Reset viewed week to current when returning to home from a session.
   viewedWeekOffset = 0;
@@ -1873,74 +1984,86 @@ function getViewedProgramWeek(offset = 0): { num: number; start: Date; end: Date
 
 // ---------- visual layer (group 3) ----------
 
+// Primary on-screen still for an exercise: the curated loop JPG if we have one,
+// otherwise the first how-to illustration (SVG/JPG). Allison 2026-06-06: every
+// actual exercise should show a PICTURE — not just a "watch video" poster —
+// AND keep its video. Every real exercise has a how-to frame, so this gives
+// picture + video coverage without sourcing new assets.
+function getPrimaryStill(exerciseName: string): { svg: string } | { image: string } | null {
+  const v = EXERCISE_VISUALS[exerciseName];
+  if (v?.loop) return { image: v.loop };
+  const frame = EXERCISE_HOWTO[exerciseName]?.frames?.[0];
+  if (frame?.svg) return { svg: frame.svg };
+  if (frame?.image) return { image: frame.image };
+  return null;
+}
+
 function renderExerciseVisual(exerciseName: string): string {
   const v = EXERCISE_VISUALS[exerciseName];
-  if (!v) return '';
+  const still = getPrimaryStill(exerciseName);
+  const youtubeId = v?.youtubeId;
+
+  // Nothing to show at all.
+  if (!still && !youtubeId) return '';
 
   const isExpanded = state.videoExpandedFor === exerciseName;
   const safeAlt = escapeHtml(`${exerciseName} — exercise demonstration`);
-  const attribution = v.attribution ? escapeHtml(v.attribution) : '';
+  const attribution = v?.attribution ? escapeHtml(v.attribution) : '';
 
-  if (v.loop) {
-    // Primary = still image. Video is behind an expander.
-    const videoBlock = v.youtubeId
+  const videoIframe = youtubeId
+    ? `<div class="visual-video-wrap">
+        <iframe
+          src="https://www.youtube.com/embed/${escapeHtml(youtubeId)}?rel=0&modestbranding=1"
+          title="${safeAlt}"
+          frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen
+          loading="lazy"
+        ></iframe>
+      </div>`
+    : '';
+
+  // Still picture (trusted inline SVG, or a curated/illustration JPG). Shown as
+  // the primary visual; the video sits behind a "Watch full video" expander.
+  if (still) {
+    const stillHtml =
+      'svg' in still
+        ? `<div class="exercise-visual-still exercise-visual-still-svg">${still.svg}</div>`
+        : `<img class="exercise-visual-still" src="${escapeHtml(still.image)}" alt="${safeAlt}" loading="lazy" />`;
+
+    const videoBlock = youtubeId
       ? `
       <button class="visual-video-toggle" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isExpanded}">
         ${isExpanded ? '× Hide video' : '▶ Watch full video'}
       </button>
-      ${
-        isExpanded
-          ? `<div class="visual-video-wrap">
-              <iframe
-                src="https://www.youtube.com/embed/${escapeHtml(v.youtubeId)}?rel=0&modestbranding=1"
-                title="${safeAlt}"
-                frameborder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowfullscreen
-                loading="lazy"
-              ></iframe>
-            </div>`
-          : ''
-      }`
+      ${isExpanded ? videoIframe : ''}`
       : '';
+
     return `
       <div class="exercise-visual">
-        <img src="${escapeHtml(v.loop)}" alt="${safeAlt}" loading="lazy" />
+        ${stillHtml}
         ${videoBlock}
         ${attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
       </div>
     `;
   }
 
-  // No still — iframe is primary, behind an expander still (autoplay-off is
-  // intentional; YouTube embeds can't autoplay on mobile without user gesture
-  // and we don't want unrequested data downloads).
-  if (v.youtubeId) {
-    return `
-      <div class="exercise-visual exercise-visual-video-only">
-        ${
-          isExpanded
-            ? `<div class="visual-video-wrap">
-                <iframe
-                  src="https://www.youtube.com/embed/${escapeHtml(v.youtubeId)}?rel=0&modestbranding=1"
-                  title="${safeAlt}"
-                  frameborder="0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowfullscreen
-                  loading="lazy"
-                ></iframe>
-              </div>`
-            : `<button class="visual-video-poster" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="false">
-                <span class="visual-video-poster-icon">▶</span>
-                <span class="visual-video-poster-label">Watch how it looks</span>
-              </button>`
-        }
-        ${attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
-      </div>
-    `;
-  }
-
-  return '';
+  // No still anywhere — video poster is primary (autoplay-off is intentional;
+  // YouTube embeds can't autoplay on mobile without a user gesture and we don't
+  // want unrequested data downloads).
+  return `
+    <div class="exercise-visual exercise-visual-video-only">
+      ${
+        isExpanded
+          ? videoIframe
+          : `<button class="visual-video-poster" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="false">
+              <span class="visual-video-poster-icon">▶</span>
+              <span class="visual-video-poster-label">Watch how it looks</span>
+            </button>`
+      }
+      ${attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
+    </div>
+  `;
 }
 
 function renderHowToFrame(frame: HowToFrame, idx: number, exerciseName: string): string {
@@ -4006,6 +4129,9 @@ function render(): void {
     root.classList.remove('screen-enter');
   }
   attachHandlers();
+  // Persist live position so reopening the app resumes the workout (cleared on
+  // quit/finish via resetState). No-op for non-resumable screens.
+  saveActiveSession();
 }
 
 // Group 2G: confirm dialog on Quit during workout.
@@ -4360,6 +4486,8 @@ function bindRange(rangeId: string, valId: string, onChange: (v: number) => void
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Resume an in-progress workout if one was left open (Allison 2026-06-06).
+  restoreActiveSession();
   render();
   void pullFromSupabase().then(() => flushPendingSyncs());
 });

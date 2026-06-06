@@ -225,10 +225,62 @@ test('exercise visual renders for known exercises', async ({ page }) => {
   // Group 3N: visual layer integration
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  // Walk past warmup walk to a still-image-backed exercise (Pelvic tilts has loop)
-  await page.locator('button:has-text("Done · Next")').click(); // off walk → belly breathing (video only)
-  // Belly breathing has youtube only → poster
+  // Walk past warmup walk to Belly breathing (no curated JPG).
+  await page.locator('button:has-text("Done · Next")').click();
   await expect(page.locator('.exercise-visual')).toBeVisible();
+});
+
+// Allison 2026-06-06: every actual exercise shows a PICTURE + a video. Exercises
+// with no curated JPG promote their how-to illustration to the main screen
+// instead of showing only a "watch video" poster.
+test('video-only exercise still shows a picture, with the video one tap away', async ({ page }) => {
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  // Off the walk → Belly breathing (no loop JPG; promotes its how-to SVG).
+  await page.locator('button:has-text("Done · Next")').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Belly breathing');
+  await expect(page.locator('.exercise-visual-still')).toBeVisible();
+  await expect(page.locator('.visual-video-toggle')).toBeVisible();
+});
+
+// Allison 2026-06-06: "when i leave the page i want it to open on the workout im
+// in unless i exit." Reopening mid-session resumes the same exercise. (We open a
+// fresh page in the same context to mimic a real reopen — the beforeEach clears
+// localStorage on every load of `page`, which a real PWA reopen does not.)
+test('resume: reopening the app returns to the in-progress workout', async ({ page, context }) => {
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await expect(page.locator('.exercise-name')).toBeVisible();
+  // Advance two exercises into the warm-up.
+  await page.locator('button:has-text("Done ·")').click();
+  await page.locator('button:has-text("Done ·")').click();
+  const nameBefore = await page.locator('.exercise-name').textContent();
+
+  const reopened = await context.newPage();
+  await reopened.goto('/');
+
+  // Lands back in the workout (not home), on the same exercise.
+  await expect(reopened.locator('.round-indicator')).toBeVisible();
+  await expect(reopened.locator('.screen-header h2')).toContainText('Workout A');
+  await expect(reopened.locator('.exercise-name')).toHaveText(nameBefore ?? '');
+  await reopened.close();
+});
+
+// Quitting clears the resume snapshot — reopening goes home, not back in.
+test('resume: quitting clears the session so reopening goes home', async ({ page, context }) => {
+  page.on('dialog', (d) => {
+    void d.accept();
+  });
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await page.locator('button:has-text("Done ·")').click();
+  await page.locator('.quit-link').click();
+  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+
+  const reopened = await context.newPage();
+  await reopened.goto('/');
+  await expect(reopened.locator('h1')).toHaveText('Workout Tracker');
+  await reopened.close();
 });
 
 test('how-to expander opens to the text on click', async ({ page }) => {
