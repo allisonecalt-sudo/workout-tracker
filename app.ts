@@ -1509,6 +1509,14 @@ function advanceExercise(): void {
   state.isResting = false;
   state.videoExpandedFor = null; // collapse video when moving on
 
+  // Cool-down is one scrollable list (not stepped) — its single "Done · Finish"
+  // button ends the session regardless of how many stretches it contains.
+  if (state.currentPhase === 'cooldown') {
+    state.screen = 'post-log';
+    render();
+    return;
+  }
+
   const list = w[state.currentPhase] ?? [];
   if (state.currentExerciseIndex < list.length - 1) {
     state.currentExerciseIndex += 1;
@@ -2601,6 +2609,42 @@ function renderRestScreen(workoutId: WorkoutId, phaseLabel: string): string {
   `;
 }
 
+// Cool-down = stretches. Allison's call (2026-06-06): show the whole block as
+// ONE scrollable list — name + cue per row — instead of stepping through each
+// stretch as its own screen. No per-stretch video, no per-stretch timer; the
+// reps text already carries the hold time and the notes carry the cue. Real
+// (non-stretch) exercises keep their stepped screens + videos.
+function renderCooldownList(w: Workout): string {
+  const stretches = w.cooldown ?? [];
+  const rows = stretches
+    .map(
+      (s) => `
+      <li class="stretch-row">
+        <div class="stretch-row-head">
+          <span class="stretch-name">${escapeHtml(s.name)}</span>
+          ${s.reps ? `<span class="stretch-reps">${escapeHtml(s.reps)}</span>` : ''}
+        </div>
+        ${s.notes ? `<p class="stretch-cue">${escapeHtml(s.notes)}</p>` : ''}
+      </li>`
+    )
+    .join('');
+
+  return `
+    <div class="screen-header">
+      <h2>Workout ${w.id}</h2>
+      <button class="quit-link" id="quit" type="button">× Quit workout</button>
+    </div>
+    <span class="round-indicator">Stretch · ${stretches.length} stretches</span>
+    <p class="subtitle">Work down the list at your own pace. No timer — hold each as long as feels right.</p>
+
+    <div class="card">
+      <ul class="stretch-list">${rows}</ul>
+    </div>
+
+    <button class="btn-large btn-primary" id="next" type="button">Done · Finish</button>
+  `;
+}
+
 function renderWorkout(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
@@ -2618,6 +2662,11 @@ function renderWorkout(): string {
 
   if (state.isResting) {
     return renderRestScreen(w.id, phaseLabel);
+  }
+
+  // Cool-down stretches render as a single scrollable list, not stepped cards.
+  if (state.currentPhase === 'cooldown') {
+    return renderCooldownList(w);
   }
 
   if (!ex) {

@@ -60,7 +60,9 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = page.locator('button:has-text("Done · Next")');
+    // Matches both the stepped "Done · Next" and the cool-down list's
+    // single "Done · Finish" button.
+    const nextBtn = page.locator('button:has-text("Done ·")');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -90,6 +92,51 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
   await expect(page.locator('h1')).toHaveText('Workout Tracker');
   await expect(page.locator('.stat-number').first()).toHaveText('1');
   await expect(page.locator('.history-word').first()).toContainText('proud');
+});
+
+// Cool-down stretches render as ONE scrollable list (Allison 2026-06-06), not
+// stepped cards — no per-stretch video, no per-stretch timer.
+test('cool-down renders as a single stretch list with no per-stretch video', async ({ page }) => {
+  await page.locator('button[data-workout="C"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await expect(page.locator('.exercise-name')).toBeVisible();
+
+  let reachedStretch = false;
+  for (let i = 0; i < 40; i++) {
+    const phase =
+      (await page
+        .locator('.round-indicator')
+        .textContent()
+        .catch(() => '')) ?? '';
+    if (phase.includes('Stretch')) {
+      reachedStretch = true;
+      break;
+    }
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) {
+      await nextBtn.click();
+    } else {
+      const skipRest = page.locator('#skip-rest');
+      if (await skipRest.isVisible()) {
+        const box = await skipRest.boundingBox();
+        if (box) {
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          await page.mouse.down();
+          await page.waitForTimeout(700);
+          await page.mouse.up();
+        }
+      }
+    }
+  }
+
+  expect(reachedStretch).toBe(true);
+  // Single list, multiple rows, and NO per-stretch video on this screen.
+  await expect(page.locator('.stretch-list')).toBeVisible();
+  expect(await page.locator('.stretch-row').count()).toBeGreaterThan(1);
+  await expect(page.locator('.exercise-visual')).toHaveCount(0);
+  // The single finish button ends the session straight to post-log.
+  await page.locator('button:has-text("Done · Finish")').click();
+  await expect(page.locator('text=Quick log')).toBeVisible();
 });
 
 // Upper-back block (Lisa Cohen May 31) — a once-per-session phase between main

@@ -98,11 +98,11 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
   'Forearm plank': {
     // Added 2026-05-15 for week-3 swap (replaces Heel taps in Workout A).
     // Forearms only — hands still off per Lisa Cohen wrist protocol.
-    // TODO: content-build pass should curate a specific PT video clip; for
-    // now the placeholder lets the exercise render without a visual.
+    // Video curated 2026-06-06: forearm-specific (hands stay off the floor).
+    youtubeId: 'mH5Sfb_KTGg',
     source: 'youtube-only',
-    license: 'TBD — placeholder pending content curation',
-    attribution: 'Pending curation 2026-05-15',
+    license: 'YouTube embed (ToS)',
+    attribution: 'How to do a Forearm Plank, The Right Way — Well+Good',
   },
 
   // ----- Cool-down -----
@@ -214,5 +214,20 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
     attribution: 'Wrist Radial Deviation with Weight — Ask Doctor Jo',
+  },
+
+  // ----- Upper-back strengthening block (Lisa Cohen, May 31 2026) -----
+  // Videos curated 2026-06-06. Wrist stays neutral on both — clinical sources.
+  'Wall angels': {
+    youtubeId: 'BbejQ2-On5o',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    attribution: 'Wall Angels for Scapular/Glenohumeral Coordination — TherEx',
+  },
+  'Scapular squeezes': {
+    youtubeId: 'b1snr_g3MZY',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    attribution: 'How to Do a Standing Scapular Retraction — MedBridge',
   },
 };

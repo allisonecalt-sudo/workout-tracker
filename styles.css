@@ -659,6 +659,52 @@ button:disabled {
   line-height: 1.5;
 }
 
+/* --- Cool-down stretch list (single scrollable list, no per-item video) -- */
+
+.stretch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.stretch-row {
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.stretch-row:last-child {
+  border-bottom: none;
+}
+
+.stretch-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stretch-name {
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.stretch-reps {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stretch-cue {
+  margin: 6px 0 0;
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  line-height: 1.5;
+}
+
 /* --- Exercise visual layer --------------------------------------------- */
 
 .exercise-visual {
