@@ -445,6 +445,41 @@ const UPPER_BACK: Exercise[] = [
   },
 ];
 
+// Week-6 upper-back block (2026-06-06). The 1 kg arm work phases IN on top of
+// the bodyweight scapular base now that wall angels + scapular squeezes feel
+// clean and the wrist has stayed quiet. SEPARATE const from UPPER_BACK so Week
+// 5 (which uses UPPER_BACK) is untouched — Week 5 stays bodyweight-only for
+// archive fidelity. Wrist NEUTRAL on both loaded moves; the 1 kg hangs from the
+// hand — NO palm/hand weight-bearing (Lisa's only constraint is the position).
+// Caps default to ~15 (streak-first double progression) per progression-rules.md;
+// prone row evidence ceiling is 3×20, but we ride reps up conservatively first.
+const UPPER_BACK_W6: Exercise[] = [
+  ...UPPER_BACK,
+  {
+    name: '1 kg prone row',
+    reps: '2 sets · 12 reps each side',
+    notes:
+      'Face-down (bed/bench edge) holding the 1 kg, arm hanging straight down, wrist NEUTRAL and straight. Drive the ELBOW up toward the ceiling, squeezing the shoulder blade toward your spine — the weight just hangs, NO hand/palm weight-bearing. Lower slow. Keep the wrist straight throughout; stop on any wrist signal.',
+  },
+  {
+    name: '1 kg biceps curl',
+    reps: '2 sets · 12 reps each side',
+    notes:
+      "Elbow tucked at your side, forearm hanging down, wrist NEUTRAL and straight. Curl the forearm up — only the forearm moves, the elbow stays pinned. Lower slow. Don't let the wrist bend back; don't swing the body for momentum.",
+  },
+];
+
+// Bilateral bodyweight hip-hinge (RDL pattern) — added to A + B main blocks in
+// Week 6 (2026-06-06). The missing standing hip-dominant move; UNLOADED start
+// per the self-prescribable hinge ladder (progression-rules.md). Bodyweight
+// only — no load. Shared const so A and B stay identical.
+const HIP_HINGE_W6: Exercise = {
+  name: 'Bodyweight hip hinge',
+  reps: '2 sets · 10 reps',
+  notes:
+    'Hinge at the hips, soft knees, flat/neutral spine — hands slide down the thighs, feel it in hamstrings + glutes. Do NOT round the low back. Bodyweight only.',
+};
+
 // Pre-walk-warmup era (Week 1 only). Kept exact for archive fidelity — this
 // is what Allison actually did her first week.
 const WEEK1_WARMUP_AB: Exercise[] = [
@@ -770,7 +805,7 @@ const PROGRAM: WeekPlan[] = [
             name: 'Forearm plank',
             reps: '1 set · 15 sec hold',
             notes:
-              'On forearms only (NOT hands — wrists still off). HELD at 1×15s for Week 4 (not doubled): consolidate the new movement first. Stop if any wrist sensation. Revisit a 2nd set in Week 5 if quiet + Lisa Cohen signs off.',
+              "On forearms only (NOT hands — wrists still off; forearms-not-palms is Lisa Cohen's only constraint, it's a wrist call). HELD at 1×15s for Week 4 (not doubled): consolidate the new movement first. Stop if any wrist sensation. Hold length + a 2nd set follow the normal evidence/progression rule (climb 15→~30s, then add a set) — no extra sign-off needed.",
             durationSec: 15,
             isTimed: true,
           },
@@ -822,8 +857,11 @@ const PROGRAM: WeekPlan[] = [
   // 30→33s in Workout A — formalizes what her body has organically been
   // doing (33s recorded in Supabase both May 19 and May 26, 0/10 back both
   // times). B and C HOLD at Week-4 numbers — they just got bumped last week
-  // and need a stabilization window. Forearm plank stays 1×15s (Lisa Cohen
-  // has not signed off on 2nd set). Cadence slowed: Week 5 and Week 6 will
+  // and need a stabilization window. Forearm plank stays 1×15s to keep the
+  // slow cadence (NOT because of any Lisa gate — Lisa never specified plank
+  // amounts; her only constraint is the position, forearms-not-palms = wrist.
+  // Hold length + a 2nd set follow the normal evidence/progression rule).
+  // Cadence slowed: Week 5 and Week 6 will
   // be identical (2 weeks per load) — buys 6 sessions of evidence per load
   // instead of 3 before next decision. Conditional gates: if Mounjaro dose
   // changes at Jun 1 nutritionist visit, hold Week 5 = Week 4 instead.
@@ -867,7 +905,7 @@ const PROGRAM: WeekPlan[] = [
             name: 'Forearm plank',
             reps: '1 set · 15 sec hold',
             notes:
-              'On forearms only (NOT hands — wrists still off). HELD at 1×15s again for Week 5: Lisa Cohen has not signed off on 2nd set. Stop if any wrist sensation.',
+              "On forearms only (NOT hands — wrists still off; forearms-not-palms is Lisa Cohen's only constraint, a wrist call). HELD at 1×15s again for Week 5 to stay on the slow cadence. Hold length + a 2nd set follow the normal evidence/progression rule (climb 15→~30s, then add a set) — no extra sign-off needed. Stop if any wrist sensation.",
             durationSec: 15,
             isTimed: true,
           },
@@ -916,20 +954,32 @@ const PROGRAM: WeekPlan[] = [
       },
     },
   },
-  // Week 6 — Jun 6-12. HOLD Week 5 numbers. Per the 2-week cadence decision
-  // (2026-05-29): each load gets 2 weeks of evidence before next bump. So
-  // Week 6 is structurally identical to Week 5 (wall sit 33s in A, B and C
-  // unchanged from Week 4). After Week 6 closes (~Jun 13), review combined
-  // Weeks 5+6 data (6 sessions) before deciding Week 7.
+  // Week 6 — Jun 6-12. DECISION 2026-06-06 (post progression-rules.md research
+  // pass): the existing loads HOLD at Week-5 numbers (wall sit 33s, squats 12,
+  // forearm plank 1×15s, etc.), and we add NEW low-risk movement on the safest
+  // axes only:
+  //  - A + B: add bilateral BODYWEIGHT hip-hinge (2×10) — the missing standing
+  //    hip-dominant pattern, started UNLOADED per the hinge ladder. Upper-back
+  //    block phases in 1 kg prone row + 1 kg biceps curl (2×12 each), wrist
+  //    neutral, no palm load (UPPER_BACK_W6 — a Week-6-only array; Week 5 keeps
+  //    bodyweight-only UPPER_BACK untouched).
+  //  - C ("can be a bit more"): small bumps on the cardio day — glute bridges
+  //    14→16, modified dead bug 6→8/side, calf raises 15→18. NO hip-hinge, NO
+  //    1 kg (it's the walk day). The 25-min walk stays LOCKED; rounds stay 2.
+  // This is more than one axis, but each addition is on a fresh/safe pattern
+  // and the existing hard loads all hold — the adherence-first rule is honored
+  // (nothing that makes showing up heavier). Caps default ~15 (streak-first
+  // double progression) per progression-rules.md. After Week 6 closes (~Jun 13),
+  // review the new moves' tolerance before deciding Week 7.
   {
     weekNum: 6,
     startsOn: '2026-06-06',
-    label: 'Stabilize at Week 5',
+    label: 'Hip-hinge + 1 kg arms in · C bumps',
     workouts: {
       A: {
         id: 'A',
         name: 'Lower Body + Core',
-        description: '🚶 10-min walk + lower body strength · ~38 min',
+        description: '🚶 10-min walk + lower body strength · ~40 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
@@ -938,6 +988,8 @@ const PROGRAM: WeekPlan[] = [
             reps: '12 reps · 3-1-3 tempo',
             notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
           },
+          // New Week 6: bodyweight hip-hinge, early while fresh (leg day).
+          HIP_HINGE_W6,
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
           {
             name: 'Wall sit',
@@ -966,16 +1018,18 @@ const PROGRAM: WeekPlan[] = [
             isTimed: true,
           },
         ],
-        upperBack: UPPER_BACK,
+        upperBack: UPPER_BACK_W6,
         cooldown: STRETCH_COOLDOWN,
       },
       B: {
         id: 'B',
         name: 'Glutes + Mobility + Core',
-        description: '🚶 10-min walk + glutes & mobility · ~40 min',
+        description: '🚶 10-min walk + glutes & mobility · ~42 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
+          // New Week 6: bodyweight hip-hinge, early while fresh.
+          HIP_HINGE_W6,
           { name: 'Side-lying leg raises', reps: '14 each side' },
           { name: 'Side-lying clamshells', reps: '10 each side' },
           { name: 'Single-leg glute bridges', reps: '10 each side' },
@@ -987,7 +1041,7 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Light fingertip touch on wall for balance only — NO grip.',
           },
         ],
-        upperBack: UPPER_BACK,
+        upperBack: UPPER_BACK_W6,
         cooldown: STRETCH_COOLDOWN,
       },
       C: {
@@ -997,12 +1051,12 @@ const PROGRAM: WeekPlan[] = [
         rounds: 2,
         warmup: WALK_WARMUP_C,
         main: [
-          { name: 'Glute bridges', reps: '14 reps · 2-sec hold' },
+          { name: 'Glute bridges', reps: '16 reps · 2-sec hold' },
           { name: 'Side-lying clamshells', reps: '10 each side' },
-          { name: 'Modified dead bug', reps: '6 each side' },
+          { name: 'Modified dead bug', reps: '8 each side' },
           {
             name: 'Standing calf raises',
-            reps: '15 reps',
+            reps: '18 reps',
             notes: 'Fingertip touch on wall for balance only — NO grip.',
           },
         ],
@@ -1045,6 +1099,15 @@ function getFutureWeekPlans(date: Date = new Date()): WeekPlan[] {
   const current = getWeekPlan(date);
   const currentIdx = PROGRAM.findIndex((wp) => wp.weekNum === current.weekNum);
   return PROGRAM.slice(currentIdx + 1);
+}
+
+// Encoded weeks BEFORE the current one, oldest → newest. Powers the collapsed
+// "Past weeks" surface on home so previous programming stays browsable (the
+// archive-not-delete principle) without expanding heavy blocks by default.
+function getPastWeekPlans(date: Date = new Date()): WeekPlan[] {
+  const current = getWeekPlan(date);
+  const currentIdx = PROGRAM.findIndex((wp) => wp.weekNum === current.weekNum);
+  return PROGRAM.slice(0, currentIdx);
 }
 
 function getProgramWeekCount(): number {
@@ -1161,6 +1224,19 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   'Outdoor walk': {
     howTo:
       "Conversational pace — you should be able to talk in full sentences without getting breathless. 20 minutes minimum. Walking is genuinely your most underrated exercise: it preserves joint health, supports digestion (especially good with Crohn's), aids GLP-1 medication's effect, and clears mental fog. Take it outdoors when possible — the visual variety and sunlight matter. Tap done when you finish.",
+  },
+  // Week-6 additions (2026-06-06).
+  'Bodyweight hip hinge': {
+    howTo:
+      'Stand tall, feet hip-width, soft (unlocked) knees, hands resting on the front of your thighs. Hinge at the HIPS — push your butt back as your hands slide down your thighs toward your knees. Keep your spine flat and neutral the whole way (NOT rounded). You should feel a stretch/load in your hamstrings and glutes. Stand back up by driving your hips forward and squeezing your glutes. Common mistake: squatting (knees forward) instead of hinging (hips back), or letting the low back round. Bodyweight only — no load. This is the standing hip-dominant pattern your routine was missing — the real-life floor-pickup skill.',
+  },
+  '1 kg prone row': {
+    howTo:
+      'Lie face-down on a bed/bench edge (or stand and hinge over) holding the 1 kg in one hand, arm hanging straight down toward the floor, wrist neutral and straight. Drive your elbow UP toward the ceiling, leading with the elbow and squeezing your shoulder blade toward your spine — the weight just hangs from your hand, no palm or hand weight-bearing. Lower slowly. 2 sets of 12 each side. Keep the wrist straight throughout. Common mistake: bending the wrist or yanking with the arm instead of leading with the elbow + blade. Fires the lower trap even at a light load.',
+  },
+  '1 kg biceps curl': {
+    howTo:
+      "Hold the 1 kg with your elbow tucked at your side, forearm hanging down, wrist neutral and straight. Curl the forearm up toward your shoulder, keeping the elbow pinned in place — only the forearm moves. Lower slowly under control. 2 sets of 12. Keep the wrist straight (neutral) the whole time — don't let it bend back. Common mistake: swinging the body or the elbow drifting forward for momentum. Slow and controlled is the work.",
   },
 };
 
@@ -2426,6 +2502,95 @@ function renderComingNextWeek(): string {
   return sections;
 }
 
+// "Past weeks" — collapsed-by-default <details>, the mirror of "Coming next
+// week". The home screen only ever expands the CURRENT week's workouts; past
+// programming is otherwise only reachable through the week-dot strip + Weekly
+// Review (session logs), never as expanded exercise blocks. This adds a single
+// lightweight collapsed surface so the past program is browsable in the same
+// compact diff form — nothing past-week renders expanded by default. Returns ''
+// if there are no encoded weeks before the current one.
+function renderPastWeeks(): string {
+  const past = getPastWeekPlans();
+  if (past.length === 0) return '';
+
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  // Newest past week first. Each week diffs against its own predecessor so the
+  // lines read "what changed when this week started".
+  const sections = [...past]
+    .reverse()
+    .map((wp) => {
+      const wpIdx = PROGRAM.findIndex((p) => p.weekNum === wp.weekNum);
+      const prev = wpIdx > 0 ? PROGRAM[wpIdx - 1]! : null;
+      const start = new Date(wp.startsOn + 'T00:00:00');
+      const startLabel = `${months[start.getMonth()]} ${start.getDate()}`;
+
+      const blocks = (['A', 'B', 'C'] as WorkoutId[])
+        .map((id) => {
+          const lines = prev ? diffWorkout(prev.workouts[id], wp.workouts[id]) : [];
+          if (lines.length === 0) {
+            return `
+              <div class="next-week-block">
+                <div class="next-week-block-title">Workout ${id}</div>
+                <div class="next-week-block-empty">${prev ? 'unchanged' : 'starting point'}</div>
+              </div>`;
+          }
+          const items = lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('');
+          return `
+            <div class="next-week-block">
+              <div class="next-week-block-title">Workout ${id}</div>
+              <ul class="next-week-block-list">${items}</ul>
+            </div>`;
+        })
+        .join('');
+
+      const caption = prev
+        ? `Diff vs Week ${prev.weekNum}${wp.label ? ` · ${wp.label}` : ''}.`
+        : `${wp.label ? `${wp.label}. ` : ''}The starting week.`;
+
+      return `
+        <details class="next-week-preview">
+          <summary class="next-week-summary">
+            <span class="next-week-summary-label">Week ${wp.weekNum}</span>
+            <span class="next-week-summary-meta">started Sat ${startLabel}</span>
+            <span class="next-week-chev">▸</span>
+          </summary>
+          <div class="next-week-body">
+            <div class="next-week-caption">${caption}</div>
+            <div class="next-week-blocks">${blocks}</div>
+          </div>
+        </details>
+      `;
+    })
+    .join('');
+
+  // One outer collapsed wrapper so the whole past-program section is a single
+  // quiet line until tapped (it never auto-expands).
+  return `
+    <details class="past-weeks-wrap">
+      <summary class="next-week-summary">
+        <span class="next-week-summary-label">Past weeks</span>
+        <span class="next-week-summary-meta">${past.length} earlier week${past.length === 1 ? '' : 's'} · tap to browse</span>
+        <span class="next-week-chev">▸</span>
+      </summary>
+      <div class="past-weeks-body">${sections}</div>
+    </details>
+  `;
+}
+
 // Gear & recovery card. Equipment is ownership-gated: a move only appears in a
 // workout once Allison says she owns the kit. Until then it lives here as a
 // "worth getting" item with what it unlocks. Also holds Lisa's neck-release.
@@ -2435,15 +2600,16 @@ function renderGearCard(): string {
       <summary class="gear-summary">🎒 Gear &amp; recovery</summary>
       <div class="gear-body">
         <div class="gear-section">
-          <div class="gear-label">You have</div>
+          <div class="gear-label">You have — in use now</div>
           <ul class="gear-list">
-            <li>✅ 1 kg weight</li>
+            <li>✅ 1 kg weight — live in your upper-back block (1 kg prone row + biceps curl, 2×12, wrist neutral)</li>
           </ul>
         </div>
         <div class="gear-section">
           <div class="gear-label">Worth getting — unlocks more (not in your workout yet)</div>
           <ul class="gear-list">
-            <li>⬜ Resistance band — unlocks band pull-aparts + band rows</li>
+            <li>⬜ A 2nd 1 kg (a pair) — lets you do both sides at once, and load the bodyweight hip-hinge later</li>
+            <li>⬜ Resistance band — unlocks band pull-aparts + band pull-throughs (neutral-wrist hip-hinge progression)</li>
             <li>⬜ 2 tennis balls in a sock (“the peanut”) — for the neck release below</li>
           </ul>
           <p class="gear-note">Tell Claude when you’ve got one and the moves it unlocks get added. Nothing shows up in your workout until you own it.</p>
@@ -2584,6 +2750,8 @@ function renderHome(): string {
     ${renderGearCard()}
 
     ${renderComingNextWeek()}
+
+    ${renderPastWeeks()}
 
     ${
       logs.length > 0

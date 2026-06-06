@@ -1391,6 +1391,47 @@ input[type='number']:focus {
   font-style: italic;
 }
 
+/* --- Past weeks — collapsed history mirror of "Coming next week" -------- */
+.past-weeks-wrap {
+  margin-top: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--grad-surface);
+  overflow: hidden;
+  /* Quieter than the forward surface — it's history, not the live edge. */
+  opacity: 0.92;
+}
+
+.past-weeks-wrap > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.past-weeks-wrap > summary::-webkit-details-marker {
+  display: none;
+}
+
+.past-weeks-wrap[open] > summary .next-week-chev {
+  transform: rotate(90deg);
+}
+
+.past-weeks-body {
+  padding: 4px 14px 14px;
+  border-top: 1px solid var(--border-divider);
+}
+
+/* Nested week previews sit flush inside the wrapper — no double margins. */
+.past-weeks-body .next-week-preview {
+  margin-top: 10px;
+  margin-bottom: 0;
+  background: var(--bg-elev-1);
+}
+
 /* --- Banners — warning is status, not panic ---------------------------- */
 
 .warning-banner {

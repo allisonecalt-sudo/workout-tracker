@@ -230,4 +230,27 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     license: 'YouTube embed (ToS)',
     attribution: 'How to Do a Standing Scapular Retraction — MedBridge',
   },
+
+  // ----- Week-6 additions (2026-06-06) -----
+  // Hip-hinge starts bodyweight (no load); 1 kg prone row + curl phase into the
+  // upper-back block. Videos curated 2026-06-06. Wrist stays neutral on the
+  // loaded moves; no still JPGs sourced — the how-to SVG renders as the still.
+  'Bodyweight hip hinge': {
+    youtubeId: '2SHo4zfXTOY',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    attribution: 'How To Hip Hinge (Bodyweight RDL Pattern) — physical therapy reference',
+  },
+  '1 kg prone row': {
+    youtubeId: 'Ub7Bztx0Hr8',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    attribution: 'Prone Row for Lower Trap / Scapular Strength — PT reference',
+  },
+  '1 kg biceps curl': {
+    youtubeId: 'ykJmrZ5v0Oo',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    attribution: 'Dumbbell Biceps Curl — neutral-wrist form reference',
+  },
 };

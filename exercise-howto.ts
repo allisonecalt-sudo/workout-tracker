@@ -598,6 +598,99 @@ const SVG_BICEPS_WALL = sNoMat(`
   <text x="22" y="168" fill="#d97757" font-size="10.5" font-family="sans-serif" font-weight="600">not a wrist stretch — wrist stays comfy</text>
 `);
 
+// ---------- Week-6 additions (2026-06-06) ----------
+// Bilateral bodyweight hip-hinge (RDL pattern), 1 kg prone row, 1 kg biceps
+// curl. Same grammar: green = body, gold = the active cue, orange = mistake,
+// grey = wall/floor/mat.
+
+// Hip-hinge START — standing tall, soft knees, neutral spine
+const SVG_HIP_HINGE_START = s(`
+  <circle cx="120" cy="40" r="13" fill="#8fbc8f" />
+  <line x1="120" y1="53" x2="120" y2="108" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <!-- arms resting on thighs -->
+  <line x1="120" y1="66" x2="108" y2="104" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <!-- legs, slight knee bend -->
+  <line x1="120" y1="108" x2="116" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <text x="40" y="34" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">stand tall · soft knees</text>
+`);
+
+// Hip-hinge HINGED — hips travel back, flat spine, hands slide down thighs
+const SVG_HIP_HINGE_HINGED = s(`
+  <!-- head out front, hips back -->
+  <circle cx="78" cy="70" r="13" fill="#8fbc8f" />
+  <!-- flat back angled forward -->
+  <line x1="88" y1="76" x2="150" y2="108" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <!-- hands sliding down the thigh -->
+  <line x1="120" y1="92" x2="138" y2="132" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <!-- thigh + shin, hips pushed back -->
+  <line x1="150" y1="108" x2="138" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <!-- arrow showing hips travelling back -->
+  <line x1="178" y1="108" x2="158" y2="108" stroke="#e6b450" stroke-width="2" />
+  <polygon points="155,108 165,103 165,113" fill="#e6b450" />
+  <text x="36" y="36" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">hips back · flat spine · slide hands down</text>
+`);
+
+// Hip-hinge WRONG — rounded low back (the danger)
+const SVG_HIP_HINGE_WRONG = s(`
+  <circle cx="78" cy="78" r="13" fill="#a8a59c" />
+  <!-- rounded/curved back -->
+  <path d="M88 84 Q120 70 150 112" fill="none" stroke="#d97757" stroke-width="6" stroke-linecap="round" />
+  <line x1="150" y1="112" x2="140" y2="150" stroke="#a8a59c" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="96" x2="138" y2="132" stroke="#a8a59c" stroke-width="4" stroke-linecap="round" />
+  <text x="40" y="36" fill="#d97757" font-size="12" font-family="sans-serif" font-weight="600">don't round the low back</text>
+`);
+
+// 1 kg prone row — face-down, elbow drives up, weight hangs, neutral wrist
+const SVG_PRONE_ROW_DOWN = s(`
+  <!-- bench/mat figure lying face down, side view -->
+  <circle cx="56" cy="120" r="10" fill="#8fbc8f" />
+  <line x1="64" y1="124" x2="160" y2="128" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <!-- legs -->
+  <line x1="160" y1="128" x2="200" y2="132" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <!-- arm hanging straight down, weight at bottom -->
+  <line x1="82" y1="126" x2="82" y2="150" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <rect x="75" y="148" width="14" height="9" rx="2" fill="#e6b450" stroke="#1a1f1c" stroke-width="1.5" />
+  <text x="40" y="44" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">start: arm hangs · 1 kg</text>
+`);
+
+const SVG_PRONE_ROW_UP = s(`
+  <circle cx="56" cy="120" r="10" fill="#8fbc8f" />
+  <line x1="64" y1="124" x2="160" y2="128" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="160" y1="128" x2="200" y2="132" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <!-- elbow drives UP toward ceiling, forearm vertical, weight raised -->
+  <line x1="82" y1="126" x2="82" y2="100" stroke="#e6b450" stroke-width="4" stroke-linecap="round" />
+  <line x1="82" y1="100" x2="84" y2="126" stroke="#e6b450" stroke-width="4" stroke-linecap="round" />
+  <rect x="77" y="120" width="14" height="9" rx="2" fill="#e6b450" stroke="#1a1f1c" stroke-width="1.5" />
+  <line x1="100" y1="104" x2="100" y2="86" stroke="#e6b450" stroke-width="2" />
+  <polygon points="100,82 95,92 105,92" fill="#e6b450" />
+  <text x="36" y="44" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">elbow drives UP · squeeze the blade</text>
+  <text x="36" y="172" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">wrist stays straight — no palm load</text>
+`);
+
+// 1 kg biceps curl — neutral wrist, elbow tucked, curl the forearm up
+const SVG_BICEPS_CURL_DOWN = sNoMat(`
+  <circle cx="100" cy="40" r="13" fill="#8fbc8f" />
+  <line x1="100" y1="53" x2="100" y2="120" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <!-- upper arm tucked at side, forearm hanging down -->
+  <line x1="100" y1="70" x2="100" y2="100" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <line x1="100" y1="100" x2="100" y2="135" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <rect x="93" y="134" width="15" height="10" rx="2" fill="#e6b450" stroke="#1a1f1c" stroke-width="1.5" />
+  <text x="30" y="36" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">elbow tucked · start low · 1 kg</text>
+`);
+
+const SVG_BICEPS_CURL_UP = sNoMat(`
+  <circle cx="100" cy="40" r="13" fill="#8fbc8f" />
+  <line x1="100" y1="53" x2="100" y2="120" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <!-- upper arm stays vertical, forearm curls up -->
+  <line x1="100" y1="70" x2="100" y2="100" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <line x1="100" y1="100" x2="118" y2="74" stroke="#e6b450" stroke-width="4" stroke-linecap="round" />
+  <rect x="113" y="66" width="15" height="10" rx="2" fill="#e6b450" stroke="#1a1f1c" stroke-width="1.5" />
+  <path d="M104 118 a 30 30 0 0 1 18 -40" fill="none" stroke="#e6b450" stroke-width="2" stroke-dasharray="3 3" />
+  <polygon points="122,80 112,76 116,88" fill="#e6b450" />
+  <text x="30" y="160" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">curl up · keep the wrist straight</text>
+  <text x="30" y="176" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">don't swing the body for momentum</text>
+`);
+
 // ---------- THE DATA ----------
 
 export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
@@ -1544,6 +1637,67 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
         svg: holdCard('Hold 45 sec', 'the dangling leg is the stretch'),
         do: 'Relax the hanging leg toward the floor.',
         avoid: "Don't grip the wall/couch — stay relaxed.",
+      },
+    ],
+  },
+
+  // ===== WEEK-6 ADDITIONS (2026-06-06) =====
+
+  'Bodyweight hip hinge': {
+    exercise: 'Bodyweight hip hinge',
+    sourceNotes:
+      'Hand-coded SVG. Bilateral RDL pattern, bodyweight only — the missing standing hip-dominant move. Teaches neutral spine while the hips move (real-life floor-pickup skill).',
+    frames: [
+      {
+        svg: SVG_HIP_HINGE_START,
+        do: 'Stand tall, feet hip-width, soft knees, hands on thighs.',
+        avoid: "Don't lock the knees — keep a soft, unlocked bend.",
+      },
+      {
+        svg: SVG_HIP_HINGE_HINGED,
+        do: 'Push hips BACK, hands slide down thighs, spine flat/neutral.',
+        avoid: "Don't squat down — the movement is hips back, not knees forward.",
+      },
+      {
+        svg: SVG_HIP_HINGE_WRONG,
+        do: 'Feel it in hamstrings + glutes. Stand back up, squeeze glutes.',
+        avoid: "Don't round the low back — flat spine the whole way.",
+      },
+    ],
+  },
+
+  '1 kg prone row': {
+    exercise: '1 kg prone row',
+    sourceNotes:
+      'Hand-coded SVG. Wrist-safe scapular pick — fires lower trap even at 1 kg. Neutral wrist, no palm/hand weight-bearing.',
+    frames: [
+      {
+        svg: SVG_PRONE_ROW_DOWN,
+        do: 'Face down, arm hanging straight, holding the 1 kg, wrist neutral.',
+        avoid: "Don't bear weight through the palm — the weight just hangs.",
+      },
+      {
+        svg: SVG_PRONE_ROW_UP,
+        do: 'Drive the elbow UP, squeeze the shoulder blade. 2 sets of 12.',
+        avoid: "Don't bend the wrist — keep it straight, no palm load.",
+      },
+    ],
+  },
+
+  '1 kg biceps curl': {
+    exercise: '1 kg biceps curl',
+    sourceNotes:
+      'Hand-coded SVG. Light neutral-wrist arm work (cleared). Real stimulus near failure at 5 weeks deconditioned.',
+    frames: [
+      {
+        svg: SVG_BICEPS_CURL_DOWN,
+        do: 'Elbow tucked at your side, forearm down, holding the 1 kg.',
+        avoid: "Don't let the wrist bend back — keep it straight (neutral).",
+      },
+      {
+        svg: SVG_BICEPS_CURL_UP,
+        do: 'Curl the forearm up, elbow stays put. 2 sets of 12.',
+        avoid: "Don't swing the body — control the weight up and down.",
       },
     ],
   },
