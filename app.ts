@@ -445,29 +445,13 @@ const UPPER_BACK: Exercise[] = [
   },
 ];
 
-// Week-6 upper-back block (2026-06-06). The 1 kg arm work phases IN on top of
-// the bodyweight scapular base now that wall angels + scapular squeezes feel
-// clean and the wrist has stayed quiet. SEPARATE const from UPPER_BACK so Week
-// 5 (which uses UPPER_BACK) is untouched — Week 5 stays bodyweight-only for
-// archive fidelity. Wrist NEUTRAL on both loaded moves; the 1 kg hangs from the
-// hand — NO palm/hand weight-bearing (Lisa's only constraint is the position).
-// Caps default to ~15 (streak-first double progression) per progression-rules.md;
-// prone row evidence ceiling is 3×20, but we ride reps up conservatively first.
-const UPPER_BACK_W6: Exercise[] = [
-  ...UPPER_BACK,
-  {
-    name: '1 kg prone row',
-    reps: '2 sets · 12 reps each side',
-    notes:
-      'Face-down (bed/bench edge) holding the 1 kg, arm hanging straight down, wrist NEUTRAL and straight. Drive the ELBOW up toward the ceiling, squeezing the shoulder blade toward your spine — the weight just hangs, NO hand/palm weight-bearing. Lower slow. Keep the wrist straight throughout; stop on any wrist signal.',
-  },
-  {
-    name: '1 kg biceps curl',
-    reps: '2 sets · 12 reps each side',
-    notes:
-      "Elbow tucked at your side, forearm hanging down, wrist NEUTRAL and straight. Curl the forearm up — only the forearm moves, the elbow stays pinned. Lower slow. Don't let the wrist bend back; don't swing the body for momentum.",
-  },
-];
+// Week-6 1 kg arm work (1 kg prone row + 1 kg biceps curl) was DEFERRED to a
+// later week on 2026-06-07 — Week 6 was right-sized to one "slow" week (KEEP the
+// hip-hinge + the C bump; defer the 1 kg). Week 6 A/B therefore use the shared
+// bodyweight-only UPPER_BACK block (wall angels + scapular squeezes). The 1 kg
+// how-to / visual / guide map entries are intentionally retained (EXERCISE_HOWTO,
+// EXERCISE_VISUALS, EXERCISE_GUIDE) so re-adding the loaded moves next week needs
+// no re-curation — only an UPPER_BACK_W6-style const + the upperBack wiring.
 
 // Bilateral bodyweight hip-hinge (RDL pattern) — added to A + B main blocks in
 // Week 6 (2026-06-06). The missing standing hip-dominant move; UNLOADED start
@@ -954,32 +938,31 @@ const PROGRAM: WeekPlan[] = [
       },
     },
   },
-  // Week 6 — Jun 6-12. DECISION 2026-06-06 (post progression-rules.md research
-  // pass): the existing loads HOLD at Week-5 numbers (wall sit 33s, squats 12,
-  // forearm plank 1×15s, etc.), and we add NEW low-risk movement on the safest
-  // axes only:
+  // Week 6 — Jun 6-12. DECISION 2026-06-06, RIGHT-SIZED 2026-06-07: last night's
+  // build stacked too much for one "slow" week, so Week 6 was trimmed to ONE
+  // real addition + the C bump. The existing loads HOLD at Week-5 numbers (wall
+  // sit 33s, squats 12, forearm plank 1×15s, etc.):
   //  - A + B: add bilateral BODYWEIGHT hip-hinge (2×10) — the missing standing
   //    hip-dominant pattern, started UNLOADED per the hinge ladder. Upper-back
-  //    block phases in 1 kg prone row + 1 kg biceps curl (2×12 each), wrist
-  //    neutral, no palm load (UPPER_BACK_W6 — a Week-6-only array; Week 5 keeps
-  //    bodyweight-only UPPER_BACK untouched).
+  //    block stays the shared bodyweight-only UPPER_BACK (wall angels + scapular
+  //    squeezes). The 1 kg prone row + 1 kg biceps curl are DEFERRED to next week
+  //    (their how-to/visual/guide entries are kept for zero-re-curation re-add).
   //  - C ("can be a bit more"): small bumps on the cardio day — glute bridges
   //    14→16, modified dead bug 6→8/side, calf raises 15→18. NO hip-hinge, NO
   //    1 kg (it's the walk day). The 25-min walk stays LOCKED; rounds stay 2.
-  // This is more than one axis, but each addition is on a fresh/safe pattern
-  // and the existing hard loads all hold — the adherence-first rule is honored
-  // (nothing that makes showing up heavier). Caps default ~15 (streak-first
-  // double progression) per progression-rules.md. After Week 6 closes (~Jun 13),
-  // review the new moves' tolerance before deciding Week 7.
+  // Net change this week = hip-hinge added (A/B) + C bump; 1 kg deferred. One
+  // fresh/safe pattern on top of held hard loads — the adherence-first rule is
+  // honored (nothing that makes showing up heavier). After Week 6 closes
+  // (~Jun 13), review the hip-hinge's tolerance + bring in the 1 kg for Week 7.
   {
     weekNum: 6,
     startsOn: '2026-06-06',
-    label: 'Hip-hinge + 1 kg arms in · C bumps',
+    label: 'Hip-hinge in · C bumps · 1 kg deferred',
     workouts: {
       A: {
         id: 'A',
         name: 'Lower Body + Core',
-        description: '🚶 10-min walk + lower body strength · ~40 min',
+        description: '🚶 10-min walk + lower body strength · ~39 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
@@ -1018,13 +1001,13 @@ const PROGRAM: WeekPlan[] = [
             isTimed: true,
           },
         ],
-        upperBack: UPPER_BACK_W6,
+        upperBack: UPPER_BACK,
         cooldown: STRETCH_COOLDOWN,
       },
       B: {
         id: 'B',
         name: 'Glutes + Mobility + Core',
-        description: '🚶 10-min walk + glutes & mobility · ~42 min',
+        description: '🚶 10-min walk + glutes & mobility · ~40 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
@@ -1041,7 +1024,7 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Light fingertip touch on wall for balance only — NO grip.',
           },
         ],
-        upperBack: UPPER_BACK_W6,
+        upperBack: UPPER_BACK,
         cooldown: STRETCH_COOLDOWN,
       },
       C: {
@@ -2600,9 +2583,9 @@ function renderGearCard(): string {
       <summary class="gear-summary">🎒 Gear &amp; recovery</summary>
       <div class="gear-body">
         <div class="gear-section">
-          <div class="gear-label">You have — in use now</div>
+          <div class="gear-label">You have — owned, not in the workout yet</div>
           <ul class="gear-list">
-            <li>✅ 1 kg weight — live in your upper-back block (1 kg prone row + biceps curl, 2×12, wrist neutral)</li>
+            <li>✅ 1 kg weight — owned, but NOT in the workout yet. Coming next week (1 kg prone row + biceps curl, 2×12, wrist neutral). Deferred so this week stays one slow step.</li>
           </ul>
         </div>
         <div class="gear-section">
