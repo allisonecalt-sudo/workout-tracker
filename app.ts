@@ -181,10 +181,12 @@ const SUPABASE_URL = 'https://hpiyvnfhoqnnnotrmwaz.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwaXl2bmZob3Fubm5vdHJtd2F6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzIwNDEsImV4cCI6MjA4ODA0ODA0MX0.AsGhYitkSnyVMwpJII05UseS_gICaXiCy7d8iHsr6Qw';
 
-// Visible build version (shown in the home header) so she can tell at a glance
-// whether a new build actually loaded. BUMP THIS TOGETHER WITH sw.js VERSION on
-// every deploy (sw.js workout-tracker-vN ↔ APP_VERSION 'vN').
-const APP_VERSION = 'v5';
+// Visible build version + date (shown in the home header as "vN · Mon D, YYYY")
+// so she can tell at a glance whether a new build actually loaded, and when.
+// BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
+// (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date.
+const APP_VERSION = 'v6';
+const BUILD_DATE = 'Jun 18, 2026';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -3040,7 +3042,7 @@ function renderHome(): string {
     <div class="home-header">
       <div class="home-header-title">
         <h1>Workout Tracker</h1>
-        <span class="app-version" aria-label="Build version">${APP_VERSION}</span>
+        <span class="app-version" aria-label="Build version">${APP_VERSION} · ${BUILD_DATE}</span>
       </div>
       <button class="settings-icon-btn" id="open-settings" type="button" aria-label="Open settings" title="Settings">
         <span class="settings-icon-glyph" aria-hidden="true">⚙</span>
@@ -4446,7 +4448,7 @@ function renderSettings(): string {
         <div class="settings-section-label">About</div>
         <div class="settings-about-row">
           <div class="settings-row-title">Workout Tracker</div>
-          <div class="settings-row-caption">Build ${APP_VERSION}.</div>
+          <div class="settings-row-caption">Build ${APP_VERSION} · ${BUILD_DATE}.</div>
         </div>
         <div class="settings-about-row">
           <div class="settings-row-title">Program weeks: ${getProgramWeekCount()}</div>
