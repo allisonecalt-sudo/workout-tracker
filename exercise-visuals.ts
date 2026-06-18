@@ -256,4 +256,12 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     license: 'YouTube embed (ToS)',
     attribution: 'Dumbbell Biceps Curl — neutral-wrist form reference',
   },
+  // Added 2026-06-18 — Lisa Cohen prescribed WYT (Y-T-W raises). Video verified
+  // embeddable (oembed 200). Bodyweight, thumbs-up / wrist-neutral, no palm load.
+  'WYT raises': {
+    youtubeId: 'Yv6sUKOwOY8',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    attribution: 'Prone I-T-W-Y for Shoulder — AskDoctorJo (DPT). Do the Y, T, W positions.',
+  },
 };

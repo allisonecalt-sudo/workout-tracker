@@ -488,33 +488,46 @@ const UPPER_BACK_W7: Exercise[] = [
     name: 'Prone row (bodyweight)',
     reps: '2 sets · 12 reps each side',
     notes:
-      'NO weight yet — building toward the 1 kg. Arm hanging, wrist NEUTRAL/straight. Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal. Add the 1 kg only when you say you are ready.',
+      'NO weight yet — building toward the 1 kg. Arm hanging, wrist NEUTRAL/straight. Keep your HEAD DOWN — do NOT lift it (Lisa, Jun 18: lifting strains the neck). Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal. Add the 1 kg only when you say you are ready.',
   },
   {
     name: '1 kg biceps curl',
     reps: '2 sets · 12 reps',
     notes:
-      'Elbow tucked at your side, forearm hanging, wrist NEUTRAL/straight. Curl the forearm up — only the forearm moves, elbow stays pinned. Lower slow. Keep the wrist straight (no bending back). Stop on any wrist signal.',
+      'Hold the weight LIGHTLY — keep wrist AND fingers neutral, never bending back / hyperextending (Lisa, Jun 18: too-heavy / over-gripping caused that — lighter is right). Elbow tucked at your side, forearm hanging. Curl the forearm up — only the forearm moves, elbow stays pinned. Lower slow. Stop on any wrist signal.',
   },
 ];
 
-// Week-9 arm work (2026-06-27): rep bump 2×12 → 2×14 after the W7+W8 window.
-// SPLIT held from Week 7 (2026-06-18): biceps at 1 kg, prone row still BODYWEIGHT
-// (building toward the 1 kg). PROVISIONAL — see Week 9 block comment; reconcile
-// against actual logs (the pending load audit) before she reaches this week.
+// Week-9 arm work (2026-06-27). REVISED 2026-06-18: Lisa prescribed WYT (Y-T-W
+// raises) — it REPLACES the scapular squeezes (same blade-squeeze pattern, more
+// complete) AND the originally-proposed overhead press (Lisa: weights too heavy,
+// don't add loaded gripping). Prone row + biceps rep-bump 2×12 → 2×14 after their
+// W7+W8 window. Biceps stays 1 kg; prone row stays BODYWEIGHT. Wall angels 2×10 →
+// 2×12. All wrist-safe (no palm load); carries Lisa's head-down + light-grip cues.
 const UPPER_BACK_W9: Exercise[] = [
-  ...UPPER_BACK,
+  {
+    name: 'Wall angels',
+    reps: '2 sets · 12 slow reps',
+    notes:
+      "Back against the wall, ribs down, chin gently tucked. Slide both arms up the wall keeping elbows AND wrists in light contact; if the wrists lift off, stop there — no forcing. Slide back down with control. Don't shrug or arch your low back to reach higher.",
+  },
+  {
+    name: 'WYT raises',
+    reps: '2 sets · 8 each (Y, T, W)',
+    notes:
+      'Lisa Cohen (Jun 18). Face DOWN, forehead on a towel, arms hanging, THUMBS UP the whole time (wrist neutral, NO palm load). Y: lift both arms overhead into a narrow V. T: arms straight out to the sides at shoulder height. W: bend the elbows down toward your ribs, squeezing the shoulder blades together. Lift from the UPPER BACK, not the neck — small, controlled lifts.',
+  },
   {
     name: 'Prone row (bodyweight)',
     reps: '2 sets · 14 reps each side',
     notes:
-      'NO weight yet — building toward the 1 kg. Arm hanging, wrist NEUTRAL/straight. Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal. Add the 1 kg only when you say you are ready.',
+      'NO weight yet — building toward the 1 kg. Arm hanging, wrist NEUTRAL/straight. Keep your HEAD DOWN — do NOT lift it (Lisa, Jun 18: lifting strains the neck). Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal. Add the 1 kg only when you say you are ready.',
   },
   {
     name: '1 kg biceps curl',
     reps: '2 sets · 14 reps',
     notes:
-      'Elbow tucked at your side, forearm hanging, wrist NEUTRAL/straight. Curl the forearm up — only the forearm moves, elbow stays pinned. Lower slow. Keep the wrist straight (no bending back). Stop on any wrist signal.',
+      'Hold the weight LIGHTLY — keep wrist AND fingers neutral, never bending back / hyperextending (Lisa, Jun 18: too-heavy / over-gripping caused that — lighter is right). Elbow tucked at your side, forearm hanging. Curl the forearm up — only the forearm moves, elbow stays pinned. Lower slow. Stop on any wrist signal.',
   },
 ];
 
@@ -1205,32 +1218,35 @@ const PROGRAM: WeekPlan[] = [
       },
     },
   },
-  // Week 8 — Jun 20-26. DECISION 2026-06-07 (C bump added 2026-06-18): two small
-  // bumps from W7, both on moves past their 2-week window. C glute bridges held
-  // at 18 (bumped 16→18 in W7 on 06-18 — her "tiny bump" call for the walk day).
-  // Original Week-8 notes: two small bumps, both on moves that
-  // completed their 2-week stabilization window. Everything else HOLDS at Week-7
-  // numbers (1 kg arms stay 2×12 — they're brand new in W7, no double-bump).
-  //  - A + B: hip-hinge 2×10 → 2×12 (HIP_HINGE_W8). Done its W6+W7 window; same
-  //    cues, still bodyweight only.
-  //  - A: wall sit 33s → 35s (reps text + durationSec updated).
-  //  - C unchanged. One change per axis; nothing stacked on the same new move.
+  // Week 8 — Jun 20-26. REWRITTEN 2026-06-18 (deep-dive "apply everything", Stage 1):
+  // un-stick the safe bodyweight numbers that had fossilized — the live data was a
+  // green light (~20/20 adherence, back 0/10 x15, capacity 9-10). All the SAME
+  // movements, just letting them climb; NO new patterns this week (those phase into
+  // W9-W11 one at a time).
+  //  - A: squats 12 → 14 (held since W3); forearm plank 15 → 20s (her own notes
+  //    said to climb it, not Lisa-gated); dead bug 6 → 8.
+  //  - Clamshells DE-DUPED: were in A+B+C (worst redundancy); now kept ONLY in B
+  //    (bumped 10 → 12), dropped from A and C.
+  //  - B: dead bug 6 → 8. C: clamshells removed (recovery day stays light).
+  //  - Hip-hinge stays 2×12; arms stay UPPER_BACK_W7 (now carrying Lisa's Jun-18
+  //    head-down + light-grip cues). Wall sit holds 36s.
   {
     weekNum: 8,
     startsOn: '2026-06-20',
-    label: 'Hip-hinge 12 · wall sit 35s',
+    label: 'Un-stick: squats 14 · plank 20s · dead bug 8',
     workouts: {
       A: {
         id: 'A',
         name: 'Lower Body + Core',
-        description: '🚶 10-min walk + lower body strength · ~41 min',
+        description: '🚶 10-min walk + lower body strength · ~42 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
           {
             name: 'Bodyweight squats',
-            reps: '12 reps · 3-1-3 tempo',
-            notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
+            reps: '14 reps · 3-1-3 tempo',
+            notes:
+              'Arms crossed over chest. Wall behind shoulder if balance wobbly. Bumped 12 → 14 (held at 12 since Week 3; back 0/10 throughout).',
           },
           HIP_HINGE_W8,
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
@@ -1243,21 +1259,17 @@ const PROGRAM: WeekPlan[] = [
             isTimed: true,
           },
           {
-            name: 'Side-lying clamshells',
-            reps: '10 each side',
-            notes: 'Head on mat or pillow. Bottom arm extended on floor, NOT propped on elbow.',
-          },
-          {
             name: 'Modified dead bug',
-            reps: '6 each side',
-            notes: 'Arms relaxed at sides on mat. Move only legs.',
+            reps: '8 each side',
+            notes:
+              'Arms relaxed at sides on mat. Move only legs. Bumped 6 → 8 (stuck at 6 for 9 weeks).',
           },
           {
             name: 'Forearm plank',
-            reps: '1 set · 15 sec hold',
+            reps: '1 set · 20 sec hold',
             notes:
-              'On forearms only (NOT hands — wrists still off). HELD at 1×15s. Stop if any wrist sensation.',
-            durationSec: 15,
+              'On forearms only (NOT hands — wrists still off). Climbing 15 → 20s (Jun 18 — progression-rules said to climb it; back 0/10). Building toward 30s, then a 2nd set. Stop if any wrist sensation.',
+            durationSec: 20,
             isTimed: true,
           },
         ],
@@ -1267,16 +1279,16 @@ const PROGRAM: WeekPlan[] = [
       B: {
         id: 'B',
         name: 'Glutes + Mobility + Core',
-        description: '🚶 10-min walk + glutes & mobility · ~42 min',
+        description: '🚶 10-min walk + glutes & mobility · ~43 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
           HIP_HINGE_W8,
           { name: 'Side-lying leg raises', reps: '14 each side' },
-          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Side-lying clamshells', reps: '12 each side' },
           { name: 'Single-leg glute bridges', reps: '10 each side' },
           { name: 'Slow supine bicycle', reps: '8 each side' },
-          { name: 'Modified dead bug', reps: '6 each side' },
+          { name: 'Modified dead bug', reps: '8 each side' },
           {
             name: 'Standing calf raises',
             reps: '15 reps',
@@ -1289,12 +1301,11 @@ const PROGRAM: WeekPlan[] = [
       C: {
         id: 'C',
         name: 'Walk + Core (cardio day)',
-        description: '🚶 25-min walk + 2-round core block · ~37 min',
+        description: '🚶 25-min walk + 2-round core block · ~36 min',
         rounds: 2,
         warmup: WALK_WARMUP_C,
         main: [
           { name: 'Glute bridges', reps: '18 reps · 2-sec hold' },
-          { name: 'Side-lying clamshells', reps: '10 each side' },
           { name: 'Modified dead bug', reps: '8 each side' },
           {
             name: 'Standing calf raises',
@@ -1306,59 +1317,53 @@ const PROGRAM: WeekPlan[] = [
       },
     },
   },
-  // Week 9 — Jun 27 - Jul 3. PROVISIONAL — THESE NUMBERS ARE TENTATIVE.
-  // ⚠️ Reconcile against Allison's ACTUAL logged sessions (the pending "load
-  // audit") BEFORE she reaches this week. Two changes proposed off Week 8:
-  //  - A: bodyweight squats 12 → 14 reps (same 3-1-3 tempo + cues). Squats have
-  //    been HELD at 12 since Week 3 — likely overdue, hence flagged for the audit.
-  //  - A + B: bodyweight prone row + 1 kg biceps curl 2×12 → 2×14 (UPPER_BACK_W9).
-  //    They completed their W7+W8 window.
-  // Everything else HOLDS at Week-8 numbers (hip-hinge 2×12, wall sit 35s, glute
-  // bridges 12/16, forearm plank 1×15s, etc.). The audit may move these; do not
-  // treat as locked.
+  // Week 9 — Jun 27 - Jul 3. REWRITTEN 2026-06-18 (deep-dive Stage 2: WYT comes in).
+  //  - A + B: NEW Lisa-prescribed WYT (Y-T-W raises) enters via UPPER_BACK_W9 — it
+  //    replaces the scapular squeezes (same blade-squeeze, more complete) and the
+  //    originally-proposed overhead press (Lisa: weights too heavy). This is the
+  //    one NEW pattern this week (one variable).
+  //  - Carry-overs from W8's un-stick: squats 14, dead bug 8, clamshells B-only @12
+  //    (dropped from A + C). Forearm plank continues climbing 20 → 25s.
+  //  - Prone row + biceps rep-bump 2×12 → 2×14 (their W7+W8 window done); biceps
+  //    1 kg, prone row bodyweight. Wall angels 2×12. Wall sit holds 36s.
   {
     weekNum: 9,
     startsOn: '2026-06-27',
-    label: 'Squats 14 · 1 kg 14 — PROVISIONAL',
+    label: 'WYT in · squats 14 · plank 25s',
     workouts: {
       A: {
         id: 'A',
         name: 'Lower Body + Core',
-        description: '🚶 10-min walk + lower body strength · ~42 min',
+        description: '🚶 10-min walk + lower body strength · ~44 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
           {
             name: 'Bodyweight squats',
             reps: '14 reps · 3-1-3 tempo',
-            notes: 'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
+            notes:
+              'Arms crossed over chest. Wall behind shoulder if balance wobbly. Held at 14 from Week 8.',
           },
           HIP_HINGE_W8,
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
           {
             name: 'Wall sit',
             reps: '36 sec hold',
-            notes:
-              'Hands rest on thighs or hang. No pushing on wall. Held at 36s from Week 8 (PROVISIONAL — reconcile in the load audit).',
+            notes: 'Hands rest on thighs or hang. No pushing on wall. Held at 36s from Week 8.',
             durationSec: 36,
             isTimed: true,
           },
           {
-            name: 'Side-lying clamshells',
-            reps: '10 each side',
-            notes: 'Head on mat or pillow. Bottom arm extended on floor, NOT propped on elbow.',
-          },
-          {
             name: 'Modified dead bug',
-            reps: '6 each side',
-            notes: 'Arms relaxed at sides on mat. Move only legs.',
+            reps: '8 each side',
+            notes: 'Arms relaxed at sides on mat. Move only legs. Held at 8 from Week 8.',
           },
           {
             name: 'Forearm plank',
-            reps: '1 set · 15 sec hold',
+            reps: '1 set · 25 sec hold',
             notes:
-              'On forearms only (NOT hands — wrists still off). HELD at 1×15s. Stop if any wrist sensation.',
-            durationSec: 15,
+              'On forearms only (NOT hands — wrists still off). Climbing 20 → 25s (continuing from Week 8). Building toward 30s, then a 2nd set. Stop if any wrist sensation.',
+            durationSec: 25,
             isTimed: true,
           },
         ],
@@ -1368,16 +1373,16 @@ const PROGRAM: WeekPlan[] = [
       B: {
         id: 'B',
         name: 'Glutes + Mobility + Core',
-        description: '🚶 10-min walk + glutes & mobility · ~42 min',
+        description: '🚶 10-min walk + glutes & mobility · ~45 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
           HIP_HINGE_W8,
           { name: 'Side-lying leg raises', reps: '14 each side' },
-          { name: 'Side-lying clamshells', reps: '10 each side' },
+          { name: 'Side-lying clamshells', reps: '12 each side' },
           { name: 'Single-leg glute bridges', reps: '10 each side' },
           { name: 'Slow supine bicycle', reps: '8 each side' },
-          { name: 'Modified dead bug', reps: '6 each side' },
+          { name: 'Modified dead bug', reps: '8 each side' },
           {
             name: 'Standing calf raises',
             reps: '15 reps',
@@ -1390,12 +1395,11 @@ const PROGRAM: WeekPlan[] = [
       C: {
         id: 'C',
         name: 'Walk + Core (cardio day)',
-        description: '🚶 25-min walk + 2-round core block · ~37 min',
+        description: '🚶 25-min walk + 2-round core block · ~36 min',
         rounds: 2,
         warmup: WALK_WARMUP_C,
         main: [
           { name: 'Glute bridges', reps: '18 reps · 2-sec hold' },
-          { name: 'Side-lying clamshells', reps: '10 each side' },
           { name: 'Modified dead bug', reps: '8 each side' },
           {
             name: 'Standing calf raises',
@@ -1580,6 +1584,10 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   '1 kg biceps curl': {
     howTo:
       "Hold the 1 kg with your elbow tucked at your side, forearm hanging down, wrist neutral and straight. Curl the forearm up toward your shoulder, keeping the elbow pinned in place — only the forearm moves. Lower slowly under control. 2 sets of 12. Keep the wrist straight (neutral) the whole time — don't let it bend back. Common mistake: swinging the body or the elbow drifting forward for momentum. Slow and controlled is the work.",
+  },
+  'WYT raises': {
+    howTo:
+      "Lisa Cohen's move (Jun 18). Lie face DOWN with your forehead resting on a towel and arms hanging toward the floor — thumbs pointing UP the whole time so the wrists stay relaxed and neutral (no palm pressing). Y: lift both arms overhead into a narrow V, like raising goalposts. T: bring arms straight out to the sides at shoulder height so your body makes a T. W: bend the elbows and pull them down toward your ribs, squeezing the shoulder blades together. Lift from the upper back, NOT the neck. 2 sets of about 8 of each position; small controlled lifts beat big swings.",
   },
 };
 
