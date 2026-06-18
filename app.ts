@@ -181,6 +181,11 @@ const SUPABASE_URL = 'https://hpiyvnfhoqnnnotrmwaz.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwaXl2bmZob3Fubm5vdHJtd2F6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzIwNDEsImV4cCI6MjA4ODA0ODA0MX0.AsGhYitkSnyVMwpJII05UseS_gICaXiCy7d8iHsr6Qw';
 
+// Visible build version (shown in the home header) so she can tell at a glance
+// whether a new build actually loaded. BUMP THIS TOGETHER WITH sw.js VERSION on
+// every deploy (sw.js workout-tracker-vN ↔ APP_VERSION 'vN').
+const APP_VERSION = 'v4';
+
 function supabaseHeaders(): HeadersInit {
   return {
     apikey: SUPABASE_ANON_KEY,
@@ -3033,7 +3038,10 @@ function renderHome(): string {
 
   return `
     <div class="home-header">
-      <h1>Workout Tracker</h1>
+      <div class="home-header-title">
+        <h1>Workout Tracker</h1>
+        <span class="app-version" aria-label="Build version">${APP_VERSION}</span>
+      </div>
       <button class="settings-icon-btn" id="open-settings" type="button" aria-label="Open settings" title="Settings">
         <span class="settings-icon-glyph" aria-hidden="true">⚙</span>
       </button>
@@ -4329,7 +4337,8 @@ function renderProgress(): string {
 // has export / import / hold-to-confirm clear. Import is merge-only; Clear
 // is local-only (Supabase rows preserved) per the archive-not-delete rule.
 
-const APP_VERSION = '2026-05-15 build';
+// APP_VERSION is declared once near the top (single source of truth, shown in
+// the home-header tag); the About caption below reuses it.
 const GITHUB_REPO_URL = 'https://github.com/allisonecalt-sudo/workout-tracker';
 
 function renderSettings(): string {

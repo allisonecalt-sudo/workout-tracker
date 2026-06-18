@@ -2668,6 +2668,22 @@ input[type='number']:focus {
   margin-bottom: 0;
 }
 
+/* Title + build-version tag grouped on a shared baseline. The version is a
+ * quiet meta tag (so a new build is visible at a glance) — muted, never an
+ * action, so no sage accent. */
+.home-header-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.app-version {
+  color: var(--text-dim-2);
+  font-size: var(--font-meta);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
 .settings-icon-btn {
   background: transparent;
   border: 1px solid var(--border);
