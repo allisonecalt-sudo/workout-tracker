@@ -180,16 +180,18 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
   // rehab videos. The text instructions (kept in EXERCISE_GUIDE) carry the
   // specific Lisa Cohen cues.
   'Left wrist stretch': {
-    youtubeId: 'M8c9TM7eO6c',
+    youtubeId: 'D4-jQu5GfBg',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'Wrist Flexor + Extensor Stretches — generic PT reference',
+    attribution:
+      'Wrist Flexor + Extensor Stretch — AskDoctorJo. Replaced 2026-06-18 (old embed 404).',
   },
   'Right wrist stretch': {
-    youtubeId: 'M8c9TM7eO6c',
+    youtubeId: 'D4-jQu5GfBg',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'Wrist Flexor + Extensor Stretches — generic PT reference',
+    attribution:
+      'Wrist Flexor + Extensor Stretch — AskDoctorJo. Replaced 2026-06-18 (old embed 404).',
   },
   'Left flexion/extension (tuna can)': {
     youtubeId: 'Aky1uJBS5UY',
@@ -236,16 +238,17 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
   // upper-back block. Videos curated 2026-06-06. Wrist stays neutral on the
   // loaded moves; no still JPGs sourced — the how-to SVG renders as the still.
   'Bodyweight hip hinge': {
-    youtubeId: '2SHo4zfXTOY',
+    youtubeId: '2W_gXhut5S8',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'How To Hip Hinge (Bodyweight RDL Pattern) — physical therapy reference',
+    attribution: 'How to Do a Hip Hinge — Hinge Health (PT). Replaced 2026-06-18 (old embed 404).',
   },
   'Prone row (bodyweight)': {
-    youtubeId: 'Ub7Bztx0Hr8',
+    youtubeId: 'CFt3WjCBbpc',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'Prone Row for Lower Trap / Scapular Strength — PT reference',
+    attribution:
+      'Prone W/T/Y Scapular Retraction — Peak Form Health Center. Bodyweight, wrist-neutral. Replaced 2026-06-18 (old embed 404).',
   },
   '1 kg biceps curl': {
     youtubeId: 'ykJmrZ5v0Oo',
