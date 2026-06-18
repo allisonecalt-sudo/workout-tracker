@@ -241,7 +241,7 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     license: 'YouTube embed (ToS)',
     attribution: 'How To Hip Hinge (Bodyweight RDL Pattern) — physical therapy reference',
   },
-  '1 kg prone row': {
+  'Prone row (bodyweight)': {
     youtubeId: 'Ub7Bztx0Hr8',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',

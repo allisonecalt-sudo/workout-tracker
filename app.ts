@@ -474,21 +474,21 @@ const HIP_HINGE_W8: Exercise = {
     'Hinge at the hips, soft knees, flat/neutral spine — hands slide down the thighs, feel it in hamstrings + glutes. Do NOT round the low back. Bodyweight only.',
 };
 
-// Week-7 1 kg arm work (2026-06-13): the loaded moves that were DEFERRED out of
-// Week 6 phase in now, on top of the shared bodyweight UPPER_BACK block (wall
-// angels + scapular squeezes). Both start at the bottom of their range (2×12)
-// per the progression rule — climb reps, then harden. Wrist stays NEUTRAL on
-// both; the weight HANGS from the hand on the row (no palm/hand weight-bearing
-// — that's the wrist constraint). Runs ONCE per session (not ×rounds) in A + B.
-// How-to / visual / guide entries were retained from the Week-6 deferral, so
-// this is zero re-curation — only the wiring is new.
+// Week-7 arm work — SPLIT 2026-06-18 (Allison's call): the BICEPS CURL goes to
+// 1 kg now; the PRONE ROW stays BODYWEIGHT and builds up to the 1 kg later (add
+// the load only when she says she's ready). Both sit on top of the shared
+// bodyweight UPPER_BACK block (wall angels + scapular squeezes). Start at the
+// bottom of the range (2×12) per the progression rule — climb reps, then add
+// load/harden. Wrist stays NEUTRAL on both; on the row the (eventual) weight
+// HANGS from the hand — no palm/hand weight-bearing (the wrist constraint). Runs
+// ONCE per session (not ×rounds) in A + B.
 const UPPER_BACK_W7: Exercise[] = [
   ...UPPER_BACK,
   {
-    name: '1 kg prone row',
+    name: 'Prone row (bodyweight)',
     reps: '2 sets · 12 reps each side',
     notes:
-      'Hold the 1 kg, arm hanging, wrist NEUTRAL/straight. Drive the elbow UP, squeeze the shoulder blade toward your spine — the weight just hangs from your hand, NO palm or hand weight-bearing. Lower slow. Keep the wrist straight throughout; stop on any wrist signal.',
+      'NO weight yet — building toward the 1 kg. Arm hanging, wrist NEUTRAL/straight. Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal. Add the 1 kg only when you say you are ready.',
   },
   {
     name: '1 kg biceps curl',
@@ -498,17 +498,17 @@ const UPPER_BACK_W7: Exercise[] = [
   },
 ];
 
-// Week-9 1 kg arm work (2026-06-27): both loaded moves 2×12 → 2×14 — they
-// completed their 2-week window (W7 + W8) and earn the rep bump. Same neutral-
-// wrist cues as UPPER_BACK_W7. PROVISIONAL — see Week 9 block comment; reconcile
+// Week-9 arm work (2026-06-27): rep bump 2×12 → 2×14 after the W7+W8 window.
+// SPLIT held from Week 7 (2026-06-18): biceps at 1 kg, prone row still BODYWEIGHT
+// (building toward the 1 kg). PROVISIONAL — see Week 9 block comment; reconcile
 // against actual logs (the pending load audit) before she reaches this week.
 const UPPER_BACK_W9: Exercise[] = [
   ...UPPER_BACK,
   {
-    name: '1 kg prone row',
+    name: 'Prone row (bodyweight)',
     reps: '2 sets · 14 reps each side',
     notes:
-      'Hold the 1 kg, arm hanging, wrist NEUTRAL/straight. Drive the elbow UP, squeeze the shoulder blade toward your spine — the weight just hangs from your hand, NO palm or hand weight-bearing. Lower slow. Keep the wrist straight throughout; stop on any wrist signal.',
+      'NO weight yet — building toward the 1 kg. Arm hanging, wrist NEUTRAL/straight. Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal. Add the 1 kg only when you say you are ready.',
   },
   {
     name: '1 kg biceps curl',
@@ -1110,10 +1110,14 @@ const PROGRAM: WeekPlan[] = [
   // wall angels + scapular squeezes. The loaded moves start at the bottom of
   // their rep range per the progression rule — climb reps, then harden. Wrist
   // stays neutral; weight hangs on the row (no palm load). One axis this week.
+  // REVISED 2026-06-18 (Allison): arm work SPLIT — biceps curl 1 kg now, prone
+  // row stays BODYWEIGHT (builds toward the 1 kg, add load only when she says).
+  // Wall sit formalized 33s → 36s (Jun 9 + Jun 16 both logged 36). Everything
+  // else still holds. Incremental only.
   {
     weekNum: 7,
     startsOn: '2026-06-13',
-    label: 'Hip-hinge holds · 1 kg arms in',
+    label: 'Biceps 1 kg · row bodyweight · wall sit 36',
     workouts: {
       A: {
         id: 'A',
@@ -1131,10 +1135,10 @@ const PROGRAM: WeekPlan[] = [
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
           {
             name: 'Wall sit',
-            reps: '33 sec hold',
+            reps: '36 sec hold',
             notes:
-              'Hands rest on thighs or hang. No pushing on wall. Held at 33s from Week 5 — stabilization continues.',
-            durationSec: 33,
+              'Hands rest on thighs or hang. No pushing on wall. Bumped 33s → 36s (2026-06-18) — formalizing what your body has already been doing (Jun 9 + Jun 16 both logged 36s). Not asking for more, just matching the number to you.',
+            durationSec: 36,
             isTimed: true,
           },
           {
@@ -1229,10 +1233,10 @@ const PROGRAM: WeekPlan[] = [
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
           {
             name: 'Wall sit',
-            reps: '35 sec hold',
+            reps: '36 sec hold',
             notes:
-              'Hands rest on thighs or hang. No pushing on wall. Bumped 33s → 35s — hip-hinge and wall sit had both held two weeks.',
-            durationSec: 35,
+              'Hands rest on thighs or hang. No pushing on wall. Held at 36s from Week 7 — 2-week window at this load before the next bump.',
+            durationSec: 36,
             isTimed: true,
           },
           {
@@ -1330,9 +1334,10 @@ const PROGRAM: WeekPlan[] = [
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
           {
             name: 'Wall sit',
-            reps: '35 sec hold',
-            notes: 'Hands rest on thighs or hang. No pushing on wall. Held at 35s from Week 8.',
-            durationSec: 35,
+            reps: '36 sec hold',
+            notes:
+              'Hands rest on thighs or hang. No pushing on wall. Held at 36s from Week 8 (PROVISIONAL — reconcile in the load audit).',
+            durationSec: 36,
             isTimed: true,
           },
           {
@@ -1565,9 +1570,9 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
     howTo:
       'Stand tall, feet hip-width, soft (unlocked) knees, hands resting on the front of your thighs. Hinge at the HIPS — push your butt back as your hands slide down your thighs toward your knees. Keep your spine flat and neutral the whole way (NOT rounded). You should feel a stretch/load in your hamstrings and glutes. Stand back up by driving your hips forward and squeezing your glutes. Common mistake: squatting (knees forward) instead of hinging (hips back), or letting the low back round. Bodyweight only — no load. This is the standing hip-dominant pattern your routine was missing — the real-life floor-pickup skill.',
   },
-  '1 kg prone row': {
+  'Prone row (bodyweight)': {
     howTo:
-      'Lie face-down on a bed/bench edge (or stand and hinge over) holding the 1 kg in one hand, arm hanging straight down toward the floor, wrist neutral and straight. Drive your elbow UP toward the ceiling, leading with the elbow and squeezing your shoulder blade toward your spine — the weight just hangs from your hand, no palm or hand weight-bearing. Lower slowly. 2 sets of 12 each side. Keep the wrist straight throughout. Common mistake: bending the wrist or yanking with the arm instead of leading with the elbow + blade. Fires the lower trap even at a light load.',
+      'Lie face-down on a bed/bench edge (or stand and hinge over), arm hanging straight down toward the floor, wrist neutral and straight. NO weight yet — you are building the pattern and endurance toward adding the 1 kg later. Drive your elbow UP toward the ceiling, leading with the elbow and squeezing your shoulder blade toward your spine. Lower slowly. 2 sets of 12 each side. Keep the wrist straight throughout. Common mistake: bending the wrist or yanking with the arm instead of leading with the elbow + blade. Fires the lower trap even unloaded. Add the 1 kg only when you say you are ready.',
   },
   '1 kg biceps curl': {
     howTo:
@@ -2935,9 +2940,9 @@ function renderGearCard(): string {
       <summary class="gear-summary">🎒 Gear &amp; recovery</summary>
       <div class="gear-body">
         <div class="gear-section">
-          <div class="gear-label">You have — owned, not in the workout yet</div>
+          <div class="gear-label">You have — in the workout now</div>
           <ul class="gear-list">
-            <li>✅ 1 kg weight — owned, but NOT in the workout yet. Coming next week (1 kg prone row + biceps curl, 2×12, wrist neutral). Deferred so this week stays one slow step.</li>
+            <li>✅ 1 kg weight — IN the workout now for the <strong>biceps curl</strong> (2×12, wrist neutral). The <strong>prone row stays bodyweight</strong> for now, building up to the 1 kg — add the load there only when you say you are ready.</li>
           </ul>
         </div>
         <div class="gear-section">

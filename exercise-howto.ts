@@ -1666,15 +1666,15 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
     ],
   },
 
-  '1 kg prone row': {
-    exercise: '1 kg prone row',
+  'Prone row (bodyweight)': {
+    exercise: 'Prone row (bodyweight)',
     sourceNotes:
-      'Hand-coded SVG. Wrist-safe scapular pick — fires lower trap even at 1 kg. Neutral wrist, no palm/hand weight-bearing.',
+      'Hand-coded SVG. Wrist-safe scapular pick — fires lower trap even unloaded. Bodyweight for now, building toward the 1 kg. Neutral wrist, no palm/hand weight-bearing.',
     frames: [
       {
         svg: SVG_PRONE_ROW_DOWN,
-        do: 'Face down, arm hanging straight, holding the 1 kg, wrist neutral.',
-        avoid: "Don't bear weight through the palm — the weight just hangs.",
+        do: 'Face down, arm hanging straight, NO weight yet, wrist neutral.',
+        avoid: "Don't bear weight through the palm — let the arm just hang.",
       },
       {
         svg: SVG_PRONE_ROW_UP,
