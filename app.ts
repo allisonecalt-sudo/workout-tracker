@@ -184,7 +184,7 @@ const SUPABASE_ANON_KEY =
 // Visible build version (shown in the home header) so she can tell at a glance
 // whether a new build actually loaded. BUMP THIS TOGETHER WITH sw.js VERSION on
 // every deploy (sw.js workout-tracker-vN ↔ APP_VERSION 'vN').
-const APP_VERSION = 'v4';
+const APP_VERSION = 'v5';
 
 function supabaseHeaders(): HeadersInit {
   return {
