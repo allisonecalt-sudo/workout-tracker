@@ -1192,7 +1192,7 @@ const PROGRAM: WeekPlan[] = [
         rounds: 2,
         warmup: WALK_WARMUP_C,
         main: [
-          { name: 'Glute bridges', reps: '16 reps · 2-sec hold' },
+          { name: 'Glute bridges', reps: '18 reps · 2-sec hold' },
           { name: 'Side-lying clamshells', reps: '10 each side' },
           { name: 'Modified dead bug', reps: '8 each side' },
           {
@@ -1205,7 +1205,10 @@ const PROGRAM: WeekPlan[] = [
       },
     },
   },
-  // Week 8 — Jun 20-26. DECISION 2026-06-07: two small bumps, both on moves that
+  // Week 8 — Jun 20-26. DECISION 2026-06-07 (C bump added 2026-06-18): two small
+  // bumps from W7, both on moves past their 2-week window. C glute bridges held
+  // at 18 (bumped 16→18 in W7 on 06-18 — her "tiny bump" call for the walk day).
+  // Original Week-8 notes: two small bumps, both on moves that
   // completed their 2-week stabilization window. Everything else HOLDS at Week-7
   // numbers (1 kg arms stay 2×12 — they're brand new in W7, no double-bump).
   //  - A + B: hip-hinge 2×10 → 2×12 (HIP_HINGE_W8). Done its W6+W7 window; same
@@ -1290,7 +1293,7 @@ const PROGRAM: WeekPlan[] = [
         rounds: 2,
         warmup: WALK_WARMUP_C,
         main: [
-          { name: 'Glute bridges', reps: '16 reps · 2-sec hold' },
+          { name: 'Glute bridges', reps: '18 reps · 2-sec hold' },
           { name: 'Side-lying clamshells', reps: '10 each side' },
           { name: 'Modified dead bug', reps: '8 each side' },
           {
@@ -1308,7 +1311,7 @@ const PROGRAM: WeekPlan[] = [
   // audit") BEFORE she reaches this week. Two changes proposed off Week 8:
   //  - A: bodyweight squats 12 → 14 reps (same 3-1-3 tempo + cues). Squats have
   //    been HELD at 12 since Week 3 — likely overdue, hence flagged for the audit.
-  //  - A + B: 1 kg prone row + 1 kg biceps curl 2×12 → 2×14 (UPPER_BACK_W9).
+  //  - A + B: bodyweight prone row + 1 kg biceps curl 2×12 → 2×14 (UPPER_BACK_W9).
   //    They completed their W7+W8 window.
   // Everything else HOLDS at Week-8 numbers (hip-hinge 2×12, wall sit 35s, glute
   // bridges 12/16, forearm plank 1×15s, etc.). The audit may move these; do not
@@ -1391,7 +1394,7 @@ const PROGRAM: WeekPlan[] = [
         rounds: 2,
         warmup: WALK_WARMUP_C,
         main: [
-          { name: 'Glute bridges', reps: '16 reps · 2-sec hold' },
+          { name: 'Glute bridges', reps: '18 reps · 2-sec hold' },
           { name: 'Side-lying clamshells', reps: '10 each side' },
           { name: 'Modified dead bug', reps: '8 each side' },
           {
