@@ -1315,11 +1315,10 @@ const PROGRAM: WeekPlan[] = [
       },
     },
   },
-  // Week 9 — Jun 27 - Jul 3. REWRITTEN 2026-06-18 (deep-dive Stage 2: WYT comes in).
-  //  - A + B: NEW Lisa-prescribed WYT (Y-T-W raises) enters via UPPER_BACK_W9 — it
-  //    replaces the scapular squeezes (same blade-squeeze, more complete) and the
-  //    originally-proposed overhead press (Lisa: weights too heavy). This is the
-  //    one NEW pattern this week (one variable).
+  // Week 9 — Jun 27 - Jul 3. Originally WYT-comes-in (Jun-18 design); REVISED 2026-06-20:
+  // arm work PAUSED here too — A + B run UPPER_BACK_SAFE (wall angels + WYT only, no grip/
+  // load) after new thumb/wrist/neck symptoms. WYT is retained (wrist-neutral); the
+  // prone row + 1 kg biceps are suspended pending Lisa's review. Lower body unchanged.
   //  - Carry-overs from W8's un-stick: squats 14, dead bug 8, clamshells B-only @12
   //    (dropped from A + C). Forearm plank continues climbing 20 → 25s.
   //  - Prone row + biceps rep-bump 2×12 → 2×14 (their W7+W8 window done); biceps
