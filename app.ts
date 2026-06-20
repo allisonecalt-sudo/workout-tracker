@@ -505,16 +505,19 @@ const UPPER_BACK_W7: Exercise[] = [
   },
 ];
 
-// Week-9 arm work (2026-06-27). REVISED 2026-06-18: Lisa prescribed WYT (Y-T-W
-// raises) — it REPLACES the scapular squeezes (same blade-squeeze pattern, more
-// complete) AND the originally-proposed overhead press (Lisa: weights too heavy,
-// don't add loaded gripping). Prone row + biceps rep-bump 2×12 → 2×14 after their
-// W7+W8 window. Biceps stays 1 kg; prone row stays BODYWEIGHT. Wall angels 2×10 →
-// 2×12. All wrist-safe (no palm load); carries Lisa's head-down + light-grip cues.
-const UPPER_BACK_W9: Exercise[] = [
+// 2026-06-20 — ARM WORK PAUSED (symptom-driven de-load). Allison reported new
+// LEFT thumb-base pain + a possible wrist cyst (ganglion?) + right-side neck pain.
+// The evidence default for new thumb/wrist overuse signs is to pull back the grip-
+// and arm-loaded moves (the 1 kg biceps curl + the prone row) until her PT, Lisa
+// Cohen, reviews — and KEEP the pain-free, wrist-neutral upper-back work. So A + B
+// in Weeks 8-10 run wall angels + WYT ONLY (no grip, no load). The loaded row +
+// biceps pattern is preserved in UPPER_BACK_W7 + the EXERCISE_GUIDE how-tos — re-add
+// it only after Lisa clears the Jun-20 symptoms. This is a protective hold, NOT a
+// clinical decision (Lisa owns that). See self/health/wrists.md (Jun-20 entry).
+const UPPER_BACK_SAFE: Exercise[] = [
   {
     name: 'Wall angels',
-    reps: '2 sets · 12 slow reps',
+    reps: '2 sets · 10 slow reps',
     notes:
       "Back against the wall, ribs down, chin gently tucked. Slide both arms up the wall keeping elbows AND wrists in light contact; if the wrists lift off, stop there — no forcing. Slide back down with control. Don't shrug or arch your low back to reach higher.",
   },
@@ -522,19 +525,7 @@ const UPPER_BACK_W9: Exercise[] = [
     name: 'WYT raises',
     reps: '2 sets · 8 each (Y, T, W)',
     notes:
-      'Lisa Cohen (Jun 18). Face DOWN, forehead on a towel, arms hanging, THUMBS UP the whole time (wrist neutral, NO palm load). Y: lift both arms overhead into a narrow V. T: arms straight out to the sides at shoulder height. W: bend the elbows down toward your ribs, squeezing the shoulder blades together. Lift from the UPPER BACK, not the neck — small, controlled lifts.',
-  },
-  {
-    name: 'Prone row (bodyweight)',
-    reps: '2 sets · 14 reps each side',
-    notes:
-      'NO weight yet — building toward the 1 kg. Arm hanging, wrist NEUTRAL/straight. Keep your HEAD DOWN — do NOT lift it (Lisa, Jun 18: lifting strains the neck). Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal. Add the 1 kg only when you say you are ready.',
-  },
-  {
-    name: '1 kg biceps curl',
-    reps: '2 sets · 14 reps',
-    notes:
-      'Hold the weight LIGHTLY — keep wrist AND fingers neutral, never bending back / hyperextending (Lisa, Jun 18: too-heavy / over-gripping caused that — lighter is right). Elbow tucked at your side, forearm hanging. Curl the forearm up — only the forearm moves, elbow stays pinned. Lower slow. Stop on any wrist signal.',
+      'Lisa Cohen (Jun 18). Face DOWN, forehead on a towel, arms hanging, THUMBS UP the whole time (wrist neutral, NO palm load). Y: lift both arms overhead into a narrow V. T: arms straight out to the sides at shoulder height. W: bend the elbows down toward your ribs, squeezing the shoulder blades together. Lift from the UPPER BACK, not the neck — small, controlled lifts. Stop if your neck complains (Jun 20: right-side neck pain — keep this gentle).',
   },
 ];
 
@@ -1280,7 +1271,7 @@ const PROGRAM: WeekPlan[] = [
             isTimed: true,
           },
         ],
-        upperBack: UPPER_BACK_W7,
+        upperBack: UPPER_BACK_SAFE,
         cooldown: STRETCH_COOLDOWN,
       },
       B: {
@@ -1302,7 +1293,7 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Light fingertip touch on wall for balance only — NO grip.',
           },
         ],
-        upperBack: UPPER_BACK_W7,
+        upperBack: UPPER_BACK_SAFE,
         cooldown: STRETCH_COOLDOWN,
       },
       C: {
@@ -1374,7 +1365,7 @@ const PROGRAM: WeekPlan[] = [
             isTimed: true,
           },
         ],
-        upperBack: UPPER_BACK_W9,
+        upperBack: UPPER_BACK_SAFE,
         cooldown: STRETCH_COOLDOWN,
       },
       B: {
@@ -1396,7 +1387,110 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Light fingertip touch on wall for balance only — NO grip.',
           },
         ],
-        upperBack: UPPER_BACK_W9,
+        upperBack: UPPER_BACK_SAFE,
+        cooldown: STRETCH_COOLDOWN,
+      },
+      C: {
+        id: 'C',
+        name: 'Walk + Core (cardio day)',
+        description: '🚶 25-min walk + 2-round core block · ~36 min',
+        rounds: 2,
+        warmup: WALK_WARMUP_C,
+        main: [
+          { name: 'Glute bridges', reps: '18 reps · 2-sec hold' },
+          { name: 'Modified dead bug', reps: '8 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '18 reps',
+            notes: 'Fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        cooldown: STRETCH_COOLDOWN,
+      },
+    },
+  },
+  // Week 10 — Jul 4-10. First leg-work ADDITION from the Jun-20 deep research
+  // (exercise-selection review): an ECCENTRIC STEP-DOWN — the highest-value
+  // wrist-free move for Allison's stated "agile + strong for summer hikes" goal.
+  // ~75% of hiking injuries happen on the DESCENT, where the quads work
+  // eccentrically to control each step down; step-downs train exactly that. ONE
+  // new pattern this week (the one-change-per-week rule) — everything else HELD
+  // from W9. No wrist load, no hands needed. Arms STILL paused (UPPER_BACK_SAFE)
+  // until Lisa reviews the Jun-20 thumb/wrist/neck symptoms. QUEUED for later
+  // weeks, one at a time, all wrist-neutral: bodyweight split squat (single-leg
+  // strength), band chest press (the missing push), band Pallof press (anti-
+  // rotation core). Separate from the app — the #1 lever for keeping muscle on
+  // Mounjaro is PROTEIN toward ~100-130 g/day (currently ~half that).
+  {
+    weekNum: 10,
+    startsOn: '2026-07-04',
+    label: 'Step-downs in · everything else held',
+    workouts: {
+      A: {
+        id: 'A',
+        name: 'Lower Body + Core',
+        description: '🚶 10-min walk + lower body strength · ~46 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          {
+            name: 'Bodyweight squats',
+            reps: '14 reps · 3-1-3 tempo',
+            notes:
+              'Arms crossed over chest. Wall behind shoulder if balance wobbly. Held at 14 from Week 8.',
+          },
+          HIP_HINGE_W8,
+          {
+            name: 'Eccentric step-down',
+            reps: '2 sets · 5 each leg',
+            notes:
+              "NEW (Jun-20 research): the downhill-hiking move. Stand on a low, sturdy step with your weight on ONE leg; let the other foot hang just off the edge. SLOWLY lower the hanging heel toward the floor over 3-4 seconds — control it, don't drop — then drive back up through the standing leg. Light fingertip touch on a wall/rail for balance ONLY — no grip, no weight on the hand (wrist stays out of it). Keep the standing knee tracking over the toes, not caving in. Start with a low step and small range; the slow lowering is the work. Stop the set if the knee pinches.",
+          },
+          { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
+          {
+            name: 'Wall sit',
+            reps: '36 sec hold',
+            notes: 'Hands rest on thighs or hang. No pushing on wall. Held at 36s.',
+            durationSec: 36,
+            isTimed: true,
+          },
+          {
+            name: 'Modified dead bug',
+            reps: '8 each side',
+            notes: 'Arms relaxed at sides on mat. Move only legs. Held at 8.',
+          },
+          {
+            name: 'Forearm plank',
+            reps: '1 set · 25 sec hold',
+            notes:
+              'On forearms only (NOT hands — wrists still off). Held at 25s this week — the step-down is the one new thing. Stop if any wrist sensation.',
+            durationSec: 25,
+            isTimed: true,
+          },
+        ],
+        upperBack: UPPER_BACK_SAFE,
+        cooldown: STRETCH_COOLDOWN,
+      },
+      B: {
+        id: 'B',
+        name: 'Glutes + Mobility + Core',
+        description: '🚶 10-min walk + glutes & mobility · ~45 min',
+        rounds: 3,
+        warmup: WALK_WARMUP_AB,
+        main: [
+          HIP_HINGE_W8,
+          { name: 'Side-lying leg raises', reps: '14 each side' },
+          { name: 'Side-lying clamshells', reps: '12 each side' },
+          { name: 'Single-leg glute bridges', reps: '10 each side' },
+          { name: 'Slow supine bicycle', reps: '8 each side' },
+          { name: 'Modified dead bug', reps: '8 each side' },
+          {
+            name: 'Standing calf raises',
+            reps: '15 reps',
+            notes: 'Light fingertip touch on wall for balance only — NO grip.',
+          },
+        ],
+        upperBack: UPPER_BACK_SAFE,
         cooldown: STRETCH_COOLDOWN,
       },
       C: {
@@ -1595,6 +1689,11 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   'WYT raises': {
     howTo:
       "Lisa Cohen's move (Jun 18). Lie face DOWN with your forehead resting on a towel and arms hanging toward the floor — thumbs pointing UP the whole time so the wrists stay relaxed and neutral (no palm pressing). Y: lift both arms overhead into a narrow V, like raising goalposts. T: bring arms straight out to the sides at shoulder height so your body makes a T. W: bend the elbows and pull them down toward your ribs, squeezing the shoulder blades together. Lift from the upper back, NOT the neck. 2 sets of about 8 of each position; small controlled lifts beat big swings.",
+  },
+  // Week-10 addition (2026-07-04) — from the Jun-20 deep research.
+  'Eccentric step-down': {
+    howTo:
+      'The single best move for hiking DOWNHILL — where most hiking knee trouble happens. Stand on a low, sturdy step: a single stair, a thick book, or a low stool. Put your whole weight on ONE leg on the step and let the other foot hang just off the edge. SLOWLY lower the hanging heel toward the floor, taking 3-4 full seconds — your standing thigh is doing the controlling. Lightly tap the floor (or just hover), then push back up through the standing leg. A fingertip on a wall or rail for balance is fine — but NO gripping and no weight through the hand (your wrist stays out of this entirely). Keep the standing knee pointing over your toes, not caving inward. Start with a low step and a small range; the magic is the SLOW lowering, not the height. Stop the set if the knee pinches.',
   },
 };
 
