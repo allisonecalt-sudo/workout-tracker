@@ -1315,23 +1315,30 @@ const PROGRAM: WeekPlan[] = [
       },
     },
   },
-  // Week 9 — Jun 27 - Jul 3. Originally WYT-comes-in (Jun-18 design); REVISED 2026-06-20:
-  // arm work PAUSED here too — A + B run UPPER_BACK_SAFE (wall angels + WYT only, no grip/
-  // load) after new thumb/wrist/neck symptoms. WYT is retained (wrist-neutral); the
-  // prone row + 1 kg biceps are suspended pending Lisa's review. Lower body unchanged.
-  //  - Carry-overs from W8's un-stick: squats 14, dead bug 8, clamshells B-only @12
-  //    (dropped from A + C). Forearm plank continues climbing 20 → 25s.
-  //  - Prone row + biceps rep-bump 2×12 → 2×14 (their W7+W8 window done); biceps
-  //    1 kg, prone row bodyweight. Wall angels 2×12. Wall sit holds 36s.
+  // Week 9 — Jun 27 - Jul 3. REVISED 2026-06-29 (post full program audit — her call to
+  // ACCELERATE past the slow one-change plan: bumps across A + B AND a 3-exercise jump on C).
+  // Arms STILL paused (UPPER_BACK_SAFE — wall angels + WYT, no grip/load) pending Lisa's
+  // Jun-20 thumb/wrist/neck review. Every addition below is wrist-neutral + back-safe, and
+  // all are moves she already knows from A/B (no new motor learning).
+  //  - A: unfreeze the frozen numbers → wall sit 36 → 40s; forearm plank 25 → 30s; dead
+  //    bug 8 → 10. (Squats stay 14; hip hinge held; arms paused.)
+  //  - B: single-leg glute bridges 10 → 12; dead bug 8 → 10.
+  //  - C: was the runt — now a real 3rd strength day. THREE new things: + bodyweight squats
+  //    12 (the standing compound C lacked — #1 muscle-preservation move), + single-leg glute
+  //    bridge 8/side (audit's "best glute move"), + side-lying leg raises 12 (added earlier
+  //    same day). Calf raises last set near-failure (the audit's effort lever). Still 2 rounds.
+  //  - Mirror (her rulebook's own line): if this makes showing up feel heavier, dial back —
+  //    the streak is the asset; governor stays "did I still show up 3×". Full audit + rollout:
+  //    self/health/workout-program-audit-2026-06-29.md.
   {
     weekNum: 9,
     startsOn: '2026-06-27',
-    label: 'WYT in · squats 14 · plank 25s',
+    label: 'Bigger week: A/B bumps + C → 3-exercise strength day',
     workouts: {
       A: {
         id: 'A',
         name: 'Lower Body + Core',
-        description: '🚶 10-min walk + lower body strength · ~44 min',
+        description: '🚶 10-min walk + lower body strength · ~45 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
@@ -1345,22 +1352,24 @@ const PROGRAM: WeekPlan[] = [
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
           {
             name: 'Wall sit',
-            reps: '36 sec hold',
-            notes: 'Hands rest on thighs or hang. No pushing on wall. Held at 36s from Week 8.',
-            durationSec: 36,
+            reps: '40 sec hold',
+            notes:
+              'Hands rest on thighs or hang. No pushing on wall. Bumped 36 → 40s (2026-06-29; held at 36 since Wk7 — cap is 45-60s per progression-rules.md).',
+            durationSec: 40,
             isTimed: true,
           },
           {
             name: 'Modified dead bug',
-            reps: '8 each side',
-            notes: 'Arms relaxed at sides on mat. Move only legs. Held at 8 from Week 8.',
+            reps: '10 each side',
+            notes:
+              'Arms relaxed at sides on mat. Move only legs. Bumped 8 → 10 (2026-06-29; was frozen at 8 — climbing toward the 12 cap).',
           },
           {
             name: 'Forearm plank',
-            reps: '1 set · 25 sec hold',
+            reps: '1 set · 30 sec hold',
             notes:
-              'On forearms only (NOT hands — wrists still off). Climbing 20 → 25s (continuing from Week 8). Building toward 30s, then a 2nd set. Stop if any wrist sensation.',
-            durationSec: 25,
+              'On forearms only (NOT hands — wrists still off). Climbing 25 → 30s (2026-06-29). At a clean 30s → add a 2nd set. Stop if any wrist sensation.',
+            durationSec: 30,
             isTimed: true,
           },
         ],
@@ -1370,16 +1379,24 @@ const PROGRAM: WeekPlan[] = [
       B: {
         id: 'B',
         name: 'Glutes + Mobility + Core',
-        description: '🚶 10-min walk + glutes & mobility · ~45 min',
+        description: '🚶 10-min walk + glutes & mobility · ~46 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
           HIP_HINGE_W8,
           { name: 'Side-lying leg raises', reps: '14 each side' },
           { name: 'Side-lying clamshells', reps: '12 each side' },
-          { name: 'Single-leg glute bridges', reps: '10 each side' },
+          {
+            name: 'Single-leg glute bridges',
+            reps: '12 each side',
+            notes: 'Bumped 10 → 12 (2026-06-29; toward the 15/side cap).',
+          },
           { name: 'Slow supine bicycle', reps: '8 each side' },
-          { name: 'Modified dead bug', reps: '8 each side' },
+          {
+            name: 'Modified dead bug',
+            reps: '10 each side',
+            notes: 'Bumped 8 → 10 (2026-06-29; toward the 12 cap).',
+          },
           {
             name: 'Standing calf raises',
             reps: '15 reps',
@@ -1391,44 +1408,61 @@ const PROGRAM: WeekPlan[] = [
       },
       C: {
         id: 'C',
-        name: 'Walk + Core (cardio day)',
-        description: '🚶 25-min walk + 2-round core block · ~36 min',
+        name: 'Walk + Lower Body + Core',
+        description: '🚶 25-min walk + 2-round strength block · ~46 min',
         rounds: 2,
         warmup: WALK_WARMUP_C,
         main: [
+          {
+            name: 'Bodyweight squats',
+            reps: '12 reps · 3-1-3 tempo',
+            notes:
+              "NEW 2026-06-29: C's biggest gap was zero standing leg strength — squats are the #1 muscle-preservation move. Start 12 (below A's 14 since C is the lighter day). Arms crossed; wall behind shoulder if wobbly.",
+          },
           { name: 'Glute bridges', reps: '18 reps · 2-sec hold' },
+          {
+            name: 'Single-leg glute bridges',
+            reps: '8 each side',
+            notes:
+              "NEW 2026-06-29: single-leg glute work (the audit's 'best glute move'). Start 8/side (below B's 12 — fresh slot). Climb toward 15, then tempo / foot-elevated per progression-rules.md.",
+          },
+          {
+            name: 'Side-lying leg raises',
+            reps: '12 each side',
+            notes:
+              'Added 2026-06-29 (meatier-Friday). Lateral-hip work C never had — back-gentle, no balance. Climb toward the 20/side cap, then ankle band / longer lever.',
+          },
           { name: 'Modified dead bug', reps: '8 each side' },
           {
             name: 'Standing calf raises',
             reps: '18 reps',
-            notes: 'Fingertip touch on wall for balance only — NO grip.',
+            notes:
+              "Last set near failure (0-2 reps left) — the audit's one move to push genuinely hard. Fingertip touch on wall for balance only — NO grip.",
           },
         ],
         cooldown: STRETCH_COOLDOWN,
       },
     },
   },
-  // Week 10 — Jul 4-10. First leg-work ADDITION from the Jun-20 deep research
-  // (exercise-selection review): an ECCENTRIC STEP-DOWN — the highest-value
-  // wrist-free move for Allison's stated "agile + strong for summer hikes" goal.
-  // ~75% of hiking injuries happen on the DESCENT, where the quads work
-  // eccentrically to control each step down; step-downs train exactly that. ONE
-  // new pattern this week (the one-change-per-week rule) — everything else HELD
-  // from W9. No wrist load, no hands needed. Arms STILL paused (UPPER_BACK_SAFE)
-  // until Lisa reviews the Jun-20 thumb/wrist/neck symptoms. QUEUED for later
-  // weeks, one at a time, all wrist-neutral: bodyweight split squat (single-leg
-  // strength), band chest press (the missing push), band Pallof press (anti-
-  // rotation core). Separate from the app — the #1 lever for keeping muscle on
-  // Mounjaro is PROTEIN toward ~100-130 g/day (currently ~half that).
+  // Week 10 — Jul 4-10. Carries forward W9's bigger week (A/B bumps + C as a 3-exercise
+  // strength day) so nothing regresses, AND adds its own one new pattern: the ECCENTRIC
+  // STEP-DOWN on A — highest-value wrist-free move for her "agile + strong for summer hikes"
+  // goal (~75% of hiking injuries happen on the DESCENT, where quads work eccentrically to
+  // control each step down). No wrist load, no hands. Arms STILL paused (UPPER_BACK_SAFE)
+  // until Lisa reviews the Jun-20 thumb/wrist/neck symptoms. QUEUED for later weeks, one at a
+  // time, all wrist-neutral: band chest press (the missing push), band Pallof press / forearm-
+  // looped row (anti-rotation + the missing pull) once Lisa clears arms + bands arrive. Separate
+  // from the app — the #1 lever for keeping muscle on Mounjaro is PROTEIN toward ~112-130 g/day
+  // (currently ~half that) — see body-measurements.md for the tracking that makes it visible.
   {
     weekNum: 10,
     startsOn: '2026-07-04',
-    label: 'Step-downs in · everything else held',
+    label: 'Step-downs in · W9 bigger-week numbers carried',
     workouts: {
       A: {
         id: 'A',
         name: 'Lower Body + Core',
-        description: '🚶 10-min walk + lower body strength · ~46 min',
+        description: '🚶 10-min walk + lower body strength · ~48 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
@@ -1448,22 +1482,23 @@ const PROGRAM: WeekPlan[] = [
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
           {
             name: 'Wall sit',
-            reps: '36 sec hold',
-            notes: 'Hands rest on thighs or hang. No pushing on wall. Held at 36s.',
-            durationSec: 36,
+            reps: '40 sec hold',
+            notes:
+              'Hands rest on thighs or hang. No pushing on wall. Carried 40s from Week 9 (cap 45-60s).',
+            durationSec: 40,
             isTimed: true,
           },
           {
             name: 'Modified dead bug',
-            reps: '8 each side',
-            notes: 'Arms relaxed at sides on mat. Move only legs. Held at 8.',
+            reps: '10 each side',
+            notes: 'Arms relaxed at sides on mat. Move only legs. Carried 10 from Week 9 (cap 12).',
           },
           {
             name: 'Forearm plank',
-            reps: '1 set · 25 sec hold',
+            reps: '1 set · 30 sec hold',
             notes:
-              'On forearms only (NOT hands — wrists still off). Held at 25s this week — the step-down is the one new thing. Stop if any wrist sensation.',
-            durationSec: 25,
+              'On forearms only (NOT hands — wrists still off). Carried 30s from Week 9 — at a clean 30s add a 2nd set. Stop if any wrist sensation.',
+            durationSec: 30,
             isTimed: true,
           },
         ],
@@ -1473,16 +1508,24 @@ const PROGRAM: WeekPlan[] = [
       B: {
         id: 'B',
         name: 'Glutes + Mobility + Core',
-        description: '🚶 10-min walk + glutes & mobility · ~45 min',
+        description: '🚶 10-min walk + glutes & mobility · ~46 min',
         rounds: 3,
         warmup: WALK_WARMUP_AB,
         main: [
           HIP_HINGE_W8,
           { name: 'Side-lying leg raises', reps: '14 each side' },
           { name: 'Side-lying clamshells', reps: '12 each side' },
-          { name: 'Single-leg glute bridges', reps: '10 each side' },
+          {
+            name: 'Single-leg glute bridges',
+            reps: '12 each side',
+            notes: 'Carried 12 from Week 9 (toward the 15/side cap).',
+          },
           { name: 'Slow supine bicycle', reps: '8 each side' },
-          { name: 'Modified dead bug', reps: '8 each side' },
+          {
+            name: 'Modified dead bug',
+            reps: '10 each side',
+            notes: 'Carried 10 from Week 9 (toward the 12 cap).',
+          },
           {
             name: 'Standing calf raises',
             reps: '15 reps',
@@ -1494,17 +1537,35 @@ const PROGRAM: WeekPlan[] = [
       },
       C: {
         id: 'C',
-        name: 'Walk + Core (cardio day)',
-        description: '🚶 25-min walk + 2-round core block · ~36 min',
+        name: 'Walk + Lower Body + Core',
+        description: '🚶 25-min walk + 2-round strength block · ~46 min',
         rounds: 2,
         warmup: WALK_WARMUP_C,
         main: [
+          {
+            name: 'Bodyweight squats',
+            reps: '12 reps · 3-1-3 tempo',
+            notes:
+              'Carried from Week 9. The standing compound C had lacked. Arms crossed; wall behind shoulder if wobbly.',
+          },
           { name: 'Glute bridges', reps: '18 reps · 2-sec hold' },
+          {
+            name: 'Single-leg glute bridges',
+            reps: '8 each side',
+            notes: 'Carried from Week 9. Climb toward 15, then tempo / foot-elevated.',
+          },
+          {
+            name: 'Side-lying leg raises',
+            reps: '12 each side',
+            notes:
+              'Carried from Week 9. Climb toward the 20/side cap, then ankle band / longer lever.',
+          },
           { name: 'Modified dead bug', reps: '8 each side' },
           {
             name: 'Standing calf raises',
             reps: '18 reps',
-            notes: 'Fingertip touch on wall for balance only — NO grip.',
+            notes:
+              'Last set near failure (0-2 reps left) — the one move to push genuinely hard. Fingertip touch on wall for balance only — NO grip.',
           },
         ],
         cooldown: STRETCH_COOLDOWN,
