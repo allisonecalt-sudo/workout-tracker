@@ -181,12 +181,13 @@ const SUPABASE_URL = 'https://hpiyvnfhoqnnnotrmwaz.supabase.co';
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhwaXl2bmZob3Fubm5vdHJtd2F6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI0NzIwNDEsImV4cCI6MjA4ODA0ODA0MX0.AsGhYitkSnyVMwpJII05UseS_gICaXiCy7d8iHsr6Qw';
 
-// Visible build version + date (shown in the home header as "vN · Mon D, YYYY")
+// Visible build version + date+TIME (shown in the home header as "vN · Mon D, YYYY · HH:MM")
 // so she can tell at a glance whether a new build actually loaded, and when.
+// Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
-// (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date.
-const APP_VERSION = 'v6';
-const BUILD_DATE = 'Jun 18, 2026';
+// (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
+const APP_VERSION = 'v7';
+const BUILD_DATE = 'Jul 3, 2026 · 18:35';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -528,6 +529,22 @@ const UPPER_BACK_SAFE: Exercise[] = [
       'Lisa Cohen (Jun 18). Face DOWN, forehead on a towel, arms hanging, THUMBS UP the whole time (wrist neutral, NO palm load). Y: lift both arms overhead into a narrow V. T: arms straight out to the sides at shoulder height. W: bend the elbows down toward your ribs, squeezing the shoulder blades together. Lift from the UPPER BACK, not the neck — small, controlled lifts. Stop if your neck complains (Jun 20: right-side neck pain — keep this gentle).',
   },
 ];
+
+// Wrist weight-bearing ON-RAMP — HER call, Jul 3 2026 ("I want to start doing the
+// beginning nothing intense but weight bearing on my wrist"), per the clearance-relay
+// rule. Beginner rung ONLY: standing wall lean, palms flat on the wall — the gentlest
+// graded palms-load there is. This is SEPARATE from the paused LOADED arm work (that
+// gate is Lisa's — task resurfaces Jul 9). Higher rungs (counter-height lean, quadruped
+// hands-and-knees) stay parked until she says the wall lean feels like nothing.
+const WRIST_ONRAMP: Exercise[] = [
+  {
+    name: 'Wall lean (wrist on-ramp)',
+    reps: '2 × 15-20 sec',
+    notes:
+      'NEW (Jul 3 — your call: start weight-bearing, nothing intense). Stand a small step from a wall, palms FLAT on it at shoulder height, fingers up, elbows soft. Lean in gently so the palms take LIGHT weight — breathe, nothing intense. 15-20 sec, shake the hands out, once more. STOP at ANY wrist or thumb sensation — this is a rehab on-ramp, not a strength move. When this feels like nothing, say so and the next rung (counter-height lean) unlocks.',
+  },
+];
+const UPPER_BACK_SAFE_W10: Exercise[] = [...UPPER_BACK_SAFE, ...WRIST_ONRAMP];
 
 // Pre-walk-warmup era (Week 1 only). Kept exact for archive fidelity — this
 // is what Allison actually did her first week.
@@ -1448,7 +1465,10 @@ const PROGRAM: WeekPlan[] = [
   // strength day) so nothing regresses, AND adds its own one new pattern: the ECCENTRIC
   // STEP-DOWN on A — highest-value wrist-free move for her "agile + strong for summer hikes"
   // goal (~75% of hiking injuries happen on the DESCENT, where quads work eccentrically to
-  // control each step down). No wrist load, no hands. Arms STILL paused (UPPER_BACK_SAFE)
+  // control each step down). No wrist load, no hands.
+  // Jul-3 additions (her calls, same day): wall sit 40→45s (she held 43s on Jul 1 — the plan
+  // catches up to her) + WRIST_ONRAMP wall lean appended to the A/B safe block (her relay:
+  // start beginner wrist weight-bearing, nothing intense). Arms STILL paused (UPPER_BACK_SAFE)
   // until Lisa reviews the Jun-20 thumb/wrist/neck symptoms. QUEUED for later weeks, one at a
   // time, all wrist-neutral: band chest press (the missing push), band Pallof press / forearm-
   // looped row (anti-rotation + the missing pull) once Lisa clears arms + bands arrive. Separate
@@ -1482,10 +1502,10 @@ const PROGRAM: WeekPlan[] = [
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
           {
             name: 'Wall sit',
-            reps: '40 sec hold',
+            reps: '45 sec hold',
             notes:
-              'Hands rest on thighs or hang. No pushing on wall. Carried 40s from Week 9 (cap 45-60s).',
-            durationSec: 40,
+              'Hands rest on thighs or hang. No pushing on wall. Bumped 40→45s (Jul 3): you held 43s on Jul 1, so the plan catches up to you + a small nudge. Cap 45-60s — graduate at a clean 60s.',
+            durationSec: 45,
             isTimed: true,
           },
           {
@@ -1502,7 +1522,7 @@ const PROGRAM: WeekPlan[] = [
             isTimed: true,
           },
         ],
-        upperBack: UPPER_BACK_SAFE,
+        upperBack: UPPER_BACK_SAFE_W10,
         cooldown: STRETCH_COOLDOWN,
       },
       B: {
@@ -1532,7 +1552,7 @@ const PROGRAM: WeekPlan[] = [
             notes: 'Light fingertip touch on wall for balance only — NO grip.',
           },
         ],
-        upperBack: UPPER_BACK_SAFE,
+        upperBack: UPPER_BACK_SAFE_W10,
         cooldown: STRETCH_COOLDOWN,
       },
       C: {
@@ -3119,13 +3139,14 @@ function renderGearCard(): string {
         <div class="gear-section">
           <div class="gear-label">You have — in the workout now</div>
           <ul class="gear-list">
-            <li>✅ 1 kg weight — IN the workout now for the <strong>biceps curl</strong> (2×12, wrist neutral). The <strong>prone row stays bodyweight</strong> for now, building up to the 1 kg — add the load there only when you say you are ready.</li>
+            <li>✅ 1 kg weight — owned. The <strong>biceps curl is PAUSED</strong> with all loaded arm work (Weeks 8-10) until Lisa reviews the thumb/wrist — it comes back the moment she clears it (check-in resurfaces Jul 9). The <strong>prone row stays bodyweight</strong>, building up to the 1 kg — load added only when you say you are ready.</li>
           </ul>
         </div>
         <div class="gear-section">
           <div class="gear-label">Worth getting — unlocks more (not in your workout yet)</div>
           <ul class="gear-list">
             <li>⬜ A 2nd 1 kg (a pair) — lets you do both sides at once, and load the bodyweight hip-hinge later</li>
+            <li>⬜ 2 kg weights — <strong>your buy-bigger trigger (you asked Jul 3):</strong> buy when the 1 kg biceps curl feels easy at 3 sets of 20, two sessions running (after Lisa un-pauses arms). The app doesn't log arm reps — tell Claude when it feels easy and this flips.</li>
             <li>⬜ Resistance band — unlocks band pull-aparts + band pull-throughs (neutral-wrist hip-hinge progression)</li>
             <li>⬜ 2 tennis balls in a sock (“the peanut”) — for the neck release below</li>
           </ul>
@@ -3318,8 +3339,12 @@ function renderPreLog(): string {
       </label>
     </div>
 
+    <div class="card">
+      <p class="gear-note">🪫 Hard day? The pre-decided knob: <strong>do 2 rounds instead of 3</strong> — same moves, same walk, streak intact. Reps drop second; the walk stays. Showing up IS the win.</p>
+    </div>
+
     <div class="warning-banner">
-      ⚠️ <strong>Wrist: cleared by Lisa Cohen (May 10).</strong> Stop if anything pings. Back pain at 3/10 → stop that exercise.
+      ⚠️ <strong>Wrist:</strong> forearms fine; palms bear weight ONLY in the wall-lean on-ramp (your call, Jul 3) — stop if anything pings. Loaded arm work paused for Lisa. Back pain at 3/10 → stop that exercise.
     </div>
 
     <button class="btn-large btn-primary" id="begin" type="button">Start</button>

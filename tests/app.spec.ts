@@ -32,10 +32,13 @@ test('selecting workout A goes to pre-log screen', async ({ page }) => {
   await expect(page.locator('button:has-text("Start")')).toBeVisible();
 });
 
-test('pre-log shows wrist-cleared banner (not the old 2/10 ceiling)', async ({ page }) => {
-  // Group 2K: wrist banner refreshed
+test('pre-log shows current wrist banner (Jul-3 on-ramp, not stale May text)', async ({ page }) => {
+  // Group 2K: wrist banner refreshed — Jul 3 2026 it moved to the wall-lean
+  // on-ramp framing (her relay) and must not regress to the stale "cleared
+  // by Lisa Cohen (May 10)" wording.
   await page.locator('button[data-workout="A"]').click();
-  await expect(page.locator('.warning-banner')).toContainText('cleared by Lisa Cohen');
+  await expect(page.locator('.warning-banner')).toContainText('wall-lean on-ramp');
+  await expect(page.locator('.warning-banner')).not.toContainText('May 10');
 });
 
 test('pre-log capacity slider shows anchor labels', async ({ page }) => {
