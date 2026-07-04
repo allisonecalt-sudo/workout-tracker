@@ -186,8 +186,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v7';
-const BUILD_DATE = 'Jul 3, 2026 · 18:35';
+const APP_VERSION = 'v8';
+const BUILD_DATE = 'Jul 4, 2026 · 21:55';
 
 function supabaseHeaders(): HeadersInit {
   return {
