@@ -186,8 +186,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v8';
-const BUILD_DATE = 'Jul 4, 2026 · 21:55';
+const APP_VERSION = 'v9';
+const BUILD_DATE = 'Jul 4, 2026 · 22:10';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -511,7 +511,7 @@ const UPPER_BACK_W7: Exercise[] = [
 // The evidence default for new thumb/wrist overuse signs is to pull back the grip-
 // and arm-loaded moves (the 1 kg biceps curl + the prone row) until her PT, Lisa
 // Cohen, reviews — and KEEP the pain-free, wrist-neutral upper-back work. So A + B
-// in Weeks 8-10 run wall angels + WYT ONLY (no grip, no load). The loaded row +
+// in Weeks 8-10 run wall angels + IWYT ONLY (no grip, no load). The loaded row +
 // biceps pattern is preserved in UPPER_BACK_W7 + the EXERCISE_GUIDE how-tos — re-add
 // it only after Lisa clears the Jun-20 symptoms. This is a protective hold, NOT a
 // clinical decision (Lisa owns that). See self/health/wrists.md (Jun-20 entry).
@@ -523,10 +523,10 @@ const UPPER_BACK_SAFE: Exercise[] = [
       "Back against the wall, ribs down, chin gently tucked. Slide both arms up the wall keeping elbows AND wrists in light contact; if the wrists lift off, stop there — no forcing. Slide back down with control. Don't shrug or arch your low back to reach higher.",
   },
   {
-    name: 'WYT raises',
-    reps: '2 sets · 8 each (Y, T, W)',
+    name: 'IWYT raises',
+    reps: '2 sets · 8 each (I, W, Y, T)',
     notes:
-      'Lisa Cohen (Jun 18). Face DOWN, forehead on a towel, arms hanging, THUMBS UP the whole time (wrist neutral, NO palm load). Y: lift both arms overhead into a narrow V. T: arms straight out to the sides at shoulder height. W: bend the elbows down toward your ribs, squeezing the shoulder blades together. Lift from the UPPER BACK, not the neck — small, controlled lifts. Stop if your neck complains (Jun 20: right-side neck pain — keep this gentle).',
+      'Lisa Cohen (Jun 18) + the I you added (Jul 4 — keep it). Face DOWN on the mat, forehead on a towel, THUMBS UP throughout (wrist neutral, no palm load). Each letter: make the shape, small lift OFF the floor from the upper back, brief hold, lower. Hands touching the floor between reps is RIGHT — the floor is the rest position. I = arms straight down along your sides. W = elbows bent toward your ribs, squeeze the blades. Y = narrow overhead V. T = straight out to the sides at shoulder height. Lift from the UPPER BACK, not the neck — neck long, eyes on the towel. Keep it gentle for the neck (agreed Jul 4); stop if it complains.',
   },
 ];
 
@@ -1334,7 +1334,7 @@ const PROGRAM: WeekPlan[] = [
   },
   // Week 9 — Jun 27 - Jul 3. REVISED 2026-06-29 (post full program audit — her call to
   // ACCELERATE past the slow one-change plan: bumps across A + B AND a 3-exercise jump on C).
-  // Arms STILL paused (UPPER_BACK_SAFE — wall angels + WYT, no grip/load) pending Lisa's
+  // Arms STILL paused (UPPER_BACK_SAFE — wall angels + IWYT, no grip/load) pending Lisa's
   // Jun-20 thumb/wrist/neck review. Every addition below is wrist-neutral + back-safe, and
   // all are moves she already knows from A/B (no new motor learning).
   //  - A: unfreeze the frozen numbers → wall sit 36 → 40s; forearm plank 25 → 30s; dead
@@ -1766,9 +1766,9 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
     howTo:
       "Hold the 1 kg with your elbow tucked at your side, forearm hanging down, wrist neutral and straight. Curl the forearm up toward your shoulder, keeping the elbow pinned in place — only the forearm moves. Lower slowly under control. 2 sets of 12. Keep the wrist straight (neutral) the whole time — don't let it bend back. Common mistake: swinging the body or the elbow drifting forward for momentum. Slow and controlled is the work.",
   },
-  'WYT raises': {
+  'IWYT raises': {
     howTo:
-      "Lisa Cohen's move (Jun 18). Lie face DOWN with your forehead resting on a towel and arms hanging toward the floor — thumbs pointing UP the whole time so the wrists stay relaxed and neutral (no palm pressing). Y: lift both arms overhead into a narrow V, like raising goalposts. T: bring arms straight out to the sides at shoulder height so your body makes a T. W: bend the elbows and pull them down toward your ribs, squeezing the shoulder blades together. Lift from the upper back, NOT the neck. 2 sets of about 8 of each position; small controlled lifts beat big swings.",
+      "Lisa Cohen's move (Jun 18), plus the I position you added (Jul 4) — so: I, W, Y, T. Lie face DOWN on the mat with your forehead resting on a folded towel, so the neck stays long and relaxed. Thumbs point UP the entire time — that keeps the wrists neutral, zero palm pressure. One rep = put your arms in the letter's shape, lift them a few centimeters OFF the floor by squeezing your upper back, hold one breath, lower. Your hands touching the ground between reps is exactly right — the floor IS the rest position; you only lift for the squeeze. The letters: I — arms straight down along your sides, lift by drawing the shoulder blades down and together. W — elbows bent and pulled toward your ribs so your arms make a W; squeeze the blades together. Y — both arms overhead in a narrow V, like a referee calling goalposts. T — arms straight out to the sides at shoulder height. Do all reps of one letter, then move to the next. Small controlled lifts beat big swings — if your neck starts doing the work, the lift is too big. About 8 of each letter, 2 rounds, and keep the whole thing gentle for the neck.",
   },
   // Week-10 addition (2026-07-04) — from the Jun-20 deep research.
   'Eccentric step-down': {
