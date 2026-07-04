@@ -186,8 +186,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v11';
-const BUILD_DATE = 'Jul 4, 2026 · 22:40';
+const APP_VERSION = 'v12';
+const BUILD_DATE = 'Jul 4, 2026 · 22:55';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2148,8 +2148,11 @@ function updateWalkLiveLine(): void {
 function beginWalkTracking(): void {
   void acquireWalkWakeLock();
   // GPS distance — outdoor. Slow-walker filtering: drop low-quality fixes
-  // (accuracy worse than 25 m) and only bank displacement ≥ 5 m, so jitter
-  // while she inches along doesn't invent kilometers.
+  // (accuracy worse than 25 m) and only bank displacement ≥ 10 m from the last
+  // anchor. The 10 m anchor is the Jul-4 research number: at her <3 km/h pace
+  // she moves ~0.8 m per fix against a 5-13 m GPS noise floor, so anything
+  // finer measures jitter, not walking (raw summation can triple a walk).
+  // Expected honesty: ±10-20% outdoors. Indoors GPS stays blind by physics.
   if ('geolocation' in navigator && walkWatchId === null) {
     walkLastFix = null;
     walkWatchId = navigator.geolocation.watchPosition(
@@ -2158,7 +2161,7 @@ function beginWalkTracking(): void {
         const fix = { lat: pos.coords.latitude, lon: pos.coords.longitude };
         if (walkLastFix) {
           const d = haversineMeters(walkLastFix, fix);
-          if (d >= 5) {
+          if (d >= 10) {
             localStorage.setItem(WALK_METERS_KEY, String(walkCounter(WALK_METERS_KEY) + d));
             walkLastFix = fix;
             updateWalkLiveLine();
