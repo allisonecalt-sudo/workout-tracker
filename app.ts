@@ -42,6 +42,11 @@ type LogEntry = {
   startedAt?: string;
   completedAt?: string;
   durationSec?: number;
+  // In-workout walk numbers (v13, Jul 4 — her idea): the Outdoor-walk step's
+  // auto-tracked minutes/steps/meters, saved WITH the session.
+  walkMinutes?: number | null;
+  walkSteps?: number | null;
+  walkMeters?: number | null;
   synced?: boolean;
 };
 
@@ -186,8 +191,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v12';
-const BUILD_DATE = 'Jul 4, 2026 · 22:55';
+const APP_VERSION = 'v13';
+const BUILD_DATE = 'Jul 4, 2026 · 22:35';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2067,6 +2072,8 @@ type WalkEntry = {
   synced?: boolean;
 };
 
+type WorkoutWalkResult = { minutes: number; meters: number; steps: number };
+
 const WALKS_KEY = 'workout-tracker:walks';
 // Her Jul-4 idea: "click walking and you automatically start tracking until I
 // tell you I'm done." Start/stop timer — start timestamp lives in localStorage
@@ -2135,7 +2142,7 @@ async function acquireWalkWakeLock(): Promise<void> {
 function updateWalkLiveLine(): void {
   const el = document.getElementById('walk-live');
   if (!el) return;
-  const start = activeWalkStart();
+  const start = activeWalkStart() ?? workoutWalkStart();
   const mins = start ? Math.max(0, Math.round((Date.now() - start) / 60000)) : 0;
   const m = walkCounter(WALK_METERS_KEY);
   const st = walkCounter(WALK_STEPS_KEY);
@@ -2324,6 +2331,57 @@ function logWalk(
   return entry;
 }
 
+// In-workout walk tracking (v13 — her actual idea, Jul 4: "each time I go on a
+// walk WITHIN each workout it tracks information, saves it"). The 'Outdoor
+// walk' step that opens A/B (10 min) and C (25 min) auto-tracks with the same
+// GPS+steps engine, and the numbers save WITH that session. render() drives
+// start/stop, so advancing, quitting, and resume-after-close all behave.
+const WW_START_KEY = 'workout-tracker:ww-start';
+let workoutWalk: WorkoutWalkResult | null = null;
+
+function workoutWalkStart(): number | null {
+  const raw = localStorage.getItem(WW_START_KEY);
+  if (!raw) return null;
+  const t = Number(raw);
+  return Number.isFinite(t) && t > 0 ? t : null;
+}
+
+function harvestWorkoutWalk(): void {
+  const start = workoutWalkStart();
+  if (start === null) return;
+  const minutes = Math.max(1, Math.round((Date.now() - start) / 60000));
+  const meters = walkCounter(WALK_METERS_KEY);
+  const steps = walkCounter(WALK_STEPS_KEY);
+  // Don't kill the engine if a STANDALONE walk is (somehow) also live.
+  if (!activeWalkStart()) endWalkTracking();
+  localStorage.removeItem(WW_START_KEY);
+  localStorage.removeItem(WALK_METERS_KEY);
+  localStorage.removeItem(WALK_STEPS_KEY);
+  workoutWalk = { minutes, meters: meters >= 10 ? meters : 0, steps };
+}
+
+function syncWorkoutWalkTracking(): void {
+  const onWalkStep =
+    state.screen === 'workout' && !state.isResting && getCurrentExercise()?.name === 'Outdoor walk';
+  const started = workoutWalkStart() !== null;
+  const standaloneActive = activeWalkStart() !== null;
+  if (onWalkStep && !standaloneActive) {
+    if (!started) {
+      localStorage.setItem(WW_START_KEY, String(Date.now()));
+      localStorage.removeItem(WALK_METERS_KEY);
+      localStorage.removeItem(WALK_STEPS_KEY);
+      beginWalkTracking();
+    } else if (walkWatchId === null && walkMotionHandler === null) {
+      // Resumed mid-walk after an app close — restart the sensors; the
+      // accumulated meters/steps are already in localStorage.
+      beginWalkTracking();
+    }
+    updateWalkLiveLine();
+  } else if (!onWalkStep && started) {
+    harvestWorkoutWalk();
+  }
+}
+
 function walksThisWeek(): number {
   const weekStart = saturdayForOffset(0).getTime();
   return loadWalks().filter((w) => new Date(w.date).getTime() >= weekStart).length;
@@ -2353,6 +2411,9 @@ async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
           started_at: entry.startedAt ?? null,
           completed_at: entry.completedAt ?? null,
           duration_seconds: entry.durationSec ?? null,
+          walk_minutes: entry.walkMinutes ?? null,
+          walk_steps: entry.walkSteps ?? null,
+          walk_meters: entry.walkMeters ?? null,
         },
       ]),
     });
@@ -2396,6 +2457,7 @@ function beginExercises(): void {
   state.startedAt = new Date().toISOString();
   state.howToOpenFor = null;
   state.videoExpandedFor = null;
+  workoutWalk = null; // fresh session, fresh walk numbers
   render();
 }
 
@@ -2478,6 +2540,7 @@ function startTimedExercise(): void {
 
 function logCompleteAndHome(): void {
   if (!state.selectedWorkout) return;
+  harvestWorkoutWalk(); // no-op unless a walk step is somehow still open
   const completedAt = new Date().toISOString();
   const startedAt = state.startedAt ?? completedAt;
   const durationSec = Math.max(
@@ -2495,6 +2558,9 @@ function logCompleteAndHome(): void {
     startedAt,
     completedAt,
     durationSec,
+    walkMinutes: workoutWalk ? workoutWalk.minutes : null,
+    walkSteps: workoutWalk && workoutWalk.steps > 0 ? workoutWalk.steps : null,
+    walkMeters: workoutWalk && workoutWalk.meters > 0 ? workoutWalk.meters : null,
   });
   resetState();
   render();
@@ -3834,6 +3900,11 @@ function renderWorkout(): string {
         <div class="exercise-name">${ex.name}</div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${ex.notes ? `<p class="exercise-notes">${ex.notes}</p>` : ''}
+        ${
+          ex.name === 'Outdoor walk'
+            ? `<p class="gear-note">🚶 Auto-tracking this walk: <span id="walk-live">starting…</span><br>Keep the phone on you — steps count indoors, km outdoors. It saves with this workout.</p>`
+            : ''
+        }
       </div>
     </div>
 
@@ -5140,6 +5211,9 @@ function render(): void {
   // workout/timer screens where it would feel laggy mid-rep. The class
   // triggers a 220ms fade + 8px translateY with the spring ease curve.
   root.innerHTML = html;
+  // v13: the in-workout walk tracker follows the screen — starts on the
+  // Outdoor-walk step, harvests when she moves past it (or quits).
+  syncWorkoutWalkTracking();
   if (state.screen !== 'workout' && state.screen !== 'pre-log' && state.screen !== 'post-log') {
     root.classList.remove('screen-enter');
     // Force reflow so re-adding triggers the animation.
