@@ -2045,6 +2045,88 @@ function markLogSynced(id: string): void {
   writeLogs(logs);
 }
 
+// ---------- Walk credit (Jul 4 2026) ----------
+// Her Jun-18 ask: "I sometimes just walk around my apartment, the walk can be
+// pretty slow that's OK — maybe even log/credit them." One-tap logging by
+// design: her capture profile says anything over two taps gets abandoned.
+// Walks are EXTRA CREDIT — they NEVER count toward the 3/week streak, so the
+// streak math stays honest. Supabase movement_log is the source of truth
+// (tandem rule); localStorage is the offline layer, same pattern as sessions.
+type WalkEntry = {
+  id: string; // local id only; the DB row generates its own uuid
+  date: string; // ISO datetime
+  synced?: boolean;
+};
+
+const WALKS_KEY = 'workout-tracker:walks';
+
+function loadWalks(): WalkEntry[] {
+  try {
+    const raw = localStorage.getItem(WALKS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as WalkEntry[];
+  } catch {
+    return [];
+  }
+}
+
+function writeWalks(walks: WalkEntry[]): void {
+  const sorted = [...walks].sort((a, b) => {
+    const aUn = a.synced ? 1 : 0;
+    const bUn = b.synced ? 1 : 0;
+    if (aUn !== bUn) return aUn - bUn; // unsynced survive the cap first
+    return b.date.localeCompare(a.date);
+  });
+  localStorage.setItem(WALKS_KEY, JSON.stringify(sorted.slice(0, 100)));
+}
+
+function markWalkSynced(id: string): void {
+  const walks = loadWalks();
+  const idx = walks.findIndex((w) => w.id === id);
+  if (idx === -1) return;
+  const entry = walks[idx];
+  if (!entry) return;
+  walks[idx] = { ...entry, synced: true };
+  writeWalks(walks);
+}
+
+async function pushWalk(walk: WalkEntry): Promise<void> {
+  if (syncDisabled()) return;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/movement_log`, {
+      method: 'POST',
+      headers: supabaseHeaders(),
+      body: JSON.stringify({ date: walk.date.slice(0, 10), kind: 'walk' }),
+    });
+    if (res.ok) markWalkSynced(walk.id);
+  } catch {
+    /* stays unsynced; flushed on next load */
+  }
+}
+
+async function flushPendingWalks(): Promise<void> {
+  if (syncDisabled()) return;
+  for (const w of loadWalks().filter((x) => !x.synced)) {
+    await pushWalk(w);
+  }
+}
+
+function logWalk(): WalkEntry {
+  const entry: WalkEntry = { id: genId(), date: new Date().toISOString(), synced: false };
+  const walks = loadWalks();
+  walks.unshift(entry);
+  writeWalks(walks);
+  void pushWalk(entry);
+  return entry;
+}
+
+function walksThisWeek(): number {
+  const weekStart = saturdayForOffset(0).getTime();
+  return loadWalks().filter((w) => new Date(w.date).getTime() >= weekStart).length;
+}
+
 // Group 1F: wrist columns dropped from POST payload — Lisa Cohen cleared the
 // wrist May 10. App was silently writing 0s for two columns the user no
 // longer fills. Schema still has the columns (no Supabase change) so existing
@@ -3174,6 +3256,7 @@ function renderHome(): string {
   // is marked as the pick — all three render with the quieter treatment.
   const todaysPick: WorkoutId | null = getAutoSuggestEnabled() ? getTodaysPick() : null;
   const lastLog = logs[0];
+  const weekWalks = walksThisWeek();
   const weekDots = getWeekDots(viewedWeekOffset);
   const canGoBack = logs.some((l) => {
     const t = new Date(l.date).getTime();
@@ -3255,6 +3338,14 @@ function renderHome(): string {
     </div>
 
     ${renderWeeklyTargetGrid()}
+
+    <div class="card walk-card">
+      <div class="walk-row">
+        <span class="walk-text">🚶 Slow walks count too${weekWalks > 0 ? ` — <strong>${weekWalks}</strong> this week` : ''}</span>
+        <button class="walk-log-btn" id="log-walk" type="button">+ Log a walk</button>
+      </div>
+      <p class="gear-note walk-note">Any pace, any length — apartment laps count. Extra credit on top of your 3/week; never part of the streak math.</p>
+    </div>
 
     <button class="weekly-review-link" id="open-weekly-review-link" type="button">
       <span>📊 Weekly review</span>
@@ -4972,6 +5063,13 @@ function attachHandlers(): void {
     render();
   });
 
+  // Walk credit (Jul 4 2026): ONE tap logs a slow walk — no modal, no fields.
+  // The re-render bumps the "N this week" count; that's the feedback.
+  bindClick('log-walk', () => {
+    logWalk();
+    render();
+  });
+
   bindClick('back-history', () => {
     state.screen = 'history';
     state.historyDetailId = null;
@@ -5204,4 +5302,5 @@ document.addEventListener('DOMContentLoaded', () => {
   restoreActiveSession();
   render();
   void pullFromSupabase().then(() => flushPendingSyncs());
+  void flushPendingWalks();
 });
