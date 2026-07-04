@@ -3141,7 +3141,7 @@ input[type='number']:focus {
 }
 
 /* ---------- Walk credit (Jul 4 2026) ---------- */
-/* Slow walks count — extra credit outside the streak math. One row, one tap. */
+/* Slow walks count — extra credit outside the streak math. One row: tap to start a tracked walk, tap Done. */
 .walk-card {
   padding: 12px 16px;
 }

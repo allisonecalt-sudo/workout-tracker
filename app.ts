@@ -191,8 +191,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v13';
-const BUILD_DATE = 'Jul 4, 2026 · 22:35';
+const APP_VERSION = 'v14';
+const BUILD_DATE = 'Jul 4, 2026 · 22:45';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2058,8 +2058,10 @@ function markLogSynced(id: string): void {
 
 // ---------- Walk credit (Jul 4 2026) ----------
 // Her Jun-18 ask: "I sometimes just walk around my apartment, the walk can be
-// pretty slow that's OK — maybe even log/credit them." One-tap logging by
-// design: her capture profile says anything over two taps gets abandoned.
+// pretty slow that's OK — maybe even log/credit them." Born one-tap (v8),
+// upgraded the same night to a start/stop TRACKED walk (v10-v13): tap once to
+// start, sensors run, tap Done — still two taps total, within her capture
+// budget.
 // Walks are EXTRA CREDIT — they NEVER count toward the 3/week streak, so the
 // streak math stays honest. Supabase movement_log is the source of truth
 // (tandem rule); localStorage is the offline layer, same pattern as sessions.
