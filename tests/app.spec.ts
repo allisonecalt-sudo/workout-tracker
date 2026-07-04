@@ -1073,3 +1073,23 @@ test('walk credit: start/stop timer logs a walk, bumps week count, streak untouc
   await page.locator('#finish-walk').click();
   await expect(page.locator('.walk-text')).toContainText('2 this week');
 });
+
+test.describe('walk distance (GPS granted)', () => {
+  test.use({
+    permissions: ['geolocation'],
+    geolocation: { latitude: 31.771, longitude: 35.2137 },
+  });
+
+  test('outdoor walk accumulates km from GPS movement', async ({ page, context }) => {
+    // Jul 4 2026 — her call: screen stays awake, GPS tracks distance.
+    // Mock fixes arrive with accuracy 0 (passes the <=25 m quality gate);
+    // each ~55 m hop must bank displacement into the live line.
+    await page.locator('#log-walk-start').click();
+    await expect(page.locator('#walk-live')).toBeVisible();
+    await context.setGeolocation({ latitude: 31.7715, longitude: 35.2137 });
+    await context.setGeolocation({ latitude: 31.772, longitude: 35.2137 });
+    await expect(page.locator('#walk-live')).toContainText('km', { timeout: 15000 });
+    await page.locator('#finish-walk').click();
+    await expect(page.locator('.walk-text')).toContainText('1 this week');
+  });
+});

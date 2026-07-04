@@ -186,8 +186,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v10';
-const BUILD_DATE = 'Jul 4, 2026 · 22:25';
+const APP_VERSION = 'v11';
+const BUILD_DATE = 'Jul 4, 2026 · 22:40';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -1996,6 +1996,12 @@ if (typeof document !== 'undefined') {
     if (document.visibilityState === 'visible' && activeTimer) {
       timerLoop();
     }
+    // Wake lock auto-releases when the app is backgrounded; if a walk is
+    // still running when she comes back, grab it again so the screen stays
+    // on for the rest of the walk (her Jul-4 call).
+    if (document.visibilityState === 'visible' && activeWalkStart()) {
+      void acquireWalkWakeLock();
+    }
   });
 }
 
@@ -2056,6 +2062,8 @@ type WalkEntry = {
   id: string; // local id only; the DB row generates its own uuid
   date: string; // ISO datetime
   minutes?: number | null; // from the start/stop timer (Jul 4); null = logged without timing
+  meters?: number | null; // GPS distance (outdoor, screen-on — her call Jul 4); null = no usable fix
+  steps?: number | null; // motion-sensor step estimate (works indoors, phone on her)
   synced?: boolean;
 };
 
@@ -2063,10 +2071,26 @@ const WALKS_KEY = 'workout-tracker:walks';
 // Her Jul-4 idea: "click walking and you automatically start tracking until I
 // tell you I'm done." Start/stop timer — start timestamp lives in localStorage
 // so an in-progress walk survives closing the app (same trick as
-// ACTIVE_SESSION_KEY). Distance/GPS deliberately NOT attempted: PWA geolocation
-// dies on screen lock and is meaningless for apartment laps — minutes are the
-// honest number.
+// ACTIVE_SESSION_KEY).
+// Same night, her calls: (1) "I don't care if the screen needs to stay open —
+// it should make the screen stay open" → wake lock + GPS distance for outdoor
+// walks; (2) "it can't track my steps at least?" → motion-sensor step estimate
+// for apartment laps, where GPS physically can't see her. Both stop the moment
+// the walk ends. Screen-locked = sensors pause = numbers undercount; the
+// wake lock exists precisely so that doesn't happen.
 const WALK_ACTIVE_KEY = 'workout-tracker:walk-active';
+const WALK_METERS_KEY = 'workout-tracker:walk-meters';
+const WALK_STEPS_KEY = 'workout-tracker:walk-steps';
+
+let walkWatchId: number | null = null;
+let walkWakeLock: { release: () => Promise<void> } | null = null;
+let walkLastFix: { lat: number; lon: number } | null = null;
+let walkTickId: number | null = null;
+let walkMotionHandler: ((e: DeviceMotionEvent) => void) | null = null;
+// step-detection state: smoothed acceleration magnitude + peak gate
+let walkAccelAvg = 9.8;
+let walkStepGateOpen = true;
+let walkLastStepAt = 0;
 
 function activeWalkStart(): number | null {
   const raw = localStorage.getItem(WALK_ACTIVE_KEY);
@@ -2075,15 +2099,147 @@ function activeWalkStart(): number | null {
   return Number.isFinite(t) && t > 0 ? t : null;
 }
 
+function walkCounter(key: string): number {
+  const raw = localStorage.getItem(key);
+  const n = raw ? Number(raw) : 0;
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+}
+
+function haversineMeters(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const R = 6371000;
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLon = (b.lon - a.lon) * rad;
+  const s =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+async function acquireWalkWakeLock(): Promise<void> {
+  // Her call (Jul 4): the screen SHOULD stay on during a walk — that's what
+  // keeps GPS + motion sensors alive in a PWA. try/catch: headless tests and
+  // older browsers have no wakeLock.
+  try {
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
+    };
+    if (nav.wakeLock && document.visibilityState === 'visible') {
+      walkWakeLock = await nav.wakeLock.request('screen');
+    }
+  } catch {
+    walkWakeLock = null;
+  }
+}
+
+function updateWalkLiveLine(): void {
+  const el = document.getElementById('walk-live');
+  if (!el) return;
+  const start = activeWalkStart();
+  const mins = start ? Math.max(0, Math.round((Date.now() - start) / 60000)) : 0;
+  const m = walkCounter(WALK_METERS_KEY);
+  const st = walkCounter(WALK_STEPS_KEY);
+  let line = `${mins} min`;
+  if (st > 0) line += ` · ${st} steps`;
+  if (m >= 10) line += ` · ${(m / 1000).toFixed(2)} km`;
+  el.textContent = line;
+}
+
+function beginWalkTracking(): void {
+  void acquireWalkWakeLock();
+  // GPS distance — outdoor. Slow-walker filtering: drop low-quality fixes
+  // (accuracy worse than 25 m) and only bank displacement ≥ 5 m, so jitter
+  // while she inches along doesn't invent kilometers.
+  if ('geolocation' in navigator && walkWatchId === null) {
+    walkLastFix = null;
+    walkWatchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (pos.coords.accuracy > 25) return;
+        const fix = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        if (walkLastFix) {
+          const d = haversineMeters(walkLastFix, fix);
+          if (d >= 5) {
+            localStorage.setItem(WALK_METERS_KEY, String(walkCounter(WALK_METERS_KEY) + d));
+            walkLastFix = fix;
+            updateWalkLiveLine();
+          }
+        } else {
+          walkLastFix = fix;
+        }
+      },
+      () => {
+        /* permission denied / no signal — minutes and steps still log */
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
+    );
+  }
+  // Step estimate — indoor-capable (apartment laps), needs the phone on her
+  // with the screen awake. Peak detection on acceleration magnitude with a
+  // slow-gait-friendly gate: ≥ 400 ms between steps, ~1.2 m/s² above the
+  // rolling baseline to open, close near baseline. Estimate-grade on purpose.
+  if (walkMotionHandler === null && typeof DeviceMotionEvent !== 'undefined') {
+    walkAccelAvg = 9.8;
+    walkStepGateOpen = true;
+    walkLastStepAt = 0;
+    walkMotionHandler = (e: DeviceMotionEvent) => {
+      const acc = e.accelerationIncludingGravity;
+      if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
+      const mag = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+      walkAccelAvg = walkAccelAvg * 0.9 + mag * 0.1; // rolling baseline
+      const now = Date.now();
+      if (walkStepGateOpen && mag > walkAccelAvg + 1.2 && now - walkLastStepAt >= 400) {
+        walkStepGateOpen = false;
+        walkLastStepAt = now;
+        localStorage.setItem(WALK_STEPS_KEY, String(walkCounter(WALK_STEPS_KEY) + 1));
+        updateWalkLiveLine();
+      } else if (!walkStepGateOpen && mag < walkAccelAvg + 0.3) {
+        walkStepGateOpen = true;
+      }
+    };
+    window.addEventListener('devicemotion', walkMotionHandler);
+  }
+  if (walkTickId === null) {
+    walkTickId = window.setInterval(updateWalkLiveLine, 30000);
+  }
+}
+
+function endWalkTracking(): void {
+  if (walkWatchId !== null && 'geolocation' in navigator) {
+    navigator.geolocation.clearWatch(walkWatchId);
+  }
+  walkWatchId = null;
+  walkLastFix = null;
+  if (walkMotionHandler !== null) {
+    window.removeEventListener('devicemotion', walkMotionHandler);
+    walkMotionHandler = null;
+  }
+  if (walkTickId !== null) {
+    window.clearInterval(walkTickId);
+    walkTickId = null;
+  }
+  if (walkWakeLock) {
+    void walkWakeLock.release().catch(() => undefined);
+    walkWakeLock = null;
+  }
+}
+
 function startWalk(): void {
   localStorage.setItem(WALK_ACTIVE_KEY, String(Date.now()));
+  localStorage.removeItem(WALK_METERS_KEY);
+  localStorage.removeItem(WALK_STEPS_KEY);
+  beginWalkTracking();
 }
 
 function finishWalk(): WalkEntry {
   const start = activeWalkStart();
+  const meters = walkCounter(WALK_METERS_KEY);
+  const steps = walkCounter(WALK_STEPS_KEY);
+  endWalkTracking();
   localStorage.removeItem(WALK_ACTIVE_KEY);
+  localStorage.removeItem(WALK_METERS_KEY);
+  localStorage.removeItem(WALK_STEPS_KEY);
   const minutes = start ? Math.max(1, Math.round((Date.now() - start) / 60000)) : null;
-  return logWalk(minutes);
+  return logWalk(minutes, meters >= 10 ? meters : null, steps > 0 ? steps : null);
 }
 
 function loadWalks(): WalkEntry[] {
@@ -2128,6 +2284,8 @@ async function pushWalk(walk: WalkEntry): Promise<void> {
         date: walk.date.slice(0, 10),
         kind: 'walk',
         minutes: walk.minutes ?? null,
+        meters: walk.meters ?? null,
+        steps: walk.steps ?? null,
       }),
     });
     if (res.ok) markWalkSynced(walk.id);
@@ -2143,11 +2301,17 @@ async function flushPendingWalks(): Promise<void> {
   }
 }
 
-function logWalk(minutes: number | null = null): WalkEntry {
+function logWalk(
+  minutes: number | null = null,
+  meters: number | null = null,
+  steps: number | null = null
+): WalkEntry {
   const entry: WalkEntry = {
     id: genId(),
     date: new Date().toISOString(),
     minutes,
+    meters,
+    steps,
     synced: false,
   };
   const walks = loadWalks();
@@ -3379,7 +3543,7 @@ function renderHome(): string {
       <div class="walk-row">
         <span class="walk-text">🚶 ${
           walkStartedAt
-            ? `Walking since <strong>${new Date(walkStartedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>…`
+            ? `Walking since <strong>${new Date(walkStartedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong> · <span id="walk-live">tracking…</span>`
             : `Slow walks count too${weekWalks > 0 ? ` — <strong>${weekWalks}</strong> this week` : ''}`
         }</span>
         ${
@@ -3390,8 +3554,8 @@ function renderHome(): string {
       </div>
       <p class="gear-note walk-note">${
         walkStartedAt
-          ? 'Tracking — tap Done when you finish and the minutes log themselves. Closing the app is fine, the walk keeps counting.'
-          : 'Tap start, walk any pace — apartment laps count — tap done when finished. Extra credit on top of your 3/week; never part of the streak math.'
+          ? 'Tracking minutes + steps (+ km outdoors via GPS). Keep the phone on you and the screen stays awake by itself — tap Done when you finish. If the screen does lock, minutes still count; steps/km pause until you come back.'
+          : 'Tap start, walk any pace — apartment laps count (steps), outdoors adds km. Tap done when finished. Extra credit on top of your 3/week; never part of the streak math.'
       }</p>
     </div>
 
@@ -5117,6 +5281,7 @@ function attachHandlers(): void {
   bindClick('log-walk-start', () => {
     startWalk();
     render();
+    updateWalkLiveLine();
   });
   bindClick('finish-walk', () => {
     finishWalk();
@@ -5356,4 +5521,11 @@ document.addEventListener('DOMContentLoaded', () => {
   render();
   void pullFromSupabase().then(() => flushPendingSyncs());
   void flushPendingWalks();
+  // Resume an in-progress WALK too (Jul 4): restart GPS + step tracking and
+  // the wake lock — accumulated meters/steps live in localStorage, so a
+  // mid-walk app close only pauses the sensors, it never loses the walk.
+  if (activeWalkStart()) {
+    beginWalkTracking();
+    updateWalkLiveLine();
+  }
 });
