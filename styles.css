@@ -3177,3 +3177,8 @@ input[type='number']:focus {
 .walk-note {
   margin-top: 8px;
 }
+
+.walk-log-btn-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}

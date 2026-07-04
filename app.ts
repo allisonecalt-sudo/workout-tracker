@@ -186,8 +186,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v9';
-const BUILD_DATE = 'Jul 4, 2026 · 22:10';
+const APP_VERSION = 'v10';
+const BUILD_DATE = 'Jul 4, 2026 · 22:25';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2055,10 +2055,36 @@ function markLogSynced(id: string): void {
 type WalkEntry = {
   id: string; // local id only; the DB row generates its own uuid
   date: string; // ISO datetime
+  minutes?: number | null; // from the start/stop timer (Jul 4); null = logged without timing
   synced?: boolean;
 };
 
 const WALKS_KEY = 'workout-tracker:walks';
+// Her Jul-4 idea: "click walking and you automatically start tracking until I
+// tell you I'm done." Start/stop timer — start timestamp lives in localStorage
+// so an in-progress walk survives closing the app (same trick as
+// ACTIVE_SESSION_KEY). Distance/GPS deliberately NOT attempted: PWA geolocation
+// dies on screen lock and is meaningless for apartment laps — minutes are the
+// honest number.
+const WALK_ACTIVE_KEY = 'workout-tracker:walk-active';
+
+function activeWalkStart(): number | null {
+  const raw = localStorage.getItem(WALK_ACTIVE_KEY);
+  if (!raw) return null;
+  const t = Number(raw);
+  return Number.isFinite(t) && t > 0 ? t : null;
+}
+
+function startWalk(): void {
+  localStorage.setItem(WALK_ACTIVE_KEY, String(Date.now()));
+}
+
+function finishWalk(): WalkEntry {
+  const start = activeWalkStart();
+  localStorage.removeItem(WALK_ACTIVE_KEY);
+  const minutes = start ? Math.max(1, Math.round((Date.now() - start) / 60000)) : null;
+  return logWalk(minutes);
+}
 
 function loadWalks(): WalkEntry[] {
   try {
@@ -2098,7 +2124,11 @@ async function pushWalk(walk: WalkEntry): Promise<void> {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/movement_log`, {
       method: 'POST',
       headers: supabaseHeaders(),
-      body: JSON.stringify({ date: walk.date.slice(0, 10), kind: 'walk' }),
+      body: JSON.stringify({
+        date: walk.date.slice(0, 10),
+        kind: 'walk',
+        minutes: walk.minutes ?? null,
+      }),
     });
     if (res.ok) markWalkSynced(walk.id);
   } catch {
@@ -2113,8 +2143,13 @@ async function flushPendingWalks(): Promise<void> {
   }
 }
 
-function logWalk(): WalkEntry {
-  const entry: WalkEntry = { id: genId(), date: new Date().toISOString(), synced: false };
+function logWalk(minutes: number | null = null): WalkEntry {
+  const entry: WalkEntry = {
+    id: genId(),
+    date: new Date().toISOString(),
+    minutes,
+    synced: false,
+  };
   const walks = loadWalks();
   walks.unshift(entry);
   writeWalks(walks);
@@ -3257,6 +3292,7 @@ function renderHome(): string {
   const todaysPick: WorkoutId | null = getAutoSuggestEnabled() ? getTodaysPick() : null;
   const lastLog = logs[0];
   const weekWalks = walksThisWeek();
+  const walkStartedAt = activeWalkStart();
   const weekDots = getWeekDots(viewedWeekOffset);
   const canGoBack = logs.some((l) => {
     const t = new Date(l.date).getTime();
@@ -3341,10 +3377,22 @@ function renderHome(): string {
 
     <div class="card walk-card">
       <div class="walk-row">
-        <span class="walk-text">🚶 Slow walks count too${weekWalks > 0 ? ` — <strong>${weekWalks}</strong> this week` : ''}</span>
-        <button class="walk-log-btn" id="log-walk" type="button">+ Log a walk</button>
+        <span class="walk-text">🚶 ${
+          walkStartedAt
+            ? `Walking since <strong>${new Date(walkStartedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>…`
+            : `Slow walks count too${weekWalks > 0 ? ` — <strong>${weekWalks}</strong> this week` : ''}`
+        }</span>
+        ${
+          walkStartedAt
+            ? `<button class="walk-log-btn walk-log-btn-active" id="finish-walk" type="button">■ Done walking</button>`
+            : `<button class="walk-log-btn" id="log-walk-start" type="button">▶ Start a walk</button>`
+        }
       </div>
-      <p class="gear-note walk-note">Any pace, any length — apartment laps count. Extra credit on top of your 3/week; never part of the streak math.</p>
+      <p class="gear-note walk-note">${
+        walkStartedAt
+          ? 'Tracking — tap Done when you finish and the minutes log themselves. Closing the app is fine, the walk keeps counting.'
+          : 'Tap start, walk any pace — apartment laps count — tap done when finished. Extra credit on top of your 3/week; never part of the streak math.'
+      }</p>
     </div>
 
     <button class="weekly-review-link" id="open-weekly-review-link" type="button">
@@ -5063,10 +5111,15 @@ function attachHandlers(): void {
     render();
   });
 
-  // Walk credit (Jul 4 2026): ONE tap logs a slow walk — no modal, no fields.
-  // The re-render bumps the "N this week" count; that's the feedback.
-  bindClick('log-walk', () => {
-    logWalk();
+  // Walk credit (Jul 4 2026, upgraded same night to her timer idea): tap Start
+  // when you head out, tap Done when finished — minutes log themselves. The
+  // re-render swaps the card state; that's the feedback. No modal, no fields.
+  bindClick('log-walk-start', () => {
+    startWalk();
+    render();
+  });
+  bindClick('finish-walk', () => {
+    finishWalk();
     render();
   });
 

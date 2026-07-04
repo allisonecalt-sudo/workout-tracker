@@ -1053,15 +1053,23 @@ test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ p
   await expect(page.locator('.week-banner')).toContainText('Week 3');
 });
 
-test('walk credit: one tap logs a walk, bumps week count, streak untouched', async ({ page }) => {
-  // Jul 4 2026 — her Jun-18 ask. Walks are extra credit: the "of 3 this week"
-  // streak number must NOT move when a walk is logged.
+test('walk credit: start/stop timer logs a walk, bumps week count, streak untouched', async ({
+  page,
+}) => {
+  // Jul 4 2026 — her Jun-18 ask, upgraded same night to her timer idea
+  // ("click walking and you automatically start tracking until I tell you
+  // I'm done"). Walks are extra credit: the "of 3 this week" streak number
+  // must NOT move when a walk is logged.
   const streakBefore = await page.locator('.streak-stat .stat-number').first().textContent();
   await expect(page.locator('.walk-text')).not.toContainText('this week');
-  await page.locator('#log-walk').click();
+  await page.locator('#log-walk-start').click();
+  await expect(page.locator('.walk-text')).toContainText('Walking since');
+  await expect(page.locator('#finish-walk')).toBeVisible();
+  await page.locator('#finish-walk').click();
   await expect(page.locator('.walk-text')).toContainText('1 this week');
   await expect(page.locator('.streak-stat .stat-number').first()).toHaveText(streakBefore ?? '0');
-  // Second tap increments again — repeat laps are legitimate.
-  await page.locator('#log-walk').click();
+  // A second walk works the same way — repeat laps are legitimate.
+  await page.locator('#log-walk-start').click();
+  await page.locator('#finish-walk').click();
   await expect(page.locator('.walk-text')).toContainText('2 this week');
 });
