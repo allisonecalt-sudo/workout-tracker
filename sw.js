@@ -9,7 +9,7 @@
 
 // Keep this version number in sync with APP_VERSION in app.ts (shown in the
 // home header) so a deploy visibly busts the cache AND the on-screen tag moves.
-const VERSION = 'workout-tracker-v14';
+const VERSION = 'workout-tracker-v15';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -68,10 +68,10 @@ self.addEventListener('install', (event) => {
         SHELL_ASSETS.map((url) =>
           cache.add(url).catch((err) => {
             console.warn('[SW] Failed to cache shell asset', url, err);
-          }),
-        ),
-      ),
-    ),
+          })
+        )
+      )
+    )
   );
   self.skipWaiting();
 });
@@ -81,10 +81,10 @@ self.addEventListener('activate', (event) => {
     (async () => {
       const keys = await caches.keys();
       await Promise.all(
-        keys.filter((k) => k !== SHELL_CACHE && k !== RUNTIME_CACHE).map((k) => caches.delete(k)),
+        keys.filter((k) => k !== SHELL_CACHE && k !== RUNTIME_CACHE).map((k) => caches.delete(k))
       );
       await self.clients.claim();
-    })(),
+    })()
   );
 });
 

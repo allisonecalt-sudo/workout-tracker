@@ -13,6 +13,14 @@ type Exercise = {
   name: string;
   reps?: string;
   notes?: string;
+  // TIMER RULE (Allison, 2026-07-08): any exercise whose work is a SUSTAINED
+  // timed hold (a single "hold N sec" — wall sit, plank, wall lean, every
+  // cooldown stretch) MUST ship with BOTH `durationSec` and `isTimed: true` so
+  // the app renders a countdown + "Start timer". No timed hold without a timer.
+  // NOT covered by this rule (do NOT force a single countdown onto them):
+  //   • per-rep micro-holds ("10 holds × 3 sec", "12 reps · 2-sec hold at top")
+  //     — these are reps, not one sustained hold; they want a rep/tempo cue.
+  //   • Outdoor walk — auto-tracks steps/km + "tap done", intentionally no countdown.
   durationSec?: number;
   isTimed?: boolean;
 };
@@ -191,8 +199,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v14';
-const BUILD_DATE = 'Jul 4, 2026 · 22:45';
+const APP_VERSION = 'v15';
+const BUILD_DATE = 'Jul 8, 2026 · 11:52';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -547,6 +555,10 @@ const WRIST_ONRAMP: Exercise[] = [
     reps: '2 × 15-20 sec',
     notes:
       'NEW (Jul 3 — your call: start weight-bearing, nothing intense). Stand a small step from a wall, palms FLAT on it at shoulder height, fingers up, elbows soft. Lean in gently so the palms take LIGHT weight — breathe, nothing intense. 15-20 sec, shake the hands out, once more. STOP at ANY wrist or thumb sensation — this is a rehab on-ramp, not a strength move. When this feels like nothing, say so and the next rung (counter-height lean) unlocks.',
+    // Timed hold → gets a timer (TIMER RULE, 2026-07-08). 20 sec = top of the
+    // 15-20 range; do 2 rounds (restart the timer for round 2, shake out between).
+    durationSec: 20,
+    isTimed: true,
   },
 ];
 const UPPER_BACK_SAFE_W10: Exercise[] = [...UPPER_BACK_SAFE, ...WRIST_ONRAMP];

@@ -691,6 +691,36 @@ const SVG_BICEPS_CURL_UP = sNoMat(`
   <text x="30" y="176" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">don't swing the body for momentum</text>
 `);
 
+// ---------- IWYT + wrist on-ramp (2026-07-08) ----------
+// IWYT raises + Wall lean were the only two current-week moves with no how-to
+// frames, so the app fell back to their raw notes paragraph = the "big blob"
+// Allison flagged Jul 7. These bring them into the same do/avoid card grammar.
+
+// IWYT raises — TOP-DOWN prone figure, arms in the T shape, thumbs up, small lift.
+const SVG_IWYT = sNoMat(`
+  <circle cx="120" cy="42" r="12" fill="#8fbc8f" />
+  <line x1="120" y1="54" x2="120" y2="128" stroke="#8fbc8f" stroke-width="9" stroke-linecap="round" />
+  <line x1="120" y1="74" x2="58" y2="74" stroke="#e6b450" stroke-width="7" stroke-linecap="round" />
+  <line x1="120" y1="74" x2="182" y2="74" stroke="#e6b450" stroke-width="7" stroke-linecap="round" />
+  <circle cx="58" cy="74" r="4.5" fill="#e6b450" />
+  <circle cx="182" cy="74" r="4.5" fill="#e6b450" />
+  <line x1="90" y1="92" x2="90" y2="80" stroke="#e6b450" stroke-width="2" />
+  <polygon points="90,76 86,84 94,84" fill="#e6b450" />
+  <text x="34" y="160" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">thumbs UP · lift from the upper back</text>
+`);
+
+// Wall lean — SIDE view, standing lean toward a wall on the right, palms flat.
+const SVG_WALL_LEAN = sNoMat(`
+  <line x1="204" y1="16" x2="204" y2="164" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
+  <circle cx="70" cy="52" r="12" fill="#8fbc8f" />
+  <line x1="74" y1="63" x2="104" y2="146" stroke="#8fbc8f" stroke-width="8" stroke-linecap="round" />
+  <line x1="80" y1="78" x2="198" y2="70" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <line x1="196" y1="62" x2="196" y2="78" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
+  <line x1="104" y1="146" x2="88" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="104" y1="146" x2="120" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <text x="20" y="176" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">palms flat · light weight only</text>
+`);
+
 // ---------- THE DATA ----------
 
 export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
@@ -1328,6 +1358,56 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
       {
         do: 'Release slowly. 2 sets of 10, 5-sec holds.',
         avoid: 'Feel it between the blades, not in the neck.',
+      },
+    ],
+  },
+
+  'IWYT raises': {
+    exercise: 'IWYT raises',
+    sourceNotes:
+      'Lisa Cohen Jun 18 + Allison Jul 4 (added the I). Prone, thumbs up, lift from the upper back — gentle on the neck.',
+    frames: [
+      {
+        svg: SVG_IWYT,
+        do: 'Face down, forehead on a towel, thumbs UP throughout.',
+        avoid: 'No palm weight — thumbs up protects the wrist.',
+      },
+      {
+        do: 'Make the letter, lift arms off the floor, brief hold, lower.',
+        avoid: 'Lift from the upper back — not by craning your neck.',
+      },
+      {
+        do: "Rest hands ON the floor between reps — that's the rest position.",
+        avoid: "Don't hover the arms between reps — set them down.",
+      },
+      {
+        do: 'I: arms down your sides. W: elbows to ribs, squeeze the blades.',
+        avoid: 'Neck stays long, eyes on the towel throughout.',
+      },
+      {
+        do: 'Y: narrow overhead V. T: arms straight out at shoulder height.',
+        avoid: 'Keep it gentle for the neck — stop if it complains.',
+      },
+    ],
+  },
+
+  'Wall lean (wrist on-ramp)': {
+    exercise: 'Wall lean (wrist on-ramp)',
+    sourceNotes:
+      'Allison Jul 3 — wrist weight-bearing on-ramp, the gentlest rung. Separate from the PT-gated loaded arm work.',
+    frames: [
+      {
+        svg: SVG_WALL_LEAN,
+        do: 'Stand a small step from the wall, palms flat at shoulder height.',
+        avoid: "Fingers point up, elbows soft — don't lock them.",
+      },
+      {
+        do: 'Lean in gently so the palms take LIGHT weight. Breathe.',
+        avoid: 'Nothing intense — a rehab on-ramp, not a push-up.',
+      },
+      {
+        do: 'Hold 15-20 sec, shake the hands out, once more.',
+        avoid: 'STOP at any wrist or thumb sensation.',
       },
     ],
   },
