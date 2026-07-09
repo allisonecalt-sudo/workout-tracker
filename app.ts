@@ -212,8 +212,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v21';
-const BUILD_DATE = 'Jul 9, 2026 · 18:45';
+const APP_VERSION = 'v22';
+const BUILD_DATE = 'Jul 9, 2026 · 18:54';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2454,26 +2454,36 @@ function harvestWorkoutWalk(): void {
   workoutWalk = { minutes, meters: meters >= 10 ? meters : 0, steps, startMs: start, endMs: end };
 }
 
+// The in-workout walk no longer auto-starts just because she lands on the step
+// (Allison Jul 9 2026: "just because I'm on the page doesn't mean it started
+// walking"). Tracking begins only when she taps Start (startWorkoutWalk); before
+// that, nothing is timed or logged. Once started, this keeps the sensors alive
+// across re-renders / app-close, and harvests when she moves past the step.
 function syncWorkoutWalkTracking(): void {
   const onWalkStep =
     state.screen === 'workout' && !state.isResting && getCurrentExercise()?.name === 'Outdoor walk';
   const started = workoutWalkStart() !== null;
   const standaloneActive = activeWalkStart() !== null;
-  if (onWalkStep && !standaloneActive) {
-    if (!started) {
-      localStorage.setItem(WW_START_KEY, String(Date.now()));
-      localStorage.removeItem(WALK_METERS_KEY);
-      localStorage.removeItem(WALK_STEPS_KEY);
-      beginWalkTracking();
-    } else if (walkWatchId === null && walkMotionHandler === null) {
-      // Resumed mid-walk after an app close — restart the sensors; the
-      // accumulated meters/steps are already in localStorage.
+  if (onWalkStep && started && !standaloneActive) {
+    if (walkWatchId === null && walkMotionHandler === null) {
+      // First tick after Start, or resumed after an app close — (re)start the
+      // sensors; any accumulated meters/steps are already in localStorage.
       beginWalkTracking();
     }
     updateWalkLiveLine();
   } else if (!onWalkStep && started) {
     harvestWorkoutWalk();
   }
+}
+
+// Explicit Start for the in-workout walk (her Jul-9 rule above). Stamps the
+// start time + clears prior counters, then lights up the tracking engine.
+function startWorkoutWalk(): void {
+  if (activeWalkStart() !== null) return; // a standalone walk owns the engine
+  localStorage.setItem(WW_START_KEY, String(Date.now()));
+  localStorage.removeItem(WALK_METERS_KEY);
+  localStorage.removeItem(WALK_STEPS_KEY);
+  beginWalkTracking();
 }
 
 function walksThisWeek(): number {
@@ -4188,7 +4198,9 @@ function renderWorkout(): string {
         ${ex.notes ? `<p class="exercise-notes">${ex.notes}</p>` : ''}
         ${
           ex.name === 'Outdoor walk'
-            ? `<p class="gear-note">🚶 Auto-tracking this walk: <span id="walk-live">starting…</span><br>Keep the phone on you — steps count indoors, km outdoors. It saves with this workout.</p>`
+            ? workoutWalkStart() !== null
+              ? `<p class="gear-note">🚶 Tracking your walk: <span id="walk-live">starting…</span><br>Keep the phone on you — steps count indoors, km outdoors. It saves with this workout. Tap “Done · Next” when you finish.</p>`
+              : `<div class="ww-start-block"><button class="btn-large btn-primary" id="ww-start" type="button">▶ Start walk</button><p class="gear-note">Just being on this page doesn't start the walk — tap Start when you actually head out. Nothing tracks or logs until you do.</p></div>`
             : ''
         }
       </div>
@@ -5687,6 +5699,14 @@ function attachHandlers(): void {
 
   bindClick('next', () => {
     advanceExercise();
+  });
+
+  // Explicit Start for the in-workout walk — nothing tracks until she taps it
+  // (Allison Jul 9 2026: being on the page ≠ walking started).
+  bindClick('ww-start', () => {
+    startWorkoutWalk();
+    render();
+    updateWalkLiveLine();
   });
 
   // Pause / resume the active workout (Allison Jul 7 2026).

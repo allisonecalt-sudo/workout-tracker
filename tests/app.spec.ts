@@ -1128,6 +1128,26 @@ test('walk credit: start/stop timer logs a walk, bumps week count, streak untouc
   await expect(page.locator('.walk-text')).toContainText('2 this week');
 });
 
+test('in-workout walk: does NOT auto-start on the step — needs an explicit Start tap', async ({
+  page,
+}) => {
+  // Allison Jul 9 2026: "just because I'm on the page doesn't mean it started
+  // walking." Landing on the Outdoor-walk step (workout A's first exercise) must
+  // NOT begin tracking or stamp a start; only tapping Start does.
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click(); // pre-log Start
+  // On the walk step: the Start button is shown, nothing is tracking yet.
+  await expect(page.locator('#ww-start')).toBeVisible();
+  await expect(page.locator('#walk-live')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('workout-tracker:ww-start'))).toBeNull();
+  // Tap Start → tracking begins and the start is stamped.
+  await page.locator('#ww-start').click();
+  await expect(page.locator('#walk-live')).toBeVisible();
+  expect(
+    await page.evaluate(() => localStorage.getItem('workout-tracker:ww-start'))
+  ).not.toBeNull();
+});
+
 test('walk: Cancel discards an opened walk without logging it', async ({ page }) => {
   // Allison Jul 9 2026: "only log walks where i finish the walk — if i just
   // open [it] to check, [it] doesn't count." Cancel is the non-logging exit.

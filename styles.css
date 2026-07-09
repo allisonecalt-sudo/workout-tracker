@@ -3413,6 +3413,16 @@ input[type='number']:focus {
   color: var(--text-dim-2);
 }
 
+/* In-workout walk: explicit Start (Jul 9 2026 — being on the page != started).
+ * The Start button + its note stack together under the walk step. */
+.ww-start-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  margin-top: 10px;
+}
+
 /* ---------- Walk credit (Jul 4 2026) ---------- */
 /* Slow walks count — extra credit outside the streak math. One row: tap to start a tracked walk, tap Done. */
 .walk-card {
