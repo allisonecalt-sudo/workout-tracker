@@ -1128,6 +1128,21 @@ test('walk credit: start/stop timer logs a walk, bumps week count, streak untouc
   await expect(page.locator('.walk-text')).toContainText('2 this week');
 });
 
+test('walk: Cancel discards an opened walk without logging it', async ({ page }) => {
+  // Allison Jul 9 2026: "only log walks where i finish the walk — if i just
+  // open [it] to check, [it] doesn't count." Cancel is the non-logging exit.
+  await expect(page.locator('.walk-text')).not.toContainText('this week');
+  await page.locator('#log-walk-start').click();
+  await expect(page.locator('#finish-walk')).toBeVisible();
+  await expect(page.locator('#cancel-walk')).toBeVisible();
+  await page.locator('#cancel-walk').click();
+  // Back to the start state, and NOTHING logged.
+  await expect(page.locator('#log-walk-start')).toBeVisible();
+  await expect(page.locator('.walk-text')).not.toContainText('this week');
+  const walks = await page.evaluate(() => localStorage.getItem('workout-tracker:walks'));
+  expect(walks === null || (JSON.parse(walks) as unknown[]).length === 0).toBeTruthy();
+});
+
 test.describe('walk distance (GPS granted)', () => {
   test.use({
     permissions: ['geolocation'],

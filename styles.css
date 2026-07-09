@@ -3455,3 +3455,27 @@ input[type='number']:focus {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* Done + Cancel side by side while a walk is active (Allison Jul 9 2026):
+ * Cancel discards without logging, so "just checking" never counts. */
+.walk-btn-group {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.walk-cancel-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: var(--font-small);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.walk-cancel-btn:active {
+  border-color: var(--accent-danger);
+  color: var(--accent-danger);
+}

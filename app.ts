@@ -212,8 +212,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v19';
-const BUILD_DATE = 'Jul 9, 2026 · 16:33';
+const APP_VERSION = 'v20';
+const BUILD_DATE = 'Jul 9, 2026 · 17:56';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2333,6 +2333,17 @@ async function finishWalk(): Promise<WalkEntry> {
   return logWalk(minutes, meters >= 10 ? meters : null, steps > 0 ? steps : null);
 }
 
+// Discard an active standalone walk WITHOUT logging it (Allison Jul 9 2026):
+// "only log walks where i finish the walk — if i just open [it] to check, [it]
+// doesn't count." Tapping "Start a walk" just to look needs a non-logging exit;
+// this clears the active state + counters and writes NO entry.
+function cancelWalk(): void {
+  endWalkTracking();
+  localStorage.removeItem(WALK_ACTIVE_KEY);
+  localStorage.removeItem(WALK_METERS_KEY);
+  localStorage.removeItem(WALK_STEPS_KEY);
+}
+
 function loadWalks(): WalkEntry[] {
   try {
     const raw = localStorage.getItem(WALKS_KEY);
@@ -3868,13 +3879,16 @@ function renderHome(): string {
         }</span>
         ${
           walkStartedAt
-            ? `<button class="walk-log-btn walk-log-btn-active" id="finish-walk" type="button">■ Done walking</button>`
+            ? `<div class="walk-btn-group">
+                 <button class="walk-log-btn walk-log-btn-active" id="finish-walk" type="button">■ Done walking</button>
+                 <button class="walk-cancel-btn" id="cancel-walk" type="button">Cancel</button>
+               </div>`
             : `<button class="walk-log-btn" id="log-walk-start" type="button">▶ Start a walk</button>`
         }
       </div>
       <p class="gear-note walk-note">${
         walkStartedAt
-          ? 'Tracking minutes + steps (+ km outdoors via GPS). Keep the phone on you and the screen stays awake by itself — tap Done when you finish. If the screen does lock, minutes still count; steps/km pause until you come back.'
+          ? 'Tracking minutes + steps (+ km outdoors via GPS). Keep the phone on you and the screen stays awake by itself — tap Done when you finish, or Cancel if you were just checking (nothing logs). If the screen does lock, minutes still count; steps/km pause until you come back.'
           : 'Tap start, walk any pace — apartment laps count (steps), outdoors adds km. Tap done when finished. Extra credit on top of your 3/week; never part of the streak math.'
       }</p>
     </div>
@@ -5640,6 +5654,10 @@ function attachHandlers(): void {
   });
   bindClick('finish-walk', () => {
     void finishWalk().then(() => render());
+  });
+  bindClick('cancel-walk', () => {
+    cancelWalk();
+    render();
   });
 
   bindClick('back-history', () => {
