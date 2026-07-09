@@ -199,8 +199,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v15';
-const BUILD_DATE = 'Jul 8, 2026 · 11:52';
+const APP_VERSION = 'v16';
+const BUILD_DATE = 'Jul 9, 2026 · 13:47';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2086,7 +2086,15 @@ type WalkEntry = {
   synced?: boolean;
 };
 
-type WorkoutWalkResult = { minutes: number; meters: number; steps: number };
+type WorkoutWalkResult = {
+  minutes: number;
+  meters: number;
+  steps: number;
+  // The walk's clock window (epoch ms), so we can ask Google Fit how many steps
+  // fell inside it — the accurate count, even if the screen was off (v16, Jul 9).
+  startMs?: number;
+  endMs?: number;
+};
 
 const WALKS_KEY = 'workout-tracker:walks';
 // Her Jul-4 idea: "click walking and you automatically start tracking until I
@@ -2254,15 +2262,21 @@ function startWalk(): void {
   beginWalkTracking();
 }
 
-function finishWalk(): WalkEntry {
+async function finishWalk(): Promise<WalkEntry> {
   const start = activeWalkStart();
+  const end = Date.now();
   const meters = walkCounter(WALK_METERS_KEY);
-  const steps = walkCounter(WALK_STEPS_KEY);
+  let steps = walkCounter(WALK_STEPS_KEY);
   endWalkTracking();
   localStorage.removeItem(WALK_ACTIVE_KEY);
   localStorage.removeItem(WALK_METERS_KEY);
   localStorage.removeItem(WALK_STEPS_KEY);
-  const minutes = start ? Math.max(1, Math.round((Date.now() - start) / 60000)) : null;
+  // Prefer Google Fit's real count for the walk window; motion estimate if not.
+  if (start) {
+    const fit = await fetchFitSteps(start, end);
+    if (fit !== null) steps = fit;
+  }
+  const minutes = start ? Math.max(1, Math.round((end - start) / 60000)) : null;
   return logWalk(minutes, meters >= 10 ? meters : null, steps > 0 ? steps : null);
 }
 
@@ -2363,7 +2377,8 @@ function workoutWalkStart(): number | null {
 function harvestWorkoutWalk(): void {
   const start = workoutWalkStart();
   if (start === null) return;
-  const minutes = Math.max(1, Math.round((Date.now() - start) / 60000));
+  const end = Date.now();
+  const minutes = Math.max(1, Math.round((end - start) / 60000));
   const meters = walkCounter(WALK_METERS_KEY);
   const steps = walkCounter(WALK_STEPS_KEY);
   // Don't kill the engine if a STANDALONE walk is (somehow) also live.
@@ -2371,7 +2386,8 @@ function harvestWorkoutWalk(): void {
   localStorage.removeItem(WW_START_KEY);
   localStorage.removeItem(WALK_METERS_KEY);
   localStorage.removeItem(WALK_STEPS_KEY);
-  workoutWalk = { minutes, meters: meters >= 10 ? meters : 0, steps };
+  // Keep start/end so logCompleteAndHome can ask Google Fit for the real count.
+  workoutWalk = { minutes, meters: meters >= 10 ? meters : 0, steps, startMs: start, endMs: end };
 }
 
 function syncWorkoutWalkTracking(): void {
@@ -2440,6 +2456,36 @@ async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
   } catch (err) {
     console.warn('[sync] push threw:', err);
     return false;
+  }
+}
+
+// Google Fit step count for a clock window, via the `fit-steps` Supabase edge
+// function (v16, Jul 9 2026 — her idea: "when I start walking it knows"). The
+// phone counts steps NATIVELY even with the screen off / another app open, so
+// asking Fit "how many steps between start and end?" gets the REAL walk count and
+// sidesteps the PWA background-sensor limit entirely. The Google token lives
+// server-side in the edge function (never in the app). Returns null on any
+// failure (offline, test mode, Fit not linked) so callers keep the motion-sensor
+// estimate as a graceful fallback — the walk still logs either way.
+async function fetchFitSteps(startMs: number, endMs: number): Promise<number | null> {
+  if (syncDisabled()) return null;
+  if (!startMs || !endMs || endMs <= startMs) return null;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/fit-steps`, {
+      method: 'POST',
+      headers: supabaseHeaders(),
+      body: JSON.stringify({ startMillis: startMs, endMillis: endMs }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    const steps = (data as { steps?: unknown }).steps;
+    return typeof steps === 'number' && steps >= 0 ? steps : null;
+  } catch {
+    return null;
   }
 }
 
@@ -2552,9 +2598,16 @@ function startTimedExercise(): void {
   });
 }
 
-function logCompleteAndHome(): void {
+async function logCompleteAndHome(): Promise<void> {
   if (!state.selectedWorkout) return;
   harvestWorkoutWalk(); // no-op unless a walk step is somehow still open
+  // By now the walk (first exercise) ended long ago, so Google Fit has synced it —
+  // prefer Fit's real step count for the walk window; keep the motion estimate if
+  // Fit is unavailable. Brief await (Fit replies fast); never blocks the log itself.
+  if (workoutWalk && workoutWalk.startMs && workoutWalk.endMs) {
+    const fit = await fetchFitSteps(workoutWalk.startMs, workoutWalk.endMs);
+    if (fit !== null) workoutWalk = { ...workoutWalk, steps: fit };
+  }
   const completedAt = new Date().toISOString();
   const startedAt = state.startedAt ?? completedAt;
   const durationSec = Math.max(
@@ -5375,8 +5428,7 @@ function attachHandlers(): void {
     updateWalkLiveLine();
   });
   bindClick('finish-walk', () => {
-    finishWalk();
-    render();
+    void finishWalk().then(() => render());
   });
 
   bindClick('back-history', () => {
@@ -5467,7 +5519,7 @@ function attachHandlers(): void {
     }
     const wordEl = document.getElementById('word') as HTMLInputElement | null;
     if (wordEl) state.word = wordEl.value.trim();
-    logCompleteAndHome();
+    void logCompleteAndHome();
   });
 
   // Video expanders (group 3N)
