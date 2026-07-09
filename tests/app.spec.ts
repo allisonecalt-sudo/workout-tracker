@@ -345,45 +345,40 @@ test('resume: quitting clears the session so reopening goes home', async ({ page
   await reopened.close();
 });
 
-test('how-to expander opens to the text on click', async ({ page }) => {
-  // Group 3N: how-to toggle
+// As of v19 (Jul 9 2026) every program exercise has an enriched EXERCISE_DETAIL
+// card, so renderWorkout shows the detail card (voice note + muscle target +
+// dropdowns) instead of the legacy how-to card. The old how-to card + its
+// EXERCISE_HOWTO/EXERCISE_GUIDE data stay in source as the fallback for any
+// future unmapped exercise (archive-not-delete). These three tests moved from
+// asserting the how-to card to asserting the detail card that now renders on
+// the first exercise (Outdoor walk).
+test('detail card: a dropdown section opens and closes on click', async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  // First exercise (outdoor walk) has a guide entry
-  const toggle = page.locator('[data-toggle-howto]').first();
-  await toggle.click();
-  // Click again to close
-  await toggle.click();
+  const toggle = page.locator('.detail-section-toggle').first();
+  await expect(toggle).toBeVisible();
+  await toggle.click(); // open
+  await expect(page.locator('.detail-section-body')).toHaveCount(1);
+  await toggle.click(); // close
+  await expect(page.locator('.detail-section-body')).toHaveCount(0);
 });
 
-test('multi-frame how-to renders Do + Avoid cues for mapped exercise', async ({ page }) => {
-  // 2026-05-15 content build: outdoor walk (first warmup exercise) has 3-frame
-  // EXERCISE_HOWTO entry. Default-open on first-this-week.
+test("detail card: Do & Don't dropdown shows do + don't cues", async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-
-  // Outdoor walk is first warmup exercise.
-  await expect(page.locator('.howto-frames').first()).toBeVisible();
-  // At least 2 frames rendered (outdoor walk has 3)
-  const frames = page.locator('.howto-frame');
-  await expect(await frames.count()).toBeGreaterThanOrEqual(2);
-  // Do cue present
-  await expect(page.locator('.howto-cue-do').first()).toBeVisible();
-  // Avoid cue present
-  await expect(page.locator('.howto-cue-avoid').first()).toBeVisible();
+  await page.locator('.detail-section-toggle', { hasText: "Do & Don't" }).click();
+  await expect(page.locator('.detail-cue-do').first()).toBeVisible();
+  await expect(page.locator('.detail-cue-dont').first()).toBeVisible();
 });
 
-test('how-to falls back to text guide for unmapped exercise', async ({ page }) => {
-  // EXERCISE_GUIDE remains the fallback for any exercise not yet keyed in
-  // EXERCISE_HOWTO. As of 2026-05-15 all WORKOUTS exercises ARE mapped, so
-  // the fallback path is exercised by injecting an artificial unmapped name.
-  // Instead we verify the legacy .how-to-text class still wins when only
-  // EXERCISE_GUIDE has the entry: do this by checking the renderHowToCard
-  // never crashes and the toggle always renders.
+test('detail card: face shows the voice note + muscle target on the first exercise', async ({
+  page,
+}) => {
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  // Toggle button always renders (whether multi-frame or legacy text).
-  await expect(page.locator('[data-toggle-howto]').first()).toBeVisible();
+  // Form guidance always renders — now as the detail card, not the how-to card.
+  await expect(page.locator('.voice-note-btn')).toBeVisible();
+  await expect(page.locator('.muscle-svg')).toBeVisible();
 });
 
 // --- Redesign Ship 1 (2026-05-15 D-1 Calm Tool Minimalism) -------------------

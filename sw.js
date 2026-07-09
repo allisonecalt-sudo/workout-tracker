@@ -9,7 +9,7 @@
 
 // Keep this version number in sync with APP_VERSION in app.ts (shown in the
 // home header) so a deploy visibly busts the cache AND the on-screen tag moves.
-const VERSION = 'workout-tracker-v18';
+const VERSION = 'workout-tracker-v19';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -58,6 +58,51 @@ const SHELL_ASSETS = [
   // at the gym. One file per exercise as the enriched card rolls out.
   './assets/voice/bodyweight-squats.mp3',
   './assets/voice/eccentric-step-down.mp3',
+  './assets/voice/1-kg-biceps-curl.mp3',
+  './assets/voice/belly-breathing.mp3',
+  './assets/voice/biceps-stretch-left.mp3',
+  './assets/voice/biceps-stretch-right.mp3',
+  './assets/voice/bodyweight-hip-hinge.mp3',
+  './assets/voice/both-knees-to-chest.mp3',
+  './assets/voice/calf-stretch-on-wall-left.mp3',
+  './assets/voice/calf-stretch-on-wall-right.mp3',
+  './assets/voice/doorway-pec-stretch.mp3',
+  './assets/voice/figure-4-stretch.mp3',
+  './assets/voice/forearm-plank.mp3',
+  './assets/voice/glute-bridges.mp3',
+  './assets/voice/glute-squeezes.mp3',
+  './assets/voice/heel-taps.mp3',
+  './assets/voice/hip-flexor-left-knee-in-right-leg-dangles.mp3',
+  './assets/voice/hip-flexor-right-knee-in-left-leg-dangles.mp3',
+  './assets/voice/iwyt-raises.mp3',
+  './assets/voice/knee-drops-side-to-side.mp3',
+  './assets/voice/knee-to-chest-hugs.mp3',
+  './assets/voice/knees-to-chest-hold.mp3',
+  './assets/voice/leg-cross-left.mp3',
+  './assets/voice/leg-cross-right.mp3',
+  './assets/voice/leg-up-in-air-left.mp3',
+  './assets/voice/leg-up-in-air-right.mp3',
+  './assets/voice/modified-dead-bug.mp3',
+  './assets/voice/neck-stretch.mp3',
+  './assets/voice/outdoor-walk.mp3',
+  './assets/voice/pelvic-tilts.mp3',
+  './assets/voice/prone-row-bodyweight.mp3',
+  './assets/voice/scapular-squeezes.mp3',
+  './assets/voice/seated-forward-fold.mp3',
+  './assets/voice/shoulder-stretch.mp3',
+  './assets/voice/side-lying-clamshells.mp3',
+  './assets/voice/side-lying-leg-raises.mp3',
+  './assets/voice/single-leg-glute-bridges.mp3',
+  './assets/voice/slow-breathing.mp3',
+  './assets/voice/slow-supine-bicycle.mp3',
+  './assets/voice/standing-calf-raises.mp3',
+  './assets/voice/wall-angels.mp3',
+  './assets/voice/wall-lean-wrist-on-ramp.mp3',
+  './assets/voice/wall-sit.mp3',
+  './assets/voice/wrist-extension-left.mp3',
+  './assets/voice/wrist-extension-right.mp3',
+  './assets/voice/wrist-flexion-left.mp3',
+  './assets/voice/wrist-flexion-right.mp3',
 ];
 
 const SUPABASE_REST_HINT = '/rest/v1/';
@@ -118,6 +163,7 @@ function isCodeRequest(url, request) {
     url.pathname.endsWith('/dist/app.js') ||
     url.pathname.endsWith('/dist/exercise-howto.js') ||
     url.pathname.endsWith('/dist/exercise-visuals.js') ||
+    url.pathname.endsWith('/dist/exercise-detail.js') ||
     url.pathname.endsWith('/index.html')
   );
 }
