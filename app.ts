@@ -6,6 +6,7 @@
 
 import { EXERCISE_VISUALS } from './exercise-visuals.js';
 import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
+import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
 
 type WorkoutId = 'A' | 'B' | 'C';
 
@@ -114,6 +115,11 @@ type AppState = {
   // Ship 5 progress screen: collapsible exercise-breakdown card. Closed by
   // default — it's reference, not primary.
   exerciseBreakdownOpen: boolean;
+  // Enriched detail card (Allison Jul 9 2026): which dropdown sections are open,
+  // keyed "<exercise>::<section>". Independent toggles, all closed by default so
+  // the card face stays minimal — "show whats important, everything else i click
+  // to open." Per-render/transient; not persisted.
+  openSections: Record<string, boolean>;
 };
 
 const STORAGE_KEY = 'workout-tracker:logs';
@@ -206,8 +212,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v17';
-const BUILD_DATE = 'Jul 9, 2026 · 14:02';
+const APP_VERSION = 'v18';
+const BUILD_DATE = 'Jul 9, 2026 · 15:13';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -1824,6 +1830,7 @@ const state: AppState = {
   videoExpandedFor: null,
   howToOpenFor: null,
   exerciseBreakdownOpen: false,
+  openSections: {},
 };
 
 // ---------- audio ----------
@@ -2829,6 +2836,8 @@ function resetState(): void {
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
   state.howToOpenFor = null;
+  state.openSections = {};
+  stopVoiceNote();
   state.historyDetailId = null;
 }
 
@@ -3190,6 +3199,118 @@ function renderHowToFrame(frame: HowToFrame, idx: number, exerciseName: string):
       </div>
     </div>
   `;
+}
+
+// ---------- per-exercise voice note (Allison Jul 9 2026) ----------
+// One <audio> plays at a time. The button toggles play/pause; button visuals
+// reflect playback and are re-synced after a re-render (opening a dropdown
+// re-renders the card, but the detached Audio keeps playing).
+let voiceAudio: HTMLAudioElement | null = null;
+let voiceAudioSrc: string | null = null;
+
+function setVoiceBtnPlaying(btn: HTMLElement, playing: boolean): void {
+  btn.classList.toggle('voice-note-playing', playing);
+  const icon = btn.querySelector('.voice-note-icon');
+  const label = btn.querySelector('.voice-note-label');
+  if (icon) icon.textContent = playing ? '⏸' : '▶';
+  if (label) label.textContent = playing ? 'Playing… (tap to stop)' : 'Listen — how to do it';
+}
+
+function stopVoiceNote(): void {
+  if (voiceAudio) {
+    voiceAudio.pause();
+    voiceAudio = null;
+  }
+  voiceAudioSrc = null;
+}
+
+function toggleVoiceNote(btn: HTMLButtonElement, src: string): void {
+  if (typeof Audio === 'undefined') return; // no audio in this environment
+  // Same note already playing → stop it.
+  if (voiceAudio && voiceAudioSrc === src && !voiceAudio.paused) {
+    voiceAudio.pause();
+    return;
+  }
+  stopVoiceNote(); // stop any other note first
+  const audio = new Audio(src);
+  voiceAudio = audio;
+  voiceAudioSrc = src;
+  audio.addEventListener('play', () => setVoiceBtnPlaying(btn, true));
+  audio.addEventListener('pause', () => setVoiceBtnPlaying(btn, false));
+  audio.addEventListener('ended', () => setVoiceBtnPlaying(btn, false));
+  void audio.play().catch(() => {
+    /* gesture/autoplay policy — safe to ignore, she can tap again */
+  });
+}
+
+// One collapsed dropdown inside the enriched detail card. Closed by default;
+// its open-state lives in state.openSections keyed "<exercise>::<section>".
+function renderDetailSection(
+  exerciseName: string,
+  sectionKey: string,
+  label: string,
+  icon: string,
+  innerHtml: string
+): string {
+  const key = `${exerciseName}::${sectionKey}`;
+  const isOpen = !!state.openSections[key];
+  return `
+    <div class="detail-section ${isOpen ? 'detail-section-open' : ''}">
+      <button class="detail-section-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${isOpen}">
+        <span class="detail-section-label"><span class="detail-section-icon" aria-hidden="true">${icon}</span> ${escapeHtml(label)}</span>
+        <span class="detail-chev" aria-hidden="true">▸</span>
+      </button>
+      ${isOpen ? `<div class="detail-section-body">${innerHtml}</div>` : ''}
+    </div>`;
+}
+
+// The enriched, low-overwhelm detail card (Allison Jul 9 2026). Face shows only
+// the important, low-reading things — the ▶ voice note + the muscle-target
+// picture. Steps / Do & Don't / Common mistakes are each a collapsed dropdown
+// she taps to open. See exercise-detail.ts for the "why".
+function renderDetailCard(exerciseName: string): string {
+  const d = EXERCISE_DETAIL[exerciseName];
+  if (!d) return '';
+
+  const stepsHtml = `<ol class="detail-steps">${d.steps
+    .map((s) => `<li>${escapeHtml(s)}</li>`)
+    .join('')}</ol>`;
+
+  const doDontHtml = `<ul class="detail-cues">${d.dos
+    .map(
+      (x) =>
+        `<li class="detail-cue-do"><span class="detail-cue-mark" aria-hidden="true">✓</span>${escapeHtml(x)}</li>`
+    )
+    .join('')}${d.donts
+    .map(
+      (x) =>
+        `<li class="detail-cue-dont"><span class="detail-cue-mark" aria-hidden="true">✗</span>${escapeHtml(x)}</li>`
+    )
+    .join('')}</ul>`;
+
+  const mistakesHtml = `<ul class="detail-mistakes">${d.mistakes
+    .map(
+      (m) =>
+        `<li><span class="detail-mistake">${escapeHtml(m.mistake)}</span><span class="detail-fix">${escapeHtml(m.fix)}</span></li>`
+    )
+    .join('')}</ul>`;
+
+  return `
+    <div class="detail-card">
+      <div class="detail-face">
+        <button class="voice-note-btn" data-voice-src="${escapeHtml(d.voiceSrc)}" type="button">
+          <span class="voice-note-icon" aria-hidden="true">▶</span>
+          <span class="voice-note-label">Listen — how to do it</span>
+        </button>
+        <div class="muscle-target">
+          <div class="muscle-target-diagram">${muscleDiagram(d.muscles)}</div>
+          <div class="muscle-target-label"><span class="muscle-target-title">Targets</span>${escapeHtml(d.muscleLabel)}</div>
+        </div>
+      </div>
+      ${renderDetailSection(exerciseName, 'steps', 'Steps', '🔢', stepsHtml)}
+      ${renderDetailSection(exerciseName, 'dodont', "Do & Don't", '✓', doDontHtml)}
+      ${renderDetailSection(exerciseName, 'mistakes', 'Common mistakes', '⚠️', mistakesHtml)}
+    </div>`;
 }
 
 function renderHowToCard(exerciseName: string): string {
@@ -4085,7 +4206,7 @@ function renderWorkout(): string {
           : ''
     }
 
-    ${renderHowToCard(ex.name)}
+    ${EXERCISE_DETAIL[ex.name] ? renderDetailCard(ex.name) : renderHowToCard(ex.name)}
 
     <button class="btn-large btn-primary" id="next" type="button">Done · Next</button>
   `;
@@ -5628,6 +5749,28 @@ function attachHandlers(): void {
       state.videoExpandedFor = state.videoExpandedFor === name ? null : name;
       render();
     });
+  });
+
+  // Enriched detail card (Allison Jul 9 2026): dropdown section toggles.
+  document.querySelectorAll<HTMLButtonElement>('[data-toggle-section]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset['toggleSection'];
+      if (!key) return;
+      state.openSections[key] = !state.openSections[key];
+      render();
+    });
+  });
+
+  // Voice-note play buttons. Re-sync visual state after a re-render if this
+  // note is still playing (the Audio object survives the DOM rebuild).
+  document.querySelectorAll<HTMLButtonElement>('.voice-note-btn').forEach((btn) => {
+    const src = btn.dataset['voiceSrc'];
+    btn.addEventListener('click', () => {
+      if (src) toggleVoiceNote(btn, src);
+    });
+    if (voiceAudio && voiceAudioSrc === src && !voiceAudio.paused) {
+      setVoiceBtnPlaying(btn, true);
+    }
   });
 
   // How-to toggles (group 3N)

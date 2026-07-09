@@ -9,7 +9,7 @@
 
 // Keep this version number in sync with APP_VERSION in app.ts (shown in the
 // home header) so a deploy visibly busts the cache AND the on-screen tag moves.
-const VERSION = 'workout-tracker-v17';
+const VERSION = 'workout-tracker-v18';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -23,6 +23,7 @@ const SHELL_ASSETS = [
   // data updates never reach an installed PWA.
   './dist/exercise-howto.js',
   './dist/exercise-visuals.js',
+  './dist/exercise-detail.js',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
@@ -53,6 +54,10 @@ const SHELL_ASSETS = [
   './assets/exercises/single-leg-glute-bridges-1.jpg',
   './assets/exercises/wrist-circles-0.jpg',
   './assets/exercises/wrist-circles-1.jpg',
+  // Per-exercise voice notes (Allison Jul 9 2026) — cached so they play offline
+  // at the gym. One file per exercise as the enriched card rolls out.
+  './assets/voice/bodyweight-squats.mp3',
+  './assets/voice/eccentric-step-down.mp3',
 ];
 
 const SUPABASE_REST_HINT = '/rest/v1/';

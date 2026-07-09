@@ -238,6 +238,44 @@ test('pause overlay opens and resume returns to the same exercise', async ({ pag
   await expect(page.locator('.exercise-name')).toHaveText(firstExercise ?? '');
 });
 
+// Enriched detail card (Allison Jul 9 2026): the face shows only the important,
+// low-reading things (voice note + muscle target); Steps / Do & Don't / Common
+// mistakes are collapsed dropdowns she taps to open. "show whats important,
+// everything else i click to open."
+test('enriched detail card: face shows voice + muscle, sections are click-to-open dropdowns', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-05-25T10:00:00.000Z'); // Week 4 — Session A reaches squats after 4 warmup taps
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  for (let i = 0; i < 4; i++) {
+    await page.locator('button:has-text("Done · Next")').click();
+  }
+  await expect(page.locator('.exercise-name')).toHaveText('Bodyweight squats');
+
+  // Face: voice note + muscle diagram visible with no tap; label names the target.
+  await expect(page.locator('.voice-note-btn')).toBeVisible();
+  await expect(page.locator('.muscle-svg')).toBeVisible();
+  await expect(page.locator('.muscle-target-label')).toContainText('Quads');
+
+  // Dropdowns closed by default — the step list isn't in the DOM until opened.
+  await expect(page.locator('.detail-steps')).toHaveCount(0);
+
+  // Open "Steps" → the 5 numbered steps appear.
+  await page.locator('.detail-section-toggle', { hasText: 'Steps' }).click();
+  await expect(page.locator('.detail-steps li')).toHaveCount(5);
+
+  // Open "Common mistakes" independently — both stay open (not an accordion).
+  await page.locator('.detail-section-toggle', { hasText: 'Common mistakes' }).click();
+  await expect(page.locator('.detail-mistakes li')).toHaveCount(3);
+  await expect(page.locator('.detail-steps li')).toHaveCount(5);
+
+  // Collapse "Steps" again → gone from the DOM.
+  await page.locator('.detail-section-toggle', { hasText: 'Steps' }).click();
+  await expect(page.locator('.detail-steps')).toHaveCount(0);
+});
+
 test('capacity slider updates value display', async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
   const slider = page.locator('#cap-before');

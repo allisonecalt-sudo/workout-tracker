@@ -1507,6 +1507,207 @@ input[type='number']:focus {
   transform: rotate(90deg);
 }
 
+/* ── Enriched detail card (Allison Jul 9 2026) ──────────────────────────────
+ * Face = only the important, low-reading things (voice note + muscle target).
+ * Everything else is a collapsed dropdown. "show whats important, everything
+ * else i click to open." */
+.detail-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.detail-face {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 16px 14px;
+}
+
+/* The star of the card — big, obvious, one-tap. */
+.voice-note-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 18px;
+  background: var(--grad-primary);
+  color: var(--bg);
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-body);
+  font-weight: 700;
+  letter-spacing: var(--track-tight);
+  cursor: pointer;
+  box-shadow: 0 4px 16px -8px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.voice-note-btn:active {
+  transform: translateY(1px);
+}
+
+.voice-note-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.voice-note-btn.voice-note-playing {
+  background: var(--bg-elev-2);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* Muscle-target picture + label, glanceable. */
+.muscle-target {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.muscle-target-diagram {
+  flex: 0 0 auto;
+  width: 52px;
+  height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.muscle-svg {
+  width: 100%;
+  height: 100%;
+  color: var(--accent);
+}
+
+.muscle-target-label {
+  font-size: var(--font-small);
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.muscle-target-title {
+  display: block;
+  font-size: var(--font-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  color: var(--text-dim-2);
+  margin-bottom: 2px;
+}
+
+/* Dropdown sections — closed by default. */
+.detail-section {
+  border-top: 1px solid var(--border);
+}
+
+.detail-section-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent;
+  color: var(--text);
+  padding: 14px 16px;
+  font-size: var(--font-small);
+  font-weight: 600;
+  letter-spacing: var(--track-tight);
+  border: 0;
+  cursor: pointer;
+}
+
+.detail-section-toggle:hover {
+  background: var(--bg-elev-2);
+}
+
+.detail-section-icon {
+  margin-right: 6px;
+}
+
+.detail-chev {
+  color: var(--accent-do);
+  font-size: var(--font-meta);
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+.detail-section-open .detail-chev {
+  transform: rotate(90deg);
+}
+
+.detail-section-body {
+  padding: 2px 18px 16px;
+  font-size: var(--font-small);
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.detail-steps {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.detail-steps li {
+  margin-bottom: 8px;
+}
+
+.detail-cues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.detail-cues li {
+  display: flex;
+  gap: 9px;
+  margin-bottom: 8px;
+  align-items: flex-start;
+}
+
+.detail-cue-mark {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.detail-cue-do .detail-cue-mark {
+  color: var(--accent-do);
+}
+
+.detail-cue-dont .detail-cue-mark {
+  color: var(--accent-danger);
+}
+
+.detail-mistakes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.detail-mistakes li {
+  margin-bottom: 12px;
+}
+
+.detail-mistake {
+  display: block;
+  font-weight: 600;
+  color: var(--accent-warn);
+  margin-bottom: 2px;
+}
+
+.detail-mistake::before {
+  content: '✗ ';
+}
+
+.detail-fix {
+  display: block;
+  color: var(--text-dim);
+}
+
+.detail-fix::before {
+  content: '→ ';
+  color: var(--accent-do);
+}
+
 .how-to-text {
   font-size: var(--font-small);
   line-height: 1.55;
