@@ -3046,6 +3046,78 @@ input[type='number']:focus {
   border: 1px solid color-mix(in srgb, var(--accent-danger) 50%, transparent);
 }
 
+/* Pause pill + paused overlay (Allison Jul 7 2026 — step away without inflating
+ * the logged workout time). The pill floats bottom-left across every workout
+ * sub-view; tapping it swaps in a full-screen Paused card until Resume. */
+.pause-fab {
+  position: fixed;
+  left: 14px;
+  bottom: 16px;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: var(--font-small);
+  font-weight: 600;
+  letter-spacing: var(--track-tight);
+  color: var(--accent-rest);
+  background: color-mix(in srgb, var(--accent-rest) 16%, var(--bg-elev-2));
+  border: 1px solid color-mix(in srgb, var(--accent-rest) 45%, transparent);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.pause-fab:active {
+  background: color-mix(in srgb, var(--accent-rest) 26%, var(--bg-elev-2));
+}
+
+.paused-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.paused-card {
+  background: var(--grad-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 30px 26px;
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+}
+
+.paused-icon {
+  font-size: 38px;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.paused-title {
+  font-size: var(--font-heading);
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: var(--track-tight);
+  margin-bottom: 6px;
+}
+
+.paused-sub {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  margin-bottom: 22px;
+}
+
 /* Hold-to-confirm: re-uses .hold-fill from .hold-to-skip. Add the
  * destructive variant where the fill color reads warn-red. */
 

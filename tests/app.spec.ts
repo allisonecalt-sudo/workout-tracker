@@ -217,6 +217,27 @@ test('quit dialog cancel keeps user in workout', async ({ page }) => {
   await expect(page.locator('h2')).toContainText('Workout A');
 });
 
+// Pause (Allison Jul 7 2026): the pill freezes the workout behind a full
+// overlay and Resume returns her to the same exercise, nothing lost.
+test('pause overlay opens and resume returns to the same exercise', async ({ page }) => {
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await expect(page.locator('.exercise-name')).toBeVisible();
+  const firstExercise = await page.locator('.exercise-name').textContent();
+
+  // Pill is present on the workout screen; tapping it opens the overlay.
+  await expect(page.locator('#pause-toggle')).toBeVisible();
+  await page.locator('#pause-toggle').click();
+  await expect(page.locator('#paused-overlay')).toBeVisible();
+  await expect(page.locator('#pause-toggle')).toHaveCount(0); // pill hidden while paused
+
+  // Resume closes the overlay and lands back on the same exercise.
+  await page.locator('#pause-resume').click();
+  await expect(page.locator('#paused-overlay')).toHaveCount(0);
+  await expect(page.locator('#pause-toggle')).toBeVisible();
+  await expect(page.locator('.exercise-name')).toHaveText(firstExercise ?? '');
+});
+
 test('capacity slider updates value display', async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
   const slider = page.locator('#cap-before');

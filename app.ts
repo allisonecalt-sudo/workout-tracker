@@ -94,6 +94,13 @@ type AppState = {
   preCountdown: number;
   syncStatus: SyncStatus;
   startedAt: string | null;
+  // Pause (Allison Jul 7 2026): step away mid-workout (e.g. "now I'm going to
+  // wash some dishes") without inflating the logged duration. `pausedAt` = the
+  // timestamp the CURRENT pause began (null when running); `pausedMs` = total
+  // paused time this session, subtracted from duration at save. Persisted in the
+  // resume snapshot so a pause survives an app close.
+  pausedAt: number | null;
+  pausedMs: number;
   // Wall-sit timing capture (group 1D): when the user starts a timed wall sit
   // we stash the start timestamp here so we can compute actual held duration
   // even if she taps Done before the timer expires.
@@ -199,8 +206,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v16';
-const BUILD_DATE = 'Jul 9, 2026 · 13:47';
+const APP_VERSION = 'v17';
+const BUILD_DATE = 'Jul 9, 2026 · 14:02';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -1810,6 +1817,8 @@ const state: AppState = {
   preCountdown: 0,
   syncStatus: 'syncing',
   startedAt: null,
+  pausedAt: null,
+  pausedMs: 0,
   wallSitStartedAt: null,
   historyDetailId: null,
   videoExpandedFor: null,
@@ -1928,6 +1937,10 @@ function startTimerCore(kind: TimerKind, seconds: number, onComplete: () => void
 
 function timerLoop(): void {
   if (!activeTimer) return;
+  // Paused: freeze the countdown. `togglePause` shifts `endsAt` forward by the
+  // paused span on resume and re-enters the loop, so no ticks are lost. This
+  // guard also makes the visibilitychange re-entry safe while paused.
+  if (state.pausedAt !== null) return;
   const remainMs = activeTimer.endsAt - Date.now();
   const remainSec = Math.max(0, Math.ceil(remainMs / 1000));
 
@@ -2004,6 +2017,39 @@ function startPreCountdown(then: () => void): void {
     state.preCountdown = 0;
     then();
   });
+}
+
+// ---------- pause (Allison Jul 7 2026) ----------
+// Toggle the workout between running and paused. Pausing accumulates real
+// elapsed time into `state.pausedMs` (subtracted from the logged duration at
+// save) and freezes any running countdown + wall-sit hold by shifting their
+// clock-anchors forward by the paused span on resume — so a 3-minute dish
+// break neither inflates the workout time nor burns a rest/hold timer.
+function togglePause(): void {
+  if (state.pausedAt === null) {
+    // → pause
+    state.pausedAt = Date.now();
+    if (rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(rafHandle);
+    }
+    rafHandle = null;
+    render();
+    return;
+  }
+  // → resume
+  const pausedFor = Date.now() - state.pausedAt;
+  state.pausedMs += pausedFor;
+  state.pausedAt = null;
+  if (activeTimer) activeTimer.endsAt += pausedFor; // don't burn the frozen countdown
+  if (state.wallSitStartedAt !== null) state.wallSitStartedAt += pausedFor; // keep held-sec honest
+  render();
+  if (activeTimer) timerLoop();
+}
+
+// Total paused milliseconds so far, including an in-progress pause. Used at save
+// to subtract step-away time from the workout's wall-clock duration.
+function totalPausedMs(): number {
+  return state.pausedMs + (state.pausedAt !== null ? Date.now() - state.pausedAt : 0);
 }
 
 // Recompute on tab visibility — if the user backgrounded the app the rAF
@@ -2515,6 +2561,8 @@ function beginExercises(): void {
   state.currentExerciseIndex = 0;
   state.isResting = false;
   state.startedAt = new Date().toISOString();
+  state.pausedAt = null; // fresh session, no paused time carried in
+  state.pausedMs = 0;
   state.howToOpenFor = null;
   state.videoExpandedFor = null;
   workoutWalk = null; // fresh session, fresh walk numbers
@@ -2610,9 +2658,13 @@ async function logCompleteAndHome(): Promise<void> {
   }
   const completedAt = new Date().toISOString();
   const startedAt = state.startedAt ?? completedAt;
+  // Subtract any paused time — stepping away (dishes, a phone call) shouldn't
+  // inflate the logged workout duration (Allison Jul 7 2026).
   const durationSec = Math.max(
     0,
-    Math.round((new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+    Math.round(
+      (new Date(completedAt).getTime() - new Date(startedAt).getTime() - totalPausedMs()) / 1000
+    )
   );
   const stored = saveLog({
     date: completedAt,
@@ -2654,6 +2706,8 @@ type ActiveSessionSnapshot = {
   currentPhase: Phase;
   currentExerciseIndex: number;
   startedAt: string | null;
+  pausedAt: number | null;
+  pausedMs: number;
 };
 
 function saveActiveSession(): void {
@@ -2672,6 +2726,8 @@ function saveActiveSession(): void {
       currentPhase: state.currentPhase,
       currentExerciseIndex: state.currentExerciseIndex,
       startedAt: state.startedAt,
+      pausedAt: state.pausedAt,
+      pausedMs: state.pausedMs,
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
   } catch {
@@ -2730,6 +2786,11 @@ function restoreActiveSession(): boolean {
     state.backPain = snap.backPain ?? 0;
     state.word = snap.word ?? '';
     state.startedAt = snap.startedAt ?? new Date().toISOString();
+    // Preserve pause accounting across an app close. If she closed while paused,
+    // she stays paused on reopen (the closed span counts as paused, so it's
+    // subtracted from duration — faithful to "I stepped away").
+    state.pausedMs = typeof snap.pausedMs === 'number' && snap.pausedMs >= 0 ? snap.pausedMs : 0;
+    state.pausedAt = typeof snap.pausedAt === 'number' ? snap.pausedAt : null;
     // Transient — never restore a running timer or open expander.
     state.isResting = false;
     state.timerSeconds = 0;
@@ -2763,6 +2824,8 @@ function resetState(): void {
   state.timerSeconds = 0;
   state.preCountdown = 0;
   state.startedAt = null;
+  state.pausedAt = null;
+  state.pausedMs = 0;
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
   state.howToOpenFor = null;
@@ -3918,6 +3981,27 @@ function renderCooldownList(w: Workout): string {
 
     <button class="btn-large btn-primary" id="next" type="button">Done · Finish</button>
   `;
+}
+
+// Floating pause pill — same spot on every workout sub-view (exercise / rest /
+// cooldown). Small and out of the way of the primary Done button.
+function renderPauseButton(): string {
+  return `<button class="pause-fab" id="pause-toggle" type="button" aria-label="Pause workout">⏸ Pause</button>`;
+}
+
+// Full-screen "Paused" overlay — freezes the workout clock and any countdown
+// until she taps Resume. Deliberately unmissable so a step-away can't be left
+// silently running.
+function renderPausedOverlay(): string {
+  return `
+    <div class="paused-overlay" id="paused-overlay">
+      <div class="paused-card">
+        <div class="paused-icon">⏸</div>
+        <div class="paused-title">Paused</div>
+        <div class="paused-sub">Workout time is on hold — take as long as you need.</div>
+        <button class="btn-large btn-primary" id="pause-resume" type="button">Resume workout</button>
+      </div>
+    </div>`;
 }
 
 function renderWorkout(): string {
@@ -5274,6 +5358,12 @@ function render(): void {
       html = renderSettings();
       break;
   }
+  // Pause affordance — available throughout the active workout (exercise, rest,
+  // and cooldown all render under the 'workout' screen). When paused, a full
+  // overlay replaces the pill so Resume is unmissable on any sub-view.
+  if (state.screen === 'workout') {
+    html += state.pausedAt !== null ? renderPausedOverlay() : renderPauseButton();
+  }
   // Ship 6: screen transitions — apply enter-animation class except on
   // workout/timer screens where it would feel laggy mid-rep. The class
   // triggers a 220ms fade + 8px translateY with the spring ease curve.
@@ -5458,6 +5548,14 @@ function attachHandlers(): void {
 
   bindClick('next', () => {
     advanceExercise();
+  });
+
+  // Pause / resume the active workout (Allison Jul 7 2026).
+  bindClick('pause-toggle', () => {
+    togglePause();
+  });
+  bindClick('pause-resume', () => {
+    togglePause();
   });
 
   // Ship 6: Quit retains its native window.confirm() flow on regular click
