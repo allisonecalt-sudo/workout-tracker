@@ -130,7 +130,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     dos: [
       'Push your knees out toward your pinky toes.',
       'Stay tall through your chest.',
-      'Keep your weight in your heels.',
+      'Spread your weight across your whole foot — heel, big-toe base, and pinky-toe base.',
     ],
     donts: [
       "Don't let your knees cave inward.",
@@ -403,6 +403,10 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       {
         mistake: 'Lifting the head and neck off the mat to pull deeper.',
         fix: 'Keep your head resting on the mat and let your hands do the gentle pulling.',
+      },
+      {
+        mistake: 'Pushing into a pinch or sharp pressure in the spine.',
+        fix: 'A pinch or sharp pressure IN your spine (not a gentle stretch) means ease off and shorten the range — check with your PT first if your back is sensitive to bending forward.',
       },
     ],
   },
@@ -857,6 +861,10 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
         mistake: 'Yanking the knee in too hard.',
         fix: 'Draw it in gently — this is an easy warmup hug, not a deep stretch.',
       },
+      {
+        mistake: 'Pushing into a pinch or sharp pressure in the spine.',
+        fix: 'A pinch or sharp pressure IN your spine (not a gentle stretch) means ease off and shorten the range — check with your PT first if your back is sensitive to bending forward.',
+      },
     ],
   },
   'Knees-to-chest hold': {
@@ -897,6 +905,10 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       {
         mistake: 'Angle too tight, so the tailbone lifts off the mat.',
         fix: 'Let the legs come a little further from your chest.',
+      },
+      {
+        mistake: 'Pushing into a pinch or sharp pressure in the spine.',
+        fix: 'A pinch or sharp pressure IN your spine (not a gentle stretch) means ease off and shorten the range — check with your PT first if your back is sensitive to bending forward.',
       },
     ],
   },
@@ -1314,21 +1326,21 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Side-lying clamshells',
     voiceSrc: './assets/voice/side-lying-clamshells.mp3',
     voiceScript:
-      "Side-lying clamshells. Lie on your side with your hips and shoulders stacked vertically and your knees bent about ninety degrees. Rest your head on the mat or a thin pillow. Don't prop up on your forearm, and keep your wrists off the floor. Your bottom arm just extends along the floor, relaxed. Keep your feet together, then open your top knee like a clam shell, lifting only to a comfortable range. Inhale as you open, exhale as you lower with control. The main thing: keep those hips stacked. Don't roll the top hip backward to lift higher. Smaller and clean beats big and sloppy. Ten each side.",
+      "Side-lying clamshells. Lie on your side with your hips and shoulders stacked vertically and your knees bent about ninety degrees. Rest your head on the mat or a thin pillow. Don't prop up on your forearm, and keep your wrists off the floor. Your bottom arm just extends along the floor, relaxed. Keep your feet together, then open your top knee like a clam shell, lifting only to a comfortable range. Exhale as you open, inhale as you lower with control. The main thing: keep those hips stacked. Don't roll the top hip backward to lift higher. Smaller and clean beats big and sloppy. Ten each side.",
     muscles: ['glutes', 'hips'],
     muscleLabel: 'Glute medius + hips',
     steps: [
       'Lie on your side with hips and shoulders stacked vertically, knees bent about 90 degrees.',
       'Rest your head on the mat or a thin pillow, not propped on your forearm. Let your bottom arm extend along the floor under your head, wrists off the ground.',
       'Keep your feet together throughout.',
-      'Open your top knee like a clam shell, keeping the bottom knee on the mat. Lift only to a comfortable range, inhaling as you open.',
-      'Lower with control, exhaling on the way down. Do 10 each side.',
+      'Open your top knee like a clam shell, keeping the bottom knee on the mat. Lift only to a comfortable range, exhaling as you open.',
+      'Lower with control, inhaling on the way down. Do 10 each side.',
     ],
     dos: [
       'Keep hips and shoulders stacked vertically through the whole rep.',
       'Keep your feet together and lift only to a comfortable range.',
       'Rest your head on the mat or a thin pillow.',
-      'Lower with control: inhale up, exhale down.',
+      'Lower with control: exhale as you open, inhale as you lower.',
     ],
     donts: [
       "Don't prop up on your forearm; wrists stay off the floor.",
@@ -1503,7 +1515,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Standing calf raises',
     voiceSrc: './assets/voice/standing-calf-raises.mp3',
     voiceScript:
-      "Standing calf raises. Stand tall with your feet about hip-width apart. Rest just a light fingertip touch on the wall for balance — no gripping, and no weight on your hand. Slowly lift your heels until you're up on the balls of your feet, taking about three seconds to rise. Hold for one second at the top, then lower back down slowly over three seconds. Breathe in as you lift, and out as you lower. The main thing: don't bounce for momentum — that slow, controlled tempo is what does the work. Aim for fifteen reps.",
+      "Standing calf raises. Stand tall with your feet about hip-width apart. Rest just a light fingertip touch on the wall for balance — no gripping, and no weight on your hand. Slowly lift your heels until you're up on the balls of your feet, taking about three seconds to rise. Hold for one second at the top, then lower back down slowly over three seconds. Breathe out as you lift, and in as you lower. The main thing: don't bounce for momentum — that slow, controlled tempo is what does the work. Aim for fifteen reps.",
     muscles: ['calves'],
     muscleLabel: 'Calves',
     steps: [
@@ -1512,13 +1524,13 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       "Slowly lift your heels until you're on the balls of your feet — 3 seconds up.",
       'Hold 1 second at the top.',
       'Lower slowly back down — 3 seconds down.',
-      'Inhale on the lift, exhale on the lower. 15 reps.',
+      'Exhale as you rise onto your toes, inhale as you lower. 15 reps.',
     ],
     dos: [
       'Stand tall, feet hip-width apart.',
       'Use a light fingertip touch on the wall for balance only.',
       '3 seconds up, hold 1 second, 3 seconds down.',
-      'Inhale on the lift, exhale on the lower.',
+      'Exhale as you rise, inhale as you lower.',
     ],
     donts: [
       "Don't grip the wall — fingertips only, no weight on your hand.",

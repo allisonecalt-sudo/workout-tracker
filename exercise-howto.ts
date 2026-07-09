@@ -841,7 +841,7 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
       },
       {
         image: `${EX_DIR}/bodyweight-squats-1.jpg`,
-        do: '3 sec down — knees track over middle toes, weight in heels.',
+        do: '3 sec down — knees track over middle toes, weight across the whole foot.',
         avoid: "Don't push past today's pain ceiling (left knee).",
       },
       {
