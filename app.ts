@@ -102,6 +102,11 @@ type AppState = {
   // resume snapshot so a pause survives an app close.
   pausedAt: number | null;
   pausedMs: number;
+  // Lite day (Allison Jul 12 2026, from the Jul-9 deep-dive): a real mechanic for
+  // low-energy / Crohn's / PMS days — one tap on pre-log drops the main block by
+  // one round (A/B 3→2, C 2→1) and marks the stretch list "do what you need."
+  // Same moves, same walk, streak intact. Showing up IS the win.
+  liteDay: boolean;
   // Wall-sit timing capture (group 1D): when the user starts a timed wall sit
   // we stash the start timestamp here so we can compute actual held duration
   // even if she taps Done before the timer expires.
@@ -212,8 +217,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v22';
-const BUILD_DATE = 'Jul 9, 2026 · 18:54';
+const APP_VERSION = 'v23';
+const BUILD_DATE = 'Jul 12, 2026 · 14:05';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -1825,6 +1830,7 @@ const state: AppState = {
   startedAt: null,
   pausedAt: null,
   pausedMs: 0,
+  liteDay: false,
   wallSitStartedAt: null,
   historyDetailId: null,
   videoExpandedFor: null,
@@ -2576,9 +2582,15 @@ function getCurrentExercise(): Exercise | null {
   return list[state.currentExerciseIndex] ?? null;
 }
 
+// Lite day: one round less than programmed, never below 1 (A/B 3→2, C 2→1).
+function effectiveRounds(w: Workout): number {
+  return state.liteDay ? Math.max(1, w.rounds - 1) : w.rounds;
+}
+
 function startWorkout(id: WorkoutId): void {
   state.selectedWorkout = id;
   state.screen = 'pre-log';
+  state.liteDay = false; // fresh pick, full program until she says otherwise
   render();
 }
 
@@ -2628,7 +2640,7 @@ function advanceExercise(): void {
     state.currentPhase = 'main';
     state.currentExerciseIndex = 0;
   } else if (state.currentPhase === 'main') {
-    if (state.currentRound < w.rounds) {
+    if (state.currentRound < effectiveRounds(w)) {
       state.currentRound += 1;
       state.currentExerciseIndex = 0;
       startRestTimer();
@@ -2736,6 +2748,7 @@ type ActiveSessionSnapshot = {
   startedAt: string | null;
   pausedAt: number | null;
   pausedMs: number;
+  liteDay: boolean;
 };
 
 function saveActiveSession(): void {
@@ -2756,6 +2769,7 @@ function saveActiveSession(): void {
       startedAt: state.startedAt,
       pausedAt: state.pausedAt,
       pausedMs: state.pausedMs,
+      liteDay: state.liteDay,
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
   } catch {
@@ -2814,6 +2828,7 @@ function restoreActiveSession(): boolean {
     state.backPain = snap.backPain ?? 0;
     state.word = snap.word ?? '';
     state.startedAt = snap.startedAt ?? new Date().toISOString();
+    state.liteDay = snap.liteDay === true; // default false on old snapshots
     // Preserve pause accounting across an app close. If she closed while paused,
     // she stays paused on reopen (the closed span counts as paused, so it's
     // subtracted from duration — faithful to "I stepped away").
@@ -2854,6 +2869,7 @@ function resetState(): void {
   state.startedAt = null;
   state.pausedAt = null;
   state.pausedMs = 0;
+  state.liteDay = false;
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
   state.howToOpenFor = null;
@@ -3986,9 +4002,13 @@ function renderPreLog(): string {
       </label>
     </div>
 
-    <div class="card">
-      <p class="gear-note">🪫 Hard day? The pre-decided knob: <strong>do 2 rounds instead of 3</strong> — same moves, same walk, streak intact. Reps drop second; the walk stays. Showing up IS the win.</p>
-    </div>
+    <button class="card lite-toggle${state.liteDay ? ' lite-toggle-on' : ''}" id="lite-toggle" type="button">
+      ${
+        state.liteDay
+          ? `<p class="gear-note"><strong>✓ Lite day.</strong> Main ×${Math.max(1, w.rounds - 1)} round${Math.max(1, w.rounds - 1) === 1 ? '' : 's'} instead of ${w.rounds} — same moves, same walk, streak intact. Stretch what you need at the end. Showing up IS the win. (Tap to undo)</p>`
+          : `<p class="gear-note">🪫 Hard day? <strong>Tap for Lite</strong> — one round less (${w.rounds}→${Math.max(1, w.rounds - 1)}), same moves, same walk, streak intact.</p>`
+      }
+    </button>
 
     <div class="warning-banner">
       ⚠️ <strong>Wrist:</strong> forearms fine; palms bear weight ONLY in the wall-lean on-ramp (your call, Jul 3) — stop if anything pings. Loaded arm work paused for Lisa. Back pain at 3/10 → stop that exercise.
@@ -4118,7 +4138,11 @@ function renderCooldownList(w: Workout): string {
       <button class="quit-link" id="quit" type="button">× Quit workout</button>
     </div>
     <span class="round-indicator">Stretch · ${stretches.length} stretches</span>
-    <p class="subtitle">Work down the list at your own pace. No timer — hold each as long as feels right.</p>
+    <p class="subtitle">${
+      state.liteDay
+        ? 'Lite day — do the stretches you need, skip the rest. Done · Finish whenever.'
+        : 'Work down the list at your own pace. No timer — hold each as long as feels right.'
+    }</p>
 
     <div class="card">
       <ul class="stretch-list">${rows}</ul>
@@ -4157,7 +4181,7 @@ function renderWorkout(): string {
   const total = phaseList.length;
   const phaseLabel =
     state.currentPhase === 'main'
-      ? `Main · Round ${state.currentRound}/${w.rounds}`
+      ? `Main · Round ${state.currentRound}/${effectiveRounds(w)}${state.liteDay ? ' · lite' : ''}`
       : state.currentPhase === 'warmup'
         ? 'Warm-up'
         : state.currentPhase === 'upperBack'
@@ -4232,7 +4256,15 @@ function renderWorkout(): string {
           : ''
     }
 
-    ${EXERCISE_DETAIL[ex.name] ? renderDetailCard(ex.name) : renderHowToCard(ex.name)}
+    ${
+      // The walk step needs no form card — Start/Done and the live line are the
+      // whole interface (the v19 card there was clutter; stripped Jul 12 2026).
+      ex.name === 'Outdoor walk'
+        ? ''
+        : EXERCISE_DETAIL[ex.name]
+          ? renderDetailCard(ex.name)
+          : renderHowToCard(ex.name)
+    }
 
     <button class="btn-large btn-primary" id="next" type="button">Done · Next</button>
   `;
@@ -5511,6 +5543,9 @@ function render(): void {
   if (state.screen === 'workout') {
     html += state.pausedAt !== null ? renderPausedOverlay() : renderPauseButton();
   }
+  // The floating pause pill overlapped the last line of content at the bottom-left
+  // (her Jul-9 note) — give the workout screen extra bottom room to scroll past it.
+  root.classList.toggle('has-pause-fab', state.screen === 'workout');
   // Ship 6: screen transitions — apply enter-animation class except on
   // workout/timer screens where it would feel laggy mid-rep. The class
   // triggers a 220ms fade + 8px translateY with the spring ease curve.
@@ -5707,6 +5742,12 @@ function attachHandlers(): void {
     startWorkoutWalk();
     render();
     updateWalkLiveLine();
+  });
+
+  // Lite-day toggle on pre-log (Allison Jul 12 2026): one round less, streak intact.
+  bindClick('lite-toggle', () => {
+    state.liteDay = !state.liteDay;
+    render();
   });
 
   // Pause / resume the active workout (Allison Jul 7 2026).

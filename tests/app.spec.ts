@@ -355,6 +355,9 @@ test('resume: quitting clears the session so reopening goes home', async ({ page
 test('detail card: a dropdown section opens and closes on click', async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
+  // A opens on the walk step, which deliberately has NO card (stripped Jul 12) —
+  // advance one step to the first real exercise before asserting the card.
+  await page.locator('button:has-text("Done ·")').click();
   const toggle = page.locator('.detail-section-toggle').first();
   await expect(toggle).toBeVisible();
   await toggle.click(); // open
@@ -366,6 +369,7 @@ test('detail card: a dropdown section opens and closes on click', async ({ page 
 test("detail card: Do & Don't dropdown shows do + don't cues", async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
+  await page.locator('button:has-text("Done ·")').click(); // past the card-less walk step
   await page.locator('.detail-section-toggle', { hasText: "Do & Don't" }).click();
   await expect(page.locator('.detail-cue-do').first()).toBeVisible();
   await expect(page.locator('.detail-cue-dont').first()).toBeVisible();
@@ -376,9 +380,19 @@ test('detail card: face shows the voice note + muscle target on the first exerci
 }) => {
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
+  await page.locator('button:has-text("Done ·")').click(); // past the card-less walk step
   // Form guidance always renders — now as the detail card, not the how-to card.
   await expect(page.locator('.voice-note-btn')).toBeVisible();
   await expect(page.locator('.muscle-svg')).toBeVisible();
+});
+
+test('walk step: shows no form card — Start walk is the whole interface', async ({ page }) => {
+  // The v19 card on the walk step was clutter (handoff note, stripped Jul 12 2026).
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Outdoor walk');
+  await expect(page.locator('.detail-card')).toHaveCount(0);
+  await expect(page.locator('.voice-note-btn')).toHaveCount(0);
 });
 
 // --- Redesign Ship 1 (2026-05-15 D-1 Calm Tool Minimalism) -------------------
@@ -1146,6 +1160,20 @@ test('in-workout walk: does NOT auto-start on the step — needs an explicit Sta
   expect(
     await page.evaluate(() => localStorage.getItem('workout-tracker:ww-start'))
   ).not.toBeNull();
+});
+
+test('lite day: pre-log toggle drops one round and marks the session lite', async ({ page }) => {
+  // Allison Jul 12 2026 (from the Jul-9 deep-dive): a low-energy day needs a real
+  // mechanic, not advice — tap Lite on pre-log → one round less (C: 2→1), streak
+  // intact. The round indicator carries the "lite" tag.
+  await page.locator('button[data-workout="C"]').click();
+  await expect(page.locator('#lite-toggle')).toBeVisible();
+  await page.locator('#lite-toggle').click();
+  await expect(page.locator('#lite-toggle')).toContainText('Lite day');
+  await page.locator('button:has-text("Start")').click();
+  // C's warmup is the walk step — advance past it into the main block.
+  await page.locator('button:has-text("Done ·")').click();
+  await expect(page.locator('.round-indicator')).toContainText('Round 1/1 · lite');
 });
 
 test('walk: Cancel discards an opened walk without logging it', async ({ page }) => {

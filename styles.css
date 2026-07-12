@@ -3276,6 +3276,28 @@ input[type='number']:focus {
   background: color-mix(in srgb, var(--accent-rest) 26%, var(--bg-elev-2));
 }
 
+/* Room to scroll the last line of workout content clear of the floating pill
+ * (it overlapped a word at the bottom-left — Allison, Jul 9 2026). */
+#app.has-pause-fab {
+  padding-bottom: 84px;
+}
+
+/* Lite-day toggle on pre-log (Jul 12 2026): a tappable card — one round less on
+ * a low-energy day, streak intact. Accent border when armed. */
+.lite-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.lite-toggle-on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev-2));
+}
+
 .paused-overlay {
   position: fixed;
   inset: 0;
