@@ -1105,20 +1105,34 @@ test('multi-week: "Coming next week" preview renders on home with diff', async (
   await expect(bBlock.locator('.next-week-block-list')).toContainText('14');
 });
 
-test('multi-week: Settings About shows Program weeks count (10)', async ({ page }) => {
+test('multi-week: Settings About shows Program weeks count (11)', async ({ page }) => {
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 10" row.
+  // About section has a "Program weeks: 11" row (Week 11 = W10 carried after the sick week).
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 10');
+  ).toContainText('Program weeks: 11');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {
   await mockDate(page, '2026-05-20T10:00:00.000Z'); // Wed in Week 3
   await page.goto('/');
   await expect(page.locator('.week-banner')).toContainText('Week 3');
+});
+
+test('sick week Jul 11-17 holds a blank slot and Jul 18-24 is Week 11', async ({ page }) => {
+  // Her calls Jul 17+19 2026: the sick week stays blank and doesn't count
+  // ("it should be week 11" + "show a space for the missing week").
+  await mockDate(page, '2026-07-19T10:00:00.000Z'); // Sun in the resume week
+  await page.goto('/');
+  // Banner: the skipped week doesn't advance the count — Week 11, not 12.
+  await expect(page.locator('.week-banner')).toContainText('Week 11');
+  // The weekly grid keeps a visible row for the missed week, labeled Sick,
+  // with all 3 slots empty.
+  const sickRow = page.locator('.weekly-row').filter({ hasText: 'Sick' });
+  await expect(sickRow).toHaveCount(1);
+  await expect(sickRow.locator('.weekly-slot-empty')).toHaveCount(3);
 });
 
 test('walk credit: start/stop timer logs a walk, bumps week count, streak untouched', async ({

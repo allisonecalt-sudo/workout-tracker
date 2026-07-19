@@ -217,8 +217,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v23';
-const BUILD_DATE = 'Jul 12, 2026 · 14:05';
+const APP_VERSION = 'v24';
+const BUILD_DATE = 'Jul 19, 2026 · 16:55';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -1629,6 +1629,17 @@ const PROGRAM: WeekPlan[] = [
   },
 ];
 
+// Week 11 — Jul 18-24 2026. Resume after the sick week (Jul 11-17, left blank —
+// the program clock paused, see SKIPPED_WEEKS). Reuses Week 10's workout objects
+// on purpose: she missed that week, so the same programming rolls forward.
+// No level-up until this week actually happens (check-in ~Jul 25).
+PROGRAM.push({
+  weekNum: 11,
+  startsOn: '2026-07-18',
+  label: 'Resume — W10 carried after sick week',
+  workouts: PROGRAM.find((wp) => wp.weekNum === 10)!.workouts,
+});
+
 // --- Resolvers -----------------------------------------------------------
 //
 // All "what's the workout today?" logic flows through these two functions.
@@ -3007,15 +3018,42 @@ function formatDuration(sec: number): string {
 
 const PROGRAM_START_DATE = '2026-05-02';
 
-function getProgramWeek(date: Date = new Date()): { num: number; start: Date; end: Date } {
+// Calendar weeks that do NOT advance the program clock. The week keeps a
+// visible blank row in the weekly views (her call Jul 19 2026: "show a space
+// for the missing week") but the NEXT week inherits its number. Keyed by the
+// Saturday the week starts on (YYYY-MM-DD) → short label shown on that row.
+const SKIPPED_WEEKS: Record<string, string> = {
+  '2026-07-11': 'Sick', // Jul 11-17 2026 — sick week, left blank, no level-up
+};
+
+function weekStartIso(weekStart: Date): string {
+  const m = String(weekStart.getMonth() + 1).padStart(2, '0');
+  const d = String(weekStart.getDate()).padStart(2, '0');
+  return `${weekStart.getFullYear()}-${m}-${d}`;
+}
+
+function getProgramWeek(date: Date = new Date()): {
+  num: number;
+  start: Date;
+  end: Date;
+  skippedLabel: string | null;
+} {
   const start = new Date(PROGRAM_START_DATE + 'T00:00:00');
   const diffDays = Math.floor((date.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-  const num = Math.max(1, Math.floor(diffDays / 7) + 1);
+  const calNum = Math.max(1, Math.floor(diffDays / 7) + 1);
   const weekStart = new Date(start);
-  weekStart.setDate(start.getDate() + (num - 1) * 7);
+  weekStart.setDate(start.getDate() + (calNum - 1) * 7);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
-  return { num, start: weekStart, end: weekEnd };
+  const skipsBefore = Object.keys(SKIPPED_WEEKS).filter(
+    (s) => new Date(s + 'T00:00:00').getTime() < weekStart.getTime()
+  ).length;
+  return {
+    num: Math.max(1, calNum - skipsBefore),
+    start: weekStart,
+    end: weekEnd,
+    skippedLabel: SKIPPED_WEEKS[weekStartIso(weekStart)] ?? null,
+  };
 }
 
 function formatWeekRange(start: Date, end: Date): string {
@@ -3117,7 +3155,12 @@ function getWeekCount(offset = 0): number {
 }
 
 // Program week info anchored on the Saturday of the viewed Sat-Fri week.
-function getViewedProgramWeek(offset = 0): { num: number; start: Date; end: Date } {
+function getViewedProgramWeek(offset = 0): {
+  num: number;
+  start: Date;
+  end: Date;
+  skippedLabel: string | null;
+} {
   return getProgramWeek(saturdayForOffset(offset));
 }
 
@@ -3502,6 +3545,7 @@ function renderSparkline(values: number[]): string {
 type WeeklyTargetRow = {
   saturday: Date;
   weekNum: number;
+  skippedLabel: string | null; // e.g. 'Sick' — week holds its slot but doesn't count
   workouts: ('A' | 'B' | 'C')[]; // in order completed (chronological)
   logs: (LogEntry | null)[]; // parallel to workouts, for click→detail
   isCurrentWeek: boolean;
@@ -3535,9 +3579,11 @@ function buildWeeklyTargetRows(logs: LogEntry[]): WeeklyTargetRow[] {
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 3); // cap at 3 for the 3-slot view
 
+    const pw = getProgramWeek(weekStart);
     rows.push({
       saturday: new Date(weekStart),
-      weekNum: getProgramWeek(weekStart).num,
+      weekNum: pw.num,
+      skippedLabel: pw.skippedLabel,
       workouts: weekLogs.map((l) => l.workout),
       logs: weekLogs,
       isCurrentWeek: weekStart.getTime() === thisSaturday.getTime(),
@@ -3575,7 +3621,11 @@ function renderWeeklyTargetGrid(): string {
         })
         .join('');
       const cls = r.isCurrentWeek ? 'weekly-row weekly-row-current' : 'weekly-row';
-      const label = r.isCurrentWeek ? 'This week' : `Wk ${r.weekNum} · ${rangeLabel}`;
+      const label = r.isCurrentWeek
+        ? 'This week'
+        : r.skippedLabel
+          ? `${r.skippedLabel} · ${rangeLabel}`
+          : `Wk ${r.weekNum} · ${rangeLabel}`;
       return `
         <div class="${cls}">
           <div class="weekly-row-label">${label}</div>
@@ -3869,14 +3919,14 @@ function renderHome(): string {
       </button>
     </div>
     <p class="subtitle">Three rotating sessions. Show up 3x/week.</p>
-    <div class="week-banner">Week ${week.num} · ${weekRange}</div>
+    <div class="week-banner">${week.skippedLabel ? `${week.skippedLabel} week` : `Week ${week.num}`} · ${weekRange}</div>
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
 
     <div class="card">
       <div class="week-nav">
         <button class="week-nav-btn" id="prev-week" type="button" ${canGoBack ? '' : 'disabled'} aria-label="Previous week">‹</button>
-        <button class="week-nav-label week-nav-label-btn" id="open-weekly-review" type="button" aria-label="Open weekly review for ${isCurrentWeek ? 'this week' : `week ${viewedWeek.num}`}">
-          <div class="week-nav-title">${isCurrentWeek ? 'This week' : `Week ${viewedWeek.num}`}</div>
+        <button class="week-nav-label week-nav-label-btn" id="open-weekly-review" type="button" aria-label="Open weekly review for ${isCurrentWeek ? 'this week' : viewedWeek.skippedLabel ? `the ${viewedWeek.skippedLabel.toLowerCase()} week` : `week ${viewedWeek.num}`}">
+          <div class="week-nav-title">${isCurrentWeek ? 'This week' : viewedWeek.skippedLabel ? `${viewedWeek.skippedLabel} week` : `Week ${viewedWeek.num}`}</div>
           <div class="week-nav-range">${viewedWeekRange}</div>
         </button>
         <button class="week-nav-btn" id="next-week" type="button" ${isCurrentWeek ? 'disabled' : ''} aria-label="${isCurrentWeek ? 'Already at current week' : 'Next week'}">›</button>
@@ -5087,10 +5137,10 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
       const t = new Date(l.date).getTime();
       return t >= weekStart.getTime() && t < weekEnd.getTime();
     }).length;
-    const weekNum = getProgramWeek(weekStart).num;
+    const pw = getProgramWeek(weekStart);
     const isCurrent = weekStart.getTime() === thisSat.getTime();
     rows.push({
-      label: isCurrent ? 'now' : `wk ${weekNum}`,
+      label: isCurrent ? 'now' : pw.skippedLabel ? pw.skippedLabel.toLowerCase() : `wk ${pw.num}`,
       value: count,
       isCurrent,
     });
