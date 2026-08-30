@@ -1105,14 +1105,14 @@ test('multi-week: "Coming next week" preview renders on home with diff', async (
   await expect(bBlock.locator('.next-week-block-list')).toContainText('14');
 });
 
-test('multi-week: Settings About shows Program weeks count (11)', async ({ page }) => {
+test('multi-week: Settings About shows Program weeks count (12)', async ({ page }) => {
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 11" row (Week 11 = W10 carried after the sick week).
+  // About section has a "Program weeks: 12" row (11 round-1 weeks + R2 W1).
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 11');
+  ).toContainText('Program weeks: 12');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {
@@ -1133,6 +1133,33 @@ test('sick week Jul 11-17 holds a blank slot and Jul 18-24 is Week 11', async ({
   const sickRow = page.locator('.weekly-row').filter({ hasText: 'Sick' });
   await expect(sickRow).toHaveCount(1);
   await expect(sickRow.locator('.weekly-slot-empty')).toHaveCount(3);
+});
+
+test('round 2: banner reads Round 2 · Week 1 from Aug 29 2026 and restart numbers are live', async ({
+  page,
+}) => {
+  // Her call Aug 30 2026: past data = a closed chapter (archived, pullable);
+  // a new round starts. Week numbers restart at 1; the restart week is the
+  // compact 2-round version with pulled-back numbers.
+  await mockDate(page, '2026-08-30T15:00:00.000Z'); // Sun in R2 Week 1
+  await page.goto('/');
+  await expect(page.locator('.week-banner')).toContainText('Round 2 · Week 1');
+  // Pre-log overview badge carries the round too.
+  await page.locator('button[data-workout="A"]').click();
+  await expect(page.locator('.overview-week-badge')).toHaveText(/R2 · Week 1/);
+});
+
+test('round 2: break weeks Jul 25–Aug 28 hold blank labeled rows, round-1 weeks keep plain labels', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-08-30T15:00:00.000Z');
+  await page.goto('/');
+  // Five Break rows, each with 3 empty slots (nothing logged over the summer).
+  const breakRows = page.locator('.weekly-row').filter({ hasText: 'Break' });
+  await expect(breakRows).toHaveCount(5);
+  // Round-1 rows keep their old plain "Wk N" labels (no R1 prefix).
+  await expect(page.locator('.weekly-row-label', { hasText: /Wk 10 ·/ }).first()).toBeVisible();
+  await expect(page.locator('.weekly-row-label', { hasText: /R1/ })).toHaveCount(0);
 });
 
 test('walk credit: start/stop timer logs a walk, bumps week count, streak untouched', async ({

@@ -217,8 +217,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v24';
-const BUILD_DATE = 'Jul 19, 2026 · 16:55';
+const APP_VERSION = 'v25';
+const BUILD_DATE = 'Aug 30, 2026 · 18:20';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -271,12 +271,21 @@ function genId(): string {
 
 type WeekPlan = {
   weekNum: number;
+  // Which round this week belongs to (see ROUNDS). Omitted = round 1.
+  // Week numbers restart at 1 inside each round.
+  round?: number;
   // ISO date (YYYY-MM-DD) of the Saturday this week starts on.
   startsOn: string;
   // Optional short tag — e.g. "Starter", "Consolidation", "Bump week".
   label?: string;
   workouts: Record<WorkoutId, Workout>;
 };
+
+// "Round 2 · Week 1" for restart rounds, plain "Week 7" for round 1 — so all
+// the old surfaces keep reading exactly as they always did.
+function weekPlanTitle(wp: WeekPlan): string {
+  return wp.round && wp.round > 1 ? `R${wp.round} · Week ${wp.weekNum}` : `Week ${wp.weekNum}`;
+}
 
 // --- Shared building blocks (so per-week deltas are obvious) -------------
 
@@ -1640,6 +1649,129 @@ PROGRAM.push({
   workouts: PROGRAM.find((wp) => wp.weekNum === 10)!.workouts,
 });
 
+// ======================= ROUND 2 =======================
+// Aug 29 2026 → . The restart after the summer break (5 Break weeks + the
+// unrun Week 11 close out Round 1 — all of it stays browsable above).
+// Design brief, her words Aug 30: "compact so I keep coming back" · "not too
+// easy but it shouldn't be too hard" · back to 3×/week. So: the same known
+// A/B/C moves, 2 rounds instead of 3, numbers at roughly 75-80% of the
+// Week-10 peaks — restart numbers, not a new ceiling; climb back per
+// progression-rules.md as sessions land clean. Eccentric step-down + supine
+// bicycle are QUEUED to return in later R2 weeks (one change at a time).
+// Arms STILL paused (UPPER_BACK_SAFE — no grip, no load) and the wrist
+// on-ramp is parked too, until she relays what Lisa cleared at the last
+// session. The walk steps stay skippable (explicit Start since v22).
+PROGRAM.push({
+  round: 2,
+  weekNum: 1,
+  startsOn: '2026-08-29',
+  label: 'Round 2 — compact restart',
+  workouts: {
+    A: {
+      id: 'A',
+      name: 'Lower Body + Core',
+      description: 'Compact restart · 2 rounds · ~30 min (walk optional)',
+      rounds: 2,
+      warmup: WALK_WARMUP_AB,
+      main: [
+        {
+          name: 'Bodyweight squats',
+          reps: '12 reps · 3-1-3 tempo',
+          notes:
+            'Restart at 12 (you were at 14 before the break). Arms crossed over chest; wall behind shoulder if balance wobbly.',
+        },
+        HIP_HINGE_W8,
+        { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
+        {
+          name: 'Wall sit',
+          reps: '35 sec hold',
+          notes:
+            "Restart at 35s (you held 45s pre-break — don't chase the old number; the streak is the asset). Hands rest on thighs or hang. No pushing on wall.",
+          durationSec: 35,
+          isTimed: true,
+        },
+        {
+          name: 'Modified dead bug',
+          reps: '8 each side',
+          notes: 'Arms relaxed at sides on mat. Move only legs. Restart at 8 (was 10).',
+        },
+        {
+          name: 'Forearm plank',
+          reps: '1 set · 20 sec hold',
+          notes:
+            'On forearms only (NOT hands — wrists still off). Restart at 20s (was 30). Stop if any wrist sensation.',
+          durationSec: 20,
+          isTimed: true,
+        },
+      ],
+      upperBack: UPPER_BACK_SAFE,
+      cooldown: STRETCH_COOLDOWN,
+    },
+    B: {
+      id: 'B',
+      name: 'Glutes + Mobility + Core',
+      description: 'Compact restart · 2 rounds · ~30 min (walk optional)',
+      rounds: 2,
+      warmup: WALK_WARMUP_AB,
+      main: [
+        HIP_HINGE_W8,
+        { name: 'Side-lying leg raises', reps: '12 each side', notes: 'Restart at 12 (was 14).' },
+        { name: 'Side-lying clamshells', reps: '10 each side', notes: 'Restart at 10 (was 12).' },
+        {
+          name: 'Single-leg glute bridges',
+          reps: '10 each side',
+          notes: 'Restart at 10 (was 12; toward the 15/side cap once sessions land clean).',
+        },
+        {
+          name: 'Modified dead bug',
+          reps: '8 each side',
+          notes: 'Restart at 8 (was 10). Supine bicycle returns in a later week.',
+        },
+        {
+          name: 'Standing calf raises',
+          reps: '12 reps',
+          notes: 'Light fingertip touch on wall for balance only — NO grip.',
+        },
+      ],
+      upperBack: UPPER_BACK_SAFE,
+      cooldown: STRETCH_COOLDOWN,
+    },
+    C: {
+      id: 'C',
+      name: 'Walk + Lower Body + Core',
+      description: '🚶 25-min walk + compact 2-round strength block · ~40 min',
+      rounds: 2,
+      warmup: WALK_WARMUP_C,
+      main: [
+        {
+          name: 'Bodyweight squats',
+          reps: '10 reps · 3-1-3 tempo',
+          notes: 'Restart at 10 (was 12). Arms crossed; wall behind shoulder if wobbly.',
+        },
+        { name: 'Glute bridges', reps: '15 reps · 2-sec hold', notes: 'Restart at 15 (was 18).' },
+        {
+          name: 'Single-leg glute bridges',
+          reps: '8 each side',
+          notes: 'Held at 8/side. Climb toward 15, then tempo / foot-elevated.',
+        },
+        {
+          name: 'Side-lying leg raises',
+          reps: '10 each side',
+          notes: 'Restart at 10 (was 12; the 20/side cap still stands).',
+        },
+        { name: 'Modified dead bug', reps: '8 each side' },
+        {
+          name: 'Standing calf raises',
+          reps: '15 reps',
+          notes:
+            'Restart at 15 (was 18). Last set near failure (0-2 reps left) — the one move to push genuinely hard. Fingertip touch on wall for balance only — NO grip.',
+        },
+      ],
+      cooldown: STRETCH_COOLDOWN,
+    },
+  },
+});
+
 // --- Resolvers -----------------------------------------------------------
 //
 // All "what's the workout today?" logic flows through these two functions.
@@ -1671,7 +1803,8 @@ function getWorkoutById(id: WorkoutId, date: Date = new Date()): Workout {
 
 function getFutureWeekPlans(date: Date = new Date()): WeekPlan[] {
   const current = getWeekPlan(date);
-  const currentIdx = PROGRAM.findIndex((wp) => wp.weekNum === current.weekNum);
+  // indexOf, not findIndex-by-weekNum: week numbers repeat across rounds.
+  const currentIdx = PROGRAM.indexOf(current);
   return PROGRAM.slice(currentIdx + 1);
 }
 
@@ -1680,7 +1813,7 @@ function getFutureWeekPlans(date: Date = new Date()): WeekPlan[] {
 // archive-not-delete principle) without expanding heavy blocks by default.
 function getPastWeekPlans(date: Date = new Date()): WeekPlan[] {
   const current = getWeekPlan(date);
-  const currentIdx = PROGRAM.findIndex((wp) => wp.weekNum === current.weekNum);
+  const currentIdx = PROGRAM.indexOf(current);
   return PROGRAM.slice(0, currentIdx);
 }
 
@@ -3018,12 +3151,38 @@ function formatDuration(sec: number): string {
 
 const PROGRAM_START_DATE = '2026-05-02';
 
+// Rounds — each fresh start of the program. Week numbers restart at 1 inside
+// each round; everything from older rounds stays fully browsable (archive-not-
+// delete). Round 2 = the post-summer restart, her call Aug 30 2026: "the past
+// data goes to an archive — accessible, but that was a closed chapter. Now
+// we're starting a new round." Each start date must be a Saturday (weeks are
+// Sat-Fri throughout the app).
+const ROUNDS: { num: number; start: string }[] = [
+  { num: 1, start: PROGRAM_START_DATE },
+  { num: 2, start: '2026-08-29' },
+];
+
+function getRoundFor(date: Date): { num: number; start: string } {
+  let chosen = ROUNDS[0]!;
+  for (const r of ROUNDS) {
+    if (new Date(r.start + 'T00:00:00').getTime() <= date.getTime()) chosen = r;
+  }
+  return chosen;
+}
+
 // Calendar weeks that do NOT advance the program clock. The week keeps a
 // visible blank row in the weekly views (her call Jul 19 2026: "show a space
 // for the missing week") but the NEXT week inherits its number. Keyed by the
 // Saturday the week starts on (YYYY-MM-DD) → short label shown on that row.
 const SKIPPED_WEEKS: Record<string, string> = {
   '2026-07-11': 'Sick', // Jul 11-17 2026 — sick week, left blank, no level-up
+  // Jul 25 – Aug 28 2026 — the summer break between Round 1 and Round 2
+  // (trip prep + vacation). Labeled rows, no level-up, honest gaps.
+  '2026-07-25': 'Break',
+  '2026-08-01': 'Break',
+  '2026-08-08': 'Break',
+  '2026-08-15': 'Break',
+  '2026-08-22': 'Break',
 };
 
 function weekStartIso(weekStart: Date): string {
@@ -3034,22 +3193,27 @@ function weekStartIso(weekStart: Date): string {
 
 function getProgramWeek(date: Date = new Date()): {
   num: number;
+  round: number;
   start: Date;
   end: Date;
   skippedLabel: string | null;
 } {
-  const start = new Date(PROGRAM_START_DATE + 'T00:00:00');
+  const round = getRoundFor(date);
+  const start = new Date(round.start + 'T00:00:00');
   const diffDays = Math.floor((date.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
   const calNum = Math.max(1, Math.floor(diffDays / 7) + 1);
   const weekStart = new Date(start);
   weekStart.setDate(start.getDate() + (calNum - 1) * 7);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
-  const skipsBefore = Object.keys(SKIPPED_WEEKS).filter(
-    (s) => new Date(s + 'T00:00:00').getTime() < weekStart.getTime()
-  ).length;
+  // Skips only count within the active round — each round's clock starts fresh.
+  const skipsBefore = Object.keys(SKIPPED_WEEKS).filter((s) => {
+    const t = new Date(s + 'T00:00:00').getTime();
+    return t >= start.getTime() && t < weekStart.getTime();
+  }).length;
   return {
     num: Math.max(1, calNum - skipsBefore),
+    round: round.num,
     start: weekStart,
     end: weekEnd,
     skippedLabel: SKIPPED_WEEKS[weekStartIso(weekStart)] ?? null,
@@ -3157,6 +3321,7 @@ function getWeekCount(offset = 0): number {
 // Program week info anchored on the Saturday of the viewed Sat-Fri week.
 function getViewedProgramWeek(offset = 0): {
   num: number;
+  round: number;
   start: Date;
   end: Date;
   skippedLabel: string | null;
@@ -3403,7 +3568,7 @@ function renderHowToCard(exerciseName: string): string {
 
   // First-time-this-week → open by default. After that, collapsed.
   const week = getProgramWeek();
-  const seenKey = `${HOWTO_SEEN_KEY_PREFIX}${week.num}`;
+  const seenKey = `${HOWTO_SEEN_KEY_PREFIX}${howToWeekKey(week)}`;
   let seen: Record<string, boolean> = {};
   try {
     const raw = localStorage.getItem(seenKey);
@@ -3438,9 +3603,15 @@ function renderHowToCard(exerciseName: string): string {
   `;
 }
 
+// Rounds repeat week numbers, so the localStorage seen-key needs the round in
+// it from round 2 on. Round-1 keys stay bare numbers (backwards compatible).
+function howToWeekKey(week: { num: number; round: number }): string {
+  return week.round > 1 ? `r${week.round}-${week.num}` : `${week.num}`;
+}
+
 function markHowToSeenThisWeek(exerciseName: string): void {
   const week = getProgramWeek();
-  const seenKey = `${HOWTO_SEEN_KEY_PREFIX}${week.num}`;
+  const seenKey = `${HOWTO_SEEN_KEY_PREFIX}${howToWeekKey(week)}`;
   let seen: Record<string, boolean> = {};
   try {
     const raw = localStorage.getItem(seenKey);
@@ -3545,6 +3716,7 @@ function renderSparkline(values: number[]): string {
 type WeeklyTargetRow = {
   saturday: Date;
   weekNum: number;
+  round: number;
   skippedLabel: string | null; // e.g. 'Sick' — week holds its slot but doesn't count
   workouts: ('A' | 'B' | 'C')[]; // in order completed (chronological)
   logs: (LogEntry | null)[]; // parallel to workouts, for click→detail
@@ -3583,6 +3755,7 @@ function buildWeeklyTargetRows(logs: LogEntry[]): WeeklyTargetRow[] {
     rows.push({
       saturday: new Date(weekStart),
       weekNum: pw.num,
+      round: pw.round,
       skippedLabel: pw.skippedLabel,
       workouts: weekLogs.map((l) => l.workout),
       logs: weekLogs,
@@ -3625,7 +3798,7 @@ function renderWeeklyTargetGrid(): string {
         ? 'This week'
         : r.skippedLabel
           ? `${r.skippedLabel} · ${rangeLabel}`
-          : `Wk ${r.weekNum} · ${rangeLabel}`;
+          : `${r.round > 1 ? `R${r.round} · ` : ''}Wk ${r.weekNum} · ${rangeLabel}`;
       return `
         <div class="${cls}">
           <div class="weekly-row-label">${label}</div>
@@ -3705,14 +3878,14 @@ function renderComingNextWeek(): string {
         })
         .join('');
 
-      const summaryLabel = idx === 0 ? 'Coming next week' : `Then Week ${wp.weekNum}`;
-      const caption = `Diff vs Week ${prev.weekNum}${wp.label ? ` · ${wp.label}` : ''}.`;
+      const summaryLabel = idx === 0 ? 'Coming next week' : `Then ${weekPlanTitle(wp)}`;
+      const caption = `Diff vs ${weekPlanTitle(prev)}${wp.label ? ` · ${wp.label}` : ''}.`;
 
       return `
         <details class="next-week-preview" ${idx === 0 ? '' : ''}>
           <summary class="next-week-summary">
             <span class="next-week-summary-label">${summaryLabel}</span>
-            <span class="next-week-summary-meta">Week ${wp.weekNum} · starts Sat ${startLabel}</span>
+            <span class="next-week-summary-meta">${weekPlanTitle(wp)} · starts Sat ${startLabel}</span>
             <span class="next-week-chev">▸</span>
           </summary>
           <div class="next-week-body">
@@ -3758,7 +3931,7 @@ function renderPastWeeks(): string {
   const sections = [...past]
     .reverse()
     .map((wp) => {
-      const wpIdx = PROGRAM.findIndex((p) => p.weekNum === wp.weekNum);
+      const wpIdx = PROGRAM.indexOf(wp);
       const prev = wpIdx > 0 ? PROGRAM[wpIdx - 1]! : null;
       const start = new Date(wp.startsOn + 'T00:00:00');
       const startLabel = `${months[start.getMonth()]} ${start.getDate()}`;
@@ -3783,13 +3956,13 @@ function renderPastWeeks(): string {
         .join('');
 
       const caption = prev
-        ? `Diff vs Week ${prev.weekNum}${wp.label ? ` · ${wp.label}` : ''}.`
+        ? `Diff vs ${weekPlanTitle(prev)}${wp.label ? ` · ${wp.label}` : ''}.`
         : `${wp.label ? `${wp.label}. ` : ''}The starting week.`;
 
       return `
         <details class="next-week-preview">
           <summary class="next-week-summary">
-            <span class="next-week-summary-label">Week ${wp.weekNum}</span>
+            <span class="next-week-summary-label">${weekPlanTitle(wp)}</span>
             <span class="next-week-summary-meta">started Sat ${startLabel}</span>
             <span class="next-week-chev">▸</span>
           </summary>
@@ -3919,14 +4092,14 @@ function renderHome(): string {
       </button>
     </div>
     <p class="subtitle">Three rotating sessions. Show up 3x/week.</p>
-    <div class="week-banner">${week.skippedLabel ? `${week.skippedLabel} week` : `Week ${week.num}`} · ${weekRange}</div>
+    <div class="week-banner">${week.skippedLabel ? `${week.skippedLabel} week` : `${week.round > 1 ? `Round ${week.round} · ` : ''}Week ${week.num}`} · ${weekRange}</div>
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
 
     <div class="card">
       <div class="week-nav">
         <button class="week-nav-btn" id="prev-week" type="button" ${canGoBack ? '' : 'disabled'} aria-label="Previous week">‹</button>
-        <button class="week-nav-label week-nav-label-btn" id="open-weekly-review" type="button" aria-label="Open weekly review for ${isCurrentWeek ? 'this week' : viewedWeek.skippedLabel ? `the ${viewedWeek.skippedLabel.toLowerCase()} week` : `week ${viewedWeek.num}`}">
-          <div class="week-nav-title">${isCurrentWeek ? 'This week' : viewedWeek.skippedLabel ? `${viewedWeek.skippedLabel} week` : `Week ${viewedWeek.num}`}</div>
+        <button class="week-nav-label week-nav-label-btn" id="open-weekly-review" type="button" aria-label="Open weekly review for ${isCurrentWeek ? 'this week' : viewedWeek.skippedLabel ? `the ${viewedWeek.skippedLabel.toLowerCase()} week` : `week ${viewedWeek.num}${viewedWeek.round > 1 ? ` of round ${viewedWeek.round}` : ''}`}">
+          <div class="week-nav-title">${isCurrentWeek ? 'This week' : viewedWeek.skippedLabel ? `${viewedWeek.skippedLabel} week` : `${viewedWeek.round > 1 ? `R${viewedWeek.round} · ` : ''}Week ${viewedWeek.num}`}</div>
           <div class="week-nav-range">${viewedWeekRange}</div>
         </button>
         <button class="week-nav-btn" id="next-week" type="button" ${isCurrentWeek ? 'disabled' : ''} aria-label="${isCurrentWeek ? 'Already at current week' : 'Next week'}">›</button>
@@ -4103,7 +4276,7 @@ function renderWorkoutOverview(w: Workout): string {
   // workout is from. PROGRAM has weeks 1..N — `getWeekPlan()` resolves the
   // current one from today's date.
   const wp = getWeekPlan();
-  const weekBadge = `<span class="overview-week-badge">Week ${wp.weekNum}</span>`;
+  const weekBadge = `<span class="overview-week-badge">${weekPlanTitle(wp)}</span>`;
   return `
     <div class="card overview-card">
       <h3 class="overview-title">What's in this workout ${weekBadge}</h3>
@@ -5140,7 +5313,11 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
     const pw = getProgramWeek(weekStart);
     const isCurrent = weekStart.getTime() === thisSat.getTime();
     rows.push({
-      label: isCurrent ? 'now' : pw.skippedLabel ? pw.skippedLabel.toLowerCase() : `wk ${pw.num}`,
+      label: isCurrent
+        ? 'now'
+        : pw.skippedLabel
+          ? pw.skippedLabel.toLowerCase()
+          : `${pw.round > 1 ? `r${pw.round} ` : ''}wk ${pw.num}`,
       value: count,
       isCurrent,
     });
@@ -5393,7 +5570,7 @@ function renderSettings(): string {
         </div>
         <div class="settings-about-row">
           <div class="settings-row-title">Program weeks: ${getProgramWeekCount()}</div>
-          <div class="settings-row-caption">Weeks 1–${getProgramWeekCount()} encoded. Add Week ${getProgramWeekCount() + 1}+ in <code>app.ts</code> PROGRAM array.</div>
+          <div class="settings-row-caption">${getProgramWeekCount()} weeks encoded across ${ROUNDS.length} round${ROUNDS.length > 1 ? 's' : ''} (Round 1: weeks 1–11 · Round 2 started Aug 29 2026). Add new weeks in <code>app.ts</code> PROGRAM array.</div>
         </div>
         <div class="settings-about-row">
           <a class="settings-link" href="${GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub →</a>
