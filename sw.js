@@ -9,7 +9,7 @@
 
 // Keep this version number in sync with APP_VERSION in app.ts (shown in the
 // home header) so a deploy visibly busts the cache AND the on-screen tag moves.
-const VERSION = 'workout-tracker-v24';
+const VERSION = 'workout-tracker-v25';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -196,7 +196,10 @@ self.addEventListener('fetch', (event) => {
 async function handleCodeNetworkFirst(request) {
   const cache = await caches.open(SHELL_CACHE);
   try {
-    const res = await fetch(request);
+    // cache: 'no-cache' bypasses the browser's HTTP cache (GitHub Pages serves
+    // max-age=600, which otherwise keeps a just-deployed build stale for up to
+    // 10 minutes) while still allowing cheap ETag 304 revalidation.
+    const res = await fetch(request, { cache: 'no-cache' });
     if (res && res.ok) cache.put(request, res.clone());
     return res;
   } catch (err) {

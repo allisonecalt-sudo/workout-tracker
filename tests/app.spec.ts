@@ -1135,6 +1135,20 @@ test('sick week Jul 11-17 holds a blank slot and Jul 18-24 is Week 11', async ({
   await expect(sickRow.locator('.weekly-slot-empty')).toHaveCount(3);
 });
 
+test('deploy hygiene: sw.js cache VERSION stays in sync with APP_VERSION', () => {
+  // v25 shipped with sw.js still saying v24 — an installed PWA then kept the
+  // old cache name and the new build didn't visibly land on her phone. The
+  // sync rule was only a comment; this makes it a failing test instead.
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const appSrc = fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
+  const swSrc = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  const appVersion = /APP_VERSION = '(v\d+)'/.exec(appSrc)?.[1];
+  const swVersion = /VERSION = 'workout-tracker-(v\d+)'/.exec(swSrc)?.[1];
+  expect(appVersion).toBeTruthy();
+  expect(swVersion).toBe(appVersion);
+});
+
 test('round 2: banner reads Round 2 · Week 1 from Aug 29 2026 and restart numbers are live', async ({
   page,
 }) => {
