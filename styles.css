@@ -1392,7 +1392,10 @@ input[type='number']:focus {
 }
 
 /* --- Past weeks — collapsed history mirror of "Coming next week" -------- */
-.past-weeks-wrap {
+/* .consistency-wrap shares the same collapsed-details look (Aug 30 2026:
+   "consistency should be collapsible"), minus the history dimming. */
+.past-weeks-wrap,
+.consistency-wrap {
   margin-top: 16px;
   margin-bottom: 16px;
   border: 1px solid var(--border);
@@ -1403,7 +1406,12 @@ input[type='number']:focus {
   opacity: 0.92;
 }
 
-.past-weeks-wrap > summary {
+.consistency-wrap {
+  opacity: 1; /* live data, not history */
+}
+
+.past-weeks-wrap > summary,
+.consistency-wrap > summary {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1412,11 +1420,13 @@ input[type='number']:focus {
   list-style: none;
 }
 
-.past-weeks-wrap > summary::-webkit-details-marker {
+.past-weeks-wrap > summary::-webkit-details-marker,
+.consistency-wrap > summary::-webkit-details-marker {
   display: none;
 }
 
-.past-weeks-wrap[open] > summary .next-week-chev {
+.past-weeks-wrap[open] > summary .next-week-chev,
+.consistency-wrap[open] > summary .next-week-chev {
   transform: rotate(90deg);
 }
 

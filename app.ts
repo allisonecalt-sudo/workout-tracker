@@ -217,8 +217,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v25';
-const BUILD_DATE = 'Aug 30, 2026 · 18:20';
+const APP_VERSION = 'v26';
+const BUILD_DATE = 'Aug 30, 2026 · 18:40';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -3807,19 +3807,29 @@ function renderWeeklyTargetGrid(): string {
     })
     .join('');
 
+  // Collapsed by default (her call Aug 30 2026: "consistency should be
+  // collapsible and the workouts should be first") — the summary line keeps
+  // the one number she cares about visible without the full week list.
   return `
-    <div class="card weekly-target-card">
-      <div class="weekly-target-header">
-        <h3 class="weekly-target-title">
-          Consistency · <span class="weekly-target-sub">3 per week</span>
-        </h3>
-        <div class="weekly-target-stat">
-          <span class="weekly-target-count">${currentWeekCount} of 3</span>
-          <span class="weekly-target-stat-label">this week</span>
+    <details class="consistency-wrap">
+      <summary class="next-week-summary">
+        <span class="next-week-summary-label">Consistency</span>
+        <span class="next-week-summary-meta">${currentWeekCount} of 3 this week</span>
+        <span class="next-week-chev">▸</span>
+      </summary>
+      <div class="past-weeks-body weekly-target-card">
+        <div class="weekly-target-header">
+          <h3 class="weekly-target-title">
+            Consistency · <span class="weekly-target-sub">3 per week</span>
+          </h3>
+          <div class="weekly-target-stat">
+            <span class="weekly-target-count">${currentWeekCount} of 3</span>
+            <span class="weekly-target-stat-label">this week</span>
+          </div>
         </div>
+        <div class="weekly-target-rows">${rowsHtml}</div>
       </div>
-      <div class="weekly-target-rows">${rowsHtml}</div>
-    </div>
+    </details>
   `;
 }
 
@@ -4095,6 +4105,28 @@ function renderHome(): string {
     <div class="week-banner">${week.skippedLabel ? `${week.skippedLabel} week` : `${week.round > 1 ? `Round ${week.round} · ` : ''}Week ${week.num}`} · ${weekRange}</div>
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
 
+    <h3>Pick today's workout</h3>
+    <div class="workout-picker">
+      ${(['A', 'B', 'C'] as WorkoutId[])
+        .map((id) => {
+          const w = getWorkoutById(id);
+          const isPick = id === todaysPick;
+          return `
+        <button class="workout-card ${isPick ? 'workout-card-pick' : ''}" data-workout="${id}">
+          <span class="workout-card-monogram" aria-hidden="true">${w.id}</span>
+          ${isPick ? '<span class="workout-card-pick-badge">Today\'s pick</span>' : ''}
+          <div class="workout-card-header">
+            <span class="workout-card-title">${w.id} · ${w.name}</span>
+            <span class="workout-card-badge">${w.rounds === 1 ? 'easy' : `${w.rounds} rounds`}</span>
+          </div>
+          <div class="workout-card-desc">${w.description}</div>
+        </button>
+      `;
+        })
+        .join('')}
+    </div>
+    <div class="last-line">${lastLine}</div>
+
     <div class="card">
       <div class="week-nav">
         <button class="week-nav-btn" id="prev-week" type="button" ${canGoBack ? '' : 'disabled'} aria-label="Previous week">‹</button>
@@ -4151,28 +4183,6 @@ function renderHome(): string {
       <span>📈 Progress</span>
       <span class="weekly-review-link-chev">→</span>
     </button>
-
-    <h3>Pick today's workout</h3>
-    <div class="workout-picker">
-      ${(['A', 'B', 'C'] as WorkoutId[])
-        .map((id) => {
-          const w = getWorkoutById(id);
-          const isPick = id === todaysPick;
-          return `
-        <button class="workout-card ${isPick ? 'workout-card-pick' : ''}" data-workout="${id}">
-          <span class="workout-card-monogram" aria-hidden="true">${w.id}</span>
-          ${isPick ? '<span class="workout-card-pick-badge">Today\'s pick</span>' : ''}
-          <div class="workout-card-header">
-            <span class="workout-card-title">${w.id} · ${w.name}</span>
-            <span class="workout-card-badge">${w.rounds === 1 ? 'easy' : `${w.rounds} rounds`}</span>
-          </div>
-          <div class="workout-card-desc">${w.description}</div>
-        </button>
-      `;
-        })
-        .join('')}
-    </div>
-    <div class="last-line">${lastLine}</div>
 
     ${renderGearCard()}
 

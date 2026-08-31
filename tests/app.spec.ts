@@ -1135,6 +1135,22 @@ test('sick week Jul 11-17 holds a blank slot and Jul 18-24 is Week 11', async ({
   await expect(sickRow.locator('.weekly-slot-empty')).toHaveCount(3);
 });
 
+test('home order: workout picker sits first, Consistency is collapsed by default', async ({
+  page,
+}) => {
+  // Her call Aug 30 2026: "consistency should be collapsible and the
+  // workouts should be first."
+  await page.goto('/');
+  const wrap = page.locator('.consistency-wrap');
+  await expect(wrap).toHaveJSProperty('open', false);
+  // Summary still shows the streak number while collapsed.
+  await expect(wrap.locator('.next-week-summary-meta')).toContainText('of 3 this week');
+  // The picker renders above the consistency section.
+  const pickerBox = await page.locator('.workout-picker').boundingBox();
+  const consistencyBox = await wrap.boundingBox();
+  expect(pickerBox!.y).toBeLessThan(consistencyBox!.y);
+});
+
 test('deploy hygiene: sw.js cache VERSION stays in sync with APP_VERSION', () => {
   // v25 shipped with sw.js still saying v24 — an installed PWA then kept the
   // old cache name and the new build didn't visibly land on her phone. The
@@ -1168,6 +1184,8 @@ test('round 2: break weeks Jul 25–Aug 28 hold blank labeled rows, round-1 week
 }) => {
   await mockDate(page, '2026-08-30T15:00:00.000Z');
   await page.goto('/');
+  // Consistency is collapsed by default (v26) — expand it to see the rows.
+  await page.locator('.consistency-wrap > summary').click();
   // Five Break rows, each with 3 empty slots (nothing logged over the summer).
   const breakRows = page.locator('.weekly-row').filter({ hasText: 'Break' });
   await expect(breakRows).toHaveCount(5);
