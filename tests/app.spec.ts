@@ -1105,7 +1105,7 @@ test('multi-week: "Coming next week" preview renders on home with diff', async (
   await expect(bBlock.locator('.next-week-block-list')).toContainText('14');
 });
 
-test('multi-week: Settings About shows Program weeks count (12)', async ({ page }) => {
+test('multi-week: Settings About shows Program weeks count (13)', async ({ page }) => {
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
