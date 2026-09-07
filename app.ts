@@ -221,8 +221,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v30';
-const BUILD_DATE = 'Sep 7, 2026 · 16:40';
+const APP_VERSION = 'v31';
+const BUILD_DATE = 'Sep 7, 2026 · 18:40';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -1834,8 +1834,10 @@ PROGRAM.push({
 // duration; and the wall sit gains more from a deeper knee angle than from a
 // longer hold.
 // PACE GUARD (unchanged): ONE new movement per week. This week's is the hands
-// one. Split squat is Week 3, single-leg calf raise Week 4, band clamshell the
-// day she confirms the TheraBand kit is home — none of them encoded here, the
+// one. UPDATED Sep 7 15:04-15:09 — she confirmed the TheraBand kit IS home, then
+// four messages later said "dont raise too fast", so the band clamshell was HELD
+// and the road shifted one week: Week 3 = yellow band on the clamshells, Week 4 =
+// split squat, Week 5 = single-leg calf raise. None of them encoded here — the
 // app deliberately holds one week at a time. Spec:
 // second-brain/self/health/research/2026-09-07-1500-level-up-PLAN.md
 PROGRAM.push({
@@ -1898,7 +1900,7 @@ PROGRAM.push({
           name: 'Side-lying clamshells',
           reps: '10 each side',
           notes:
-            'Band loop around the thighs the day you confirm the TheraBand kit is home — not before. Bodyweight until then.',
+            'Bodyweight this week. The TheraBand kit IS home (you confirmed Sep 7) — the yellow band loops around the thighs starting WEEK 3, not now. Your words the same minute: "dont raise too fast."',
         },
         {
           name: 'Single-leg glute bridges',
