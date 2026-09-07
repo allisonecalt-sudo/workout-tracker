@@ -222,7 +222,7 @@ const SUPABASE_ANON_KEY =
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
 const APP_VERSION = 'v30';
-const BUILD_DATE = 'Sep 7, 2026 · 17:05';
+const BUILD_DATE = 'Sep 7, 2026 · 16:40';
 
 function supabaseHeaders(): HeadersInit {
   return {
