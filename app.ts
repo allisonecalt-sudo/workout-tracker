@@ -221,8 +221,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v27';
-const BUILD_DATE = 'Sep 7, 2026 · 14:40';
+const APP_VERSION = 'v28';
+const BUILD_DATE = 'Sep 7, 2026 · 15:20';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -4288,7 +4288,8 @@ function renderGearCard(): string {
         <div class="gear-section">
           <div class="gear-label">You have — in the workout now</div>
           <ul class="gear-list">
-            <li>✅ 1 kg weight — owned. The <strong>biceps curl is PAUSED</strong> with all loaded arm work (Weeks 8-10) until Lisa reviews the thumb/wrist — it comes back the moment she clears it (check-in resurfaces Jul 9). The <strong>prone row stays bodyweight</strong>, building up to the 1 kg — load added only when you say you are ready.</li>
+            <li>✅ 1 kg weight — owned. The <strong>biceps curl is still PAUSED</strong> with all loaded arm work (since Jun 20 2026, the thumb/cyst). Sep 7 2026 you opened <em>weight-bearing</em> on the hands (bird dog, legs only) — <strong>holding and gripping a weight is a separate gate</strong> and stays closed until Lisa says otherwise. The <strong>prone row stays bodyweight</strong>. One to ask her: can you hold the 1 kg for prone Y/T raises?</li>
+            <li>✅ TheraBand kit (Yellow / Red / Green) — <strong>you confirmed it is home Sep 7 2026.</strong> Not in a workout yet, on purpose (your words the same minute: “don’t raise too fast”). Booked for <strong>Week 3</strong>: yellow band looped around the thighs on the clamshells in Workout B. A band <em>looped</em> around the legs uses no hands at all; a band you have to <em>hold and pull</em> is the gripping gate above.</li>
           </ul>
         </div>
         <div class="gear-section">
@@ -4296,7 +4297,6 @@ function renderGearCard(): string {
           <ul class="gear-list">
             <li>⬜ A 2nd 1 kg (a pair) — lets you do both sides at once, and load the bodyweight hip-hinge later</li>
             <li>⬜ 2 kg weights — <strong>your buy-bigger trigger (you asked Jul 3):</strong> buy when the 1 kg biceps curl feels easy at 3 sets of 20, two sessions running (after Lisa un-pauses arms). The app doesn't log arm reps — tell Claude when it feels easy and this flips.</li>
-            <li>⬜ Resistance band — unlocks band pull-aparts + band pull-throughs (neutral-wrist hip-hinge progression)</li>
             <li>⬜ 2 tennis balls in a sock (“the peanut”) — for the neck release below</li>
           </ul>
           <p class="gear-note">Tell Claude when you’ve got one and the moves it unlocks get added. Nothing shows up in your workout until you own it.</p>
