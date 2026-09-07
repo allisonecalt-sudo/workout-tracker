@@ -28,24 +28,40 @@ test('week-dots row is rendered with 7 day labels', async ({ page }) => {
 test('selecting workout A goes to pre-log screen', async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
   await expect(page.locator('h2')).toContainText('Workout A');
-  await expect(page.locator('text=Capacity right now')).toBeVisible();
+  // Label reworded Sep 7 2026 (was "Capacity right now") — see the anchor-label
+  // test below for why. This assertion only needs a marker that pre-log rendered.
+  await expect(page.locator('text=not your mood')).toBeVisible();
   await expect(page.locator('button:has-text("Start")')).toBeVisible();
 });
 
-test('pre-log shows current wrist banner (Jul-3 on-ramp, not stale May text)', async ({ page }) => {
-  // Group 2K: wrist banner refreshed — Jul 3 2026 it moved to the wall-lean
-  // on-ramp framing (her relay) and must not regress to the stale "cleared
-  // by Lisa Cohen (May 10)" wording.
+test('pre-log shows current wrist banner (Sep-7 bird dog, not stale wall-lean or May text)', async ({
+  page,
+}) => {
+  // Group 2K, refreshed twice. May 2026: "cleared by Lisa Cohen (May 10)".
+  // Jul 3 2026: the wall-lean on-ramp (her relay). Sep 7 2026: her relay
+  // "i can go on my arms i just have to stop with pain" opened palms-on-floor
+  // at the bird-dog rung, so the banner must name the bird dog and must NOT
+  // regress to either older wording. This banner is the last thing she reads
+  // before every session — it has to describe today's actual permission.
   await page.locator('button[data-workout="A"]').click();
-  await expect(page.locator('.warning-banner')).toContainText('wall-lean on-ramp');
+  await expect(page.locator('.warning-banner')).toContainText('bird dog');
+  await expect(page.locator('.warning-banner')).not.toContainText('wall-lean on-ramp');
   await expect(page.locator('.warning-banner')).not.toContainText('May 10');
 });
 
-test('pre-log capacity slider shows anchor labels', async ({ page }) => {
-  // Group 2L: anchor labels
+test('pre-log capacity slider asks about the BODY, not mood, and shows anchor labels', async ({
+  page,
+}) => {
+  // Group 2L: anchor labels. Reworded Sep 7 2026 — she said of her three
+  // Round-2 logs "5 is just my mood its getting beter ... but stil lets say
+  // now at 8", i.e. the slider had been collecting a mood reading under a
+  // capacity label, which quietly invalidated the under-recovery watch
+  // signal (capacity-after < capacity-before for 2+ sessions → dial back).
+  // The label now says which one it wants; the anchors avoid mood words.
   await page.locator('button[data-workout="A"]').click();
-  await expect(page.locator('.range-anchors').first()).toContainText('depleted');
-  await expect(page.locator('.range-anchors').first()).toContainText('baseline');
+  await expect(page.locator('.label-text').first()).toContainText('not your mood');
+  await expect(page.locator('.range-anchors').first()).toContainText('running on empty');
+  await expect(page.locator('.range-anchors').first()).toContainText('an ordinary day');
   await expect(page.locator('.range-anchors').first()).toContainText('strong');
 });
 

@@ -599,24 +599,26 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Forearm plank',
     voiceSrc: './assets/voice/forearm-plank.mp3',
     voiceScript:
-      "Forearm plank. Set your forearms on the mat with your elbows right under your shoulders, and tuck your toes. Here's the key: stay up on your forearms only — your hands and wrists stay off the floor. Lift into a straight line from your head all the way to your heels. Squeeze your glutes and your core so your hips stay level with your shoulders — don't let them sag or pike. Hold for fifteen seconds and keep breathing through it. Start small; there's no rush to go longer yet.",
+      "Forearm plank. Set your forearms on the mat with your elbows right under your shoulders, and tuck your toes. Here's the key: stay up on your forearms only — your hands and wrists stay off the floor. Lift into a straight line from your head all the way to your heels. Now the part that does the work: tuck your tailbone under, squeeze your glutes, and pull your ribs down. That small tuck roughly doubles what your abs are doing, without holding it a second longer. Hold for the time on your screen and keep breathing through it. Quality beats survival time — come down when the line breaks, not when the timer ends.",
     muscles: ['core', 'glutes', 'shoulders'],
     muscleLabel: 'Core + glutes (trunk stability)',
     steps: [
       'Set your forearms on the mat with elbows under your shoulders — hands and wrists stay off the floor.',
       'Tuck your toes and lift up onto your forearms.',
       'Make a straight line from head to heels, squeezing your glutes and core so your hips stay level with your shoulders.',
-      'Hold for 15 seconds, breathing through the hold.',
+      'Tuck your tailbone under and pull your ribs down — a small tilt of the pelvis, held the whole time.',
+      'Hold for the time on your screen, breathing through the hold.',
     ],
     dos: [
       'Keep elbows under your shoulders, weight on forearms only.',
       'Squeeze glutes and core so hips stay level with your shoulders.',
+      'Hold the tailbone tuck the whole time — it is the difference between an easy plank and a working one.',
       'Hold the straight line head to heels and breathe through it.',
     ],
     donts: [
       "Don't drop onto your palms — forearms only, wrists stay off.",
       "Don't let your hips sag or pike out of line.",
-      "Don't bump up to 30 seconds yet — start small.",
+      "Don't chase a longer hold — the tuck is what makes it harder, not the clock.",
     ],
     mistakes: [
       {

@@ -221,8 +221,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v28';
-const BUILD_DATE = 'Sep 7, 2026 · 15:20';
+const APP_VERSION = 'v29';
+const BUILD_DATE = 'Sep 7, 2026 · 16:00';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2112,7 +2112,7 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   },
   'Outdoor walk': {
     howTo:
-      "Conversational pace — you should be able to talk in full sentences without getting breathless. 20 minutes minimum. Walking is genuinely your most underrated exercise: it preserves joint health, supports digestion (especially good with Crohn's), aids GLP-1 medication's effect, and clears mental fog. Take it outdoors when possible — the visual variety and sunlight matter. Tap done when you finish.",
+      "Conversational pace — you should be able to talk in full sentences without getting breathless. 20 minutes minimum. Walking is genuinely your most underrated exercise: it preserves joint health, supports digestion (especially good with Crohn's), and clears mental fog. Take it outdoors when possible — the visual variety and sunlight matter. Tap done when you finish.",
   },
   // Week-6 additions (2026-06-06).
   'Bodyweight hip hinge': {
@@ -4500,14 +4500,14 @@ function renderPreLog(): string {
 
     <div class="card">
       <label class="field">
-        <span class="label-text">Capacity right now (1-10)</span>
+        <span class="label-text">Your BODY right now, not your mood (1-10)</span>
         <div class="range-row">
           <input type="range" id="cap-before" min="1" max="10" value="${state.capacityBefore}" />
           <span class="range-value" id="cap-before-val">${state.capacityBefore}</span>
         </div>
         <div class="range-anchors">
-          <span>1 — depleted</span>
-          <span>5 — baseline</span>
+          <span>1 — running on empty</span>
+          <span>5 — an ordinary day</span>
           <span>10 — strong</span>
         </div>
       </label>
@@ -4522,7 +4522,7 @@ function renderPreLog(): string {
     </button>
 
     <div class="warning-banner">
-      ⚠️ <strong>Wrist:</strong> forearms fine; palms bear weight ONLY in the wall-lean on-ramp (your call, Jul 3) — stop if anything pings. Loaded arm work paused for Lisa. Back pain at 3/10 → stop that exercise.
+      ⚠️ <strong>Wrist:</strong> forearms fine. Palms take weight in the <strong>bird dog only</strong> (your call, Sep 7) — stop at pain, and tomorrow morning must not be worse. Holding or gripping a weight is still out. Back pain at 3/10 → stop that exercise.
     </div>
 
     <button class="btn-large btn-primary" id="begin" type="button">Start</button>
@@ -4796,14 +4796,14 @@ function renderPostLog(): string {
 
     <div class="card">
       <label class="field">
-        <span class="label-text">Capacity now (1-10)</span>
+        <span class="label-text">Your BODY now, not your mood (1-10)</span>
         <div class="range-row">
           <input type="range" id="cap-after" min="1" max="10" value="${state.capacityAfter}" />
           <span class="range-value" id="cap-after-val">${state.capacityAfter}</span>
         </div>
         <div class="range-anchors">
-          <span>1 — depleted</span>
-          <span>5 — baseline</span>
+          <span>1 — running on empty</span>
+          <span>5 — an ordinary day</span>
           <span>10 — strong</span>
         </div>
       </label>
