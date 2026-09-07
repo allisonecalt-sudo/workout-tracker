@@ -9,7 +9,7 @@
 
 // Keep this version number in sync with APP_VERSION in app.ts (shown in the
 // home header) so a deploy visibly busts the cache AND the on-screen tag moves.
-const VERSION = 'workout-tracker-v26';
+const VERSION = 'workout-tracker-v27';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -60,6 +60,9 @@ const SHELL_ASSETS = [
   './assets/voice/eccentric-step-down.mp3',
   './assets/voice/1-kg-biceps-curl.mp3',
   './assets/voice/belly-breathing.mp3',
+  // R2 Week 2 (Sep 7 2026).
+  './assets/voice/bird-dog-legs-only.mp3',
+  './assets/voice/full-dead-bug.mp3',
   './assets/voice/biceps-stretch-left.mp3',
   './assets/voice/biceps-stretch-right.mp3',
   './assets/voice/bodyweight-hip-hinge.mp3',

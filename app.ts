@@ -56,6 +56,10 @@ type LogEntry = {
   walkMinutes?: number | null;
   walkSteps?: number | null;
   walkMeters?: number | null;
+  // Free-text session marker (existing Supabase column). Currently carries the
+  // cardio-lane marker — "cardio: apartment 10 min" — when she took the indoor
+  // option instead of the tracked walk (Sep 7 2026).
+  notes?: string | null;
   synced?: boolean;
 };
 
@@ -217,8 +221,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v26';
-const BUILD_DATE = 'Aug 30, 2026 · 18:40';
+const APP_VERSION = 'v27';
+const BUILD_DATE = 'Sep 7, 2026 · 14:40';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -589,6 +593,41 @@ const WRIST_ONRAMP: Exercise[] = [
   },
 ];
 const UPPER_BACK_SAFE_W10: Exercise[] = [...UPPER_BACK_SAFE, ...WRIST_ONRAMP];
+
+// WHAT: the first palms-on-floor move since April — bird dog with the LEGS only
+// (both hands stay down the whole time).
+// WHY: her relay Sep 7 2026, which IS the clearance under the relay rule ("stop
+// referencing Lisa, I tell you Lisa", Jun 18): "i can go on my arms i just have
+// to stop with pain". The measured ladder (Uhl 2003, shoulder demand as the load
+// proxy) puts static quadruped at 2-11% and legs-only bird dog just above it,
+// with SYMMETRIC hand load — the full bird dog (one hand lifted, 20-40%) is the
+// NEXT rung, not this one. Runs at the END of the upper-back block in A + B.
+// Her stop rule governs: pressure is fine, PAIN means done for the day, and the
+// next morning must not be worse.
+const BIRD_DOG_LEGS: Exercise = {
+  name: 'Bird dog (legs only)',
+  reps: '2 sets · 6 each side · 2-sec hold',
+  notes:
+    'NEW (Sep 7 — your words: "i can go on my arms i just have to stop with pain"). Hands and knees. Hands FLAT under the shoulders, fingers turned slightly out — or on fists if flat palms bother, or hands up on the couch / a low step for less load. BOTH hands stay down the whole time. Extend ONE leg straight back, hold 2 sec, lower with control. STOP AT PAIN — pressure is fine, pain means shake the hands out and you are done for today. Next morning must not be worse. First hands-on-floor move since April; the full bird dog (opposite arm too) is the next rung, later.',
+};
+
+// A + B upper-back block for R2 Week 2 — the same wrist-safe wall angels + IWYT,
+// with the hands move appended at the END (last, so the wrists are warm and any
+// stop-at-pain exit costs nothing else in the session).
+const UPPER_BACK_SAFE_R2W2: Exercise[] = [...UPPER_BACK_SAFE, BIRD_DOG_LEGS];
+
+// WHAT: the modified dead bug graduates — arms join the legs.
+// WHY: queued as the "free win" since Jun 22 and cashed in R2 W2. Opposite arm
+// reaches overhead as the opposite leg extends; the arms move IN THE AIR, so it
+// stays ZERO wrist load. The low back pressed to the mat is the whole exercise —
+// if it lifts, bend the knee more (shorten the lever), don't push through.
+// A + B only; C deliberately stays on the modified version (C is the lighter day).
+const FULL_DEAD_BUG: Exercise = {
+  name: 'Full dead bug',
+  reps: '8 each side',
+  notes:
+    'LEVEL UP from the modified version. Same tabletop start, but now the OPPOSITE ARM reaches back overhead as the leg extends. Low back pressed to the mat the WHOLE time — if it lifts, bend the knee more and shorten the range. Arms move in the air: zero weight on the wrists.',
+};
 
 // Pre-walk-warmup era (Week 1 only). Kept exact for archive fidelity — this
 // is what Allison actually did her first week.
@@ -1661,6 +1700,10 @@ PROGRAM.push({
 // Arms STILL paused (UPPER_BACK_SAFE — no grip, no load) and the wrist
 // on-ramp is parked too, until she relays what Lisa cleared at the last
 // session. The walk steps stay skippable (explicit Start since v22).
+//
+// Sep 7 2026 — her relay: "i can go on my arms i just have to stop with pain"
+// → palms-on-floor opened at beginner rung (bird dog legs-only, both hands
+// down). Loaded/gripped arm work still gated.
 PROGRAM.push({
   round: 2,
   weekNum: 1,
@@ -1765,6 +1808,145 @@ PROGRAM.push({
           reps: '15 reps',
           notes:
             'Restart at 15 (was 18). Last set near failure (0-2 reps left) — the one move to push genuinely hard. Fingertip touch on wall for balance only — NO grip.',
+        },
+      ],
+      cooldown: STRETCH_COOLDOWN,
+    },
+  },
+});
+
+// --- ROUND 2 · WEEK 2 — Sep 5-11 2026 ------------------------------------
+// WHAT: harder VERSIONS at the same reps. Three real changes (forearm plank
+// WITH a posterior pelvic tilt · modified → full dead bug in A+B · bird dog
+// legs-only, the hands move) + one form dial (wall sit deeper, not longer) +
+// the effort dial (last round stops ~2 reps short, not 6). Still 2 rounds,
+// ~30 min. Rep counts are UNCHANGED from Week 1 on purpose.
+// WHY: her ask Sep 7, verbatim — "i want to go up a level nothing crazy but i
+// can start to work alittle harder" and, crucially, "ok but its not always
+// about adding its abut tehactual execrises". Her own Jun-29 rule says the
+// same: "once it gets to a certain level … don't be dumb go to the next level
+// change the exercise." The tempo dial is spent (her 3-1-3 squat is a 7-second
+// rep; hypertrophy is flat from 0.5-8 s/rep, Schoenfeld 2015) and the rep caps
+// are close, so VARIATION is the road left. Week 1 earned it: 3/3 sessions,
+// back 0/10 ×3, capacity 5→5, wall sit 38 s against a 35 s target.
+// Evidence for the two harder holds: Schoenfeld 2014 — a plank held WITH a
+// posterior pelvic tilt roughly DOUBLES abdominal activity at the same
+// duration; and the wall sit gains more from a deeper knee angle than from a
+// longer hold.
+// PACE GUARD (unchanged): ONE new movement per week. This week's is the hands
+// one. Split squat is Week 3, single-leg calf raise Week 4, band clamshell the
+// day she confirms the TheraBand kit is home — none of them encoded here, the
+// app deliberately holds one week at a time. Spec:
+// second-brain/self/health/research/2026-09-07-1500-level-up-PLAN.md
+PROGRAM.push({
+  round: 2,
+  weekNum: 2,
+  startsOn: '2026-09-05',
+  label: 'Round 2 — Week 2 · harder versions, not reps',
+  workouts: {
+    A: {
+      id: 'A',
+      name: 'Lower Body + Core',
+      description: 'Harder versions, same reps · 2 rounds · ~30 min (cardio optional)',
+      rounds: 2,
+      warmup: WALK_WARMUP_AB,
+      main: [
+        {
+          name: 'Bodyweight squats',
+          reps: '12 reps · 3-1-3 tempo',
+          notes:
+            'Same 12 as last week — the change is EFFORT: on the LAST round stop about 2 reps short, not 6. Never to failure. Arms crossed over chest; wall behind shoulder if balance wobbly.',
+        },
+        HIP_HINGE_W8,
+        { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
+        {
+          name: 'Wall sit',
+          reps: '40 sec hold',
+          notes:
+            'DEEPER, not longer — slide down until the knees come toward 90°. You held 38 s last week, so seconds are not the point this week; the angle is. Hands rest on thighs or hang. No pushing on the wall.',
+          durationSec: 40,
+          isTimed: true,
+        },
+        FULL_DEAD_BUG,
+        {
+          name: 'Forearm plank',
+          reps: '1 set · 20 sec hold',
+          notes:
+            'SAME 20 sec, roughly DOUBLE the work: hold it WITH a posterior pelvic tilt — tuck the tailbone under, squeeze the glutes, ribs down. Forearms only, NOT hands. Stop if any wrist sensation.',
+          durationSec: 20,
+          isTimed: true,
+        },
+      ],
+      upperBack: UPPER_BACK_SAFE_R2W2,
+      cooldown: STRETCH_COOLDOWN,
+    },
+    B: {
+      id: 'B',
+      name: 'Glutes + Mobility + Core',
+      description: 'Harder versions, same reps · 2 rounds · ~30 min (cardio optional)',
+      rounds: 2,
+      warmup: WALK_WARMUP_AB,
+      main: [
+        HIP_HINGE_W8,
+        {
+          name: 'Side-lying leg raises',
+          reps: '12 each side',
+          notes:
+            'Your best glute-med move (81% MVIC, best of 12 tested — DiStefano 2009), so it stays exactly as it is. The change is EFFORT: last round stop about 2 reps short, not 6.',
+        },
+        {
+          name: 'Side-lying clamshells',
+          reps: '10 each side',
+          notes:
+            'Band loop around the thighs the day you confirm the TheraBand kit is home — not before. Bodyweight until then.',
+        },
+        {
+          name: 'Single-leg glute bridges',
+          reps: '10 each side',
+          notes:
+            'Already the hard version — the small dial this week is a 2-3 sec SQUEEZE at the top of every rep.',
+        },
+        FULL_DEAD_BUG,
+        {
+          name: 'Standing calf raises',
+          reps: '12 reps',
+          notes: 'Light fingertip touch on wall for balance only — NO grip.',
+        },
+      ],
+      upperBack: UPPER_BACK_SAFE_R2W2,
+      cooldown: STRETCH_COOLDOWN,
+    },
+    C: {
+      id: 'C',
+      name: 'Walk + Lower Body + Core',
+      description: '🚶 25-min cardio + 2-round strength block · ~40 min',
+      rounds: 2,
+      warmup: WALK_WARMUP_C,
+      main: [
+        {
+          name: 'Bodyweight squats',
+          reps: '10 reps · 3-1-3 tempo',
+          notes:
+            'C stays the lighter day — 10, not 12. Last round: stop about 2 reps short, not 6. Arms crossed; wall behind shoulder if wobbly.',
+        },
+        { name: 'Glute bridges', reps: '15 reps · 2-sec hold' },
+        {
+          name: 'Single-leg glute bridges',
+          reps: '8 each side',
+          notes: 'Small dial: 2-3 sec squeeze at the top of every rep.',
+        },
+        { name: 'Side-lying leg raises', reps: '10 each side' },
+        {
+          name: 'Modified dead bug',
+          reps: '8 each side',
+          notes:
+            'C stays MODIFIED on purpose (legs only, arms resting) — the full dead bug lives in A and B this week.',
+        },
+        {
+          name: 'Standing calf raises',
+          reps: '15 reps',
+          notes:
+            'Last set near failure (0-2 reps left) — the one move to push genuinely hard. Fingertip touch on wall for balance only — NO grip.',
         },
       ],
       cooldown: STRETCH_COOLDOWN,
@@ -1953,6 +2135,19 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   'Eccentric step-down': {
     howTo:
       'The single best move for hiking DOWNHILL — where most hiking knee trouble happens. Stand on a low, sturdy step: a single stair, a thick book, or a low stool. Put your whole weight on ONE leg on the step and let the other foot hang just off the edge. SLOWLY lower the hanging heel toward the floor, taking 3-4 full seconds — your standing thigh is doing the controlling. Lightly tap the floor (or just hover), then push back up through the standing leg. A fingertip on a wall or rail for balance is fine — but NO gripping and no weight through the hand (your wrist stays out of this entirely). Keep the standing knee pointing over your toes, not caving inward. Start with a low step and a small range; the magic is the SLOW lowering, not the height. Stop the set if the knee pinches.',
+  },
+  // Round-2 Week-2 additions (2026-09-07).
+  'Full dead bug': {
+    howTo:
+      'The graduation from the modified version — now the arms come along. Same start: on your back, hips and knees both at 90° in the air (shins parallel to the ceiling). Reach both arms straight up toward the ceiling. Extend ONE leg out low while the OPPOSITE arm reaches back overhead toward the floor. Come back to the start, then switch sides. 8 each side. The whole exercise is the low back: it stays pressed to the mat the entire time. If it lifts off, bend the extending knee more — a shorter lever is the fix, not pushing through. Breathe out as the limbs go away from you. Your arms move through the AIR, so there is zero weight on your wrists. Common mistake: rushing, and letting the ribs flare as the arm goes overhead — keep the ribs down and go slower.',
+  },
+  'Bird dog (legs only)': {
+    howTo:
+      "Your first hands-on-the-floor move since April, at the beginner rung — LEGS ONLY, both hands stay down the whole time. Set up on hands and knees: hands flat under the shoulders with the fingers turned slightly out, knees under the hips, back long and flat. If flat palms bother you, make fists and rest on the knuckles; if that still bothers you, put the hands up on the couch or a low step — the higher your hands, the less weight goes through them. Slide one leg straight back until it is level with your body, hold 2 seconds, and lower it with control. Alternate sides — 6 each side, 2 sets. Keep the hips square (a hip bone shouldn't roll open) and the neck long, eyes on the floor. THE RULE: stop at PAIN. Pressure and stretch are fine; pain means shake the hands out and you're done for today — and the next morning must not feel worse. The full bird dog, where one hand also lifts, is the next rung. Not this week.",
+  },
+  'Apartment cardio': {
+    howTo:
+      'The indoor half of the either/or — same minutes as the walk, no tracking, just the timer. Pick whichever fits the day: BUILDING STAIRS in intervals (up at an easy effort, walk down as the rest, repeat), LAPS around the apartment, or MARCHING in place. Conversational effort: you should be able to talk in full sentences. Stairs are the strongest option minute-for-minute (roughly 10 minutes of stairs ≈ 14 minutes of brisk walking) — but the one you will actually do is the right one. Hand on the rail for balance is fine; no gripping and hauling yourself up.',
   },
 };
 
@@ -2636,6 +2831,55 @@ function startWorkoutWalk(): void {
   beginWalkTracking();
 }
 
+// ---------- Cardio either/or (Allison Sep 7 2026) ----------
+// WHAT: the cardio step that opens A/B (10 min) and C (25 min) is now a CHOICE —
+// walk outside (the tracked flow, entirely unchanged: GPS + steps + Fit) OR the
+// apartment on a plain countdown for the SAME minutes (building stairs in
+// intervals, apartment laps, marching in place), with nothing tracked.
+// WHY: her ask, verbatim — "also i want cardio i can do in apt or walk like pick
+// either or". Weather, dark, chagim, or just not wanting to leave the building
+// shouldn't cost her the cardio. Rounds first, reps second, the walk never
+// (her Jul-3 escape hatch) — so the minutes stay identical either way.
+// HOW: the choice is one localStorage key (same trick as WW_START_KEY, so it
+// survives an app close mid-session) and getCurrentExercise() swaps the walk
+// step for a timed apartment step while it's set. NO Supabase schema change —
+// the minutes land in the existing walk_minutes column and a marker string goes
+// into the existing notes column, so the two lanes stay tellable apart later.
+const WW_APARTMENT_KEY = 'workout-tracker:ww-apartment';
+const APARTMENT_CARDIO_NAME = 'Apartment cardio';
+
+function apartmentCardioMinutes(): number | null {
+  const raw = localStorage.getItem(WW_APARTMENT_KEY);
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+// Minutes the walk step prescribes — read off its own reps text ("10 min").
+function walkStepMinutes(ex: Exercise): number {
+  const m = /(\d+)\s*min/.exec(ex.reps ?? '');
+  return m?.[1] ? Number(m[1]) : 10;
+}
+
+function chooseApartmentCardio(minutes: number): void {
+  localStorage.setItem(WW_APARTMENT_KEY, String(minutes));
+}
+
+function clearApartmentCardio(): void {
+  localStorage.removeItem(WW_APARTMENT_KEY);
+}
+
+function apartmentCardioStep(minutes: number): Exercise {
+  return {
+    name: APARTMENT_CARDIO_NAME,
+    reps: `${minutes} min`,
+    notes:
+      'Same minutes as the walk, inside. Pick one: building stairs in intervals (up easy, down = the rest), laps around the apartment, or marching in place. Conversational effort — you should still be able to talk. Nothing is tracked here; the timer is the whole thing.',
+    durationSec: minutes * 60,
+    isTimed: true,
+  };
+}
+
 function walksThisWeek(): number {
   const weekStart = saturdayForOffset(0).getTime();
   return loadWalks().filter((w) => new Date(w.date).getTime() >= weekStart).length;
@@ -2668,6 +2912,7 @@ async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
           walk_minutes: entry.walkMinutes ?? null,
           walk_steps: entry.walkSteps ?? null,
           walk_meters: entry.walkMeters ?? null,
+          notes: entry.notes ?? null,
         },
       ]),
     });
@@ -2719,11 +2964,25 @@ function getCurrentWorkout(): Workout | null {
   return state.selectedWorkout ? getWorkoutById(state.selectedWorkout) : null;
 }
 
-function getCurrentExercise(): Exercise | null {
+// The step exactly as PROGRAM has it — no substitutions. Use this whenever the
+// programmed content is what matters (e.g. reading the walk's prescribed
+// minutes after the apartment swap has already happened).
+function rawCurrentExercise(): Exercise | null {
   const w = getCurrentWorkout();
   if (!w) return null;
   const list = w[state.currentPhase] ?? [];
   return list[state.currentExerciseIndex] ?? null;
+}
+
+function getCurrentExercise(): Exercise | null {
+  const ex = rawCurrentExercise();
+  // Cardio either/or (Sep 7 2026): while the apartment option is chosen, the
+  // walk step IS the apartment timer — same minutes, no tracking.
+  if (ex && ex.name === 'Outdoor walk') {
+    const minutes = apartmentCardioMinutes();
+    if (minutes !== null) return apartmentCardioStep(minutes);
+  }
+  return ex;
 }
 
 // Lite day: one round less than programmed, never below 1 (A/B 3→2, C 2→1).
@@ -2750,6 +3009,7 @@ function beginExercises(): void {
   state.howToOpenFor = null;
   state.videoExpandedFor = null;
   workoutWalk = null; // fresh session, fresh walk numbers
+  clearApartmentCardio(); // fresh session, cardio lane unchosen again
   render();
 }
 
@@ -2850,6 +3110,12 @@ async function logCompleteAndHome(): Promise<void> {
       (new Date(completedAt).getTime() - new Date(startedAt).getTime() - totalPausedMs()) / 1000
     )
   );
+  // Cardio either/or (Sep 7 2026): the apartment lane has nothing to track, so
+  // the PRESCRIBED minutes are the honest number and a marker in `notes` says
+  // which lane it was — no new Supabase column, both already exist.
+  const apartmentMin = apartmentCardioMinutes();
+  const notesParts: string[] = [];
+  if (apartmentMin !== null) notesParts.push(`cardio: apartment ${apartmentMin} min`);
   const stored = saveLog({
     date: completedAt,
     workout: state.selectedWorkout,
@@ -2861,9 +3127,10 @@ async function logCompleteAndHome(): Promise<void> {
     startedAt,
     completedAt,
     durationSec,
-    walkMinutes: workoutWalk ? workoutWalk.minutes : null,
+    walkMinutes: workoutWalk ? workoutWalk.minutes : apartmentMin,
     walkSteps: workoutWalk && workoutWalk.steps > 0 ? workoutWalk.steps : null,
     walkMeters: workoutWalk && workoutWalk.meters > 0 ? workoutWalk.meters : null,
+    notes: notesParts.length > 0 ? notesParts.join(' · ') : null,
   });
   resetState();
   render();
@@ -3019,6 +3286,7 @@ function resetState(): void {
   state.howToOpenFor = null;
   state.openSections = {};
   stopVoiceNote();
+  clearApartmentCardio(); // the cardio lane is a per-session choice
   state.historyDetailId = null;
 }
 
@@ -3147,6 +3415,16 @@ function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return s === 0 ? `${m} min` : `${m}m ${s}s`;
+}
+
+// The big countdown face. Holds are all under a minute so they keep reading as
+// bare seconds; the apartment-cardio timer runs 10-25 minutes, where a raw
+// "600" reads as nonsense — those show as m:ss.
+function formatTimerDisplay(sec: number): string {
+  if (sec < 60) return String(sec);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 const PROGRAM_START_DATE = '2026-05-02';
@@ -4457,8 +4735,10 @@ function renderWorkout(): string {
           ex.name === 'Outdoor walk'
             ? workoutWalkStart() !== null
               ? `<p class="gear-note">🚶 Tracking your walk: <span id="walk-live">starting…</span><br>Keep the phone on you — steps count indoors, km outdoors. It saves with this workout. Tap “Done · Next” when you finish.</p>`
-              : `<div class="ww-start-block"><button class="btn-large btn-primary" id="ww-start" type="button">▶ Start walk</button><p class="gear-note">Just being on this page doesn't start the walk — tap Start when you actually head out. Nothing tracks or logs until you do.</p></div>`
-            : ''
+              : `<div class="ww-start-block"><button class="btn-large btn-primary" id="ww-start" type="button">▶ Start walk</button><button class="cardio-alt-btn" id="ww-apartment" type="button">🏠 Apartment instead (timer)</button><p class="gear-note">Just being on this page doesn't start the walk — tap Start when you actually head out. Nothing tracks or logs until you do. Not going out? Take the same minutes inside.</p></div>`
+            : ex.name === APARTMENT_CARDIO_NAME
+              ? `<div class="ww-start-block"><button class="cardio-alt-btn" id="ww-outdoor" type="button">🚶 Walk outside instead</button></div>`
+              : ''
         }
       </div>
     </div>
@@ -4477,7 +4757,7 @@ function renderWorkout(): string {
         `
             : `
           <div class="timer-label">${state.timerSeconds > 0 ? 'Hold' : 'Ready'}</div>
-          <div class="timer-display">${state.timerSeconds || ex.durationSec || 0}</div>
+          <div class="timer-display">${formatTimerDisplay(state.timerSeconds || ex.durationSec || 0)}</div>
           <button class="btn-large btn-primary" id="start-timed" type="button" ${state.timerSeconds > 0 ? 'disabled' : ''}>${state.timerSeconds > 0 ? 'Running…' : 'Start timer'}</button>
         `
         }
@@ -5979,6 +6259,22 @@ function attachHandlers(): void {
     startWorkoutWalk();
     render();
     updateWalkLiveLine();
+  });
+
+  // Cardio either/or (Allison Sep 7 2026): "i want cardio i can do in apt or
+  // walk like pick either or". Same minutes, indoors, on a plain timer.
+  bindClick('ww-apartment', () => {
+    const raw = rawCurrentExercise();
+    if (!raw) return;
+    chooseApartmentCardio(walkStepMinutes(raw));
+    render();
+  });
+
+  // …and back out again, in case she changes her mind before starting.
+  bindClick('ww-outdoor', () => {
+    clearApartmentCardio();
+    stopTimer();
+    render();
   });
 
   // Lite-day toggle on pre-log (Allison Jul 12 2026): one round less, streak intact.

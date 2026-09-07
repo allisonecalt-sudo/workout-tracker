@@ -3455,6 +3455,25 @@ input[type='number']:focus {
   margin-top: 10px;
 }
 
+/* Cardio either/or (Sep 7 2026) — the secondary lane on the cardio step:
+   "Apartment instead (timer)" under Start walk, and "Walk outside instead"
+   on the apartment timer. Quiet on purpose: it's an alternative, not a
+   competing primary action. */
+.cardio-alt-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: var(--font-small);
+  cursor: pointer;
+}
+
+.cardio-alt-btn:active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* ---------- Walk credit (Jul 4 2026) ---------- */
 /* Slow walks count — extra credit outside the streak math. One row: tap to start a tracked walk, tap Done. */
 .walk-card {

@@ -337,6 +337,51 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       { mistake: 'Rotating the palm down.', fix: 'Keep the palm up and flat against the wall.' },
     ],
   },
+  // Round-2 Week-2 addition (2026-09-07) — the first palms-on-floor move since
+  // April, at the beginner rung of the weight-bearing ladder. Both hands stay
+  // DOWN (symmetric load); the full bird dog, where one hand lifts, is the next
+  // rung. Her stop rule leads every section: pain ends it, pressure doesn't.
+  'Bird dog (legs only)': {
+    exercise: 'Bird dog (legs only)',
+    voiceSrc: './assets/voice/bird-dog-legs-only.mp3',
+    voiceScript:
+      "Bird dog, legs only. This is your first move back on your hands, so we start at the gentlest rung. Get on your hands and knees. Hands flat under your shoulders with your fingers turned slightly out, knees under your hips, back long and flat. If flat palms bother you, make fists and rest on your knuckles instead. If that still bothers you, put your hands up on the couch or a low step — the higher your hands, the less weight goes through them. Both hands stay down the whole time. Now slide one leg straight back until it's level with your body. Hold two seconds, then lower it with control. Alternate sides, six each side, two sets. Keep your hips square, like you're balancing a cup on your lower back, and keep your neck long with your eyes on the floor. Here's the rule that matters most: stop at pain. Pressure and stretch are fine. Pain means shake your hands out and you're done for today — and the next morning must not feel worse.",
+    muscles: ['core', 'glutes', 'back', 'forearms'],
+    muscleLabel: 'Deep core + glutes (with light, even hand load)',
+    steps: [
+      'On hands and knees: hands flat under the shoulders, fingers turned slightly out; knees under the hips.',
+      'Fists instead of flat palms, or hands up on the couch / a low step, if flat palms bother you — both hands stay down either way.',
+      'Long flat back, neck long, eyes on the floor.',
+      'Slide ONE leg straight back until it is level with your body. Hold 2 seconds.',
+      'Lower with control and switch sides. 6 each side, 2 sets.',
+    ],
+    dos: [
+      'Keep BOTH hands down the whole time — this rung is legs only.',
+      'Keep the hips square; a hip bone should not roll open.',
+      'Hold 2 seconds at the top and lower slowly.',
+      'Raise your hands onto the couch or a step if the floor is too much.',
+    ],
+    donts: [
+      "Don't lift a hand or an arm — that is the next rung, not this week.",
+      "Don't push through pain. Pressure is fine; pain means stop for today.",
+      "Don't let the low back sag or the leg swing up past level.",
+      "Don't crane your neck up to look forward.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Wrist or palm discomfort on the floor.',
+        fix: 'Turn the fingers out a little more, switch to fists, or move the hands up onto the couch or a low step.',
+      },
+      {
+        mistake: 'Hips rolling open as the leg goes back.',
+        fix: 'Lift the leg less and keep both hip bones pointing at the floor.',
+      },
+      {
+        mistake: 'Feeling it in the low back instead of the glute.',
+        fix: 'Lower the leg to hip height, no higher, and squeeze the glute to lift it.',
+      },
+    ],
+  },
   'Bodyweight hip hinge': {
     exercise: 'Bodyweight hip hinge',
     voiceSrc: './assets/voice/bodyweight-hip-hinge.mp3',
@@ -585,6 +630,50 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       {
         mistake: 'Jumping to a longer 30-second hold too soon.',
         fix: 'Keep it to 15 seconds for now and build up gradually.',
+      },
+    ],
+  },
+  // Round-2 Week-2 addition (2026-09-07) — the modified dead bug graduates: the
+  // opposite arm now reaches overhead with the leg. Queued as the "free win"
+  // since Jun 22; the arms travel through the AIR, so it stays zero wrist load.
+  'Full dead bug': {
+    exercise: 'Full dead bug',
+    voiceSrc: './assets/voice/full-dead-bug.mp3',
+    voiceScript:
+      "Full dead bug. This is the level up from the modified version you've been doing. Same start: on your back, hips and knees both at ninety degrees in the air, shins parallel to the ceiling. Now reach both arms straight up toward the ceiling. Extend one leg out low, and at the same time let the opposite arm reach back overhead toward the floor. Then bring them both home and switch sides. Eight each side. The whole exercise is your lower back — it stays pressed into the mat the entire time. If it lifts off, bend the extending knee more. A shorter lever is the fix; pushing through is not. Breathe out as the arm and leg travel away from you, and keep your ribs down so they don't flare as the arm goes overhead. Your arms move through the air, so there's zero weight on your wrists.",
+    muscles: ['core'],
+    muscleLabel: 'Abs / deep core (anti-arch, now with the arms)',
+    steps: [
+      'Lie on your back, hips and knees both at 90° in the air, shins parallel to the ceiling.',
+      'Reach both arms straight up toward the ceiling.',
+      'Extend ONE leg out low while the OPPOSITE arm reaches back overhead toward the floor.',
+      'Bring both home to the start, then switch sides. 8 each side.',
+      'Low back stays pressed to the mat the whole time — exhale as the limbs travel away.',
+    ],
+    dos: [
+      'Press the low back into the mat from start to finish.',
+      'Move the opposite arm and leg together, slowly.',
+      'Keep the ribs down as the arm goes overhead.',
+      'Bend the extending knee more if the back lifts.',
+    ],
+    donts: [
+      "Don't let the low back arch off the mat — shorten the range instead.",
+      "Don't let the ribs flare as the arm reaches back.",
+      "Don't rush; slow is the point.",
+      "Don't push a hand into the floor — the arms travel in the air, wrists stay out of it.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Lower back arches as the arm and leg extend.',
+        fix: 'Bend the extending knee more and shorten the arm reach — a shorter lever, not more effort.',
+      },
+      {
+        mistake: 'Ribs flaring up as the arm goes overhead.',
+        fix: 'Exhale on the reach and keep the ribs pulled down toward the hips.',
+      },
+      {
+        mistake: 'Same-side arm and leg moving together.',
+        fix: 'It is OPPOSITE arm to leg — right arm with left leg, then swap.',
       },
     ],
   },

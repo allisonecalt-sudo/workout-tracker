@@ -1109,10 +1109,10 @@ test('multi-week: Settings About shows Program weeks count (12)', async ({ page 
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 12" row (11 round-1 weeks + R2 W1).
+  // About section has a "Program weeks: 13" row (11 round-1 weeks + R2 W1 + R2 W2).
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 12');
+  ).toContainText('Program weeks: 13');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {
@@ -1282,4 +1282,291 @@ test.describe('walk distance (GPS granted)', () => {
     await page.locator('#finish-walk').click();
     await expect(page.locator('.walk-text')).toContainText('1 this week');
   });
+});
+
+// --- Round 2 · Week 2 (Sep 5-11 2026) --------------------------------------
+//
+// "Harder versions, not reps" — her ask Sep 7: "ok but its not always about
+// adding its abut tehactual execrises". These lock in the three real changes
+// (the plank held WITH a posterior pelvic tilt, the modified dead bug
+// graduating to the full one in A + B, and bird dog legs-only as the first
+// hands-on-floor move since April), the deeper wall sit, and the fact that C
+// deliberately stays on the modified dead bug.
+
+test('R2 W2: a date inside Sep 5-11 2026 resolves to Round 2 · Week 2', async ({ page }) => {
+  await mockDate(page, '2026-09-08T10:00:00.000Z'); // Tue inside Sep 5-11
+  await page.goto('/');
+  await expect(page.locator('.week-banner')).toContainText('Round 2 · Week 2');
+  await page.locator('button[data-workout="A"]').click();
+  await expect(page.locator('.overview-week-badge')).toHaveText(/Week 2/);
+});
+
+test('R2 W2: workout A carries the full dead bug, bird dog legs-only, the tilted plank and a 40 s wall sit', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-08T10:00:00.000Z');
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  // The overview lists every phase's exercise names (textContent is in the DOM
+  // whether or not the <details> is open).
+  const overview = (await page.locator('.overview-phase-items').allTextContents()).join(' | ');
+  expect(overview).toContain('Full dead bug');
+  expect(overview).toContain('Bird dog (legs only)');
+  expect(overview).toContain('Forearm plank');
+  expect(overview).toContain('Wall sit');
+  // The modified version is GONE from A — it graduated.
+  expect(overview).not.toContain('Modified dead bug');
+
+  // Walk into the session and read the actual step content.
+  await page.locator('button:has-text("Start")').click();
+  const seen: Record<string, string> = {};
+  for (let i = 0; i < 40; i++) {
+    // Short timeouts: several steps legitimately have no notes element, and the
+    // default 30 s auto-wait would burn the whole test budget on them.
+    const name =
+      (await page
+        .locator('.exercise-name')
+        .textContent({ timeout: 1000 })
+        .catch(() => '')) ?? '';
+    if (name) {
+      const notes =
+        (await page
+          .locator('.exercise-notes')
+          .first()
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      const reps =
+        (await page
+          .locator('.exercise-reps')
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      seen[name] = `${reps} :: ${notes}`;
+    }
+    if (seen['Forearm plank']) break;
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else break;
+  }
+
+  await expect(page.locator('.exercise-name')).toHaveText('Forearm plank');
+  // Wall sit: 40 s, and the cue is DEEPER not longer (she held 38 s last week).
+  expect(seen['Wall sit']).toContain('40 sec');
+  expect(seen['Wall sit']).toContain('38');
+  // Forearm plank: same 20 s, held WITH a posterior pelvic tilt.
+  expect(seen['Forearm plank']).toContain('20 sec');
+  expect(seen['Forearm plank']).toContain('posterior pelvic tilt');
+  expect(seen['Forearm plank']).toContain('tailbone');
+  // Full dead bug: opposite arm overhead, 8 each side.
+  expect(seen['Full dead bug']).toContain('8 each side');
+  expect(seen['Full dead bug']).toContain('OPPOSITE ARM');
+});
+
+test('R2 W2: workout C stays on the MODIFIED dead bug (no full dead bug, no bird dog)', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-08T10:00:00.000Z');
+  await page.goto('/');
+  await page.locator('button[data-workout="C"]').click();
+  const overview = (await page.locator('.overview-phase-items').allTextContents()).join(' | ');
+  expect(overview).toContain('Modified dead bug');
+  expect(overview).not.toContain('Full dead bug');
+  // C is the cardio day — no upper-back block, so no bird dog either.
+  expect(overview).not.toContain('Bird dog');
+});
+
+test('R2 W2: bird dog legs-only sits at the END of the upper-back block in A and B', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-08T10:00:00.000Z');
+  for (const id of ['A', 'B']) {
+    await page.goto('/');
+    await page.locator(`button[data-workout="${id}"]`).click();
+    const upperBack = await page
+      .locator('.overview-phase')
+      .filter({ hasText: 'Upper back' })
+      .locator('.overview-phase-items')
+      .textContent();
+    expect(upperBack ?? '').toMatch(/Wall angels.*IWYT raises.*Bird dog \(legs only\)$/);
+  }
+});
+
+// Every exercise the week references must carry form guidance, or she lands on
+// a bare step mid-workout. The app renders EXERCISE_DETAIL first and falls back
+// to EXERCISE_GUIDE, so the UNION is what has to cover the week (several
+// long-standing moves — Wall angels, Forearm plank, the stretches — only ever
+// got detail cards). Source-level, so it also covers steps a UI walk-through
+// would need 40 taps to reach.
+test('R2 W2: every exercise name in the week has a detail card or a how-to guide entry', () => {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const root = path.join(__dirname, '..');
+  const appSrc = fs.readFileSync(path.join(root, 'app.ts'), 'utf8');
+  const detailSrc = fs.readFileSync(path.join(root, 'exercise-detail.ts'), 'utf8');
+
+  const weekStart = appSrc.indexOf('// --- ROUND 2 · WEEK 2');
+  const weekEnd = appSrc.indexOf('// --- Resolvers', weekStart);
+  expect(weekStart).toBeGreaterThan(-1);
+  expect(weekEnd).toBeGreaterThan(weekStart);
+
+  // A shared building block's full declaration, found by balanced-bracket scan
+  // (string-aware) so single-line and multi-line consts both resolve exactly.
+  const declBlock = (id: string): string | null => {
+    const head = new RegExp(`\\nconst ${id}\\b[^\\n=]*=\\s*`).exec(appSrc);
+    if (!head) return null;
+    let i = head.index + head[0].length;
+    const open = appSrc[i];
+    if (open !== '[' && open !== '{') return null;
+    const close = open === '[' ? ']' : '}';
+    let depth = 0;
+    let inStr: string | null = null;
+    for (; i < appSrc.length; i++) {
+      const ch = appSrc[i] as string;
+      if (inStr !== null) {
+        if (ch === '\\') i += 1;
+        else if (ch === inStr) inStr = null;
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === '`') {
+        inStr = ch;
+        continue;
+      }
+      if (ch === open) depth += 1;
+      else if (ch === close) {
+        depth -= 1;
+        if (depth === 0) return appSrc.slice(head.index, i + 1);
+      }
+    }
+    return null;
+  };
+
+  // Collect `name: '...'`, then follow any shared const the block references
+  // (WALK_WARMUP_AB, UPPER_BACK_SAFE_R2W2, …). PROGRAM is skipped — that one is
+  // every week ever encoded.
+  const collect = (block: string, seen: Set<string>, out: Set<string>): void => {
+    const code = block
+      .replace(/^\s*\/\/.*$/gm, '')
+      // Drop the WORKOUT `name:` ("Lower Body + Core") that sits right under
+      // `id: 'A'` — those are session titles, not exercises.
+      .replace(/id: '[ABC]',\s*\n\s*name: '[^']*',/g, '');
+    for (const m of code.matchAll(/name: '((?:[^'\\]|\\.)*)'/g)) {
+      out.add((m[1] ?? '').replace(/\\'/g, "'"));
+    }
+    for (const m of code.matchAll(/\b([A-Z][A-Z0-9_]{2,})\b/g)) {
+      const id = m[1] ?? '';
+      if (id === 'PROGRAM' || seen.has(id)) continue;
+      seen.add(id);
+      const decl = declBlock(id);
+      if (decl) collect(decl, seen, out);
+    }
+  };
+  const names = new Set<string>();
+  collect(appSrc.slice(weekStart, weekEnd), new Set<string>(), names);
+
+  // Sanity: resolution actually reached the shared blocks + the new moves.
+  expect(names.has('Full dead bug')).toBe(true);
+  expect(names.has('Bird dog (legs only)')).toBe(true);
+  expect(names.has('Wall angels')).toBe(true); // via UPPER_BACK_SAFE_R2W2
+  expect(names.has('Outdoor walk')).toBe(true); // via WALK_WARMUP_AB
+  expect(names.has('Neck stretch')).toBe(true); // via STRETCH_COOLDOWN
+  expect(names.size).toBeGreaterThan(20);
+
+  const guideStart = appSrc.indexOf('const EXERCISE_GUIDE');
+  const guideBlock = appSrc.slice(guideStart, appSrc.indexOf('\n};', guideStart));
+  const keysIn = (src: string): Set<string> =>
+    new Set(
+      [...src.matchAll(/^ {2}'((?:[^'\\]|\\.)*)': \{/gm)].map((m) =>
+        (m[1] ?? '').replace(/\\'/g, "'")
+      )
+    );
+  const guideKeys = keysIn(guideBlock);
+  const detailKeys = keysIn(detailSrc);
+
+  const uncovered = [...names].filter((n) => !guideKeys.has(n) && !detailKeys.has(n));
+  expect(uncovered).toEqual([]);
+  // The two NEW moves carry BOTH — a how-to entry and a full detail card.
+  for (const n of ['Full dead bug', 'Bird dog (legs only)']) {
+    expect(guideKeys.has(n)).toBe(true);
+    expect(detailKeys.has(n)).toBe(true);
+  }
+  // The apartment-cardio step is a named exercise too, so it needs guidance.
+  expect(guideKeys.has('Apartment cardio')).toBe(true);
+});
+
+// --- Cardio either/or (Sep 7 2026) -----------------------------------------
+// Her ask, verbatim: "also i want cardio i can do in apt or walk like pick
+// either or". Walk outside = the tracked flow, untouched. Apartment = the same
+// minutes on a plain countdown, nothing tracked, marked in the session notes.
+
+test('cardio either/or: the walk step offers an apartment option that swaps in a same-length timer', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-08T10:00:00.000Z');
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  // Both lanes are offered on the cardio step; nothing is tracking yet.
+  await expect(page.locator('.exercise-name')).toHaveText('Outdoor walk');
+  await expect(page.locator('#ww-start')).toBeVisible();
+  await expect(page.locator('#ww-apartment')).toBeVisible();
+
+  // Pick the apartment → the step becomes a 10-minute countdown, same minutes.
+  await page.locator('#ww-apartment').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Apartment cardio');
+  await expect(page.locator('.exercise-reps')).toContainText('10 min');
+  await expect(page.locator('.timer-display')).toHaveText('10:00');
+  await expect(page.locator('#start-timed')).toBeVisible();
+  // Nothing from the walk engine is running.
+  expect(await page.evaluate(() => localStorage.getItem('workout-tracker:ww-start'))).toBeNull();
+
+  // And she can change her mind back to the outdoor walk.
+  await page.locator('#ww-outdoor').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Outdoor walk');
+  await expect(page.locator('#ww-start')).toBeVisible();
+});
+
+test('cardio either/or: finishing after the apartment option saves walk_minutes + the notes marker, and never POSTs', async ({
+  page,
+}) => {
+  // C's cardio block is 25 min, so the saved marker must read 25. Sync is off
+  // under automation (navigator.webdriver), so this can never reach the real
+  // workout_sessions table — asserted below, not assumed.
+  const posted: string[] = [];
+  page.on('request', (req) => {
+    if (req.method() === 'POST') posted.push(req.url());
+  });
+  await mockDate(page, '2026-09-08T10:00:00.000Z');
+  await page.goto('/');
+  await page.locator('button[data-workout="C"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Outdoor walk');
+  await page.locator('#ww-apartment').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Apartment cardio');
+  await expect(page.locator('.timer-display')).toHaveText('25:00');
+
+  for (let i = 0; i < 30; i++) {
+    const isPostLog = await page
+      .locator('text=Quick log')
+      .isVisible()
+      .catch(() => false);
+    if (isPostLog) break;
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else break;
+  }
+  await expect(page.locator('text=Quick log')).toBeVisible();
+  await page.locator('#word').fill('inside');
+  await page.locator('button:has-text("Save & finish")').click();
+  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+
+  const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+  const logs = JSON.parse(raw ?? '[]') as { walkMinutes?: number | null; notes?: string | null }[];
+  expect(logs.length).toBe(1);
+  expect(logs[0]?.walkMinutes).toBe(25);
+  expect(logs[0]?.notes).toBe('cardio: apartment 25 min');
+  expect(posted.filter((u) => u.includes('workout_sessions'))).toEqual([]);
+
+  // The choice is per-session — it must not leak into the next workout.
+  expect(
+    await page.evaluate(() => localStorage.getItem('workout-tracker:ww-apartment'))
+  ).toBeNull();
 });

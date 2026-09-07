@@ -266,4 +266,24 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     license: 'YouTube embed (ToS)',
     attribution: 'Prone I-T-W-Y for Shoulder — AskDoctorJo (DPT). All four positions: I, W, Y, T.',
   },
+
+  // ----- Round-2 Week-2 additions (2026-09-07) -----
+  // Both ids verified via YouTube oembed (HTTP 200 + matching title) on the day
+  // they were added — never guessed. Same PT channel already trusted here for
+  // the modified dead bug.
+  'Bird dog (legs only)': {
+    youtubeId: 'xEDnlOxeJH4',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    attribution:
+      'How to Do the Bird Dog Exercise — Hinge Health (PT). NOTE: the video demos the FULL bird dog (arm + leg). This week is LEGS ONLY — both your hands stay down. Watch it for the setup and the flat-back cue.',
+  },
+  'Full dead bug': {
+    loop: 'assets/exercises/modified-dead-bug-0.jpg',
+    youtubeId: 'GbSC02oU3To',
+    source: 'free-exercise-db',
+    license: 'Unlicense (public domain) + YouTube embed (ToS)',
+    attribution:
+      'Still: yuhonas/free-exercise-db. Video: Hinge Health PT — Dead Bug (the full arm-and-leg version, which is exactly this move).',
+  },
 };
