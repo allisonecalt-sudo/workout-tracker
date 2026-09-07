@@ -1586,3 +1586,191 @@ test('cardio either/or: finishing after the apartment option saves walk_minutes 
     await page.evaluate(() => localStorage.getItem('workout-tracker:ww-apartment'))
   ).toBeNull();
 });
+
+// --- Guided indoor strip (v30, Sep 7 2026) ---------------------------------
+// Her words: "Also did you make alternative to outdoor walk / Because I often
+// don't want to go outside" → "Something similar with a similar amount of like
+// movement warm up cardio". v29's apartment lane was a countdown plus a written
+// menu — a timer and a DECISION. Now it runs five 2-minute segments that cycle
+// for the whole block, and the screen says which one is live, derived from the
+// countdown itself. Still ONE step in the phase array.
+
+// A clock the TEST can move. mockDate FREEZES time, which is right for
+// date-based content but can never advance a countdown. This pins Date.now() to
+// a base plus a window-level offset the test bumps — so the app's own (real)
+// rAF loop sees the jump on its very next frame and re-renders, with no
+// thousands of synthetic frames to grind through.
+async function movableClock(
+  page: import('@playwright/test').Page,
+  iso: string,
+  opts: { skipPreCountdown?: boolean } = {}
+): Promise<void> {
+  await page.addInitScript((isoArg: string) => {
+    const base = new Date(isoArg).getTime();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__clockOffset = 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nowMs = (): number => base + Number((window as any).__clockOffset ?? 0);
+    const RealDate = Date;
+    class MovableDate extends RealDate {
+      constructor(...args: ConstructorParameters<typeof Date>) {
+        if (args.length === 0) {
+          super(nowMs());
+        } else {
+          super(...args);
+        }
+      }
+      static override now(): number {
+        return nowMs();
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).Date = MovableDate;
+  }, iso);
+  if (opts.skipPreCountdown) {
+    // The 3-2-1 "Get ready" is a separate timer; zero it so the block timer —
+    // the one the strip is derived from — starts on the tap.
+    await page.addInitScript(() => {
+      window.localStorage.setItem('workout-tracker:setting-pre-count', '0');
+    });
+  }
+}
+
+async function advanceClock(page: import('@playwright/test').Page, ms: number): Promise<void> {
+  await page.evaluate((msArg: number) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).__clockOffset = Number((window as any).__clockOffset ?? 0) + msArg;
+  }, ms);
+}
+
+test('indoor strip: choosing the apartment option shows the first segment, ready to go', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-08T10:00:00.000Z');
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await page.locator('#ww-apartment').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Apartment cardio');
+
+  // Segment 1 is live before she taps Start, labelled as what's coming.
+  const strip = page.locator('.cardio-routine');
+  await expect(strip).toHaveAttribute('data-segment-index', '0');
+  await expect(page.locator('.cardio-seg-label')).toHaveText('Starts with');
+  await expect(page.locator('.cardio-seg-now')).toHaveText('Easy marching in place');
+  await expect(page.locator('.cardio-seg-cue')).toHaveText('Loose arms swinging. Just get moving.');
+  // The whole list is visible, in order, with the live one highlighted.
+  await expect(page.locator('.cardio-seg-item')).toHaveCount(5);
+  await expect(page.locator('.cardio-seg-item.is-current')).toHaveCount(1);
+  await expect(page.locator('.cardio-seg-item').nth(0)).toHaveClass(/is-current/);
+  await expect(page.locator('.cardio-seg-item').nth(1)).toContainText('Step touch, side to side');
+  await expect(page.locator('.cardio-seg-item').nth(4)).toContainText('Marching, a bit quicker');
+  // Stairs stay offered — but as an alternative in the footnote, never the default.
+  await expect(page.locator('.cardio-seg-foot')).toContainText('building stairs');
+  // And the escape hatch back outside is still right there.
+  await expect(page.locator('#ww-outdoor')).toBeVisible();
+});
+
+test('indoor strip: the live segment advances by itself as the countdown crosses a boundary', async ({
+  page,
+}) => {
+  await movableClock(page, '2026-09-08T10:00:00.000Z', { skipPreCountdown: true });
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await page.locator('#ww-apartment').click();
+  await expect(page.locator('.timer-display')).toHaveText('10:00');
+
+  await page.locator('#start-timed').click();
+  await expect(page.locator('.cardio-seg-label')).toHaveText('Right now');
+  await expect(page.locator('.cardio-routine')).toHaveAttribute('data-segment-index', '0');
+
+  // 1:30 in — still inside the first two-minute segment.
+  await advanceClock(page, 90_000);
+  await expect(page.locator('.timer-display')).toHaveText('8:30');
+  await expect(page.locator('.cardio-routine')).toHaveAttribute('data-segment-index', '0');
+
+  // Cross 2:00 → segment 2, with no tap from her.
+  await advanceClock(page, 40_000);
+  await expect(page.locator('.cardio-routine')).toHaveAttribute('data-segment-index', '1');
+  await expect(page.locator('.cardio-seg-now')).toHaveText('Step touch, side to side');
+  await expect(page.locator('.cardio-seg-item').nth(1)).toHaveClass(/is-current/);
+  await expect(page.locator('.cardio-seg-item').nth(0)).not.toHaveClass(/is-current/);
+
+  // Cross 4:00 → segment 3, and the per-move countdown reads the time left in it.
+  await advanceClock(page, 120_000);
+  await expect(page.locator('.cardio-routine')).toHaveAttribute('data-segment-index', '2');
+  await expect(page.locator('.cardio-seg-now')).toHaveText('Knee lifts');
+  await expect(page.locator('.cardio-seg-left')).toContainText('left in this move');
+});
+
+test('indoor strip: a 25-minute block cycles past segment five back to segment one', async ({
+  page,
+}) => {
+  // Workout C's cardio block is 25 min = twelve and a half segments, so it must
+  // loop — and end mid-list rather than stopping dead after the fifth move.
+  await movableClock(page, '2026-09-08T10:00:00.000Z', { skipPreCountdown: true });
+  await page.goto('/');
+  await page.locator('button[data-workout="C"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await page.locator('#ww-apartment').click();
+  await expect(page.locator('.timer-display')).toHaveText('25:00');
+  await page.locator('#start-timed').click();
+
+  // 8:20 in = the fifth (last) segment of the first pass.
+  await advanceClock(page, 500_000);
+  await expect(page.locator('.cardio-routine')).toHaveAttribute('data-segment-index', '4');
+  await expect(page.locator('.cardio-seg-now')).toHaveText('Marching, a bit quicker');
+
+  // 10:20 in = past the end of the list → wraps to the first move again.
+  await advanceClock(page, 120_000);
+  await expect(page.locator('.cardio-routine')).toHaveAttribute('data-segment-index', '0');
+  await expect(page.locator('.cardio-seg-now')).toHaveText('Easy marching in place');
+  await expect(page.locator('.timer-display')).toHaveText('14:40');
+
+  // …and keeps cycling on the second pass.
+  await advanceClock(page, 130_000);
+  await expect(page.locator('.cardio-routine')).toHaveAttribute('data-segment-index', '1');
+  await expect(page.locator('.cardio-seg-now')).toHaveText('Step touch, side to side');
+});
+
+test('indoor strip: the outdoor walk is untouched — no strip, tracking still starts on tap', async ({
+  page,
+}) => {
+  // The strip belongs to the indoor lane only. The walk keeps its own interface
+  // (Start → tracking line), and none of the GPS/step path may be disturbed.
+  await mockDate(page, '2026-09-08T10:00:00.000Z');
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Outdoor walk');
+  await expect(page.locator('.cardio-routine')).toHaveCount(0);
+
+  await page.locator('#ww-start').click();
+  await expect(page.locator('#walk-live')).toBeVisible();
+  await expect(page.locator('.cardio-routine')).toHaveCount(0);
+  expect(
+    await page.evaluate(() => localStorage.getItem('workout-tracker:ww-start'))
+  ).not.toBeNull();
+  expect(
+    await page.evaluate(() => localStorage.getItem('workout-tracker:ww-apartment'))
+  ).toBeNull();
+});
+
+test('indoor strip: the card carries no baked duration (the block is 10 min in A/B, 25 in C)', () => {
+  // A weekly-changing number baked into a card went stale in this repo once
+  // already. The detail card + guide entry must talk in "your minutes".
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const detailSrc = fs.readFileSync(path.join(__dirname, '..', 'exercise-detail.ts'), 'utf8');
+  const start = detailSrc.indexOf("'Apartment cardio': {");
+  expect(start).toBeGreaterThan(-1);
+  const end = detailSrc.indexOf("'Belly breathing': {", start);
+  const card = detailSrc.slice(start, end);
+  // No "10 min"/"25 minutes"/"ten minutes" style duration claims inside the card.
+  expect(card).not.toMatch(/\b\d+\s*(?:-|\s)?min(?:ute)?s?\b/i);
+  expect(card).not.toMatch(/\b(?:ten|twenty-five|twenty five)\s+minutes\b/i);
+  // The two-minute segment length is the routine's own shape, not a weekly
+  // number — it's allowed, and it's what makes the strip legible.
+  expect(card).toContain('two minutes each');
+});

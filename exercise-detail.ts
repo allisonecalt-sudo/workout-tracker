@@ -228,6 +228,54 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       },
     ],
   },
+  // Sep 7 2026 (v30). The indoor half of the cardio either/or. NOTE the hard
+  // rule this card obeys: NO duration and no weekly-changing number anywhere in
+  // the script or the steps — the block is 10 minutes in A and B and 25 in C,
+  // and a baked number went stale in this repo once already. It says "your
+  // minutes" and lets the timer be the source of truth.
+  'Apartment cardio': {
+    exercise: 'Apartment cardio',
+    voiceSrc: './assets/voice/apartment-cardio.mp3',
+    voiceScript:
+      "Apartment cardio. This is the walk, done inside, on the days you don't want to go out — and you don't have to invent it or remember it. Start the timer and the strip on screen runs the routine for you: five easy moves, two minutes each, cycling in order until your minutes are up, and the screen always tells you which one is live right now. You begin with easy marching in place, arms loose and swinging, just getting moving. Then step touch, side to side: step out, tap the other foot in, and reach the arms as you go. Then knee lifts, marching taller, bringing the opposite hand toward the knee. Then heel kicks back, light and quiet, with one foot always on the floor. And you finish with marching again, a bit quicker, warm but still able to talk. That last part is the whole rule for effort: conversational, full sentences, never breathless. Nothing here jumps and nothing lands hard, so it stays quiet for the neighbours and easy on your back, and there's nothing to grip and no hands on the floor. If you'd rather take the building stairs, that's a great swap — same minutes, up at an easy effort, and walk down as your rest. Otherwise, just start the timer and follow the screen.",
+    muscles: ['quads', 'glutes', 'calves'],
+    muscleLabel: 'Legs + cardio — indoor warm-up',
+    steps: [
+      'Tap Start timer — the strip below runs itself and tells you which move is live.',
+      'Easy marching in place: loose arms swinging, just get moving.',
+      'Step touch, side to side: step out, tap the other foot in, reach the arms as you go.',
+      'Knee lifts: march taller, bring the opposite hand toward the knee.',
+      'Heel kicks back: light and quiet, one foot always on the floor.',
+      'Marching, a bit quicker: finish warm, still able to talk.',
+      'It loops back round until your minutes are done. Tap done when the timer ends.',
+    ],
+    dos: [
+      'Keep it conversational — full sentences, never breathless.',
+      'Let the screen tell you the move; you just follow it.',
+      'Keep one foot on the floor — quiet for the neighbours, kind to your back.',
+      'Building stairs are a fine swap: same minutes, up easy, walk down as the rest.',
+    ],
+    donts: [
+      "Don't jump or add hops — no flight phase in this one.",
+      "Don't put your hands on the floor or grip anything.",
+      "Don't push the pace until your breathing goes ragged.",
+      "Don't skip it because you can't go outside — that's exactly what this lane is for.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Turning it into a HIIT session and going breathless.',
+        fix: 'Ease back to conversational — this is a warm-up, not a workout on its own.',
+      },
+      {
+        mistake: 'Adding jumping jacks or hops because it feels too easy.',
+        fix: 'Stay grounded — one foot on the floor. Go a little quicker instead if you want more.',
+      },
+      {
+        mistake: 'Stopping between moves to work out what comes next.',
+        fix: 'Keep moving and glance at the screen — it already switched for you.',
+      },
+    ],
+  },
   'Belly breathing': {
     exercise: 'Belly breathing',
     voiceSrc: './assets/voice/belly-breathing.mp3',

@@ -3474,6 +3474,101 @@ input[type='number']:focus {
   color: var(--accent);
 }
 
+/* Guided indoor strip (v30, Sep 7 2026) — the apartment lane stopped being a
+   timer + a decision. Five 2-minute segments cycle for the whole block; the
+   card says which one is LIVE right now and shows the rest so she can see
+   what's coming. Read at arm's length, on the floor, mid-session: one big name,
+   one cue line, a quiet list. No interaction — it advances itself. */
+.cardio-routine {
+  text-align: center;
+}
+
+.cardio-seg-label {
+  font-size: var(--font-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim-2);
+  margin-bottom: 6px;
+}
+
+.cardio-seg-now {
+  font-size: var(--font-heading);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: var(--track-heading);
+  color: var(--accent);
+}
+
+.cardio-seg-cue {
+  font-size: var(--font-body);
+  color: var(--text-dim);
+  line-height: 1.45;
+  max-width: 420px;
+  margin: 8px auto 0;
+}
+
+.cardio-seg-left {
+  margin-top: 10px;
+  font-size: var(--font-small);
+  color: var(--text-dim-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.cardio-seg-list {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cardio-seg-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: var(--font-small);
+  color: var(--text-dim-2);
+}
+
+.cardio-seg-item.is-current {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cardio-seg-num {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-micro);
+  font-variant-numeric: tabular-nums;
+  background: var(--border);
+  color: var(--text-dim-2);
+}
+
+.cardio-seg-item.is-current .cardio-seg-num {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.cardio-seg-foot {
+  margin: 16px 0 0;
+  font-size: var(--font-meta);
+  color: var(--text-dim-2);
+  line-height: 1.5;
+  text-align: left;
+}
+
 /* ---------- Walk credit (Jul 4 2026) ---------- */
 /* Slow walks count — extra credit outside the streak math. One row: tap to start a tracked walk, tap Done. */
 .walk-card {

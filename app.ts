@@ -221,8 +221,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v29';
-const BUILD_DATE = 'Sep 7, 2026 · 16:00';
+const APP_VERSION = 'v30';
+const BUILD_DATE = 'Sep 7, 2026 · 17:05';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2147,7 +2147,7 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   },
   'Apartment cardio': {
     howTo:
-      'The indoor half of the either/or — same minutes as the walk, no tracking, just the timer. Pick whichever fits the day: BUILDING STAIRS in intervals (up at an easy effort, walk down as the rest, repeat), LAPS around the apartment, or MARCHING in place. Conversational effort: you should be able to talk in full sentences. Stairs are the strongest option minute-for-minute (roughly 10 minutes of stairs ≈ 14 minutes of brisk walking) — but the one you will actually do is the right one. Hand on the rail for balance is fine; no gripping and hauling yourself up.',
+      "The indoor half of the either/or — the same minutes as the walk, in your own front room, and you don't have to invent it. Tap the timer and the strip runs itself: five moves, two minutes each, cycling in order for however long the block is — easy marching in place, step touch side to side, knee lifts, heel kicks back, then marching a bit quicker to finish. The screen always says which one is live now, so there's nothing to remember or count. Effort stays CONVERSATIONAL the whole way: full sentences, never breathless. Nothing jumps and nothing lands hard — one foot stays on the floor throughout, which keeps it quiet for the neighbours and keeps the impact off your back. Nothing to grip and no hands on the floor either. If you'd rather do the BUILDING STAIRS instead, take the same minutes there — up at an easy effort, walk down as the rest, repeat. Stairs are the strongest option minute-for-minute (roughly 10 minutes of stairs ≈ 14 minutes of brisk walking), so it's a great swap on a day you feel like it — hand on the rail for balance is fine, no gripping and hauling. But the strip is the default, because the point of this lane is that you never have to leave the apartment. Nothing is tracked here; the timer is the whole thing.",
   },
 };
 
@@ -2874,10 +2874,62 @@ function apartmentCardioStep(minutes: number): Exercise {
     name: APARTMENT_CARDIO_NAME,
     reps: `${minutes} min`,
     notes:
-      'Same minutes as the walk, inside. Pick one: building stairs in intervals (up easy, down = the rest), laps around the apartment, or marching in place. Conversational effort — you should still be able to talk. Nothing is tracked here; the timer is the whole thing.',
+      "Same minutes as the walk, inside — and you don't have to invent it. Start the timer and the strip below runs itself: five moves, two minutes each, cycling until the time is up. Conversational effort the whole way — you should still be able to talk. Rather do the building stairs? Same minutes there works too. Nothing is tracked here; the timer is the whole thing.",
     durationSec: minutes * 60,
     isTimed: true,
   };
+}
+
+// ---------- The guided indoor strip (Allison Sep 7 2026, v30) ----------
+// WHAT CHANGED from v29: the apartment lane was a countdown plus a written menu
+// ("pick one: stairs, laps, or marching") — i.e. a timer and a DECISION, which
+// is not an equivalent to a 10-minute walk. Her words the same day: "Also did
+// you make alternative to outdoor walk / Because I often don't want to go
+// outside" → "Something similar with a similar amount of like movement warm up
+// cardio". So the step now RUNS a routine instead of describing one.
+// CONSTRAINTS these five satisfy on purpose: nothing jumps and nothing has a
+// flight phase (apartment building, neighbours below, and impact is out with
+// her back baseline), no hands on the floor, nothing to grip, and the effort
+// stays conversational start to finish — it's a warm-up, not a session.
+// SHAPE: this is still ONE exercise in the phase array. The segments are a
+// DISPLAY derived from the existing countdown — never extra steps, no index
+// arithmetic, nothing for the engine to know about.
+type CardioSegment = { name: string; cue: string };
+
+const APARTMENT_SEGMENT_SEC = 120;
+
+const APARTMENT_CARDIO_SEGMENTS: readonly CardioSegment[] = [
+  { name: 'Easy marching in place', cue: 'Loose arms swinging. Just get moving.' },
+  {
+    name: 'Step touch, side to side',
+    cue: 'Step out, tap the other foot in, reach the arms as you go.',
+  },
+  { name: 'Knee lifts', cue: 'March taller. Bring the opposite hand toward the knee.' },
+  { name: 'Heel kicks back', cue: 'Light and quiet, one foot always on the floor.' },
+  { name: 'Marching, a bit quicker', cue: 'Finish warm, still able to talk.' },
+];
+
+// Which segment is live, read off the countdown alone — so it advances by
+// itself as the timer runs and she never has to work out "which two minutes am
+// I in". Cycles: 10 min = one pass of the five; 25 min keeps going round and
+// ends mid-list; a Lite/odd duration works the same way. Elapsed is clamped one
+// second short of the end so the last tick can't flip the strip back to segment
+// one as the timer lands on 0:00.
+function apartmentSegmentIndex(totalSec: number, remainingSec: number): number {
+  const n = APARTMENT_CARDIO_SEGMENTS.length;
+  if (totalSec <= 0 || n === 0) return 0;
+  const remain = Math.max(0, Math.min(totalSec, remainingSec));
+  const elapsed = Math.min(totalSec - remain, Math.max(0, totalSec - 1));
+  return Math.floor(elapsed / APARTMENT_SEGMENT_SEC) % n;
+}
+
+// Seconds left in the CURRENT segment — capped by what's left overall, so a
+// part-segment at the end of an odd block counts down honestly.
+function apartmentSegmentRemainingSec(totalSec: number, remainingSec: number): number {
+  if (totalSec <= 0) return 0;
+  const remain = Math.max(0, Math.min(totalSec, remainingSec));
+  const intoSegment = (totalSec - remain) % APARTMENT_SEGMENT_SEC;
+  return Math.max(0, Math.min(APARTMENT_SEGMENT_SEC - intoSegment, remain));
 }
 
 function walksThisWeek(): number {
@@ -4684,6 +4736,32 @@ function renderPausedOverlay(): string {
     </div>`;
 }
 
+// The guided indoor strip (v30). Rendered only while the apartment cardio step
+// is the current exercise. `remainingSec` mirrors the timer display's own
+// fallback (idle = the whole duration), so before she taps Start the strip sits
+// on segment 1 as "Starts with" — and once running it re-derives on every tick,
+// because timerLoop re-renders each time the second changes.
+function renderApartmentRoutine(totalSec: number, remainingSec: number, running: boolean): string {
+  const idx = apartmentSegmentIndex(totalSec, remainingSec);
+  const seg = APARTMENT_CARDIO_SEGMENTS[idx];
+  if (!seg) return '';
+  const left = apartmentSegmentRemainingSec(totalSec, remainingSec);
+  const items = APARTMENT_CARDIO_SEGMENTS.map(
+    (s, i) =>
+      `<li class="cardio-seg-item${i === idx ? ' is-current' : ''}"><span class="cardio-seg-num" aria-hidden="true">${i + 1}</span><span class="cardio-seg-name">${escapeHtml(s.name)}</span></li>`
+  ).join('');
+  return `
+    <div class="card cardio-routine" data-segment-index="${idx}">
+      <div class="cardio-seg-label">${running ? 'Right now' : 'Starts with'}</div>
+      <div class="cardio-seg-now">${escapeHtml(seg.name)}</div>
+      <p class="cardio-seg-cue">${escapeHtml(seg.cue)}</p>
+      ${running ? `<div class="cardio-seg-left">${formatTimerDisplay(left)} left in this move</div>` : ''}
+      <ol class="cardio-seg-list">${items}</ol>
+      <p class="cardio-seg-foot">Two minutes each — it moves on by itself and loops back round until your time is up. Rather do the building stairs? Take the same minutes there instead: up easy, walk down as the rest.</p>
+    </div>
+  `;
+}
+
 function renderWorkout(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
@@ -4767,6 +4845,18 @@ function renderWorkout(): string {
         : showTempo
           ? `<div class="card">${renderTempoBar()}</div>`
           : ''
+    }
+
+    ${
+      // The guided indoor strip sits directly under the countdown it's derived
+      // from, so "how long left" and "what am I doing" read as one block.
+      ex.name === APARTMENT_CARDIO_NAME
+        ? renderApartmentRoutine(
+            ex.durationSec ?? 0,
+            state.timerSeconds > 0 ? state.timerSeconds : (ex.durationSec ?? 0),
+            state.timerSeconds > 0
+          )
+        : ''
     }
 
     ${
