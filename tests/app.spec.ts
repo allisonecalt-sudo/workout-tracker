@@ -361,6 +361,200 @@ test('resume: quitting clears the session so reopening goes home', async ({ page
   await reopened.close();
 });
 
+// ---------- Left-open workout gate (v32, Sep 11 2026) ----------
+// She did Workout A on Mon Sep 7 and never tapped Done. The app kept the
+// snapshot and, on the next open, would have dropped her straight back into it
+// — days later — with no idea it was stale; tapping through to Done from there
+// is what logged the Sep 2→4 "B" row as a 46-hour workout. Now a snapshot older
+// than 3 hours is a QUESTION on home (did it / throw it away / keep going), not
+// a silent resume. Snapshots are seeded on the beforeEach page and read from a
+// fresh context page, which has no localStorage-clearing init script.
+const ACTIVE_SESSION_KEY = 'workout-tracker:active-session';
+const LOGS_KEY = 'workout-tracker:logs';
+
+function leftOpenSnapshot(ageMs: number, workout: 'A' | 'B' | 'C' = 'A') {
+  return {
+    screen: 'workout',
+    selectedWorkout: workout,
+    capacityBefore: 6,
+    capacityAfter: 5,
+    wallSitSec: 0,
+    backPain: 0,
+    word: '',
+    currentRound: 1,
+    currentPhase: 'warmup',
+    currentExerciseIndex: 0,
+    startedAt: new Date(Date.now() - ageMs).toISOString(),
+    pausedAt: null,
+    pausedMs: 0,
+    liteDay: false,
+  };
+}
+
+const FOUR_DAYS = 4 * 24 * 60 * 60 * 1000;
+const TEN_MINUTES = 10 * 60 * 1000;
+
+test('left-open gate: a 4-day-old workout is a question on home, not a silent resume', async ({
+  page,
+  context,
+}) => {
+  await page.evaluate(([key, snap]) => localStorage.setItem(key, JSON.stringify(snap)), [
+    ACTIVE_SESSION_KEY,
+    leftOpenSnapshot(FOUR_DAYS),
+  ] as const);
+  const reopened = await context.newPage();
+  await reopened.goto('/');
+  await expect(reopened.locator('h1')).toHaveText('Workout Tracker');
+  await expect(reopened.locator('#stale-session-card')).toBeVisible();
+  await expect(reopened.locator('#stale-session-card')).toContainText('Workout A was left open');
+  await expect(reopened.locator('#stale-session-card')).toContainText('never tapped Done');
+  await expect(reopened.locator('.round-indicator')).toHaveCount(0);
+  await reopened.close();
+});
+
+test('left-open gate: "Yes, I did it" logs it for the day it was STARTED with no invented numbers', async ({
+  page,
+  context,
+}) => {
+  const snap = leftOpenSnapshot(FOUR_DAYS);
+  await page.evaluate(([key, s]) => localStorage.setItem(key, JSON.stringify(s)), [
+    ACTIVE_SESSION_KEY,
+    snap,
+  ] as const);
+  const reopened = await context.newPage();
+  await reopened.goto('/');
+  await reopened.locator('#stale-finished').click();
+
+  await expect(reopened.locator('#stale-session-card')).toHaveCount(0);
+  await expect(reopened.locator('.stat-number').first()).toHaveText('1');
+  // Duration is unknown → "—", never a multi-day number.
+  await expect(reopened.locator('.history-date').first()).toContainText('—');
+
+  const saved = await reopened.evaluate(
+    ([logsKey, activeKey]) => ({
+      logs: JSON.parse(localStorage.getItem(logsKey) ?? '[]') as Array<Record<string, unknown>>,
+      active: localStorage.getItem(activeKey),
+    }),
+    [LOGS_KEY, ACTIVE_SESSION_KEY] as const
+  );
+  expect(saved.active).toBeNull();
+  expect(saved.logs).toHaveLength(1);
+  const row = saved.logs[0]!;
+  expect(row['workout']).toBe('A');
+  expect(row['date']).toBe(snap.startedAt); // dated the day she started it
+  expect(row['capacityBefore']).toBe(6); // the one number she really entered
+  expect(row['capacityAfter']).toBeNull();
+  expect(row['backPain']).toBeNull();
+  expect(row['durationSec']).toBeUndefined();
+  expect(row['completedAt']).toBeUndefined();
+  expect(String(row['notes'])).toContain('Done was never tapped');
+  await reopened.close();
+});
+
+test('left-open gate: "No, throw it away" discards it and clears the snapshot', async ({
+  page,
+  context,
+}) => {
+  await page.evaluate(([key, snap]) => localStorage.setItem(key, JSON.stringify(snap)), [
+    ACTIVE_SESSION_KEY,
+    leftOpenSnapshot(FOUR_DAYS),
+  ] as const);
+  const reopened = await context.newPage();
+  await reopened.goto('/');
+  await reopened.locator('#stale-discard').click();
+  await expect(reopened.locator('#stale-session-card')).toHaveCount(0);
+  await expect(reopened.locator('.stat-number').first()).toHaveText('0');
+  const active = await reopened.evaluate((key) => localStorage.getItem(key), ACTIVE_SESSION_KEY);
+  expect(active).toBeNull();
+  await reopened.close();
+});
+
+test('left-open gate: "Keep going" resumes the workout where she left it', async ({
+  page,
+  context,
+}) => {
+  await page.evaluate(([key, snap]) => localStorage.setItem(key, JSON.stringify(snap)), [
+    ACTIVE_SESSION_KEY,
+    leftOpenSnapshot(FOUR_DAYS),
+  ] as const);
+  const reopened = await context.newPage();
+  await reopened.goto('/');
+  await reopened.locator('#stale-continue').click();
+  await expect(reopened.locator('.round-indicator')).toBeVisible();
+  await expect(reopened.locator('.screen-header h2')).toContainText('Workout A');
+  await reopened.close();
+});
+
+test('left-open gate: a 10-minute-old workout still resumes silently (no card)', async ({
+  page,
+  context,
+}) => {
+  await page.evaluate(([key, snap]) => localStorage.setItem(key, JSON.stringify(snap)), [
+    ACTIVE_SESSION_KEY,
+    leftOpenSnapshot(TEN_MINUTES),
+  ] as const);
+  const reopened = await context.newPage();
+  await reopened.goto('/');
+  await expect(reopened.locator('.round-indicator')).toBeVisible();
+  await expect(reopened.locator('#stale-session-card')).toHaveCount(0);
+  await reopened.close();
+});
+
+// The Done safety net: "Keep going" on a 5-hour-old C, walk it to Save, and the
+// duration comes out as 5h+. That is a session that sat open, not a workout
+// length — it must be blanked ("—") and explained in the note, never logged.
+test('Done safety net: a session that comes out longer than 3h logs no duration, with a note', async ({
+  page,
+  context,
+}) => {
+  const FIVE_HOURS = 5 * 60 * 60 * 1000;
+  await page.evaluate(([key, snap]) => localStorage.setItem(key, JSON.stringify(snap)), [
+    ACTIVE_SESSION_KEY,
+    leftOpenSnapshot(FIVE_HOURS, 'C'),
+  ] as const);
+  const reopened = await context.newPage();
+  await reopened.goto('/');
+  await reopened.locator('#stale-continue').click();
+  await expect(reopened.locator('.exercise-name')).toBeVisible();
+
+  for (let i = 0; i < 30; i++) {
+    const isPostLog = await reopened
+      .locator('text=Quick log')
+      .isVisible()
+      .catch(() => false);
+    if (isPostLog) break;
+    const nextBtn = reopened.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) {
+      await nextBtn.click();
+    } else {
+      const skipRest = reopened.locator('#skip-rest');
+      if (await skipRest.isVisible()) {
+        const box = await skipRest.boundingBox();
+        if (box) {
+          await reopened.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          await reopened.mouse.down();
+          await reopened.waitForTimeout(700);
+          await reopened.mouse.up();
+        }
+      }
+    }
+  }
+  await expect(reopened.locator('text=Quick log')).toBeVisible();
+  await reopened.locator('button:has-text("Save & finish")').click();
+  await expect(reopened.locator('h1')).toHaveText('Workout Tracker');
+
+  const row = await reopened.evaluate(
+    (logsKey) =>
+      (JSON.parse(localStorage.getItem(logsKey) ?? '[]') as Array<Record<string, unknown>>)[0],
+    LOGS_KEY
+  );
+  expect(row).toBeDefined();
+  expect(row!['durationSec']).toBeUndefined();
+  expect(String(row!['notes'])).toContain('left open');
+  await expect(reopened.locator('.history-date').first()).toContainText('—');
+  await reopened.close();
+});
+
 // As of v19 (Jul 9 2026) every program exercise has an enriched EXERCISE_DETAIL
 // card, so renderWorkout shows the detail card (voice note + muscle target +
 // dropdowns) instead of the legacy how-to card. The old how-to card + its

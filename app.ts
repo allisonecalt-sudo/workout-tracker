@@ -44,9 +44,12 @@ type LogEntry = {
   date: string;
   workout: WorkoutId;
   capacityBefore: number;
-  capacityAfter: number;
+  // null = never recorded (v32, Sep 11 2026): a workout logged after the fact
+  // from a left-open snapshot has no post-log, so after-capacity and back pain
+  // are unknown — shown as "—", never invented as 5/0.
+  capacityAfter: number | null;
   wallSitSec: number;
-  backPain: number;
+  backPain: number | null;
   word: string;
   startedAt?: string;
   completedAt?: string;
@@ -138,6 +141,17 @@ const HOWTO_SEEN_KEY_PREFIX = 'workout-tracker:howto-seen-week-';
 // in-progress session so reopening the app lands back on that workout. Quitting
 // or finishing clears it (those go through resetState()).
 const ACTIVE_SESSION_KEY = 'workout-tracker:active-session';
+// A workout is 30-60 minutes. A snapshot older than this was LEFT OPEN, not
+// paused (v32, Sep 11 2026): she did Workout A on Mon Sep 7 and never tapped
+// Done; the app kept the snapshot and would have dropped her straight back into
+// it on the next open, days later, with no idea it was stale — and tapping
+// through to Done from there is exactly what logged the Sep 2→4 "B" row as a
+// 46-hour workout. Past this age the app ASKS on home (did it / throw it away /
+// keep going) instead of resuming silently.
+const STALE_SESSION_MS = 3 * 60 * 60 * 1000;
+// Same bar at Done: a computed duration longer than this is a session that sat
+// open, not a workout length. Blank it and say so in notes rather than log it.
+const MAX_PLAUSIBLE_DURATION_SEC = 3 * 60 * 60;
 // Ship 6: timing defaults — overridable via Settings screen. The constants
 // remain as "defaults" only; runtime values come from getSetting().
 // Allison 2026-05-15 18:07: "i do not need the brakes anymore there doesn't
@@ -221,8 +235,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v31';
-const BUILD_DATE = 'Sep 7, 2026 · 18:40';
+const APP_VERSION = 'v32';
+const BUILD_DATE = 'Sep 11, 2026 · 10:35';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2454,6 +2468,9 @@ function saveLog(entry: LogEntry): LogEntry {
   const stored: LogEntry = { ...entry, id: entry.id ?? genId(), synced: false };
   const logs = loadLogs();
   logs.unshift(stored);
+  // Newest-first by DATE, not by save order — an after-the-fact log (v32) is
+  // dated the day it was started, which may be older than rows already here.
+  logs.sort((a, b) => b.date.localeCompare(a.date));
   writeLogs(logs);
   return stored;
 }
@@ -3158,18 +3175,26 @@ async function logCompleteAndHome(): Promise<void> {
   const startedAt = state.startedAt ?? completedAt;
   // Subtract any paused time — stepping away (dishes, a phone call) shouldn't
   // inflate the logged workout duration (Allison Jul 7 2026).
-  const durationSec = Math.max(
+  const rawDurationSec = Math.max(
     0,
     Math.round(
       (new Date(completedAt).getTime() - new Date(startedAt).getTime() - totalPausedMs()) / 1000
     )
   );
+  // Safety net (v32, Sep 11 2026): a session that sat open for hours or days
+  // before Done has no honest duration. Blank it instead of logging 46 hours.
+  const leftOpen = rawDurationSec > MAX_PLAUSIBLE_DURATION_SEC;
   // Cardio either/or (Sep 7 2026): the apartment lane has nothing to track, so
   // the PRESCRIBED minutes are the honest number and a marker in `notes` says
   // which lane it was — no new Supabase column, both already exist.
   const apartmentMin = apartmentCardioMinutes();
   const notesParts: string[] = [];
   if (apartmentMin !== null) notesParts.push(`cardio: apartment ${apartmentMin} min`);
+  if (leftOpen) {
+    notesParts.push(
+      `duration not recorded — session was left open ${Math.round(rawDurationSec / 3600)}h before Done`
+    );
+  }
   const stored = saveLog({
     date: completedAt,
     workout: state.selectedWorkout,
@@ -3180,7 +3205,7 @@ async function logCompleteAndHome(): Promise<void> {
     word: state.word,
     startedAt,
     completedAt,
-    durationSec,
+    ...(leftOpen ? {} : { durationSec: rawDurationSec }),
     walkMinutes: workoutWalk ? workoutWalk.minutes : apartmentMin,
     walkSteps: workoutWalk && workoutWalk.steps > 0 ? workoutWalk.steps : null,
     walkMeters: workoutWalk && workoutWalk.meters > 0 ? workoutWalk.meters : null,
@@ -3251,26 +3276,25 @@ function clearActiveSession(): void {
   }
 }
 
-// Rehydrate an in-progress session on load. Validates the snapshot against the
-// live program (a workout she was mid-way through must still exist, and the
-// phase/index must be in range) — a stale or corrupt snapshot is discarded, not
-// crashed on. Transient bits (timers, expanders) reset; she lands on the
-// exercise she left, not mid-countdown.
-function restoreActiveSession(): boolean {
+// Read + validate the in-progress snapshot against the live program (a workout
+// she was mid-way through must still exist, and the phase/index must be in
+// range) — a corrupt snapshot is discarded, not crashed on. Returns a fully
+// defaulted snapshot or null.
+function readActiveSnapshot(): ActiveSessionSnapshot | null {
   try {
-    if (typeof localStorage === 'undefined') return false;
+    if (typeof localStorage === 'undefined') return null;
     const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
-    if (!raw) return false;
+    if (!raw) return null;
     const snap = JSON.parse(raw) as Partial<ActiveSessionSnapshot>;
-    if (!snap || typeof snap !== 'object') return false;
+    if (!snap || typeof snap !== 'object') return null;
     if (!snap.selectedWorkout || !RESUMABLE_SCREENS.includes(snap.screen as AppScreen)) {
       clearActiveSession();
-      return false;
+      return null;
     }
     const w = getWorkoutById(snap.selectedWorkout);
     if (!w) {
       clearActiveSession();
-      return false;
+      return null;
     }
     const phase = (snap.currentPhase ?? 'warmup') as Phase;
     const phaseList = w[phase] ?? [];
@@ -3279,38 +3303,139 @@ function restoreActiveSession(): boolean {
     const idxOk = phase === 'cooldown' || (idx >= 0 && idx < phaseList.length);
     if (!idxOk) {
       clearActiveSession();
-      return false;
+      return null;
     }
-
-    state.screen = snap.screen as AppScreen;
-    state.selectedWorkout = snap.selectedWorkout;
-    state.currentPhase = phase;
-    state.currentExerciseIndex = phase === 'cooldown' ? 0 : idx;
-    state.currentRound = snap.currentRound ?? 1;
-    state.capacityBefore = snap.capacityBefore ?? 5;
-    state.capacityAfter = snap.capacityAfter ?? 5;
-    state.wallSitSec = snap.wallSitSec ?? 0;
-    state.backPain = snap.backPain ?? 0;
-    state.word = snap.word ?? '';
-    state.startedAt = snap.startedAt ?? new Date().toISOString();
-    state.liteDay = snap.liteDay === true; // default false on old snapshots
-    // Preserve pause accounting across an app close. If she closed while paused,
-    // she stays paused on reopen (the closed span counts as paused, so it's
-    // subtracted from duration — faithful to "I stepped away").
-    state.pausedMs = typeof snap.pausedMs === 'number' && snap.pausedMs >= 0 ? snap.pausedMs : 0;
-    state.pausedAt = typeof snap.pausedAt === 'number' ? snap.pausedAt : null;
-    // Transient — never restore a running timer or open expander.
-    state.isResting = false;
-    state.timerSeconds = 0;
-    state.preCountdown = 0;
-    state.wallSitStartedAt = null;
-    state.videoExpandedFor = null;
-    state.howToOpenFor = null;
-    return true;
+    return {
+      screen: snap.screen as AppScreen,
+      selectedWorkout: snap.selectedWorkout,
+      capacityBefore: snap.capacityBefore ?? 5,
+      capacityAfter: snap.capacityAfter ?? 5,
+      wallSitSec: snap.wallSitSec ?? 0,
+      backPain: snap.backPain ?? 0,
+      word: snap.word ?? '',
+      currentRound: snap.currentRound ?? 1,
+      currentPhase: phase,
+      currentExerciseIndex: phase === 'cooldown' ? 0 : idx,
+      startedAt: typeof snap.startedAt === 'string' ? snap.startedAt : null,
+      pausedAt: typeof snap.pausedAt === 'number' ? snap.pausedAt : null,
+      pausedMs: typeof snap.pausedMs === 'number' && snap.pausedMs >= 0 ? snap.pausedMs : 0,
+      liteDay: snap.liteDay === true, // default false on old snapshots
+    };
   } catch {
     clearActiveSession();
+    return null;
+  }
+}
+
+// Put a validated snapshot back into live state. Transient bits (timers,
+// expanders) reset; she lands on the exercise she left, not mid-countdown.
+function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
+  state.screen = snap.screen;
+  state.selectedWorkout = snap.selectedWorkout;
+  state.currentPhase = snap.currentPhase;
+  state.currentExerciseIndex = snap.currentExerciseIndex;
+  state.currentRound = snap.currentRound;
+  state.capacityBefore = snap.capacityBefore;
+  state.capacityAfter = snap.capacityAfter;
+  state.wallSitSec = snap.wallSitSec;
+  state.backPain = snap.backPain;
+  state.word = snap.word;
+  state.startedAt = snap.startedAt ?? new Date().toISOString();
+  state.liteDay = snap.liteDay;
+  // Preserve pause accounting across an app close. If she closed while paused,
+  // she stays paused on reopen (the closed span counts as paused, so it's
+  // subtracted from duration — faithful to "I stepped away").
+  state.pausedMs = snap.pausedMs;
+  state.pausedAt = snap.pausedAt;
+  // Transient — never restore a running timer or open expander.
+  state.isResting = false;
+  state.timerSeconds = 0;
+  state.preCountdown = 0;
+  state.wallSitStartedAt = null;
+  state.videoExpandedFor = null;
+  state.howToOpenFor = null;
+}
+
+// A snapshot too old to resume silently (see STALE_SESSION_MS). Held here until
+// she answers the home card; the snapshot stays in localStorage meanwhile so a
+// reload asks again rather than losing it.
+let staleSnapshot: ActiveSessionSnapshot | null = null;
+
+// Rehydrate an in-progress session on load — unless it was left open long
+// enough that "resume" would be a lie, in which case home asks instead.
+function restoreActiveSession(): boolean {
+  const snap = readActiveSnapshot();
+  if (!snap) return false;
+  const startedMs = snap.startedAt ? new Date(snap.startedAt).getTime() : NaN;
+  if (Number.isFinite(startedMs) && Date.now() - startedMs > STALE_SESSION_MS) {
+    staleSnapshot = snap;
     return false;
   }
+  applyActiveSnapshot(snap);
+  return true;
+}
+
+// "Yes, I did it": log the left-open workout for the day it was STARTED. No
+// post-log ever happened, so after-capacity, back pain, end time and duration
+// are unknown — saved as null (shown "—"), with a note saying why. The one
+// number that was really entered, capacity-before, is kept.
+function logStaleSessionAsDone(): void {
+  const snap = staleSnapshot;
+  if (!snap) return;
+  const startedAt = snap.startedAt ?? new Date().toISOString();
+  const stored = saveLog({
+    date: startedAt,
+    workout: snap.selectedWorkout,
+    capacityBefore: snap.capacityBefore,
+    capacityAfter: null,
+    wallSitSec: snap.wallSitSec,
+    backPain: null,
+    word: snap.word,
+    startedAt,
+    notes:
+      'logged after the fact — Done was never tapped, so no end time, after-capacity or back pain',
+  });
+  staleSnapshot = null;
+  clearActiveSession();
+  render();
+  state.syncStatus = 'syncing';
+  updateSyncIndicator();
+  void pushLogToSupabase(stored).then((ok) => {
+    state.syncStatus = ok ? 'synced' : 'offline';
+    updateSyncIndicator();
+  });
+}
+
+function discardStaleSession(): void {
+  staleSnapshot = null;
+  clearActiveSession();
+  render();
+}
+
+// "Keep going": resume it anyway. The Done safety net will blank the duration.
+function continueStaleSession(): void {
+  const snap = staleSnapshot;
+  if (!snap) return;
+  staleSnapshot = null;
+  applyActiveSnapshot(snap);
+  render();
+}
+
+function renderStaleSessionCard(snap: ActiveSessionSnapshot): string {
+  const when = snap.startedAt
+    ? `${formatDateLong(snap.startedAt)} at ${formatTime(snap.startedAt)}`
+    : 'earlier';
+  return `
+    <div class="stale-card" id="stale-session-card" role="region" aria-label="Unfinished workout">
+      <div class="stale-card-title">Workout ${snap.selectedWorkout} was left open</div>
+      <div class="stale-card-sub">You started it ${when} and never tapped Done. Did you do it?</div>
+      <div class="btn-row stale-card-row">
+        <button class="btn btn-primary" id="stale-finished" type="button">Yes, I did it</button>
+        <button class="btn" id="stale-discard" type="button">No, throw it away</button>
+      </div>
+      <button class="quit-link stale-card-continue" id="stale-continue" type="button">Keep going where I left off</button>
+    </div>
+  `;
 }
 
 function resetState(): void {
@@ -3358,6 +3483,7 @@ type RemoteSession = {
   started_at: string | null;
   completed_at: string | null;
   duration_seconds: number | null;
+  notes?: string | null;
 };
 
 async function pullFromSupabase(): Promise<void> {
@@ -3387,13 +3513,15 @@ async function pullFromSupabase(): Promise<void> {
           date: r.date,
           workout: r.workout_type,
           capacityBefore: r.capacity_before_1_10 ?? 0,
-          capacityAfter: r.capacity_after_1_10 ?? 0,
+          // null stays null (v32): a missing after-reading is "—", not 0.
+          capacityAfter: r.capacity_after_1_10 ?? null,
           wallSitSec: r.wall_sit_seconds ?? 0,
-          backPain: r.pain_back_0_10 ?? 0,
+          backPain: r.pain_back_0_10 ?? null,
           word: r.one_word ?? '',
           startedAt: r.started_at ?? undefined,
           completedAt: r.completed_at ?? undefined,
           durationSec: r.duration_seconds ?? undefined,
+          notes: r.notes ?? null,
           synced: true,
         });
       }
@@ -4119,7 +4247,7 @@ function renderWeeklyTargetGrid(): string {
           if (w && log) {
             const cls = `weekly-slot weekly-slot-${w}`;
             const id = log.id ? `data-detail="${escapeHtml(log.id)}"` : '';
-            const tooltip = `${formatDate(log.date)} · Workout ${w} · capacity ${log.capacityBefore}→${log.capacityAfter}`;
+            const tooltip = `${formatDate(log.date)} · Workout ${w} · capacity ${log.capacityBefore}→${log.capacityAfter ?? '—'}`;
             return `<button class="${cls}" type="button" ${id} aria-label="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}">${w}</button>`;
           }
           return `<div class="weekly-slot weekly-slot-empty" aria-label="open slot"></div>`;
@@ -4420,7 +4548,7 @@ function renderHome(): string {
     .join('');
 
   const lastLine = lastLog
-    ? `Last: ${lastLog.workout} · ${formatDate(lastLog.date)} · capacity ${lastLog.capacityBefore}→${lastLog.capacityAfter}`
+    ? `Last: ${lastLog.workout} · ${formatDate(lastLog.date)} · capacity ${lastLog.capacityBefore}→${lastLog.capacityAfter ?? '—'}`
     : 'No sessions yet — pick A to start.';
 
   return `
@@ -4436,6 +4564,7 @@ function renderHome(): string {
     <p class="subtitle">Three rotating sessions. Show up 3x/week.</p>
     <div class="week-banner">${week.skippedLabel ? `${week.skippedLabel} week` : `${week.round > 1 ? `Round ${week.round} · ` : ''}Week ${week.num}`} · ${weekRange}</div>
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
+    ${staleSnapshot ? renderStaleSessionCard(staleSnapshot) : ''}
 
     <h3>Pick today's workout</h3>
     <div class="workout-picker">
@@ -4942,7 +5071,7 @@ function renderHistory(): string {
       <span class="history-workout-badge">${l.workout}</span>
       <div>
         <div class="history-date">${formatDate(l.date)}${l.durationSec ? ` · ${formatDuration(l.durationSec)}` : ''}${spark ? ` <span class="history-sparkline-wrap" aria-hidden="false">${spark}</span>` : ''}</div>
-        <div class="history-meta">cap ${l.capacityBefore}→${l.capacityAfter} · wall ${l.wallSitSec}s · back ${l.backPain}</div>
+        <div class="history-meta">cap ${l.capacityBefore}→${l.capacityAfter ?? '—'} · wall ${l.wallSitSec}s · back ${l.backPain ?? '—'}</div>
         ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
       </div>
       <div class="history-meta">›</div>
@@ -4982,10 +5111,11 @@ function renderHistoryDetail(): string {
       <div class="detail-row"><span class="detail-label">Finished</span><span>${completedAt}</span></div>
       <div class="detail-row"><span class="detail-label">Duration</span><span>${duration}</span></div>
       <div class="detail-row"><span class="detail-label">Capacity before</span><span>${log.capacityBefore}</span></div>
-      <div class="detail-row"><span class="detail-label">Capacity after</span><span>${log.capacityAfter}</span></div>
+      <div class="detail-row"><span class="detail-label">Capacity after</span><span>${log.capacityAfter ?? '—'}</span></div>
       <div class="detail-row"><span class="detail-label">Wall sit</span><span>${log.wallSitSec}s</span></div>
-      <div class="detail-row"><span class="detail-label">Back pain</span><span>${log.backPain}/10</span></div>
+      <div class="detail-row"><span class="detail-label">Back pain</span><span>${log.backPain === null ? '—' : `${log.backPain}/10`}</span></div>
       ${log.word ? `<div class="detail-row"><span class="detail-label">One word</span><span><em>"${escapeHtml(log.word)}"</em></span></div>` : ''}
+      ${log.notes ? `<div class="detail-row"><span class="detail-label">Note</span><span>${escapeHtml(log.notes)}</span></div>` : ''}
     </div>
     <button class="weekly-review-link progress-link" id="open-progress-from-detail" type="button">
       <span>📈 View progress</span>
@@ -5055,15 +5185,19 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
   let totalSec = 0;
   let capBeforeSum = 0;
   let capAfterSum = 0;
+  let capAfterCount = 0; // v32: after-the-fact logs have no after-reading
   let maxWallSit = 0;
   let backPainSum = 0;
   let backPainCount = 0;
   for (const { log } of sessions) {
     totalSec += log.durationSec ?? 0;
     capBeforeSum += log.capacityBefore;
-    capAfterSum += log.capacityAfter;
+    if (log.capacityAfter !== null) {
+      capAfterSum += log.capacityAfter;
+      capAfterCount += 1;
+    }
     if (log.wallSitSec > maxWallSit) maxWallSit = log.wallSitSec;
-    if (log.backPain > 0) {
+    if (log.backPain !== null && log.backPain > 0) {
       backPainSum += log.backPain;
       backPainCount += 1;
     }
@@ -5072,7 +5206,7 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
     count: sessions.length,
     totalSec,
     avgCapBefore: capBeforeSum / sessions.length,
-    avgCapAfter: capAfterSum / sessions.length,
+    avgCapAfter: capAfterCount > 0 ? capAfterSum / capAfterCount : null,
     maxWallSit,
     avgBackPain: backPainCount > 0 ? backPainSum / backPainCount : null,
   };
@@ -5127,7 +5261,8 @@ function renderDeltaDecimal(
   return `<span class="weekly-review-delta-num ${cls}">${arrow} ${sign}${diff.toFixed(1)}</span>`;
 }
 
-function formatCapArrowColor(before: number, after: number): string {
+function formatCapArrowColor(before: number, after: number | null): string {
+  if (after === null) return 'cap-arrow-same';
   if (after > before) return 'cap-arrow-up';
   if (after < before) return 'cap-arrow-down';
   return 'cap-arrow-same';
@@ -5145,7 +5280,7 @@ function renderWeeklyReviewSession(s: WeekSession): string {
       : '';
 
   const backPainLine =
-    log.backPain > 0
+    log.backPain !== null && log.backPain > 0
       ? `<div class="weekly-review-session-stat weekly-review-session-stat-warn"><span class="weekly-review-session-stat-num">${log.backPain}/10</span><span class="weekly-review-session-stat-lbl">back pain</span></div>`
       : '';
 
@@ -5169,7 +5304,7 @@ function renderWeeklyReviewSession(s: WeekSession): string {
           <span class="weekly-review-session-stat-num">
             ${log.capacityBefore}
             <span class="weekly-review-cap-arrow ${capCls}">→</span>
-            ${log.capacityAfter}
+            ${log.capacityAfter ?? '—'}
           </span>
           <span class="weekly-review-session-stat-lbl">capacity</span>
         </div>
@@ -5587,11 +5722,14 @@ function renderWallSitTrendCard(logs: LogEntry[]): string {
   `;
 }
 
-function renderCapacityTrendCard(logs: LogEntry[]): string {
+function renderCapacityTrendCard(allLogs: LogEntry[]): string {
+  // Only sessions with BOTH readings — the two lines share an x-axis, so a
+  // session with no after-reading (v32 after-the-fact log) can't sit on it.
+  const logs = allLogs.filter((l) => l.capacityAfter !== null);
   if (logs.length < 2) return '';
 
   const before = logs.map((l) => l.capacityBefore);
-  const after = logs.map((l) => l.capacityAfter);
+  const after = logs.map((l) => l.capacityAfter ?? 0); // filtered above; ?? only narrows the type
 
   const avgBefore = before.reduce((a, b) => a + b, 0) / before.length;
   const avgAfter = after.reduce((a, b) => a + b, 0) / after.length;
@@ -5630,10 +5768,12 @@ function renderCapacityTrendCard(logs: LogEntry[]): string {
   `;
 }
 
-function renderBackPainTrendCard(logs: LogEntry[]): string {
+function renderBackPainTrendCard(allLogs: LogEntry[]): string {
+  // Skip sessions with no back-pain reading (v32 after-the-fact logs).
+  const logs = allLogs.filter((l) => l.backPain !== null);
   if (logs.length < 2) return '';
 
-  const values = logs.map((l) => l.backPain);
+  const values = logs.map((l) => l.backPain ?? 0); // filtered above; ?? only narrows the type
   const positive = values.filter((v) => v > 0);
 
   // Pain scale max is 10 per the post-log slider.
@@ -6245,6 +6385,11 @@ function attachHandlers(): void {
     state.screen = 'history';
     render();
   });
+
+  // v32: the left-open workout card on home (see STALE_SESSION_MS).
+  bindClick('stale-finished', logStaleSessionAsDone);
+  bindClick('stale-discard', discardStaleSession);
+  bindClick('stale-continue', continueStaleSession);
 
   // Week navigation on home — prev/next step through past weeks of the dot strip.
   bindClick('prev-week', () => {

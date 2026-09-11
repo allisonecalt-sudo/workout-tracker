@@ -1444,6 +1444,38 @@ input[type='number']:focus {
 
 /* --- Banners — warning is status, not panic ---------------------------- */
 
+/* Left-open workout card (v32, Sep 11 2026): on open the app found a workout
+ * snapshot older than 3 hours. It asks instead of silently resuming. Same warm
+ * amber as the warning banner — it's a question, not an alarm. */
+.stale-card {
+  background: rgba(230, 180, 80, 0.08);
+  border: 1px solid rgba(230, 180, 80, 0.35);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.stale-card-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.stale-card-sub {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.stale-card-row .btn {
+  flex: 1;
+}
+
+.stale-card-continue {
+  display: block;
+  margin: 12px auto 0;
+}
+
 .warning-banner {
   background: rgba(230, 180, 80, 0.08);
   border: 1px solid rgba(230, 180, 80, 0.35);
