@@ -235,8 +235,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v32';
-const BUILD_DATE = 'Sep 11, 2026 · 10:35';
+const APP_VERSION = 'v33';
+const BUILD_DATE = 'Sep 11, 2026 · 11:26';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -3486,47 +3486,75 @@ type RemoteSession = {
   notes?: string | null;
 };
 
+// How many sessions a pull fetches (newest first). The merge below uses it to
+// know whether the server's answer is the WHOLE history or just a window.
+const PULL_LIMIT = 50;
+
+// Group 1E: id-keyed merge. Remote rows replace local-synced rows with the same
+// id; a local-unsynced row never loses its write.
+// v33 (Sep 11 2026): a row DELETED in Supabase must vanish from the phone too.
+// Until now the pull only added and updated, so a row removed on the server
+// (the false Thu-Sep-10 "B") stayed in her history forever. Rule: a local row
+// the server once had (synced) that is missing from the fetched window is gone.
+// Rows older than a full 50-row window are left alone (they may simply be past
+// the window), and an empty server answer is never read as "delete everything".
+function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEntry[] {
+  const remoteIds = new Set(remote.map((r) => r.id));
+  const windowIsEverything = remote.length < PULL_LIMIT;
+  const oldestRemoteMs =
+    remote.length > 0 ? Math.min(...remote.map((r) => new Date(r.date).getTime())) : NaN;
+  const byId = new Map<string, LogEntry>();
+  for (const l of local) {
+    if (!l.id) continue;
+    if (l.synced && remote.length > 0 && !remoteIds.has(l.id)) {
+      const insideWindow = windowIsEverything || new Date(l.date).getTime() >= oldestRemoteMs;
+      if (insideWindow) continue; // deleted on the server → drop it here too
+    }
+    byId.set(l.id, l);
+  }
+  for (const r of remote) {
+    const existing = byId.get(r.id);
+    if (existing && !existing.synced) continue; // local-unsynced wins
+    byId.set(r.id, {
+      id: r.id,
+      date: r.date,
+      workout: r.workout_type,
+      capacityBefore: r.capacity_before_1_10 ?? 0,
+      // null stays null (v32): a missing after-reading is "—", not 0.
+      capacityAfter: r.capacity_after_1_10 ?? null,
+      wallSitSec: r.wall_sit_seconds ?? 0,
+      backPain: r.pain_back_0_10 ?? null,
+      word: r.one_word ?? '',
+      startedAt: r.started_at ?? undefined,
+      completedAt: r.completed_at ?? undefined,
+      durationSec: r.duration_seconds ?? undefined,
+      notes: r.notes ?? null,
+      synced: true,
+    });
+  }
+  return Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date));
+}
+
+// Test-only hook: the merge is pure, but the network is off under automation
+// (syncDisabled), so Playwright reaches it here. Never set outside automation.
+if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
+  (
+    window as unknown as { __wtMergeRemoteSessions?: typeof mergeRemoteSessions }
+  ).__wtMergeRemoteSessions = mergeRemoteSessions;
+}
+
 async function pullFromSupabase(): Promise<void> {
   if (syncDisabled()) return;
   try {
     const sRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/workout_sessions?select=*&order=date.desc&limit=50`,
+      `${SUPABASE_URL}/rest/v1/workout_sessions?select=*&order=date.desc&limit=${PULL_LIMIT}`,
       {
         headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
       }
     );
     if (sRes.ok) {
       const remote: RemoteSession[] = await sRes.json();
-      const local = loadLogs();
-      // Group 1E: id-keyed merge. Remote-synced rows replace local-synced
-      // rows with same id; local-unsynced never lose their write. Tombstone
-      // handling deferred (audit §11 Session C).
-      const byId = new Map<string, LogEntry>();
-      for (const l of local) {
-        if (l.id) byId.set(l.id, l);
-      }
-      for (const r of remote) {
-        const existing = byId.get(r.id);
-        if (existing && !existing.synced) continue; // local-unsynced wins
-        byId.set(r.id, {
-          id: r.id,
-          date: r.date,
-          workout: r.workout_type,
-          capacityBefore: r.capacity_before_1_10 ?? 0,
-          // null stays null (v32): a missing after-reading is "—", not 0.
-          capacityAfter: r.capacity_after_1_10 ?? null,
-          wallSitSec: r.wall_sit_seconds ?? 0,
-          backPain: r.pain_back_0_10 ?? null,
-          word: r.one_word ?? '',
-          startedAt: r.started_at ?? undefined,
-          completedAt: r.completed_at ?? undefined,
-          durationSec: r.duration_seconds ?? undefined,
-          notes: r.notes ?? null,
-          synced: true,
-        });
-      }
-      const merged = Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date));
-      writeLogs(merged);
+      writeLogs(mergeRemoteSessions(loadLogs(), remote));
     } else {
       console.warn('[sync] pull sessions failed:', sRes.status);
     }

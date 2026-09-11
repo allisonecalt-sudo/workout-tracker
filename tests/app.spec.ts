@@ -500,6 +500,91 @@ test('left-open gate: a 10-minute-old workout still resumes silently (no card)',
   await reopened.close();
 });
 
+// v33 (Sep 11 2026): a row deleted in Supabase must vanish from the phone. The
+// pull used to only add and update, so the false Thu-Sep-10 "B" (deleted on
+// the server the same morning) would have sat in her history forever. The
+// merge is pure; the network is off under automation, so the app exposes it
+// as window.__wtMergeRemoteSessions only when navigator.webdriver is true.
+test('pull merge (v33): a row deleted on the server disappears; unsynced, out-of-window and empty-answer cases stay safe', async ({
+  page,
+}) => {
+  const result = await page.evaluate(() => {
+    type Row = { id: string; date: string; synced?: boolean };
+    type Merge = (local: unknown[], remote: unknown[]) => Row[];
+    const merge = (window as unknown as { __wtMergeRemoteSessions: Merge }).__wtMergeRemoteSessions;
+    const local = (id: string, date: string, synced: boolean) => ({
+      id,
+      date,
+      workout: 'A',
+      capacityBefore: 5,
+      capacityAfter: 5,
+      wallSitSec: 0,
+      backPain: 0,
+      word: '',
+      synced,
+    });
+    const remote = (id: string, date: string) => ({
+      id,
+      date,
+      workout_type: 'B',
+      capacity_before_1_10: 5,
+      capacity_after_1_10: null,
+      wall_sit_seconds: 0,
+      pain_back_0_10: null,
+      one_word: null,
+      started_at: null,
+      completed_at: null,
+      duration_seconds: null,
+      notes: null,
+    });
+    const ids = (rows: Row[]) => rows.map((r) => r.id).sort();
+
+    // Case 1: the server answered with its WHOLE history (fewer than 50 rows).
+    const whole = merge(
+      [
+        local('deleted-on-server', '2026-09-10T17:24:38.715Z', true),
+        local('unsynced-local', '2026-09-11T08:00:00.000Z', false),
+        local('ancient-synced', '2026-01-01T10:00:00.000Z', true),
+        local('still-there', '2026-09-04T14:22:39.062Z', true),
+      ],
+      [
+        remote('still-there', '2026-09-04T14:22:39.062+00:00'),
+        remote('server-new', '2026-09-07T15:00:00+00:00'),
+      ]
+    );
+
+    // Case 2: the server answered with a full 50-row WINDOW (Sep 2026 dates).
+    const window50 = Array.from({ length: 50 }, (_, i) =>
+      remote(`w${i}`, `2026-09-${String(1 + (i % 28)).padStart(2, '0')}T10:00:00+00:00`)
+    );
+    const windowed = merge(
+      [
+        local('missing-inside-window', '2026-09-15T10:00:00.000Z', true),
+        local('older-than-window', '2025-12-31T10:00:00.000Z', true),
+        local('unsynced-local', '2026-09-30T10:00:00.000Z', false),
+      ],
+      window50
+    );
+
+    // Case 3: an empty server answer never deletes anything.
+    const empty = merge([local('keep-me', '2026-09-04T14:22:39.062Z', true)], []);
+
+    return {
+      whole: ids(whole),
+      windowedKept: ids(windowed).filter((id) => !id.startsWith('w')),
+      windowedCount: windowed.length,
+      empty: ids(empty),
+      serverNewSynced: whole.find((r) => r.id === 'server-new')?.synced,
+    };
+  });
+
+  expect(result.whole).toEqual(['server-new', 'still-there', 'unsynced-local']);
+  expect(result.serverNewSynced).toBe(true);
+  expect(result.windowedKept).toEqual(['older-than-window', 'unsynced-local']);
+  expect(result.windowedCount).toBe(52);
+  expect(result.empty).toEqual(['keep-me']);
+});
+
 // The Done safety net: "Keep going" on a 5-hour-old C, walk it to Save, and the
 // duration comes out as 5h+. That is a session that sat open, not a workout
 // length — it must be blanked ("—") and explained in the note, never logged.
