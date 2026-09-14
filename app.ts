@@ -251,8 +251,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v37';
-const BUILD_DATE = 'Sep 14, 2026 · 11:52';
+const APP_VERSION = 'v38';
+const BUILD_DATE = 'Sep 14, 2026 · 12:02';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2022,24 +2022,24 @@ const R2W3_BAND_CLAMSHELL: Exercise = {
   // title/author as quoted). NOT watched end to end — so it is offered as a
   // demonstration, not endorsed frame by frame.
   setup: {
-    title: 'Tie the band into a loop first (one time)',
+    title: 'Tie the band into a loop (one time)',
     steps: [
-      'Take the <strong>yellow</strong> one — the lightest. Lay it flat, no twists.',
-      "Bring the two ends together and <strong>overlap them by about a hand's width</strong>. Overlapping is what stops it slipping.",
-      "Tie the overlap in a <strong>square knot</strong>: same as a shoelace bow, but pull the ends all the way through instead of leaving loops. Do it twice. (This is TheraBand's own way of making a loop.)",
-      'Check the size against your legs: the loop should sit <strong>just above your knees</strong> and be only <em>just</em> snug with your knees together. If it is already tight before you move, it is too small — retie it bigger. Too small is the usual mistake.',
-      'Turn the <strong>knot to the outside</strong> of your top thigh so it is not pressing into you.',
-      'Keep it tied. It lives as a loop now — you only do this once.',
+      'Take the <strong>yellow</strong> one, laid flat.',
+      "Overlap the two ends about <strong>a hand's width</strong>, then tie a <strong>double square knot</strong> — a shoelace bow with the ends pulled all the way through.",
+      'Size it to sit <strong>just above your knees</strong>, only just snug with your knees together. Already tight before you move? Retie it bigger.',
+      'Knot to the <strong>outside</strong> of your top thigh. Then leave it tied — this is a one-time job.',
     ],
     youtubeId: 'ESNXHhPdIos',
-    attribution: 'How to tie a TheraBand — Total Therapy Florida (physical therapy)',
+    attribution: 'Total Therapy Florida (physical therapy)',
     footnote:
-      'Tying it with your fingers is fine — that is not the gripping gate. The gate is holding and pulling something while you move, and a tied loop needs no hands at all. <strong>Give the knot a tug before each set</strong>; latex creeps loose. If the knot turns out to be a nuisance, a ready-made loop band is the thing to buy — say so and it goes on the list.',
+      'Tying it is not the gripping gate — a tied loop needs no hands while you move. Tug the knot before each set.',
   },
-  // Notes stay about the MOVEMENT. The tying lives in `setup` below so she is
-  // not reading the same paragraph twice (SHORT + SIMPLE).
+  // Notes stay SHORT and about the MOVEMENT: the tying lives in `setup` above,
+  // and the movement cues live in the detail card. The tying
+  // lives in `setup`. Measured on her phone Sep 14: the first draft of this
+  // step ran 933 px on a 915 px screen — a wall of text she would not read.
   notes:
-    'NEW this week — the band goes on. Once it is tied (see below), everything is the same as always: hips and shoulders stacked, head on the mat, bottom arm flat along the floor — do NOT prop on your elbow, keep the wrists off the floor. Loop just above the knees, feet together, open the top knee against the band, lower it slow. Back to 10 each side, not 15 — the band IS the increase. If your hips start rolling backward to get the knee higher, the band is too strong for now: slide the loop further down your thighs, or take it off and finish bodyweight. That is the right call, not a failure.',
+    'NEW: the band goes on — tie it first (just below). Same movement as always. <strong>10 each side, not 15</strong> — the band is the increase. If your hips roll backward to get the knee higher, the band is too strong for now: slide it lower down your thighs, or take it off and finish bodyweight. That is the right call, not a failure.',
 };
 PROGRAM.push({
   round: 2,

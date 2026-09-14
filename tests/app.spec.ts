@@ -654,8 +654,7 @@ test('R2 W3: workout B carries the yellow band on the clamshells, reps back to 1
   expect(repsSeen).toContain('yellow band');
   // The notes stay about the MOVEMENT (the tying moved to the setup block, so
   // she isn't reading the same paragraph twice).
-  expect(notesSeen).toContain('above the knees');
-  expect(notesSeen).toContain('the band IS the increase');
+  expect(notesSeen).toContain('the band is the increase');
   expect(notesSeen).toContain('finish bodyweight');
 });
 
@@ -682,14 +681,14 @@ test('R2 W3: the clamshell step carries a tying explanation AND its own video, o
   await expect(setup).toBeVisible();
   // Open by DEFAULT — a step she has never done should not hide behind a tap.
   await expect(setup.locator('.setup-body')).toBeVisible();
-  await expect(setup).toContainText('Tie the band into a loop first');
+  await expect(setup).toContainText('Tie the band into a loop');
 
   // The explanation: the knot, the sizing, the knot position, and the gate line.
   const steps = setup.locator('.setup-steps li');
-  expect(await steps.count()).toBeGreaterThanOrEqual(5);
+  expect(await steps.count()).toBeGreaterThanOrEqual(4);
   const allSteps = (await steps.allTextContents()).join(' | ');
   expect(allSteps).toContain('square knot');
-  expect(allSteps).toContain('overlap');
+  expect(allSteps).toContain('Overlap');
   expect(allSteps).toContain('just above your knees');
   expect(allSteps).toContain('outside');
   await expect(setup.locator('.setup-footnote')).toContainText('not the gripping gate');
