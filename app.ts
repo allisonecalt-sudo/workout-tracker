@@ -235,8 +235,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v35';
-const BUILD_DATE = 'Sep 14, 2026 · 09:52';
+const APP_VERSION = 'v36';
+const BUILD_DATE = 'Sep 14, 2026 · 11:10';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -1997,9 +1997,9 @@ const R2W3_BAND_CLAMSHELL: Exercise = {
   // the recorded voice note are all keyed to this exact string. The band is the
   // prescription, not a different exercise.
   name: 'Side-lying clamshells',
-  reps: '10 each side · yellow band',
+  reps: '10 each side · yellow band (tied into a loop)',
   notes:
-    'NEW this week — the yellow band goes ON. Loop it around both thighs, just above the knees, so it is snug when your knees are together. Everything else is identical: hips and shoulders stacked, head on the mat, bottom arm extended on the floor (do NOT prop on your elbow, and keep the wrists off the floor). Feet stay together, open the top knee against the band, lower with control. Nothing to hold and nothing on your hands — the band is a loop, so this is not the gripping gate. Back to 10 each side, not 15: the band IS the increase. If your hips start rolling backward to get the knee higher, the band is too strong for now — move it further down the thighs, or take it off and finish bodyweight. That is not a failure, it is the right call.',
+    'NEW this week — the yellow band goes on. YOURS IS A FLAT STRIP, SO YOU TIE IT FIRST (her question, Sep 14: "so do i tie it?"). Overlap the two ends by about a hand\'s width and tie them in a square knot — the same knot as a shoelace bow but pulled all the way through, twice. That is TheraBand\'s own instruction for making a loop. Size it so the loop sits just above your knees and is only just snug with your knees together; too small is the usual mistake. Turn the knot to the OUTSIDE of your top thigh so it is not digging into you. Tying it once with your fingers is fine — there is nothing to hold or pull while you are moving, so this is still not the gripping gate. Then everything is the same as always: hips and shoulders stacked, head on the mat, bottom arm flat along the floor (do NOT prop on your elbow, keep the wrists off the floor). Feet together, open the top knee against the band, lower it slow. Back to 10 each side, not 15 — the band IS the increase. If your hips start rolling backward to get the knee higher, the band is too strong for now: slide the loop further down your thighs, or take it off and finish bodyweight. That is the right call, not a failure. Give the knot a tug before each set — latex can creep loose.',
 };
 PROGRAM.push({
   round: 2,
@@ -4556,7 +4556,7 @@ function renderGearCard(): string {
           <div class="gear-label">You have — in the workout now</div>
           <ul class="gear-list">
             <li>✅ 1 kg weight — owned. The <strong>biceps curl is still PAUSED</strong> with all loaded arm work (since Jun 20 2026, the thumb/cyst). Sep 7 2026 you opened <em>weight-bearing</em> on the hands (bird dog, legs only) — <strong>holding and gripping a weight is a separate gate</strong> and stays closed until Lisa says otherwise. The <strong>prone row stays bodyweight</strong>. One to ask her: can you hold the 1 kg for prone Y/T raises?</li>
-            <li>✅ TheraBand kit (Yellow / Red / Green) — <strong>the yellow band is IN your workout as of Week 3</strong> (your word, Sep 14: “build week 3”), looped around the thighs on the clamshells in <strong>Workout B</strong>. Held back one week from when you confirmed the kit was home, on your own “don’t raise too fast”. Reps went back to 10 a side because the band is the increase; it climbs to 15 before the <strong>red</strong> one. A band <em>looped</em> around the legs uses no hands at all; a band you have to <em>hold and pull</em> is the gripping gate above, and that stays shut.</li>
+            <li>✅ TheraBand kit (Yellow / Red / Green) — <strong>the yellow band is IN your workout as of Week 3</strong> (your word, Sep 14: “build week 3”), around the thighs on the clamshells in <strong>Workout B</strong>. <strong>These are flat strips, so tie the ends in a square knot once and keep that loop</strong> — you asked, and the workout step now walks you through it. Held back one week from when you confirmed the kit was home, on your own “don’t raise too fast”. Reps went back to 10 a side because the band is the increase; it climbs to 15 before the <strong>red</strong> one. A band <em>looped</em> around the legs uses no hands while you move; a band you have to <em>hold and pull</em> is the gripping gate above, and that stays shut. If the knot annoys you, a ready-made loop band is the thing to buy — tell Claude and it goes on the list.</li>
           </ul>
         </div>
         <div class="gear-section">

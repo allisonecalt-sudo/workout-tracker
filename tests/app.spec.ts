@@ -652,8 +652,12 @@ test('R2 W3: workout B carries the yellow band on the clamshells, reps back to 1
   // The band is the increase, so reps RESET — 10 a side, never 15 this week.
   expect(repsSeen).toContain('10 each side');
   expect(repsSeen).toContain('yellow band');
+  // Her kit is FLAT strips, not loop bands — she asked "so do i tie it?", so the
+  // step has to say so rather than assume a loop she does not own.
+  expect(notesSeen).toContain('FLAT STRIP');
+  expect(notesSeen).toContain('square knot');
   // And it must tell her the loop is not the gripping gate, plus the back-off.
-  expect(notesSeen).toContain('above the knees');
+  expect(notesSeen).toContain('above your knees');
   expect(notesSeen).toContain('not the gripping gate');
 });
 
