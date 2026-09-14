@@ -59,7 +59,12 @@ type LogEntry = {
   id?: string;
   date: string;
   workout: WorkoutId;
-  capacityBefore: number;
+  // null = never recorded. BEFORE-capacity goes nullable in v39: the sync used
+  // to coerce a missing reading to 0 with `?? 0`, which rendered historical rows
+  // as "cap 0 → 0" — and 0 is not a value this slider can produce (its range is
+  // 1-10), so it was a hole wearing a number. Named in the May-14 audit, fixed
+  // Sep 14 2026 on her word ("ok so fix it").
+  capacityBefore: number | null;
   // null = never recorded (v32, Sep 11 2026): a workout logged after the fact
   // from a left-open snapshot has no post-log, so after-capacity and back pain
   // are unknown — shown as "—", never invented as 5/0.
@@ -251,8 +256,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v38';
-const BUILD_DATE = 'Sep 14, 2026 · 12:02';
+const APP_VERSION = 'v39';
+const BUILD_DATE = 'Sep 14, 2026 · 12:22';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -3609,7 +3614,8 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       id: r.id,
       date: r.date,
       workout: r.workout_type,
-      capacityBefore: r.capacity_before_1_10 ?? 0,
+      // v39: no `?? 0`. A missing reading stays missing and renders as "—".
+      capacityBefore: r.capacity_before_1_10,
       // null stays null (v32): a missing after-reading is "—", not 0.
       capacityAfter: r.capacity_after_1_10 ?? null,
       wallSitSec: r.wall_sit_seconds ?? 0,
@@ -4424,7 +4430,7 @@ function renderWeeklyTargetGrid(): string {
           if (w && log) {
             const cls = `weekly-slot weekly-slot-${w}`;
             const id = log.id ? `data-detail="${escapeHtml(log.id)}"` : '';
-            const tooltip = `${formatDate(log.date)} · Workout ${w} · capacity ${log.capacityBefore}→${log.capacityAfter ?? '—'}`;
+            const tooltip = `${formatDate(log.date)} · Workout ${w} · capacity ${log.capacityBefore ?? '—'}→${log.capacityAfter ?? '—'}`;
             return `<button class="${cls}" type="button" ${id} aria-label="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}">${w}</button>`;
           }
           return `<div class="weekly-slot weekly-slot-empty" aria-label="open slot"></div>`;
@@ -4725,7 +4731,7 @@ function renderHome(): string {
     .join('');
 
   const lastLine = lastLog
-    ? `Last: ${lastLog.workout} · ${formatDate(lastLog.date)} · capacity ${lastLog.capacityBefore}→${lastLog.capacityAfter ?? '—'}`
+    ? `Last: ${lastLog.workout} · ${formatDate(lastLog.date)} · capacity ${lastLog.capacityBefore ?? '—'}→${lastLog.capacityAfter ?? '—'}`
     : 'No sessions yet — pick A to start.';
 
   return `
@@ -5249,7 +5255,7 @@ function renderHistory(): string {
       <span class="history-workout-badge">${l.workout}</span>
       <div>
         <div class="history-date">${formatDate(l.date)}${l.durationSec ? ` · ${formatDuration(l.durationSec)}` : ''}${spark ? ` <span class="history-sparkline-wrap" aria-hidden="false">${spark}</span>` : ''}</div>
-        <div class="history-meta">cap ${l.capacityBefore}→${l.capacityAfter ?? '—'} · wall ${l.wallSitSec}s · back ${l.backPain ?? '—'}</div>
+        <div class="history-meta">cap ${l.capacityBefore ?? '—'}→${l.capacityAfter ?? '—'} · wall ${l.wallSitSec}s · back ${l.backPain ?? '—'}</div>
         ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
       </div>
       <div class="history-meta">›</div>
@@ -5288,7 +5294,7 @@ function renderHistoryDetail(): string {
       <div class="detail-row"><span class="detail-label">Started</span><span>${startedAt}</span></div>
       <div class="detail-row"><span class="detail-label">Finished</span><span>${completedAt}</span></div>
       <div class="detail-row"><span class="detail-label">Duration</span><span>${duration}</span></div>
-      <div class="detail-row"><span class="detail-label">Capacity before</span><span>${log.capacityBefore}</span></div>
+      <div class="detail-row"><span class="detail-label">Capacity before</span><span>${log.capacityBefore ?? '—'}</span></div>
       <div class="detail-row"><span class="detail-label">Capacity after</span><span>${log.capacityAfter ?? '—'}</span></div>
       <div class="detail-row"><span class="detail-label">Wall sit</span><span>${log.wallSitSec}s</span></div>
       <div class="detail-row"><span class="detail-label">Back pain</span><span>${log.backPain === null ? '—' : `${log.backPain}/10`}</span></div>
@@ -5372,6 +5378,7 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
   // present a hole as a number.
   let durationKnownCount = 0;
   let capBeforeSum = 0;
+  let capBeforeCount = 0; // v39: before-capacity can be missing on old rows too
   let capAfterSum = 0;
   let capAfterCount = 0; // v32: after-the-fact logs have no after-reading
   let maxWallSit = 0;
@@ -5382,7 +5389,10 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
       totalSec += log.durationSec;
       durationKnownCount += 1;
     }
-    capBeforeSum += log.capacityBefore;
+    if (log.capacityBefore !== null) {
+      capBeforeSum += log.capacityBefore;
+      capBeforeCount += 1;
+    }
     if (log.capacityAfter !== null) {
       capAfterSum += log.capacityAfter;
       capAfterCount += 1;
@@ -5397,7 +5407,7 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
     count: sessions.length,
     totalSec,
     durationKnownCount,
-    avgCapBefore: capBeforeSum / sessions.length,
+    avgCapBefore: capBeforeCount > 0 ? capBeforeSum / capBeforeCount : null,
     avgCapAfter: capAfterCount > 0 ? capAfterSum / capAfterCount : null,
     maxWallSit,
     avgBackPain: backPainCount > 0 ? backPainSum / backPainCount : null,
@@ -5453,8 +5463,9 @@ function renderDeltaDecimal(
   return `<span class="weekly-review-delta-num ${cls}">${arrow} ${sign}${diff.toFixed(1)}</span>`;
 }
 
-function formatCapArrowColor(before: number, after: number | null): string {
-  if (after === null) return 'cap-arrow-same';
+function formatCapArrowColor(before: number | null, after: number | null): string {
+  // Either side missing → no direction to show.
+  if (before === null || after === null) return 'cap-arrow-same';
   if (after > before) return 'cap-arrow-up';
   if (after < before) return 'cap-arrow-down';
   return 'cap-arrow-same';
@@ -5494,7 +5505,7 @@ function renderWeeklyReviewSession(s: WeekSession): string {
       <div class="weekly-review-session-stats">
         <div class="weekly-review-session-stat">
           <span class="weekly-review-session-stat-num">
-            ${log.capacityBefore}
+            ${log.capacityBefore ?? '—'}
             <span class="weekly-review-cap-arrow ${capCls}">→</span>
             ${log.capacityAfter ?? '—'}
           </span>
@@ -5920,12 +5931,14 @@ function renderWallSitTrendCard(logs: LogEntry[]): string {
 
 function renderCapacityTrendCard(allLogs: LogEntry[]): string {
   // Only sessions with BOTH readings — the two lines share an x-axis, so a
-  // session with no after-reading (v32 after-the-fact log) can't sit on it.
-  const logs = allLogs.filter((l) => l.capacityAfter !== null);
+  // session missing either end (v32 after-the-fact log, or a pre-v39 row with
+  // no before-reading) can't sit on it.
+  const logs = allLogs.filter((l) => l.capacityBefore !== null && l.capacityAfter !== null);
   if (logs.length < 2) return '';
 
-  const before = logs.map((l) => l.capacityBefore);
-  const after = logs.map((l) => l.capacityAfter ?? 0); // filtered above; ?? only narrows the type
+  // Both filtered above; the `??` only narrows the type, it never substitutes.
+  const before = logs.map((l) => l.capacityBefore ?? 0);
+  const after = logs.map((l) => l.capacityAfter ?? 0);
 
   const avgBefore = before.reduce((a, b) => a + b, 0) / before.length;
   const avgAfter = after.reduce((a, b) => a + b, 0) / after.length;
@@ -6335,7 +6348,7 @@ function isValidLogEntry(x: unknown): x is LogEntry {
   return (
     typeof o['date'] === 'string' &&
     (o['workout'] === 'A' || o['workout'] === 'B' || o['workout'] === 'C') &&
-    typeof o['capacityBefore'] === 'number' &&
+    isNullableNumber(o['capacityBefore']) &&
     isNullableNumber(o['capacityAfter']) &&
     typeof o['wallSitSec'] === 'number' &&
     isNullableNumber(o['backPain'])

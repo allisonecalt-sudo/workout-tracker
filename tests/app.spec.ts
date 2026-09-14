@@ -776,6 +776,123 @@ test('R2 W3: gear card no longer says the band is waiting for a future week', as
   await expect(gear).not.toContainText('Booked for');
 });
 
+// v39 (Sep 14 2026): before-capacity goes nullable. The sync used to coerce a
+// missing reading with `?? 0`, and 0 is not a value the slider can produce (its
+// range is 1-10) — so it was a hole wearing a number. Named in the May-14 audit,
+// fixed on her word "ok so fix it". One REAL row has this: her very first
+// session, May 2 2026, has both capacity columns null and was rendering "0→0".
+test('capacity before (v39): a missing reading stays missing through the sync, the week average and the import', async ({
+  page,
+}) => {
+  const out = await page.evaluate(() => {
+    const w = window as unknown as {
+      __wtMergeRemoteSessions: (l: unknown[], r: unknown[]) => Array<Record<string, unknown>>;
+      __wtComputeWeekTotals: (s: unknown[]) => { avgCapBefore: number | null; count: number };
+      __wtIsValidLogEntry: (x: unknown) => boolean;
+    };
+    // The real May-2 shape: both capacity columns null on the server.
+    const merged = w.__wtMergeRemoteSessions(
+      [],
+      [
+        {
+          id: 'first-ever',
+          date: '2026-05-02T19:00:00+00:00',
+          workout_type: 'A',
+          capacity_before_1_10: null,
+          capacity_after_1_10: null,
+          wall_sit_seconds: 20,
+          pain_back_0_10: null,
+          one_word: null,
+          started_at: null,
+          completed_at: null,
+          duration_seconds: null,
+          notes: null,
+        },
+      ]
+    );
+    const mk = (before: number | null) => ({
+      log: {
+        id: `x${String(before)}`,
+        date: '2026-09-14T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: before,
+        capacityAfter: 5,
+        wallSitSec: 0,
+        backPain: 0,
+        word: '',
+      },
+      durationStr: '—',
+    });
+    return {
+      mergedBefore: merged[0]?.['capacityBefore'],
+      // 6 and 8 known, one missing → average must be 7, NOT (6+8+0)/3 = 4.67.
+      totals: w.__wtComputeWeekTotals([mk(6), mk(8), mk(null)]),
+      allMissing: w.__wtComputeWeekTotals([mk(null)]).avgCapBefore,
+      importAcceptsNull: w.__wtIsValidLogEntry({
+        date: '2026-05-02',
+        workout: 'A',
+        capacityBefore: null,
+        capacityAfter: null,
+        wallSitSec: 20,
+        backPain: null,
+      }),
+      importRejectsJunk: w.__wtIsValidLogEntry({
+        date: '2026-05-02',
+        workout: 'A',
+        capacityBefore: 'five',
+        capacityAfter: null,
+        wallSitSec: 20,
+        backPain: null,
+      }),
+    };
+  });
+
+  // The whole point: null survives the sync instead of becoming 0.
+  expect(out.mergedBefore).toBeNull();
+  // The average is over the readings that EXIST, so a hole cannot drag it down.
+  expect(out.totals.count).toBe(3);
+  expect(out.totals.avgCapBefore).toBe(7);
+  // Nothing to average → "—", not 0.
+  expect(out.allMissing).toBeNull();
+  // And a backup containing that row still restores.
+  expect(out.importAcceptsNull).toBe(true);
+  expect(out.importRejectsJunk).toBe(false);
+});
+
+test('capacity before (v39): the history row shows an em dash, never "0"', async ({
+  page,
+  context,
+}) => {
+  // Seed on THIS page, then read from a fresh page in the same context: the
+  // suite's beforeEach installs an init script that clears localStorage on
+  // every navigation, so a goto() here would wipe the row we just wrote.
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'workout-tracker:logs',
+      JSON.stringify([
+        {
+          id: 'first-ever',
+          date: '2026-05-02T19:00:00.000Z',
+          workout: 'A',
+          capacityBefore: null,
+          capacityAfter: null,
+          wallSitSec: 20,
+          backPain: null,
+          word: '',
+          synced: true,
+        },
+      ])
+    );
+  });
+  const reopened = await context.newPage();
+  await reopened.goto('/');
+  await reopened.locator('#view-history').click();
+  const meta = reopened.locator('.history-meta').first();
+  await expect(meta).toContainText('cap —→—');
+  await expect(meta).not.toContainText('cap 0');
+  await reopened.close();
+});
+
 // v34 (Sep 14 2026): both of these were found by the close's bleed check, not
 // by a test — the v32 nullable change had two readers that were never updated.
 test('backup restore (v34): a row with null after-capacity / back pain survives the import', async ({
