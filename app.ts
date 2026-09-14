@@ -256,8 +256,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v39';
-const BUILD_DATE = 'Sep 14, 2026 · 12:22';
+const APP_VERSION = 'v40';
+const BUILD_DATE = 'Sep 14, 2026 · 12:48';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -5005,6 +5005,13 @@ function renderCooldownList(w: Workout): string {
           ${s.reps ? `<span class="stretch-reps">${escapeHtml(s.reps)}</span>` : ''}
         </div>
         ${s.notes ? `<p class="stretch-cue">${escapeHtml(s.notes)}</p>` : ''}
+        ${
+          /* v40: cooldown is Exercise[] like every other phase, so a stretch CAN
+             carry `setup`. Without this call it would silently never render — a
+             trap rather than a live bug (no stretch carries one today), found by
+             the v32-v39 consistency audit. Rendering it here means the field
+             works everywhere its type is allowed. */ renderExerciseSetup(s)
+        }
       </li>`
     )
     .join('');

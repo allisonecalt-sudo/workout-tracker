@@ -893,6 +893,56 @@ test('capacity before (v39): the history row shows an em dash, never "0"', async
   await reopened.close();
 });
 
+// v40 (Sep 14 2026): `setup` must work on every phase whose type allows it.
+// The cooldown list renders Exercise[] through its own markup, so it was the
+// one phase where a setup block would have silently vanished. Asserted against
+// the renderer rather than the program, since no real stretch carries one.
+test('setup blocks (v40): every phase that renders an Exercise also renders its setup', async ({
+  page,
+}) => {
+  const callSites = await page.evaluate(() => {
+    // renderExerciseSetup is not exported; count its call sites in the shipped
+    // bundle instead. Both the stepped-exercise renderer and the cooldown list
+    // must call it.
+    return fetch('dist/app.js')
+      .then((r) => r.text())
+      .then((src) => (src.match(/renderExerciseSetup\(/g) ?? []).length);
+  });
+  // 1 definition + 2 call sites.
+  expect(callSites).toBeGreaterThanOrEqual(3);
+
+  // And the cooldown list still renders normally with no setup present.
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  for (let i = 0; i < 60; i++) {
+    if (
+      await page
+        .locator('.stretch-list')
+        .isVisible()
+        .catch(() => false)
+    )
+      break;
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else {
+      const skipRest = page.locator('#skip-rest');
+      if (await skipRest.isVisible()) {
+        const box = await skipRest.boundingBox();
+        if (box) {
+          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+          await page.mouse.down();
+          await page.waitForTimeout(700);
+          await page.mouse.up();
+        }
+      } else break;
+    }
+  }
+  await expect(page.locator('.stretch-list')).toBeVisible();
+  await expect(page.locator('.stretch-row').first()).toBeVisible();
+  // No stretch carries a setup today, so none should show.
+  await expect(page.locator('.stretch-list .setup-block')).toHaveCount(0);
+});
+
 // v34 (Sep 14 2026): both of these were found by the close's bleed check, not
 // by a test — the v32 nullable change had two readers that were never updated.
 test('backup restore (v34): a row with null after-capacity / back pain survives the import', async ({
