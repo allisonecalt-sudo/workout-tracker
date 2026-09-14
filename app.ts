@@ -235,8 +235,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v33';
-const BUILD_DATE = 'Sep 11, 2026 · 11:26';
+const APP_VERSION = 'v34';
+const BUILD_DATE = 'Sep 14, 2026 · 09:02';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -3535,12 +3535,19 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
   return Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date));
 }
 
-// Test-only hook: the merge is pure, but the network is off under automation
-// (syncDisabled), so Playwright reaches it here. Never set outside automation.
+// Test-only hooks: these are pure functions reached through UI paths that are
+// awkward or destructive to drive (a file-picker import, a whole seeded week),
+// and the network is off under automation (syncDisabled). Never set outside
+// automation. v34 added the two the bleed check caught untested.
 if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
-  (
-    window as unknown as { __wtMergeRemoteSessions?: typeof mergeRemoteSessions }
-  ).__wtMergeRemoteSessions = mergeRemoteSessions;
+  const w = window as unknown as {
+    __wtMergeRemoteSessions?: typeof mergeRemoteSessions;
+    __wtIsValidLogEntry?: typeof isValidLogEntry;
+    __wtComputeWeekTotals?: typeof computeWeekTotals;
+  };
+  w.__wtMergeRemoteSessions = mergeRemoteSessions;
+  w.__wtIsValidLogEntry = isValidLogEntry;
+  w.__wtComputeWeekTotals = computeWeekTotals;
 }
 
 async function pullFromSupabase(): Promise<void> {
@@ -5193,6 +5200,9 @@ function getWeekSessions(offset: number): WeekSession[] {
 type WeekTotals = {
   count: number;
   totalSec: number;
+  // How many of `count` sessions contributed to totalSec (v34). Less than
+  // count → the total is partial and must say so.
+  durationKnownCount: number;
   avgCapBefore: number | null;
   avgCapAfter: number | null;
   maxWallSit: number;
@@ -5204,6 +5214,7 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
     return {
       count: 0,
       totalSec: 0,
+      durationKnownCount: 0,
       avgCapBefore: null,
       avgCapAfter: null,
       maxWallSit: 0,
@@ -5211,6 +5222,12 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
     };
   }
   let totalSec = 0;
+  // v34: count how many of the week's sessions actually HAVE a duration. A
+  // session logged after the fact has none, and `?? 0` quietly folded it in as
+  // zero minutes — so a real 3-session week reported the total of 2 as if it
+  // were the total of 3. Fail-loud rule: say the total is partial, never
+  // present a hole as a number.
+  let durationKnownCount = 0;
   let capBeforeSum = 0;
   let capAfterSum = 0;
   let capAfterCount = 0; // v32: after-the-fact logs have no after-reading
@@ -5218,7 +5235,10 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
   let backPainSum = 0;
   let backPainCount = 0;
   for (const { log } of sessions) {
-    totalSec += log.durationSec ?? 0;
+    if (typeof log.durationSec === 'number') {
+      totalSec += log.durationSec;
+      durationKnownCount += 1;
+    }
     capBeforeSum += log.capacityBefore;
     if (log.capacityAfter !== null) {
       capAfterSum += log.capacityAfter;
@@ -5233,6 +5253,7 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
   return {
     count: sessions.length,
     totalSec,
+    durationKnownCount,
     avgCapBefore: capBeforeSum / sessions.length,
     avgCapAfter: capAfterCount > 0 ? capAfterSum / capAfterCount : null,
     maxWallSit,
@@ -5401,7 +5422,11 @@ function renderWeeklyReview(): string {
       <div class="weekly-review-totals-grid">
         <div class="weekly-review-total">
           <div class="weekly-review-total-num">${formatTotalDuration(totals.totalSec)}</div>
-          <div class="weekly-review-total-lbl">total time</div>
+          <div class="weekly-review-total-lbl">${
+            totals.durationKnownCount < totals.count
+              ? `total time · ${totals.durationKnownCount} of ${totals.count} sessions`
+              : 'total time'
+          }</div>
         </div>
         <div class="weekly-review-total">
           <div class="weekly-review-total-num">${formatAvg(totals.avgCapBefore)}</div>
@@ -6152,6 +6177,15 @@ function exportSessionsToFile(): void {
   showDataStatus(`Exported ${logs.length} session${logs.length === 1 ? '' : 's'}.`);
 }
 
+// v34 (Sep 14 2026): `capacityAfter` and `backPain` may legitimately be NULL
+// since v32 (a workout logged after the fact never had a post-log). This guard
+// still demanded `typeof === 'number'`, so restoring a backup SILENTLY DROPPED
+// every such row — her real Mon Sep 7 session would have vanished on import
+// with no error shown. Found by the close's bleed check, not by a test.
+function isNullableNumber(v: unknown): boolean {
+  return v === null || typeof v === 'number';
+}
+
 function isValidLogEntry(x: unknown): x is LogEntry {
   if (!x || typeof x !== 'object') return false;
   const o = x as Record<string, unknown>;
@@ -6159,9 +6193,9 @@ function isValidLogEntry(x: unknown): x is LogEntry {
     typeof o['date'] === 'string' &&
     (o['workout'] === 'A' || o['workout'] === 'B' || o['workout'] === 'C') &&
     typeof o['capacityBefore'] === 'number' &&
-    typeof o['capacityAfter'] === 'number' &&
+    isNullableNumber(o['capacityAfter']) &&
     typeof o['wallSitSec'] === 'number' &&
-    typeof o['backPain'] === 'number'
+    isNullableNumber(o['backPain'])
   );
 }
 

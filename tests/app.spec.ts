@@ -426,7 +426,12 @@ test('left-open gate: "Yes, I did it" logs it for the day it was STARTED with no
   await reopened.locator('#stale-finished').click();
 
   await expect(reopened.locator('#stale-session-card')).toHaveCount(0);
-  await expect(reopened.locator('.stat-number').first()).toHaveText('1');
+  // Assert the session LANDED, not the week counter. The original assertion
+  // here was `.stat-number` = 1, which broke on Mon Sep 14 the moment the
+  // Sat-Fri week rolled over: a snapshot four days old is deliberately in the
+  // PAST, so it can fall outside the current week and the week stat stays 0.
+  // The row's own presence is the thing under test; "recent" is not week-scoped.
+  await expect(reopened.locator('.history-row')).toHaveCount(1);
   // Duration is unknown → "—", never a multi-day number.
   await expect(reopened.locator('.history-date').first()).toContainText('—');
 
@@ -583,6 +588,112 @@ test('pull merge (v33): a row deleted on the server disappears; unsynced, out-of
   expect(result.windowedKept).toEqual(['older-than-window', 'unsynced-local']);
   expect(result.windowedCount).toBe(52);
   expect(result.empty).toEqual(['keep-me']);
+});
+
+// v34 (Sep 14 2026): both of these were found by the close's bleed check, not
+// by a test — the v32 nullable change had two readers that were never updated.
+test('backup restore (v34): a row with null after-capacity / back pain survives the import', async ({
+  page,
+}) => {
+  // The real shape of her Mon Sep 7 row: logged after the fact, so no post-log.
+  // Before v34 `isValidLogEntry` demanded `typeof === 'number'` and this row was
+  // silently dropped on import — a real session lost with no error shown.
+  const dropped = await page.evaluate(() => {
+    const rows = [
+      {
+        id: 'after-the-fact',
+        date: '2026-09-07T15:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 6,
+        capacityAfter: null,
+        wallSitSec: 0,
+        backPain: null,
+        word: '',
+        notes: 'logged after the fact',
+      },
+      {
+        id: 'ordinary',
+        date: '2026-09-11T15:07:00.000Z',
+        workout: 'B',
+        capacityBefore: 7,
+        capacityAfter: 5,
+        wallSitSec: 0,
+        backPain: 0,
+        word: 'good',
+      },
+    ];
+    const fn = (window as unknown as { __wtIsValidLogEntry: (x: unknown) => boolean })
+      .__wtIsValidLogEntry;
+    return rows.filter((r) => !fn(r)).map((r) => r.id);
+  });
+  expect(dropped).toEqual([]);
+
+  // And the guard still rejects genuinely broken rows.
+  const rejected = await page.evaluate(() => {
+    const fn = (window as unknown as { __wtIsValidLogEntry: (x: unknown) => boolean })
+      .__wtIsValidLogEntry;
+    return [
+      fn({ date: '2026-09-07', workout: 'D', capacityBefore: 5, wallSitSec: 0 }),
+      fn({ date: '2026-09-07', workout: 'A', capacityBefore: 'six', wallSitSec: 0 }),
+      fn({ workout: 'A', capacityBefore: 5, wallSitSec: 0 }),
+      fn({
+        date: '2026-09-07',
+        workout: 'A',
+        capacityBefore: 5,
+        capacityAfter: 'none',
+        wallSitSec: 0,
+        backPain: null,
+      }),
+      fn(null),
+    ];
+  });
+  expect(rejected).toEqual([false, false, false, false, false]);
+});
+
+test('weekly total (v34): a week with an unrecorded duration says how many sessions it counted', async ({
+  page,
+}) => {
+  // `totalSec += log.durationSec ?? 0` folded a missing duration in as zero
+  // minutes, so a 3-session week reported the total of 2 as if it were all 3.
+  const out = await page.evaluate(() => {
+    const mk = (id: string, date: string, durationSec?: number) => ({
+      log: {
+        id,
+        date,
+        workout: 'A',
+        capacityBefore: 6,
+        capacityAfter: 5,
+        wallSitSec: 0,
+        backPain: 0,
+        word: '',
+        ...(durationSec === undefined ? {} : { durationSec }),
+      },
+      durationStr: '—',
+    });
+    const fn = (
+      window as unknown as {
+        __wtComputeWeekTotals: (s: unknown[]) => {
+          count: number;
+          totalSec: number;
+          durationKnownCount: number;
+        };
+      }
+    ).__wtComputeWeekTotals;
+    const partial = fn([
+      mk('a', '2026-09-07T15:00:00.000Z'), // no duration — logged after the fact
+      mk('b', '2026-09-11T15:07:00.000Z', 1951),
+      mk('c', '2026-09-11T15:25:00.000Z', 1099),
+    ]);
+    const complete = fn([mk('b', '2026-09-11T15:07:00.000Z', 1951)]);
+    return { partial, complete };
+  });
+  // The zero-duration session must NOT drag the total down, and must be declared.
+  expect(out.partial.totalSec).toBe(1951 + 1099);
+  expect(out.partial.count).toBe(3);
+  expect(out.partial.durationKnownCount).toBe(2);
+  // A complete week says nothing extra.
+  expect(out.complete.count).toBe(1);
+  expect(out.complete.durationKnownCount).toBe(1);
 });
 
 // The Done safety net: "Keep going" on a 5-hour-old C, walk it to Save, and the
