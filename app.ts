@@ -235,8 +235,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v34';
-const BUILD_DATE = 'Sep 14, 2026 · 09:02';
+const APP_VERSION = 'v35';
+const BUILD_DATE = 'Sep 14, 2026 · 09:52';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -1967,6 +1967,56 @@ PROGRAM.push({
       ],
       cooldown: STRETCH_COOLDOWN,
     },
+  },
+});
+
+// --- Round 2 Week 3 — Sat Sep 12 to Fri Sep 18 2026 ------------------------
+//
+// WHAT: Week 2 held EXACTLY, with ONE change — the yellow TheraBand goes around
+// the thighs on the clamshells in Workout B.
+// WHY: her word Mon Sep 14 2026, 09:46 — "build week 3". This is the one new
+// thing the Sep-7 road put here, and it was held back from Week 2 on her own
+// "dont raise too fast" (Sep 7 15:09). The band is LOOPED, so there is nothing
+// to grip and nothing on the hands — the grip-and-hold gate stays shut.
+// Reps do NOT go up: the load is the change, so it resets at 10/side and climbs
+// to 15 over the coming weeks before the red band. Her rule since Jun 29: once a
+// move tops out, change the exercise, don't pile on reps.
+//
+// WHAT IS DELIBERATELY NOT IN THIS WEEK:
+//  - The bird dog stays LEGS ONLY. The road gates the opposite-arm version on
+//    legs-only feeling "like nothing"; her word after two sessions was "good"
+//    (Sep 11) with clean mornings. Good is not nothing, so the gate holds.
+//  - Split squat (Week 4) and single-leg calf raise (Week 5) stay unencoded —
+//    the app holds one week at a time, on purpose.
+//  - Nothing gripped or loaded in the hands. Still Lisa's gate.
+// PACE GUARD: one new movement per week. This week's is the band. That is all.
+// Spec: second-brain/self/health/research/2026-09-07-1500-level-up-PLAN.md (THE ROAD).
+const R2W2_PLAN = PROGRAM[PROGRAM.length - 1]!;
+const R2W3_BAND_CLAMSHELL: Exercise = {
+  // Name is UNCHANGED on purpose: the detail card, the exercise illustration and
+  // the recorded voice note are all keyed to this exact string. The band is the
+  // prescription, not a different exercise.
+  name: 'Side-lying clamshells',
+  reps: '10 each side · yellow band',
+  notes:
+    'NEW this week — the yellow band goes ON. Loop it around both thighs, just above the knees, so it is snug when your knees are together. Everything else is identical: hips and shoulders stacked, head on the mat, bottom arm extended on the floor (do NOT prop on your elbow, and keep the wrists off the floor). Feet stay together, open the top knee against the band, lower with control. Nothing to hold and nothing on your hands — the band is a loop, so this is not the gripping gate. Back to 10 each side, not 15: the band IS the increase. If your hips start rolling backward to get the knee higher, the band is too strong for now — move it further down the thighs, or take it off and finish bodyweight. That is not a failure, it is the right call.',
+};
+PROGRAM.push({
+  round: 2,
+  weekNum: 3,
+  startsOn: '2026-09-12',
+  label: 'Round 2 — Week 3 · the band goes on the clamshells',
+  workouts: {
+    // A and C are Week 2 unchanged (shallow-copied so the two weeks never alias).
+    A: { ...R2W2_PLAN.workouts.A },
+    B: {
+      ...R2W2_PLAN.workouts.B,
+      description: 'Same as last week + the yellow band on the clamshells · 2 rounds · ~30 min',
+      main: R2W2_PLAN.workouts.B.main.map((ex) =>
+        ex.name === 'Side-lying clamshells' ? R2W3_BAND_CLAMSHELL : ex
+      ),
+    },
+    C: { ...R2W2_PLAN.workouts.C },
   },
 });
 
@@ -4506,7 +4556,7 @@ function renderGearCard(): string {
           <div class="gear-label">You have — in the workout now</div>
           <ul class="gear-list">
             <li>✅ 1 kg weight — owned. The <strong>biceps curl is still PAUSED</strong> with all loaded arm work (since Jun 20 2026, the thumb/cyst). Sep 7 2026 you opened <em>weight-bearing</em> on the hands (bird dog, legs only) — <strong>holding and gripping a weight is a separate gate</strong> and stays closed until Lisa says otherwise. The <strong>prone row stays bodyweight</strong>. One to ask her: can you hold the 1 kg for prone Y/T raises?</li>
-            <li>✅ TheraBand kit (Yellow / Red / Green) — <strong>you confirmed it is home Sep 7 2026.</strong> Not in a workout yet, on purpose (your words the same minute: “don’t raise too fast”). Booked for <strong>Week 3</strong>: yellow band looped around the thighs on the clamshells in Workout B. A band <em>looped</em> around the legs uses no hands at all; a band you have to <em>hold and pull</em> is the gripping gate above.</li>
+            <li>✅ TheraBand kit (Yellow / Red / Green) — <strong>the yellow band is IN your workout as of Week 3</strong> (your word, Sep 14: “build week 3”), looped around the thighs on the clamshells in <strong>Workout B</strong>. Held back one week from when you confirmed the kit was home, on your own “don’t raise too fast”. Reps went back to 10 a side because the band is the increase; it climbs to 15 before the <strong>red</strong> one. A band <em>looped</em> around the legs uses no hands at all; a band you have to <em>hold and pull</em> is the gripping gate above, and that stays shut.</li>
           </ul>
         </div>
         <div class="gear-section">

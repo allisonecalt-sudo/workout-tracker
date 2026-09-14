@@ -590,6 +590,99 @@ test('pull merge (v33): a row deleted on the server disappears; unsynced, out-of
   expect(result.empty).toEqual(['keep-me']);
 });
 
+// --- Round 2 Week 3: the band goes on the clamshells (v35, Sep 14 2026) ------
+// Her word: "build week 3". One change only — the yellow band, in B, looped.
+// These assert BOTH halves: the change landed, and nothing else moved.
+test('R2 W3: a date inside Sep 12-18 2026 resolves to Round 2 · Week 3', async ({ page }) => {
+  await page.addInitScript(() => {
+    const real = Date;
+    const fixed = new real('2026-09-14T10:00:00').getTime();
+    class MockDate extends real {
+      constructor(...args: ConstructorParameters<typeof Date>) {
+        super(...(args.length ? args : [fixed]));
+      }
+      static override now(): number {
+        return fixed;
+      }
+    }
+    (globalThis as unknown as { Date: DateConstructor }).Date =
+      MockDate as unknown as DateConstructor;
+  });
+  await page.goto('/');
+  await expect(page.locator('.week-banner')).toContainText('Round 2 · Week 3');
+});
+
+test('R2 W3: workout B carries the yellow band on the clamshells, reps back to 10', async ({
+  page,
+}) => {
+  await page.locator('button[data-workout="B"]').click();
+  // The pre-log overview lists exercise NAMES only, so the name must be
+  // unchanged there (the detail card, illustration and recorded voice note are
+  // all keyed to it) and the band must show up on the step itself.
+  const overview = (await page.locator('.overview-phase-items').allTextContents()).join(' | ');
+  expect(overview).toContain('Side-lying clamshells');
+
+  await page.locator('button:has-text("Start")').click();
+  let repsSeen = '';
+  let notesSeen = '';
+  for (let i = 0; i < 40; i++) {
+    const name =
+      (await page
+        .locator('.exercise-name')
+        .textContent({ timeout: 1000 })
+        .catch(() => '')) ?? '';
+    if (name.includes('Side-lying clamshells')) {
+      repsSeen =
+        (await page
+          .locator('.exercise-reps')
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      notesSeen =
+        (await page
+          .locator('.exercise-notes')
+          .first()
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      break;
+    }
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else break;
+  }
+  // The band is the increase, so reps RESET — 10 a side, never 15 this week.
+  expect(repsSeen).toContain('10 each side');
+  expect(repsSeen).toContain('yellow band');
+  // And it must tell her the loop is not the gripping gate, plus the back-off.
+  expect(notesSeen).toContain('above the knees');
+  expect(notesSeen).toContain('not the gripping gate');
+});
+
+test('R2 W3: the band is in B ONLY, and the bird dog has NOT been levelled up', async ({
+  page,
+}) => {
+  // C also has clamshells — they stay bodyweight.
+  await page.locator('button[data-workout="C"]').click();
+  await expect(page.locator('body')).not.toContainText('yellow band');
+  await page.locator('.quit-link, #back-home').first().click();
+
+  // The opposite-arm bird dog is gated on legs-only feeling "like nothing";
+  // her word was "good". Both A and B must still say legs only.
+  for (const w of ['A', 'B']) {
+    await page.locator(`button[data-workout="${w}"]`).click();
+    await expect(page.locator('body')).toContainText('Bird dog (legs only)');
+    await expect(page.locator('body')).not.toContainText('opposite arm reaches back');
+    await page.locator('.quit-link, #back-home').first().click();
+  }
+});
+
+test('R2 W3: gear card no longer says the band is waiting for a future week', async ({ page }) => {
+  const gear = page.locator('.gear-card');
+  await gear.locator('.gear-summary').click();
+  await expect(gear).toContainText('IN your workout as of Week 3');
+  await expect(gear).not.toContainText('Not in a workout yet');
+  await expect(gear).not.toContainText('Booked for');
+});
+
 // v34 (Sep 14 2026): both of these were found by the close's bleed check, not
 // by a test — the v32 nullable change had two readers that were never updated.
 test('backup restore (v34): a row with null after-capacity / back pain survives the import', async ({
@@ -1511,14 +1604,15 @@ test('multi-week: "Coming next week" preview renders on home with diff', async (
   await expect(bBlock.locator('.next-week-block-list')).toContainText('14');
 });
 
-test('multi-week: Settings About shows Program weeks count (13)', async ({ page }) => {
+test('multi-week: Settings About shows Program weeks count (14)', async ({ page }) => {
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 13" row (11 round-1 weeks + R2 W1 + R2 W2).
+  // About section has a "Program weeks: 14" row
+  // (11 round-1 weeks + R2 W1 + R2 W2 + R2 W3).
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 13');
+  ).toContainText('Program weeks: 14');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {
