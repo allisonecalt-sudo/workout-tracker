@@ -1444,6 +1444,77 @@ input[type='number']:focus {
 
 /* --- Banners — warning is status, not panic ---------------------------- */
 
+/* One-time kit SETUP block on an exercise step (v37, Sep 14 2026).
+ * Her ask after spotting that her TheraBands are flat strips: "make sure there
+ * s avideo and expalation". Sits under the notes, opens by default the first
+ * time (a step she hasn't done yet shouldn't hide behind a tap), and carries
+ * its own video separate from the movement video. Sage accent, not amber —
+ * this is an instruction, not a warning. */
+.setup-block {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev-2);
+  overflow: hidden;
+  text-align: left;
+}
+
+.setup-block-open {
+  border-color: var(--accent);
+}
+
+.setup-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 12px 14px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+}
+
+.setup-toggle-title {
+  font-weight: 600;
+  font-size: var(--font-small);
+}
+
+.setup-toggle-chev {
+  color: var(--text-dim);
+  flex: 0 0 auto;
+}
+
+.setup-body {
+  padding: 0 14px 14px;
+}
+
+.setup-steps {
+  margin: 0 0 10px;
+  padding-left: 22px;
+  font-size: var(--font-small);
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.setup-steps li {
+  margin-bottom: 8px;
+}
+
+.setup-steps li:last-child {
+  margin-bottom: 0;
+}
+
+.setup-footnote {
+  margin: 0 0 10px;
+  font-size: var(--font-meta);
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
 /* Left-open workout card (v32, Sep 11 2026): on open the app found a workout
  * snapshot older than 3 hours. It asks instead of silently resuming. Same warm
  * amber as the warning banner — it's a question, not an alarm. */

@@ -652,13 +652,103 @@ test('R2 W3: workout B carries the yellow band on the clamshells, reps back to 1
   // The band is the increase, so reps RESET — 10 a side, never 15 this week.
   expect(repsSeen).toContain('10 each side');
   expect(repsSeen).toContain('yellow band');
-  // Her kit is FLAT strips, not loop bands — she asked "so do i tie it?", so the
-  // step has to say so rather than assume a loop she does not own.
-  expect(notesSeen).toContain('FLAT STRIP');
-  expect(notesSeen).toContain('square knot');
-  // And it must tell her the loop is not the gripping gate, plus the back-off.
-  expect(notesSeen).toContain('above your knees');
-  expect(notesSeen).toContain('not the gripping gate');
+  // The notes stay about the MOVEMENT (the tying moved to the setup block, so
+  // she isn't reading the same paragraph twice).
+  expect(notesSeen).toContain('above the knees');
+  expect(notesSeen).toContain('the band IS the increase');
+  expect(notesSeen).toContain('finish bodyweight');
+});
+
+// v37: her kit is FLAT strips, so the step must explain AND show the tying.
+// Her ask: "make sure there s avideo and expalation".
+test('R2 W3: the clamshell step carries a tying explanation AND its own video, open by default', async ({
+  page,
+}) => {
+  await page.locator('button[data-workout="B"]').click();
+  await page.locator('button:has-text("Start")').click();
+  for (let i = 0; i < 40; i++) {
+    const name =
+      (await page
+        .locator('.exercise-name')
+        .textContent({ timeout: 1000 })
+        .catch(() => '')) ?? '';
+    if (name.includes('Side-lying clamshells')) break;
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else break;
+  }
+
+  const setup = page.locator('.setup-block');
+  await expect(setup).toBeVisible();
+  // Open by DEFAULT — a step she has never done should not hide behind a tap.
+  await expect(setup.locator('.setup-body')).toBeVisible();
+  await expect(setup).toContainText('Tie the band into a loop first');
+
+  // The explanation: the knot, the sizing, the knot position, and the gate line.
+  const steps = setup.locator('.setup-steps li');
+  expect(await steps.count()).toBeGreaterThanOrEqual(5);
+  const allSteps = (await steps.allTextContents()).join(' | ');
+  expect(allSteps).toContain('square knot');
+  expect(allSteps).toContain('overlap');
+  expect(allSteps).toContain('just above your knees');
+  expect(allSteps).toContain('outside');
+  await expect(setup.locator('.setup-footnote')).toContainText('not the gripping gate');
+
+  // The video is a SECOND video, separate from the movement video, and it only
+  // loads on tap (no unrequested embed).
+  await expect(setup.locator('iframe')).toHaveCount(0);
+  await setup.locator('.visual-video-toggle').click();
+  const frame = page.locator('.setup-block iframe');
+  await expect(frame).toHaveCount(1);
+  await expect(frame).toHaveAttribute('src', /youtube\.com\/embed\/ESNXHhPdIos/);
+  await expect(page.locator('.setup-block .visual-attribution')).toContainText('Total Therapy');
+
+  // And the toggle actually CLOSES on the first tap (the default-open bug).
+  await page.locator('.setup-toggle').click();
+  await expect(page.locator('.setup-block .setup-body')).toHaveCount(0);
+});
+
+// The leak this design exists to prevent: EXERCISE_VISUALS and the detail cards
+// are keyed by exercise NAME, so anything hung there appears on every week
+// carrying that name. Week 2's clamshell is the SAME name and is bodyweight —
+// if the tying setup shows up there, the app is lying about last week.
+test('R2 W3: the tying setup does NOT leak onto Week 2, whose clamshell is bodyweight', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-08T10:00:00.000Z'); // inside Round 2 Week 2
+  await page.goto('/');
+  await expect(page.locator('.week-banner')).toContainText('Week 2');
+  await page.locator('button[data-workout="B"]').click();
+  await page.locator('button:has-text("Start")').click();
+  for (let i = 0; i < 40; i++) {
+    const name =
+      (await page
+        .locator('.exercise-name')
+        .textContent({ timeout: 1000 })
+        .catch(() => '')) ?? '';
+    if (name.includes('Side-lying clamshells')) {
+      await expect(page.locator('.setup-block')).toHaveCount(0);
+      await expect(page.locator('.exercise-reps')).not.toContainText('yellow band');
+      await expect(page.locator('.exercise-notes').first()).toContainText('Bodyweight this week');
+      return;
+    }
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else break;
+  }
+  throw new Error("never reached Week 2's clamshells");
+});
+
+// And nothing in Workout C gets a setup block — C has no banded move at all.
+test('R2 W3: workout C carries no setup block anywhere', async ({ page }) => {
+  await page.locator('button[data-workout="C"]').click();
+  await page.locator('button:has-text("Start")').click();
+  for (let i = 0; i < 40; i++) {
+    await expect(page.locator('.setup-block')).toHaveCount(0);
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else break;
+  }
 });
 
 test('R2 W3: the band is in B ONLY, and the bird dog has NOT been levelled up', async ({

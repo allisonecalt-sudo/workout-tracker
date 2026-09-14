@@ -24,6 +24,22 @@ type Exercise = {
   //   • Outdoor walk — auto-tracks steps/km + "tap done", intentionally no countdown.
   durationSec?: number;
   isTimed?: boolean;
+  // One-time SETUP the exercise needs before the first rep — kit you have to
+  // prepare, not the movement itself (v37, Sep 14 2026, her ask: "make sure
+  // there s avideo and expalation" about tying the band).
+  // WHY it lives on the Exercise and NOT on EXERCISE_VISUALS: the visuals and
+  // detail cards are keyed by exercise NAME, so anything attached there shows up
+  // on EVERY week and every workout carrying that name — including Workout C's
+  // clamshells, which are bodyweight, and the Week 1/2 history. Setup is a
+  // property of THIS WEEK'S PRESCRIPTION, so it hangs off the Exercise object.
+  setup?: {
+    title: string;
+    steps: string[];
+    youtubeId?: string;
+    attribution?: string;
+    // Shown under the steps — what to do if the setup itself is the problem.
+    footnote?: string;
+  };
 };
 
 type Workout = {
@@ -235,8 +251,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v36';
-const BUILD_DATE = 'Sep 14, 2026 · 11:10';
+const APP_VERSION = 'v37';
+const BUILD_DATE = 'Sep 14, 2026 · 11:52';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -1998,8 +2014,32 @@ const R2W3_BAND_CLAMSHELL: Exercise = {
   // prescription, not a different exercise.
   name: 'Side-lying clamshells',
   reps: '10 each side · yellow band (tied into a loop)',
+  // Her ask, Sep 14 11:43, right after she spotted that her bands are flat
+  // strips: "make sure there s avideo and expalation". The movement video
+  // (Margaret Martin, PT) already sits on the exercise itself — this is the
+  // SETUP video, a different thing: how to turn a flat strip into a loop.
+  // Channel checked live via YouTube oEmbed on Sep 14 (exists + embeddable +
+  // title/author as quoted). NOT watched end to end — so it is offered as a
+  // demonstration, not endorsed frame by frame.
+  setup: {
+    title: 'Tie the band into a loop first (one time)',
+    steps: [
+      'Take the <strong>yellow</strong> one — the lightest. Lay it flat, no twists.',
+      "Bring the two ends together and <strong>overlap them by about a hand's width</strong>. Overlapping is what stops it slipping.",
+      "Tie the overlap in a <strong>square knot</strong>: same as a shoelace bow, but pull the ends all the way through instead of leaving loops. Do it twice. (This is TheraBand's own way of making a loop.)",
+      'Check the size against your legs: the loop should sit <strong>just above your knees</strong> and be only <em>just</em> snug with your knees together. If it is already tight before you move, it is too small — retie it bigger. Too small is the usual mistake.',
+      'Turn the <strong>knot to the outside</strong> of your top thigh so it is not pressing into you.',
+      'Keep it tied. It lives as a loop now — you only do this once.',
+    ],
+    youtubeId: 'ESNXHhPdIos',
+    attribution: 'How to tie a TheraBand — Total Therapy Florida (physical therapy)',
+    footnote:
+      'Tying it with your fingers is fine — that is not the gripping gate. The gate is holding and pulling something while you move, and a tied loop needs no hands at all. <strong>Give the knot a tug before each set</strong>; latex creeps loose. If the knot turns out to be a nuisance, a ready-made loop band is the thing to buy — say so and it goes on the list.',
+  },
+  // Notes stay about the MOVEMENT. The tying lives in `setup` below so she is
+  // not reading the same paragraph twice (SHORT + SIMPLE).
   notes:
-    'NEW this week — the yellow band goes on. YOURS IS A FLAT STRIP, SO YOU TIE IT FIRST (her question, Sep 14: "so do i tie it?"). Overlap the two ends by about a hand\'s width and tie them in a square knot — the same knot as a shoelace bow but pulled all the way through, twice. That is TheraBand\'s own instruction for making a loop. Size it so the loop sits just above your knees and is only just snug with your knees together; too small is the usual mistake. Turn the knot to the OUTSIDE of your top thigh so it is not digging into you. Tying it once with your fingers is fine — there is nothing to hold or pull while you are moving, so this is still not the gripping gate. Then everything is the same as always: hips and shoulders stacked, head on the mat, bottom arm flat along the floor (do NOT prop on your elbow, keep the wrists off the floor). Feet together, open the top knee against the band, lower it slow. Back to 10 each side, not 15 — the band IS the increase. If your hips start rolling backward to get the knee higher, the band is too strong for now: slide the loop further down your thighs, or take it off and finish bodyweight. That is the right call, not a failure. Give the knot a tug before each set — latex can creep loose.',
+    'NEW this week — the band goes on. Once it is tied (see below), everything is the same as always: hips and shoulders stacked, head on the mat, bottom arm flat along the floor — do NOT prop on your elbow, keep the wrists off the floor. Loop just above the knees, feet together, open the top knee against the band, lower it slow. Back to 10 each side, not 15 — the band IS the increase. If your hips start rolling backward to get the knee higher, the band is too strong for now: slide the loop further down your thighs, or take it off and finish bodyweight. That is the right call, not a failure.',
 };
 PROGRAM.push({
   round: 2,
@@ -3890,6 +3930,58 @@ function getPrimaryStill(exerciseName: string): { svg: string } | { image: strin
   return null;
 }
 
+// One-time kit setup for THIS week's version of an exercise (v37). Opens by
+// default the first time she meets it — a step she has not done yet should not
+// be hidden behind a tap — and remembers being closed for the rest of the
+// session. Its video is a SECOND video, separate from the movement video in
+// EXERCISE_VISUALS, because tying a band and doing a clamshell are two things.
+function renderExerciseSetup(ex: Exercise): string {
+  const s = ex.setup;
+  if (!s) return '';
+  const key = `setup:${ex.name}`;
+  const open = state.openSections[key] !== false; // default OPEN
+  const videoOpen = state.videoExpandedFor === key;
+  const stepsHtml = s.steps.map((t) => `<li>${t}</li>`).join('');
+  return `
+    <div class="setup-block${open ? ' setup-block-open' : ''}">
+      <button class="setup-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${open}">
+        <span class="setup-toggle-title">🔧 ${escapeHtml(s.title)}</span>
+        <span class="setup-toggle-chev">${open ? '▾' : '▸'}</span>
+      </button>
+      ${
+        open
+          ? `<div class="setup-body">
+        <ol class="setup-steps">${stepsHtml}</ol>
+        ${s.footnote ? `<p class="setup-footnote">${s.footnote}</p>` : ''}
+        ${
+          s.youtubeId
+            ? `<button class="visual-video-toggle" data-expand-video="${escapeHtml(key)}" type="button" aria-expanded="${videoOpen}">
+                ${videoOpen ? '× Hide the video' : '▶ Watch someone do it (40 sec)'}
+              </button>
+              ${
+                videoOpen
+                  ? `<div class="visual-video-wrap">
+                      <iframe
+                        src="https://www.youtube.com/embed/${escapeHtml(s.youtubeId)}?rel=0&modestbranding=1"
+                        title="${escapeHtml(s.title)}"
+                        frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen
+                        loading="lazy"
+                      ></iframe>
+                    </div>`
+                  : ''
+              }
+              ${s.attribution ? `<div class="visual-attribution">${escapeHtml(s.attribution)}</div>` : ''}`
+            : ''
+        }
+      </div>`
+          : ''
+      }
+    </div>
+  `;
+}
+
 function renderExerciseVisual(exerciseName: string): string {
   const v = EXERCISE_VISUALS[exerciseName];
   const still = getPrimaryStill(exerciseName);
@@ -5025,6 +5117,7 @@ function renderWorkout(): string {
         <div class="exercise-name">${ex.name}</div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${ex.notes ? `<p class="exercise-notes">${ex.notes}</p>` : ''}
+        ${renderExerciseSetup(ex)}
         ${
           ex.name === 'Outdoor walk'
             ? workoutWalkStart() !== null
@@ -6717,7 +6810,12 @@ function attachHandlers(): void {
     btn.addEventListener('click', () => {
       const key = btn.dataset['toggleSection'];
       if (!key) return;
-      state.openSections[key] = !state.openSections[key];
+      // Read the state the renderer actually drew, not `!openSections[key]`.
+      // Detail sections default CLOSED, the v37 setup block defaults OPEN, and
+      // the old negation silently no-opped the first tap on anything
+      // default-open (undefined → !undefined → true → still open).
+      const isOpen = btn.getAttribute('aria-expanded') === 'true';
+      state.openSections[key] = !isOpen;
       render();
     });
   });
