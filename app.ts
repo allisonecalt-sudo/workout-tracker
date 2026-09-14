@@ -256,8 +256,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v40';
-const BUILD_DATE = 'Sep 14, 2026 · 12:48';
+const APP_VERSION = 'v41';
+const BUILD_DATE = 'Sep 14, 2026 · 13:14';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2009,10 +2009,44 @@ PROGRAM.push({
 //    (Sep 11) with clean mornings. Good is not nothing, so the gate holds.
 //  - Split squat (Week 4) and single-leg calf raise (Week 5) stay unencoded —
 //    the app holds one week at a time, on purpose.
-//  - Nothing gripped or loaded in the hands. Still Lisa's gate.
-// PACE GUARD: one new movement per week. This week's is the band. That is all.
+//  - Nothing gripped or loaded in the hands YET. Her relay the same afternoon
+//    ("baisclaly it shold nt hurt") opened that gate pain-gated, but the re-entry
+//    is set for Week 4 and starts BELOW the old 1 kg — the Jun-18 injury mechanism
+//    was the grip itself.
+//  - The HANDS plank is still OUT, and she settled that herself at 13:08:
+//    "plank on forearms still" / "but can do stuff on forearms". So forearm
+//    loading is open and the palms-down plank stays on the shelf — her own Sep-7
+//    ladder puts it at the top (counter lean -> quadruped -> bird dog legs-only ->
+//    full bird dog -> incline push-up -> plank on hands) and she is on rung 3.
+//    What "planks come back in" therefore means: the forearm plank was in A ONLY
+//    for all of Round 1 and Round 2 so far; it now runs in B as well.
+// PACE GUARD: one new movement per week. This week's is the band. The wall lean
+// and the second forearm plank are a RETURN and a REPEAT of moves she already
+// does — not new levels. Nothing on the palms changed.
 // Spec: second-brain/self/health/research/2026-09-07-1500-level-up-PLAN.md (THE ROAD).
+// The WALL LEAN COMES BACK (v41, her word Mon Sep 14 13:07: "ok but planks come
+// back in and the wall learn"). It is the same `WRIST_ONRAMP` she ran from Jul 3,
+// unchanged — palms flat on a wall, standing, 2 × 20 s, timer included.
+//
+// WHY it is safe to add in the same week as the band, when the pace rule says one
+// new movement: it is not a level-up. On the measured ladder (Uhl 2003, shoulder
+// demand as the load proxy) the wall lean sits BELOW the legs-only bird dog she is
+// already doing — so this adds wrist-specific VOLUME, not intensity. It is also
+// exactly what she asked for two messages earlier: "i stil need to build up wirst
+// weight." It runs last in the block, after the bird dog, so a stop-at-pain exit
+// costs nothing else in the session.
+const UPPER_BACK_SAFE_R2W3: Exercise[] = [...UPPER_BACK_SAFE, BIRD_DOG_LEGS, ...WRIST_ONRAMP];
+
 const R2W2_PLAN = PROGRAM[PROGRAM.length - 1]!;
+// A's forearm plank, reused verbatim in B (v41). Pulled from the Week 2 plan
+// rather than retyped: if the plank prescription changes, both workouts move
+// together. Throws loudly at load time if A's plank is ever renamed.
+const R2W3_FOREARM_PLANK: Exercise = (() => {
+  const found = R2W2_PLAN.workouts.A.main.find((ex) => ex.name === 'Forearm plank');
+  if (!found) throw new Error('R2W3: expected a Forearm plank in Week 2 workout A');
+  return found;
+})();
+
 const R2W3_BAND_CLAMSHELL: Exercise = {
   // Name is UNCHANGED on purpose: the detail card, the exercise illustration and
   // the recorded voice note are all keyed to this exact string. The band is the
@@ -2052,14 +2086,21 @@ PROGRAM.push({
   startsOn: '2026-09-12',
   label: 'Round 2 — Week 3 · the band goes on the clamshells',
   workouts: {
-    // A and C are Week 2 unchanged (shallow-copied so the two weeks never alias).
-    A: { ...R2W2_PLAN.workouts.A },
+    // A keeps Week 2's exercises; only the upper-back block changes (wall lean back).
+    A: { ...R2W2_PLAN.workouts.A, upperBack: UPPER_BACK_SAFE_R2W3 },
     B: {
       ...R2W2_PLAN.workouts.B,
-      description: 'Same as last week + the yellow band on the clamshells · 2 rounds · ~30 min',
-      main: R2W2_PLAN.workouts.B.main.map((ex) =>
-        ex.name === 'Side-lying clamshells' ? R2W3_BAND_CLAMSHELL : ex
-      ),
+      description: 'Same as last week + the band on the clamshells + the wall lean back · ~30 min',
+      main: [
+        ...R2W2_PLAN.workouts.B.main.map((ex) =>
+          ex.name === 'Side-lying clamshells' ? R2W3_BAND_CLAMSHELL : ex
+        ),
+        // "planks come back in" (13:07) + "plank on forearms still" (13:08).
+        // B has never carried a plank — A has had the only one since Week 1. This
+        // is A's exact entry, reused rather than retyped so the two cannot drift.
+        R2W3_FOREARM_PLANK,
+      ],
+      upperBack: UPPER_BACK_SAFE_R2W3,
     },
     C: { ...R2W2_PLAN.workouts.C },
   },

@@ -893,6 +893,82 @@ test('capacity before (v39): the history row shows an em dash, never "0"', async
   await reopened.close();
 });
 
+// v41 (Sep 14 2026): her word — "ok but planks come back in and the wall learn",
+// then "plank on forearms still" / "but can do stuff on forearms".
+test('R2 W3 (v41): the wall lean is back in A and B, after the bird dog', async ({ page }) => {
+  for (const w of ['A', 'B']) {
+    await page.goto('/');
+    await page.locator(`button[data-workout="${w}"]`).click();
+    const overview = (await page.locator('.overview-phase-items').allTextContents()).join(' | ');
+    expect(overview).toContain('Wall lean (wrist on-ramp)');
+    expect(overview).toContain('Bird dog (legs only)');
+    // The wall lean must come AFTER the bird dog: a stop-at-pain exit on the
+    // easier move should not cost her the harder one she has already earned.
+    expect(overview.indexOf('Wall lean')).toBeGreaterThan(overview.indexOf('Bird dog'));
+  }
+});
+
+test('R2 W3 (v41): the forearm plank now runs in B too, and stays on FOREARMS', async ({
+  page,
+}) => {
+  await page.locator('button[data-workout="B"]').click();
+  const overview = (await page.locator('.overview-phase-items').allTextContents()).join(' | ');
+  expect(overview).toContain('Forearm plank');
+  // The hands plank stays out — her own ladder puts it at the top and she is on
+  // rung 3. "plank on forearms still" is the ruling this pins.
+  expect(overview).not.toContain('Plank on hands');
+  expect(overview).not.toContain('High plank');
+});
+
+test('R2 W3 (v41): the plank in B is the SAME prescription as the one in A', async ({ page }) => {
+  const read = async (w: string) => {
+    await page.goto('/');
+    await page.locator(`button[data-workout="${w}"]`).click();
+    await page.locator('button:has-text("Start")').click();
+    for (let i = 0; i < 60; i++) {
+      const name =
+        (await page
+          .locator('.exercise-name')
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      if (name.includes('Forearm plank')) {
+        const reps =
+          (await page
+            .locator('.exercise-reps')
+            .textContent({ timeout: 1000 })
+            .catch(() => '')) ?? '';
+        const notes =
+          (await page
+            .locator('.exercise-notes')
+            .first()
+            .textContent({ timeout: 1000 })
+            .catch(() => '')) ?? '';
+        return `${reps.trim()} :: ${notes.trim()}`;
+      }
+      const nextBtn = page.locator('button:has-text("Done ·")');
+      if (await nextBtn.isVisible()) await nextBtn.click();
+      else {
+        const skipRest = page.locator('#skip-rest');
+        if (await skipRest.isVisible()) {
+          const box = await skipRest.boundingBox();
+          if (box) {
+            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+            await page.mouse.down();
+            await page.waitForTimeout(700);
+            await page.mouse.up();
+          }
+        } else break;
+      }
+    }
+    return null;
+  };
+  const inA = await read('A');
+  const inB = await read('B');
+  expect(inA).not.toBeNull();
+  expect(inB).toBe(inA);
+  expect(String(inA)).toContain('Forearms only, NOT hands');
+});
+
 // v40 (Sep 14 2026): `setup` must work on every phase whose type allows it.
 // The cooldown list renders Exercise[] through its own markup, so it was the
 // one phase where a setup block would have silently vanished. Asserted against
