@@ -271,6 +271,13 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
   // Both ids verified via YouTube oembed (HTTP 200 + matching title) on the day
   // they were added — never guessed. Same PT channel already trusted here for
   // the modified dead bug.
+  'Supported split squat': {
+    youtubeId: 'Oe086pgL5fw',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    attribution:
+      'Supported Split Squat — 18STRONG. Checked live via YouTube oEmbed Sep 19 2026 (exists, embeddable, title + author as quoted); not watched end to end. Their support is a rack — yours is the couch or a chair, fingertips only.',
+  },
   'Bird dog (legs only)': {
     youtubeId: 'xEDnlOxeJH4',
     source: 'youtube-only',

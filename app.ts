@@ -256,8 +256,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v41';
-const BUILD_DATE = 'Sep 14, 2026 · 13:14';
+const APP_VERSION = 'v42';
+const BUILD_DATE = 'Sep 19, 2026 · 22:35';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2106,6 +2106,145 @@ PROGRAM.push({
   },
 });
 
+// ---------------------------------------------------------------------------
+// ROUND 2 · WEEK 4 (Sat Sep 19 – Fri Sep 25 2026) — v42, built Sat Sep 19 22:30.
+// Her brief tonight, in order: "so les get week 4 ready" → "weigh and consider
+// where it should be not elipticla yet" → "just condsider whats worth raising".
+// Two RAISES, two CATCH-UPS, everything else HOLDS. Trail + evidence:
+//   second-brain/self/health/exercise.md (Sep 19 status line)
+//   second-brain/self/health/progression-rules.md (the earn-then-nudge rule)
+//
+// RAISE 1 — the SUPPORTED SPLIT SQUAT replaces the bodyweight squat in A ONLY.
+//   The road's Week-4 move since Sep 7 (level-up PLAN, "THE ROAD"). The squat's
+//   tempo dial is spent: 3-1-3 is a 7-second rep and hypertrophy is flat past
+//   ~8 s/rep (Schoenfeld 2015, confirmed by the Sep-7 blind check), so a harder
+//   VARIATION is the road left. Fingertips on the couch are balance only. Her
+//   words tonight — "its ok i can grip" / "ignore the wrist" — mean light hand
+//   contact is no longer a gate. C keeps its 10 squats: C stays the lighter day.
+//   Video Oe086pgL5fw ("SUPPORTED SPLIT SQUAT", 18STRONG) re-checked live via
+//   YouTube oEmbed Sep 19 22:28 — exists + embeddable; not watched end to end.
+// RAISE 2 — wall sit 40 → 45 s. Earned under the rule "2 sessions over target →
+//   one nudge": she held 42 s (Sep 7) and 43 s (Sep 14) against a 40-s ask.
+//   The Week-2 depth cue (knees toward 90°) stays; graduate at a clean 60.
+// CATCH-UP 1 — the 1 kg comes back into the arm block because she ALREADY does
+//   it, off-app: "im doing 1 kg in arms btw i do hip hinges with 1 kg" (Sep 19
+//   22:26). UPPER_BACK_SAFE (no load) had been understating her since June.
+//   The prone row and the 1 kg curl return at their Jun-18 prescriptions (2×12),
+//   wrist-neutral cues intact. Not a raise — the app matching reality, exactly
+//   the wall-sit pattern (she over-delivers, the plan catches up).
+// CATCH-UP 2 — the hinge note says 1 kg. Same exercise NAME so the card, the
+//   picture and the voice note still resolve. Heavier than 1 kg stays PT-gated
+//   (progression-rules.md, Forward additions §1).
+// HOLDS — band clamshell 10/side (only its second week); bird dog legs-only (no
+//   "feels like nothing" report yet — full bird dog waits for her word); walk /
+//   apartment cardio unchanged. The elliptical she bought tonight is NOT in the
+//   program until it is in the room. Days this week: Yom Kippur Mon Sep 21, erev
+//   Sukkot Fri Sep 25 → A Tue · B Wed · C Thu (her call).
+// ---------------------------------------------------------------------------
+const R2W3_PLAN = PROGRAM[PROGRAM.length - 1]!;
+
+const R2W4_SPLIT_SQUAT: Exercise = {
+  name: 'Supported split squat',
+  reps: '2 sets · 6-8 each side',
+  notes:
+    'NEW — this takes the place of your squats in A (C keeps its 10 squats). Stand a long step in front of the couch or a chair, fingertips resting on it for BALANCE ONLY — light touch, no gripping, no weight through the hands. Front foot flat, back heel up. Chest tall, lower straight down so the back knee heads toward the floor and the front thigh comes near parallel. Push through the front heel to stand. 6-8 each side; last set stop about 2 short. Front knee pinches or you wobble a lot? Make the range smaller — the right call, not a failure.',
+};
+
+// The Week-2 wall sit, re-read from the plan object so the depth cue and the
+// timer flags travel with it; only the seconds change.
+const R2W4_WALL_SIT: Exercise = (() => {
+  const found = R2W3_PLAN.workouts.A.main.find((ex) => ex.name === 'Wall sit');
+  if (!found) throw new Error('R2W4: expected a Wall sit in Week 3 workout A');
+  return {
+    ...found,
+    reps: '45 sec hold',
+    durationSec: 45,
+    notes:
+      '40 → 45. You held 42 on Sep 7 and 43 on Sep 14 — two sessions over target is the rule for one nudge. Keep the Week-2 depth: knees toward 90°. Hands on thighs or hanging, no pushing on the wall. Graduate at a clean 60.',
+  };
+})();
+
+// Same NAME as HIP_HINGE_W8 on purpose — the detail card, the stick figure and the
+// recorded voice note are keyed to 'Bodyweight hip hinge'. The 1 kg is her
+// existing practice, now written down.
+const HIP_HINGE_R2W4: Exercise = {
+  name: 'Bodyweight hip hinge',
+  reps: '2 sets · 12 reps · holding the 1 kg',
+  notes:
+    'Same hinge, now HOLDING the 1 kg the way you already do — it hangs from the hands, wrists neutral, light grip. Hinge at the hips, soft knees, flat/neutral spine; feel it in hamstrings + glutes. Do NOT round the low back. 1 kg is the ceiling for now; anything heavier is a Lisa question.',
+};
+
+// The Jun-18 loaded pair, pulled from UPPER_BACK_W7 by name so the cues are the
+// vetted ones. Throws at load time if either was ever renamed.
+const R2W4_LOADED_ARMS: Exercise[] = (() => {
+  const row = UPPER_BACK_W7.find((ex) => ex.name === 'Prone row (bodyweight)');
+  const curl = UPPER_BACK_W7.find((ex) => ex.name === '1 kg biceps curl');
+  if (!row || !curl) throw new Error('R2W4: expected the prone row + 1 kg curl in UPPER_BACK_W7');
+  return [
+    {
+      ...row,
+      notes:
+        'BACK IN (Sep 19 — your words: "im doing 1 kg in arms"). Bodyweight or holding the 1 kg — your call, you already hold it. Arm hanging, wrist NEUTRAL/straight, light grip. HEAD DOWN — do not lift it (Lisa, Jun 18). Drive the elbow UP, squeeze the shoulder blade toward your spine, lower slow. Pain tells — stop on any wrist signal.',
+    },
+    {
+      ...curl,
+      notes:
+        'BACK IN (Sep 19 — you already do this off-app). Hold the 1 kg LIGHTLY — wrist AND fingers neutral, never bending back (Lisa, Jun 18: the too-heavy grip was the mechanism). Elbow tucked, forearm hanging; only the forearm moves. Lower slow. Pain tells — stop on any wrist signal. Your 2 kg trigger is unchanged: easy at 3×20, two sessions running.',
+    },
+  ];
+})();
+
+// Block order: the no-load pair first (wall angels, IWYT), then the 1 kg pair,
+// then the hands-on-floor bird dog, then the wall lean last — so the wrists are
+// warm before they take weight, and a stop-at-pain exit costs nothing else.
+const UPPER_BACK_R2W4: Exercise[] = [
+  ...UPPER_BACK_SAFE,
+  ...R2W4_LOADED_ARMS,
+  BIRD_DOG_LEGS,
+  ...WRIST_ONRAMP,
+];
+
+// Load-time guards: the three Week-3 A exercises we swap must exist by name.
+for (const needed of ['Bodyweight squats', 'Bodyweight hip hinge', 'Wall sit']) {
+  if (!R2W3_PLAN.workouts.A.main.some((ex) => ex.name === needed)) {
+    throw new Error(`R2W4: expected '${needed}' in Week 3 workout A`);
+  }
+}
+if (!R2W3_PLAN.workouts.B.main.some((ex) => ex.name === 'Bodyweight hip hinge')) {
+  throw new Error("R2W4: expected 'Bodyweight hip hinge' in Week 3 workout B");
+}
+
+PROGRAM.push({
+  round: 2,
+  weekNum: 4,
+  startsOn: '2026-09-19',
+  label: 'Round 2 — Week 4 · the split squat, and the 1 kg comes back',
+  workouts: {
+    A: {
+      ...R2W3_PLAN.workouts.A,
+      description:
+        'Split squat in for the squat · wall sit 45 · 1 kg back in the arm block · 2 rounds · ~30 min (cardio optional)',
+      main: R2W3_PLAN.workouts.A.main.map((ex) => {
+        if (ex.name === 'Bodyweight squats') return R2W4_SPLIT_SQUAT;
+        if (ex.name === 'Bodyweight hip hinge') return HIP_HINGE_R2W4;
+        if (ex.name === 'Wall sit') return R2W4_WALL_SIT;
+        return ex;
+      }),
+      upperBack: UPPER_BACK_R2W4,
+    },
+    B: {
+      ...R2W3_PLAN.workouts.B,
+      description: 'Same as last week · hinge with the 1 kg · 1 kg back in the arm block · ~30 min',
+      main: R2W3_PLAN.workouts.B.main.map((ex) =>
+        ex.name === 'Bodyweight hip hinge' ? HIP_HINGE_R2W4 : ex
+      ),
+      upperBack: UPPER_BACK_R2W4,
+    },
+    // C unchanged on purpose: lighter day, its 10 squats stay, cardio slot as before.
+    C: { ...R2W3_PLAN.workouts.C },
+  },
+});
+
 // --- Resolvers -----------------------------------------------------------
 //
 // All "what's the workout today?" logic flows through these two functions.
@@ -2292,6 +2431,11 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   'Full dead bug': {
     howTo:
       'The graduation from the modified version — now the arms come along. Same start: on your back, hips and knees both at 90° in the air (shins parallel to the ceiling). Reach both arms straight up toward the ceiling. Extend ONE leg out low while the OPPOSITE arm reaches back overhead toward the floor. Come back to the start, then switch sides. 8 each side. The whole exercise is the low back: it stays pressed to the mat the entire time. If it lifts off, bend the extending knee more — a shorter lever is the fix, not pushing through. Breathe out as the limbs go away from you. Your arms move through the AIR, so there is zero weight on your wrists. Common mistake: rushing, and letting the ribs flare as the arm goes overhead — keep the ribs down and go slower.',
+  },
+  // Round-2 Week-4 addition (2026-09-19) — the road's split squat.
+  'Supported split squat': {
+    howTo:
+      "The squat's next rung — one leg does most of the work, so the same 6 to 8 reps are a real step up without adding any weight. Stand a long step in front of the couch or a sturdy chair and rest your fingertips on it, for BALANCE ONLY: light touch, no gripping, no weight going through your hands. One foot forward, flat on the floor; the other foot back with the heel up. Chest tall, eyes forward. Lower straight down, so the back knee travels toward the floor and the front thigh comes near parallel — think elevator, not escalator: down, not forward. Push through the front heel to stand. 6 to 8 each side, 2 sets; on the last set stop about 2 reps short. If the front knee pinches, or you wobble a lot, make the range smaller and keep the fingertips down — that is the right call. This replaces the squat in workout A only; C keeps its 10 squats.",
   },
   'Bird dog (legs only)': {
     howTo:
@@ -3911,6 +4055,85 @@ function saturdayForOffset(offset: number): Date {
   return saturday;
 }
 
+// ---------------------------------------------------------------------------
+// SATURDAY IS THE SWING DAY (v42, Sep 19 2026) — her rule, now automatic.
+// May 15 2026: "a week is saturday to friday, but i can be flexible if i need
+// saturday to be brought into week bf if i didnt do 3." That was recorded as
+// "her call, situational — don't auto-attribute". Sep 19 2026, 22:46, after she
+// finished Week 3's third session on Saturday night: "you just set it up, sat is
+// swing." So it is a RULE now: a session logged on a SATURDAY counts toward the
+// week that just ended (the previous Sat→Fri) if that week is still short of 3;
+// otherwise it opens the new week. Sunday→Friday sessions never swing.
+// Attribution runs chronologically, so a Saturday that swung back is already
+// counted before the next Saturday is judged. The Supabase row keeps its TRUE
+// timestamp — the swing lives in how the app COUNTS, never in the data.
+// Every "sessions in week X" surface goes through attributeSessionsToWeeks so
+// the count, the 3-slot rows, the week card and the progress bars agree.
+// ---------------------------------------------------------------------------
+const SESSIONS_PER_WEEK_TARGET = 3;
+
+// Local-midnight Saturday on/before the given moment, as ms. DST-safe (setDate).
+function calendarSaturdayMs(dateIso: string): number {
+  const d = new Date(dateIso);
+  const back = (d.getDay() + 1) % 7; // Sat=0, Sun=1, …, Fri=6
+  const sat = new Date(d);
+  sat.setDate(d.getDate() - back);
+  sat.setHours(0, 0, 0, 0);
+  return sat.getTime();
+}
+
+function previousSaturdayMs(saturdayMs: number): number {
+  const d = new Date(saturdayMs);
+  d.setDate(d.getDate() - 7);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/** Each log → the local-midnight Saturday (ms) of the week it COUNTS toward. */
+function attributeSessionsToWeeks(logs: LogEntry[]): Map<LogEntry, number> {
+  const out = new Map<LogEntry, number>();
+  const counts = new Map<number, number>();
+  const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
+  for (const l of sorted) {
+    const base = calendarSaturdayMs(l.date);
+    const isSaturday = new Date(l.date).getDay() === 6;
+    let weekMs = base;
+    if (isSaturday) {
+      const prev = previousSaturdayMs(base);
+      const prevCount = counts.get(prev) ?? 0;
+      // Swing only to COMPLETE a week she was working (1 or 2 sessions). A week
+      // with zero sessions is a skipped week (break, sickness, pre-program), and
+      // the rule is "bring Saturday in if I didn't do 3", not "resurrect a week I
+      // never started" — that would also make a fresh Saturday session vanish
+      // from "this week" for no reason she could see.
+      if (prevCount > 0 && prevCount < SESSIONS_PER_WEEK_TARGET) weekMs = prev;
+    }
+    out.set(l, weekMs);
+    counts.set(weekMs, (counts.get(weekMs) ?? 0) + 1);
+  }
+  return out;
+}
+
+/** Sessions attributed to the week whose local-midnight Saturday is `saturday`, oldest first. */
+function sessionsAttributedTo(
+  logs: LogEntry[],
+  saturday: Date,
+  attribution: Map<LogEntry, number> = attributeSessionsToWeeks(logs)
+): LogEntry[] {
+  const key = saturday.getTime();
+  return logs
+    .filter((l) => attribution.get(l) === key)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** How many Saturday sessions that fell inside this week were counted toward the week before. */
+function swungOutOfWeek(logs: LogEntry[], saturday: Date): number {
+  const attribution = attributeSessionsToWeeks(logs);
+  const key = saturday.getTime();
+  return logs.filter((l) => calendarSaturdayMs(l.date) === key && attribution.get(l) !== key)
+    .length;
+}
+
 function getWeekDots(offset = 0): WeekDotInfo[] {
   const logs = loadLogs();
   // Allison's week = Sat..Fri (Shabbat-anchored). See memory
@@ -3940,14 +4163,8 @@ function getWeekDots(offset = 0): WeekDotInfo[] {
 
 // Count sessions in the Sat-Fri week `offset` weeks back.
 function getWeekCount(offset = 0): number {
-  const logs = loadLogs();
-  const saturday = saturdayForOffset(offset);
-  const startMs = saturday.getTime();
-  const endMs = startMs + 7 * 24 * 60 * 60 * 1000 - 1;
-  return logs.filter((l) => {
-    const t = new Date(l.date).getTime();
-    return t >= startMs && t <= endMs;
-  }).length;
+  // Swing-aware (v42): a Saturday session may count toward the week before.
+  return sessionsAttributedTo(loadLogs(), saturdayForOffset(offset)).length;
 }
 
 // Program week info anchored on the Saturday of the viewed Sat-Fri week.
@@ -4421,19 +4638,13 @@ function buildWeeklyTargetRows(logs: LogEntry[]): WeeklyTargetRow[] {
   // Walk back from this Saturday to the Saturday on/before programStart.
   const rows: WeeklyTargetRow[] = [];
   const cursor = new Date(thisSaturday);
+  // Swing-aware (v42): attribution computed once, shared by every row.
+  const attribution = attributeSessionsToWeeks(logs);
   while (cursor.getTime() >= programStart.getTime() - 6 * 24 * 60 * 60 * 1000) {
     const weekStart = new Date(cursor);
-    const weekEnd = new Date(cursor);
-    weekEnd.setDate(weekEnd.getDate() + 7);
 
-    // Find sessions in this week (chronological — oldest first)
-    const weekLogs = logs
-      .filter((l) => {
-        const t = new Date(l.date).getTime();
-        return t >= weekStart.getTime() && t < weekEnd.getTime();
-      })
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .slice(0, 3); // cap at 3 for the 3-slot view
+    // Sessions COUNTED toward this week (chronological — oldest first)
+    const weekLogs = sessionsAttributedTo(logs, weekStart, attribution).slice(0, 3); // cap at 3 for the 3-slot view
 
     const pw = getProgramWeek(weekStart);
     rows.push({
@@ -4460,6 +4671,12 @@ function renderWeeklyTargetGrid(): string {
   const logs = loadLogs();
   const rows = buildWeeklyTargetRows(logs);
   const currentWeekCount = getWeekCount(0);
+  // Swing note (v42): if this week's Saturday session was counted toward last
+  // week, say so where the number is — otherwise "0 of 3" next to a lit Saturday
+  // dot reads like a bug.
+  const swung = swungOutOfWeek(logs, saturdayForOffset(0));
+  const swingNote =
+    swung > 0 ? ` · Sat counted for last week${swung > 1 ? ` (×${swung})` : ''}` : '';
 
   const rowsHtml = rows
     .map((r) => {
@@ -4498,7 +4715,7 @@ function renderWeeklyTargetGrid(): string {
     <details class="consistency-wrap">
       <summary class="next-week-summary">
         <span class="next-week-summary-label">Consistency</span>
-        <span class="next-week-summary-meta">${currentWeekCount} of 3 this week</span>
+        <span class="next-week-summary-meta">${currentWeekCount} of 3 this week${swingNote}</span>
         <span class="next-week-chev">▸</span>
       </summary>
       <div class="past-weeks-body weekly-target-card">
@@ -4694,8 +4911,8 @@ function renderGearCard(): string {
         <div class="gear-section">
           <div class="gear-label">You have — in the workout now</div>
           <ul class="gear-list">
-            <li>✅ 1 kg weight — owned. The <strong>biceps curl is still PAUSED</strong> with all loaded arm work (since Jun 20 2026, the thumb/cyst). Sep 7 2026 you opened <em>weight-bearing</em> on the hands (bird dog, legs only) — <strong>holding and gripping a weight is a separate gate</strong> and stays closed until Lisa says otherwise. The <strong>prone row stays bodyweight</strong>. One to ask her: can you hold the 1 kg for prone Y/T raises?</li>
-            <li>✅ TheraBand kit (Yellow / Red / Green) — <strong>the yellow band is IN your workout as of Week 3</strong> (your word, Sep 14: “build week 3”), around the thighs on the clamshells in <strong>Workout B</strong>. <strong>These are flat strips, so tie the ends in a square knot once and keep that loop</strong> — you asked, and the workout step now walks you through it. Held back one week from when you confirmed the kit was home, on your own “don’t raise too fast”. Reps went back to 10 a side because the band is the increase; it climbs to 15 before the <strong>red</strong> one. A band <em>looped</em> around the legs uses no hands while you move; a band you have to <em>hold and pull</em> is the gripping gate above, and that stays shut. If the knot annoys you, a ready-made loop band is the thing to buy — tell Claude and it goes on the list.</li>
+            <li>✅ 1 kg weight — owned, and <strong>back IN your workout as of Week 4</strong> (Sep 19 2026, your words: “im doing 1 kg in arms btw i do hip hinges with 1 kg”). The <strong>1 kg biceps curl</strong> and the <strong>prone row</strong> are in the A + B arm block again at their Jun-18 2×12, and the hip hinge says “holding the 1 kg”. Grip rule is yours: light hold, wrist and fingers neutral, <strong>pain tells</strong>. 1 kg is the ceiling for now — your 2 kg trigger is unchanged: the curl easy at 3×20, two sessions running. Still a Lisa question: the 1 kg for prone Y/T raises.</li>
+            <li>✅ TheraBand kit (Yellow / Red / Green) — <strong>the yellow band is IN your workout as of Week 3</strong> (your word, Sep 14: “build week 3”), around the thighs on the clamshells in <strong>Workout B</strong>. <strong>These are flat strips, so tie the ends in a square knot once and keep that loop</strong> — you asked, and the workout step now walks you through it. Held back one week from when you confirmed the kit was home, on your own “don’t raise too fast”. Reps went back to 10 a side because the band is the increase; it climbs to 15 before the <strong>red</strong> one. A band <em>looped</em> around the legs uses no hands while you move; a band you have to <em>hold and pull</em> is grip work — open since Week 4 at the 1 kg rung, pain tells, and not in a workout yet. If the knot annoys you, a ready-made loop band is the thing to buy — tell Claude and it goes on the list.</li>
           </ul>
         </div>
         <div class="gear-section">
@@ -4929,7 +5146,7 @@ function renderPreLog(): string {
     </button>
 
     <div class="warning-banner">
-      ⚠️ <strong>Wrist:</strong> forearms fine. Palms take weight in the <strong>bird dog only</strong> (your call, Sep 7) — stop at pain, and tomorrow morning must not be worse. Holding or gripping a weight is still out. Back pain at 3/10 → stop that exercise.
+      ⚠️ <strong>Wrist:</strong> forearms fine. Palms take weight in the <strong>bird dog</strong> and the <strong>wall lean</strong> (your call, Sep 7) — stop at pain, and tomorrow morning must not be worse. Holding the <strong>1 kg</strong> is back (your word, Sep 19: “i can grip”) — light hold, wrist neutral, <strong>pain tells</strong>. Back pain at 3/10 → stop that exercise.
     </div>
 
     <button class="btn-large btn-primary" id="begin" type="button">Start</button>
@@ -5378,20 +5595,11 @@ type WeekSession = {
 };
 
 function getWeekSessions(offset: number): WeekSession[] {
-  const logs = loadLogs();
-  const saturday = saturdayForOffset(offset);
-  const startMs = saturday.getTime();
-  const endMs = startMs + 7 * 24 * 60 * 60 * 1000 - 1;
-  return logs
-    .filter((l) => {
-      const t = new Date(l.date).getTime();
-      return t >= startMs && t <= endMs;
-    })
-    .sort((a, b) => a.date.localeCompare(b.date)) // chronological within the week
-    .map((log) => ({
-      log,
-      durationStr: log.durationSec ? formatDuration(log.durationSec) : '—',
-    }));
+  // Swing-aware (v42): sessions COUNTED toward this Sat→Fri week, oldest first.
+  return sessionsAttributedTo(loadLogs(), saturdayForOffset(offset)).map((log) => ({
+    log,
+    durationStr: log.durationSec ? formatDuration(log.durationSec) : '—',
+  }));
 }
 
 type WeekTotals = {
@@ -6081,14 +6289,11 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
 
   const rows: { label: string; value: number; isCurrent: boolean }[] = [];
   const cursor = new Date(firstSat);
+  // Swing-aware (v42): same attribution as the 3-slot rows and the week card.
+  const attribution = attributeSessionsToWeeks(logs);
   while (cursor.getTime() <= thisSat.getTime()) {
     const weekStart = new Date(cursor);
-    const weekEnd = new Date(cursor);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-    const count = logs.filter((l) => {
-      const t = new Date(l.date).getTime();
-      return t >= weekStart.getTime() && t < weekEnd.getTime();
-    }).length;
+    const count = sessionsAttributedTo(logs, weekStart, attribution).length;
     const pw = getProgramWeek(weekStart);
     const isCurrent = weekStart.getTime() === thisSat.getTime();
     rows.push({

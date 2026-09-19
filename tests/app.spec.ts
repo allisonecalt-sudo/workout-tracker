@@ -768,6 +768,196 @@ test('R2 W3: the band is in B ONLY, and the bird dog has NOT been levelled up', 
   }
 });
 
+// v42 (Sep 19 2026): Round 2 Week 4 — two raises, two catch-ups, C untouched.
+test('R2 W4: split squat replaces the squat in A only, wall sit reads 45, the 1 kg is back in A+B', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-22T10:00:00.000Z'); // Tue inside Round 2 Week 4
+  await page.goto('/');
+  await expect(page.locator('.week-banner')).toContainText('Week 4');
+
+  // A: split squat in, bodyweight squat out, wall sit 45, 1 kg pair present.
+  await page.locator('button[data-workout="A"]').click();
+  const bodyA = page.locator('body');
+  await expect(bodyA).toContainText('Supported split squat');
+  await expect(bodyA).not.toContainText('Bodyweight squats');
+  await expect(bodyA).toContainText('1 kg biceps curl');
+  await expect(bodyA).toContainText('Prone row');
+  // (The overview lists NAMES only — reps like "holding the 1 kg" are checked on
+  // the running step in the walk-the-steps test below.)
+  // Holds: bird dog still legs-only; wall lean still last.
+  await expect(bodyA).toContainText('Bird dog (legs only)');
+  await expect(bodyA).toContainText('Wall lean');
+  await page.locator('.quit-link, #back-home').first().click();
+
+  // B: no split squat (B never had a squat), hinge says 1 kg, 1 kg pair present, band clamshell held.
+  await page.locator('button[data-workout="B"]').click();
+  const bodyB = page.locator('body');
+  await expect(bodyB).not.toContainText('Supported split squat');
+  await expect(bodyB).toContainText('1 kg biceps curl');
+  await expect(bodyB).toContainText('Prone row');
+  await expect(bodyB).toContainText('Side-lying clamshells');
+  await page.locator('.quit-link, #back-home').first().click();
+
+  // C: untouched — its 10 squats stay, no split squat, no 1 kg, no band.
+  await page.locator('button[data-workout="C"]').click();
+  const bodyC = page.locator('body');
+  await expect(bodyC).toContainText('Bodyweight squats');
+  await expect(bodyC).not.toContainText('Supported split squat');
+  await expect(bodyC).not.toContainText('1 kg biceps curl');
+  await expect(bodyC).not.toContainText('yellow band');
+});
+
+// ---------- Saturday is the swing day (v42, Sep 19 2026) ----------
+// Her rule: a Saturday session counts toward the week that just ended if that
+// week is short of 3; otherwise it opens the new week. Sunday+ never swings.
+// The seeded rows keep their TRUE timestamps — only the counting moves.
+const SWING_WEEK3_A = {
+  id: 'swing-a',
+  date: '2026-09-14T15:50:00.000Z', // Mon Sep 14 — Week 3
+  workout: 'A',
+  capacityBefore: 7,
+  capacityAfter: null,
+  wallSitSec: 43,
+  backPain: null,
+  word: '',
+};
+const SWING_WEEK3_B = {
+  id: 'swing-b',
+  date: '2026-09-18T15:02:00.000Z', // Fri Sep 18 — Week 3
+  workout: 'B',
+  capacityBefore: 8,
+  capacityAfter: 5,
+  wallSitSec: 0,
+  backPain: 0,
+  word: '',
+  durationSec: 2100,
+};
+const SWING_SAT_C = {
+  id: 'swing-c',
+  date: '2026-09-19T19:21:00.000Z', // Sat Sep 19, 22:21 Jerusalem — the swing day
+  workout: 'C',
+  capacityBefore: 7,
+  capacityAfter: 9,
+  wallSitSec: 0,
+  backPain: 0,
+  word: '',
+  durationSec: 720,
+};
+
+test('swing: a Saturday session completes a 2-session week — last week shows 3 of 3, this week 0', async ({
+  page,
+}) => {
+  await page.addInitScript(
+    (rows: unknown[]) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    },
+    [SWING_WEEK3_A, SWING_WEEK3_B, SWING_SAT_C]
+  );
+  await mockDate(page, '2026-09-20T10:00:00.000Z'); // Sun Sep 20 — Week 4
+  await page.goto('/');
+  await expect(page.locator('.week-banner')).toContainText('Week 4');
+
+  const meta = page.locator('.consistency-wrap .next-week-summary-meta');
+  await expect(meta).toContainText('0 of 3 this week');
+  await expect(meta).toContainText('Sat counted for last week');
+
+  await page.locator('.consistency-wrap > summary').click();
+  // This week: three open slots.
+  await expect(page.locator('.weekly-row-current .weekly-slot-empty')).toHaveCount(3);
+  // Last week (R2 · Wk 3): A, B, C — the Saturday C is its third pill.
+  const wk3 = page.locator('.weekly-row').filter({ hasText: 'R2 · Wk 3' }).first();
+  await expect(wk3.locator('button.weekly-slot')).toHaveCount(3);
+  await expect(wk3.locator('button.weekly-slot').nth(2)).toHaveText('C');
+});
+
+test('swing: a Saturday session does NOT swing when last week already has 3 — it opens the new week', async ({
+  page,
+}) => {
+  const full = [
+    { ...SWING_WEEK3_A, id: 'full-a', date: '2026-09-13T15:00:00.000Z' }, // Sun
+    { ...SWING_WEEK3_B, id: 'full-b', date: '2026-09-15T15:00:00.000Z' }, // Tue
+    { ...SWING_WEEK3_B, id: 'full-c', workout: 'C', date: '2026-09-17T15:00:00.000Z' }, // Thu
+    SWING_SAT_C,
+  ];
+  await page.addInitScript((rows: unknown[]) => {
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+  }, full);
+  await mockDate(page, '2026-09-20T10:00:00.000Z');
+  await page.goto('/');
+  const meta = page.locator('.consistency-wrap .next-week-summary-meta');
+  await expect(meta).toContainText('1 of 3 this week');
+  await expect(meta).not.toContainText('Sat counted');
+  await page.locator('.consistency-wrap > summary').click();
+  await expect(page.locator('.weekly-row-current button.weekly-slot')).toHaveCount(1);
+  const wk3 = page.locator('.weekly-row').filter({ hasText: 'R2 · Wk 3' }).first();
+  await expect(wk3.locator('button.weekly-slot')).toHaveCount(3);
+});
+
+test('swing: a SUNDAY session never swings, even when last week is short', async ({ page }) => {
+  const sunday = { ...SWING_SAT_C, id: 'sun-c', date: '2026-09-20T19:21:00.000Z' }; // Sun Sep 20
+  await page.addInitScript(
+    (rows: unknown[]) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    },
+    [SWING_WEEK3_A, SWING_WEEK3_B, sunday]
+  );
+  await mockDate(page, '2026-09-21T10:00:00.000Z'); // Mon Sep 21
+  await page.goto('/');
+  const meta = page.locator('.consistency-wrap .next-week-summary-meta');
+  await expect(meta).toContainText('1 of 3 this week');
+  await expect(meta).not.toContainText('Sat counted');
+  await page.locator('.consistency-wrap > summary').click();
+  const wk3 = page.locator('.weekly-row').filter({ hasText: 'R2 · Wk 3' }).first();
+  await expect(wk3.locator('button.weekly-slot')).toHaveCount(2);
+});
+
+// The overview lists names, not reps — so the wall-sit seconds are checked inside
+// the running workout, on the step itself (same walk-the-steps grammar as W3).
+test('R2 W4: the wall sit step itself reads 45 sec (the earned nudge from 40)', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-22T10:00:00.000Z'); // Tue inside Round 2 Week 4
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  for (let i = 0; i < 40; i++) {
+    const name =
+      (await page
+        .locator('.exercise-name')
+        .textContent({ timeout: 1000 })
+        .catch(() => '')) ?? '';
+    if (name.includes('Wall sit')) {
+      await expect(page.locator('.exercise-reps')).toContainText('45 sec');
+      await expect(page.locator('.exercise-notes').first()).toContainText('40 → 45');
+      return;
+    }
+    if (name.includes('Supported split squat')) {
+      await expect(page.locator('.exercise-reps')).toContainText('6-8 each side');
+    }
+    if (name.includes('Bodyweight hip hinge')) {
+      // Catch-up, not a raise: the hinge now says she holds the 1 kg.
+      await expect(page.locator('.exercise-reps')).toContainText('holding the 1 kg');
+    }
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else break;
+  }
+  throw new Error("never reached Week 4's wall sit");
+});
+
+// The leak guard, same shape as W3's: the split squat is keyed by NAME, so it must
+// not appear on any earlier week — Week 3's A still says bodyweight squats.
+test('R2 W4: the split squat does NOT leak onto Week 3', async ({ page }) => {
+  await mockDate(page, '2026-09-15T10:00:00.000Z'); // Tue inside Round 2 Week 3
+  await page.goto('/');
+  await expect(page.locator('.week-banner')).toContainText('Week 3');
+  await page.locator('button[data-workout="A"]').click();
+  await expect(page.locator('body')).toContainText('Bodyweight squats');
+  await expect(page.locator('body')).not.toContainText('Supported split squat');
+  await expect(page.locator('body')).not.toContainText('holding the 1 kg');
+});
+
 test('R2 W3: gear card no longer says the band is waiting for a future week', async ({ page }) => {
   const gear = page.locator('.gear-card');
   await gear.locator('.gear-summary').click();
@@ -1940,7 +2130,7 @@ test('multi-week: "Coming next week" preview renders on home with diff', async (
   await expect(bBlock.locator('.next-week-block-list')).toContainText('14');
 });
 
-test('multi-week: Settings About shows Program weeks count (14)', async ({ page }) => {
+test('multi-week: Settings About shows Program weeks count (15)', async ({ page }) => {
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
@@ -1948,7 +2138,7 @@ test('multi-week: Settings About shows Program weeks count (14)', async ({ page 
   // (11 round-1 weeks + R2 W1 + R2 W2 + R2 W3).
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 14');
+  ).toContainText('Program weeks: 15');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {

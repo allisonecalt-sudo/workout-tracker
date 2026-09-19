@@ -389,6 +389,52 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
   // April, at the beginner rung of the weight-bearing ladder. Both hands stay
   // DOWN (symmetric load); the full bird dog, where one hand lifts, is the next
   // rung. Her stop rule leads every section: pain ends it, pressure doesn't.
+  // Round-2 Week-4 (Sep 19 2026) — the road's split squat. Cues derived from
+  // the EXERCISE_GUIDE entry in app.ts; the "fingertips, no grip, no weight
+  // through the hands" line is her standing hand constraint, kept verbatim even
+  // though she said tonight the wrist is healing — balance-only is the point.
+  'Supported split squat': {
+    exercise: 'Supported split squat',
+    voiceSrc: './assets/voice/supported-split-squat.mp3',
+    voiceScript:
+      'Supported split squat. New this week, and it takes the place of your squats in workout A. Stand a long step in front of the couch or a chair, and rest your fingertips on it, for balance only. Light touch. No gripping, and no weight through your hands. Front foot flat, back heel up. Keep your chest tall and lower straight down, so the back knee moves toward the floor and the front thigh comes near parallel. Think elevator, not escalator. Then push through the front heel to stand. Six to eight each side, two sets. On the last set, stop about two reps short. If the front knee pinches, or you wobble a lot, make the range smaller and keep your fingertips down. That is the right call, not a failure.',
+    muscles: ['quads', 'glutes', 'core'],
+    muscleLabel: 'Quads + glutes, one leg at a time',
+    steps: [
+      'Stand a long step in front of the couch or a sturdy chair; fingertips on it for balance only.',
+      'One foot forward and flat; the other foot back with the heel up. Chest tall.',
+      'Lower straight down — back knee toward the floor, front thigh near parallel. Elevator, not escalator.',
+      'Push through the front heel to stand.',
+      '6-8 each side, 2 sets. Last set: stop about 2 short.',
+    ],
+    dos: [
+      'Keep the fingertips down the whole set — a light touch is the support.',
+      'Keep the front knee tracking over the front foot, not caving in.',
+      'Stay tall through the chest; the torso goes down, not forward.',
+      'Make the range smaller the moment the front knee pinches.',
+    ],
+    donts: [
+      "Don't grip the couch or lean weight into your hands — balance only.",
+      "Don't let the front heel lift; drive through it.",
+      "Don't push past today's knee pain ceiling.",
+      "Don't swap it into C — C keeps its 10 squats on purpose.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Torso pitching forward as you lower.',
+        fix: 'Think elevator: drop straight down between the feet, chest tall, eyes forward.',
+      },
+      {
+        mistake: 'Front knee drifting inward.',
+        fix: 'Push the knee out toward the pinky toe, same cue as your squats.',
+      },
+      {
+        mistake: 'Wobbling a lot, so you start gripping the couch.',
+        fix: 'Widen the stance a little front-to-back and shorten the range — the fingertips stay a light touch.',
+      },
+    ],
+  },
+
   'Bird dog (legs only)': {
     exercise: 'Bird dog (legs only)',
     voiceSrc: './assets/voice/bird-dog-legs-only.mp3',
