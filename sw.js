@@ -11,7 +11,8 @@
 // home header) so a deploy visibly busts the cache AND the on-screen tag moves.
 // v48 (Sep 24 2026): the redesign — no new shell files in P1-P8 (the archive
 // and migration files are not shell), so only the cache name moves.
-const VERSION = 'workout-tracker-v48';
+// v49 (Sep 25 2026): the visual pass + the two more machine readings.
+const VERSION = 'workout-tracker-v49';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 

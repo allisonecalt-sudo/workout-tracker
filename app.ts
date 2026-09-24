@@ -108,6 +108,11 @@ type LogEntry = {
   ellipticalLevel?: number | null;
   ellipticalKm?: number | null;
   ellipticalPulse?: number | null;
+  // v49 (Sep 25 2026): the two more the machine shows — her ask "every time
+  // put in" (calories, time). Time is typed from the console but prefilled
+  // from the app's own timer when it ran, so a normal ride needs no typing.
+  ellipticalTimeSec?: number | null;
+  ellipticalKcal?: number | null;
   // Her free-text post-log line, verbatim — never glued to a machine marker.
   sessionNote?: string | null;
   liteDay?: boolean | null;
@@ -345,8 +350,10 @@ const SUPABASE_ANON_KEY =
 // v48 (Sep 24 2026): the home + workout redesign, P1-P8 on branch redesign-v48
 // (DECISIONS-v48-2026-09-24.md). Her words: "look at home ux ui and make it
 // better i feel like its a bit all over the place".
-const APP_VERSION = 'v48';
-const BUILD_DATE = 'Sep 25, 2026 · 00:42';
+// v49 (Sep 25 2026): the visual pass (SPEC-v49.md) + the two more machine
+// readings, calories and time ("every time put in").
+const APP_VERSION = 'v49';
+const BUILD_DATE = 'Sep 25, 2026 · 01:39';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -3428,6 +3435,11 @@ function chooseElliptical(minutes: number): void {
 // asked for. Blank = not recorded, never a zero.
 const WW_ELLIPTICAL_KM_KEY = 'workout-tracker:ww-elliptical-km';
 const WW_ELLIPTICAL_PULSE_KEY = 'workout-tracker:ww-elliptical-pulse';
+// v49 (Sep 25 2026): "every time put in" — calories and time off the console,
+// alongside distance/level/pulse. Time is seconds (mm:ss typed, or prefilled
+// from the app's own timer); calories is the console's own estimate.
+const WW_ELLIPTICAL_TIME_KEY = 'workout-tracker:ww-elliptical-time-sec';
+const WW_ELLIPTICAL_KCAL_KEY = 'workout-tracker:ww-elliptical-kcal';
 
 function ellipticalKm(): number | null {
   const n = Number(localStorage.getItem(WW_ELLIPTICAL_KM_KEY) ?? '');
@@ -3437,6 +3449,43 @@ function ellipticalKm(): number | null {
 function ellipticalPulse(): number | null {
   const n = Number(localStorage.getItem(WW_ELLIPTICAL_PULSE_KEY) ?? '');
   return Number.isFinite(n) && n >= 30 && n <= 230 ? Math.round(n) : null;
+}
+
+// Typed wins; otherwise the app's own clock — by Save the elliptical step has
+// always been left once (captureLaneMinutesIfLeaving, on Done · Next), so
+// laneDoneMinutes() is the precise honest number, same one "✓ N min done"
+// already showed her. Never null just because she didn't retype what the app
+// already knows (her ask: "every time put in").
+function ellipticalTimeSec(): number | null {
+  const typed = parseMmSs(localStorage.getItem(WW_ELLIPTICAL_TIME_KEY) ?? '');
+  if (typed !== null) return typed;
+  const mins = laneDoneMinutes();
+  return mins !== null ? mins * 60 : null;
+}
+
+function ellipticalKcal(): number | null {
+  const n = Number(localStorage.getItem(WW_ELLIPTICAL_KCAL_KEY) ?? '');
+  return Number.isFinite(n) && n >= 0 && n < 5000 ? Math.round(n * 10) / 10 : null;
+}
+
+// "10:02" → 602. Accepts a bare number of seconds too ("602"). Anything else
+// (empty, garbled) is not a reading — null, same rule as every other field.
+function parseMmSs(raw: string): number | null {
+  const v = raw.trim();
+  if (v === '') return null;
+  const mmss = /^(\d{1,3}):([0-5]?\d)$/.exec(v);
+  if (mmss?.[1] && mmss[2]) {
+    const sec = Number(mmss[1]) * 60 + Number(mmss[2]);
+    return sec > 0 && sec < 18000 ? sec : null;
+  }
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 && n < 18000 ? Math.round(n) : null;
+}
+
+function formatMmSs(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 // Saved on every keystroke so the value survives a re-render or an app close.
@@ -3560,6 +3609,8 @@ function clearElliptical(): void {
   localStorage.removeItem(WW_ELLIPTICAL_LEVEL_KEY);
   localStorage.removeItem(WW_ELLIPTICAL_KM_KEY);
   localStorage.removeItem(WW_ELLIPTICAL_PULSE_KEY);
+  localStorage.removeItem(WW_ELLIPTICAL_TIME_KEY);
+  localStorage.removeItem(WW_ELLIPTICAL_KCAL_KEY);
 }
 
 function ellipticalStep(minutes: number): Exercise {
@@ -3674,6 +3725,9 @@ const V48_SESSION_COLUMNS = [
   'voice_plays',
 ] as const;
 
+// The two columns added in v49 (migrations/2026-09-25-v49-elliptical-time-kcal.sql).
+const V49_SESSION_COLUMNS = ['elliptical_time_sec', 'elliptical_kcal'] as const;
+
 // The workout_sessions row for a saved entry — pure, so it's testable without a
 // network (v48, Sep 24 2026). Every structured number has its own column now;
 // `notes` carries only system annotations.
@@ -3700,6 +3754,8 @@ function sessionPayload(entry: LogEntry): Record<string, unknown> {
     elliptical_level: entry.ellipticalLevel ?? null,
     elliptical_km: entry.ellipticalKm ?? null,
     elliptical_pulse: entry.ellipticalPulse ?? null,
+    elliptical_time_sec: entry.ellipticalTimeSec ?? null,
+    elliptical_kcal: entry.ellipticalKcal ?? null,
     session_note: entry.sessionNote ?? null,
     lite_day: entry.liteDay ?? null,
     arm_feel: entry.armFeel ?? null,
@@ -3714,6 +3770,7 @@ function sessionPayload(entry: LogEntry): Record<string, unknown> {
 function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
   const payload = sessionPayload(entry);
   for (const col of V48_SESSION_COLUMNS) delete payload[col];
+  for (const col of V49_SESSION_COLUMNS) delete payload[col];
   const noteParts = [legacyCardioMarker(entry), entry.sessionNote, entry.notes].filter(
     (p): p is string => typeof p === 'string' && p.trim() !== ''
   );
@@ -4612,6 +4669,8 @@ async function saveCompletedSession(): Promise<void> {
     ellipticalLevel: onElliptical ? ellipticalLevel() : null,
     ellipticalKm: onElliptical ? ellipticalKm() : null,
     ellipticalPulse: onElliptical ? ellipticalPulse() : null,
+    ellipticalTimeSec: onElliptical ? ellipticalTimeSec() : null,
+    ellipticalKcal: onElliptical ? ellipticalKcal() : null,
     sessionNote,
     liteDay: state.liteDay,
     // v48 · P5 (Sep 24 2026): "curl=easy;row=right" — only the parts she
@@ -4987,6 +5046,10 @@ type RemoteSession = {
   // numeric(5,2) — PostgREST may hand it back as a string.
   elliptical_km?: number | string | null;
   elliptical_pulse?: number | null;
+  // v49 (Sep 25 2026): calories + time off the machine. kcal is numeric(6,1) —
+  // PostgREST may hand it back as a string, same as km.
+  elliptical_time_sec?: number | null;
+  elliptical_kcal?: number | string | null;
   session_note?: string | null;
   lite_day?: boolean | null;
   arm_feel?: string | null;
@@ -5055,6 +5118,9 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       ellipticalLevel: r.elliptical_level ?? null,
       ellipticalKm: r.elliptical_km == null ? null : Number(r.elliptical_km),
       ellipticalPulse: r.elliptical_pulse ?? null,
+      // v49: round-trips the same way — null stays null.
+      ellipticalTimeSec: r.elliptical_time_sec ?? null,
+      ellipticalKcal: r.elliptical_kcal == null ? null : Number(r.elliptical_kcal),
       sessionNote: r.session_note ?? null,
       liteDay: r.lite_day ?? null,
       armFeel: r.arm_feel ?? null,
@@ -6384,7 +6450,9 @@ function renderHome(): string {
     swungLogs.length > 0
       ? ` · Sat's ${swungLogs.map((l) => l.workout).join(' + ')} went to ${lastWeekTitle}`
       : '';
-  const weekLine = `${weekCount} of 3 this week${swingWords} · ${logs.length} total`;
+  // v49 · look (Sep 25 2026): the lifetime count moves to the Start → Now
+  // card's own "Sessions" row — spec §5 frame 1, "Only one count on Home."
+  const weekLine = `${weekCount} of 3 this week${swingWords}`;
   // Saturday morning, last week still at 1-2: one quiet line says today will
   // count for it (v46, kept).
   const saturdayNote =
@@ -6398,7 +6466,12 @@ function renderHome(): string {
 
   const dotsHtml = weekDots
     .map((d) => {
-      const cls = d.workout ? `dot dot-${d.workout}` : 'dot dot-empty';
+      // v49 · look (Sep 25 2026): today gets its own ring + bold label (spec
+      // §5 frame 1, §6 "is-today") — the strip otherwise has no way to say
+      // "you are here".
+      const isToday = localIsoDate(d.date) === localIsoDate(new Date());
+      const cls =
+        (d.workout ? `dot dot-${d.workout}` : 'dot dot-empty') + (isToday ? ' is-today' : '');
       const clickAttr = d.logId ? `data-detail="${escapeHtml(d.logId)}"` : '';
       return `
         <button class="week-dot ${cls}" ${clickAttr} type="button" ${d.logId ? '' : 'tabindex="-1"'} aria-label="${d.letter} ${formatDate(d.date.toISOString())}${d.workout ? ` workout ${d.workout}` : ' no workout'}">
@@ -6460,6 +6533,8 @@ function renderHome(): string {
       ${saturdayNote}
     </div>
 
+    ${renderHomeStartNowCard(logs)}
+
     <div class="card walk-card">${walkRow}</div>
 
     <div class="home-doors">
@@ -6471,6 +6546,69 @@ function renderHome(): string {
       </button>
     </div>
   `;
+}
+
+// v49 · look (Sep 25 2026): Home gets its own "Start → Now" card (spec §5
+// frame 1; checklist "Start → Now rows (P6 class, and on Home)") — the same
+// witnessed-movement-no-verdict rows as the Progress card (guide §2), scoped
+// to the three numbers tellable at a glance.
+//
+// HONEST WALL SIT (spec's own flag): before v45's real timing capture (group
+// 1D, Sep 24 2026), a completed wall-sit step saved that WEEK'S PRESCRIBED
+// hold length, not what she actually held — showing that as "measured" is
+// exactly the fake precision the spec warns against ("never show the 20 s
+// prescription as a measured start"). Only a log dated on/after v45 ships is
+// a real measurement, so the pair only ever draws from those. Zero honest
+// points → the row is omitted; one → the latest shown alone, no "from".
+const V45_WALL_SIT_TIMING_SINCE = '2026-09-24';
+
+function honestWallSitLogs(chronoLogs: LogEntry[]): LogEntry[] {
+  return chronoLogs.filter((l) => l.wallSitSec > 0 && l.date >= V45_WALL_SIT_TIMING_SINCE);
+}
+
+function renderHomeStartNowCard(logs: LogEntry[]): string {
+  if (logs.length === 0) return '';
+  const chrono = getChronologicalLogs();
+  const first = chrono[0];
+  if (!first) return '';
+
+  const levels = chrono.map(rideLevel).filter((v): v is number => v !== null);
+  const levelVal =
+    levels.length === 0
+      ? `<span class="sn-first">${ELLIPTICAL_START_LEVEL}</span> → <span class="sn-last">first ride tonight</span>`
+      : levels.length === 1
+        ? `<span class="sn-last">${levels[0]}</span>`
+        : `<span class="sn-first">${levels[0]}</span> → <span class="sn-last">${levels[levels.length - 1]}</span>`;
+
+  const rows: [string, string][] = [['Elliptical level', levelVal]];
+
+  const wallHonest = honestWallSitLogs(chrono);
+  if (wallHonest.length === 1) {
+    rows.push(['Wall sit', `<span class="sn-last">${wallHonest[0]!.wallSitSec} s</span>`]);
+  } else if (wallHonest.length > 1) {
+    const wFirst = wallHonest[0]!.wallSitSec;
+    const wLast = wallHonest[wallHonest.length - 1]!.wallSitSec;
+    rows.push([
+      'Wall sit',
+      `<span class="sn-first">${wFirst} s</span> → <span class="sn-last">${wLast} s</span>`,
+    ]);
+  }
+
+  rows.push(['Sessions', `<span class="sn-last">${logs.length}</span>`]);
+
+  return `
+    <div class="card hero-card home-startnow-card">
+      <div class="start-now-head">
+        <span class="progress-card-label">📈 Start → Now</span>
+        <span class="progress-card-meta">since ${formatMonthDay(first.date)}</span>
+      </div>
+      ${rows
+        .map(
+          ([label, val]) =>
+            `<div class="start-now-row"><span class="start-now-lbl">${escapeHtml(label)}</span><span class="start-now-val">${val}</span></div>`
+        )
+        .join('')}
+    </div>`;
 }
 
 // v48 · P5 (Sep 24 2026) — the body reading as 1-10 tap chips (DECISIONS Q6).
@@ -6924,16 +7062,42 @@ function renderApartmentRoutine(totalSec: number, remainingSec: number, running:
 // steps said 3, and the readings sat 550 px from the level (uxui timed 2/5); the
 // ride ENDS on level 3, so a level set before it was a guess. Replaces v46's
 // renderEllipticalControls / renderEllipticalReadings.
-function renderEllipticalAfterCard(): string {
+function renderEllipticalAfterCard(ex: Exercise): string {
   const level = ellipticalLevel();
   const last = lastEllipticalLevel();
   const km = localStorage.getItem(WW_ELLIPTICAL_KM_KEY) ?? '';
   const pulse = localStorage.getItem(WW_ELLIPTICAL_PULSE_KEY) ?? '';
+  const kcal = localStorage.getItem(WW_ELLIPTICAL_KCAL_KEY) ?? '';
+  // v49 (Sep 25 2026): calories + time — her ask "every time put in". Time is
+  // typed off the console, but a normal ride needs nothing typed: it prefills
+  // from the app's own clock — the precise capture if she's already left the
+  // step once (laneDoneMinutes), else the same "she rode the prescription"
+  // fallback the Done face already uses (renderLaneTimerCard) — never a
+  // rounder guess than what's shown right above it.
+  const typedTime = localStorage.getItem(WW_ELLIPTICAL_TIME_KEY);
+  const fallbackSec =
+    laneDoneMinutes() !== null ? laneDoneMinutes()! * 60 : (ex.durationSec ?? null);
+  const time = typedTime ?? (fallbackSec !== null ? formatMmSs(fallbackSec) : '');
+  const timeFromApp = typedTime === null && fallbackSec !== null;
   // "—" until she touches it: an untouched stepper saves null, never a guess.
   const sameChip =
     last !== null
       ? `<button class="ell-same-chip${level === last ? ' is-on' : ''}" id="ell-level-same" type="button" aria-pressed="${level === last}">${last} again</button>`
       : '';
+  const readingRow = (
+    id: string,
+    label: string,
+    value: string,
+    unit: string,
+    opts: { type?: string; step?: string; min?: string; max?: string; sub?: string } = {}
+  ): string => `
+      <label class="ell-reading" for="${id}">
+        <span class="ell-reading-label">${label}${opts.sub ? `<span class="ell-reading-sub">${opts.sub}</span>` : ''}</span>
+        <span class="ell-reading-field">
+          <input type="${opts.type ?? 'number'}" id="${id}" inputmode="${opts.type === 'text' ? 'numeric' : 'decimal'}" ${opts.step ? `step="${opts.step}"` : ''} ${opts.min ? `min="${opts.min}"` : ''} ${opts.max ? `max="${opts.max}"` : ''} placeholder="–" value="${escapeHtml(value)}" />
+          ${unit ? `<span class="ell-reading-unit">${unit}</span>` : ''}
+        </span>
+      </label>`;
   return `
     <div class="card ell-after-card">
       <div class="ell-readings-title">From the machine, before STOP</div>
@@ -6949,8 +7113,10 @@ function renderEllipticalAfterCard(): string {
         </div>
       </div>
       <div class="ell-readings-row">
-        <label class="ell-reading"><span>Distance (km)</span><input type="number" id="ell-km" inputmode="decimal" step="0.01" min="0" placeholder="—" value="${escapeHtml(km)}" /></label>
-        <label class="ell-reading"><span>Pulse</span><input type="number" id="ell-pulse" inputmode="numeric" step="1" min="30" max="230" placeholder="—" value="${escapeHtml(pulse)}" /></label>
+        ${readingRow('ell-km', 'Distance', km, 'km', { step: '0.01', min: '0' })}
+        ${readingRow('ell-kcal', 'Calories', kcal, 'kcal', { step: '0.1', min: '0' })}
+        ${readingRow('ell-time', 'Time', time, '', { type: 'text', sub: timeFromApp ? 'from the app' : undefined })}
+        ${readingRow('ell-pulse', 'Pulse', pulse, 'bpm', { step: '1', min: '30', max: '230' })}
       </div>
     </div>`;
 }
@@ -7068,7 +7234,7 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
       ${header}
       ${nameCard('')}
       ${renderLaneTimerCard(ex, true)}
-      ${renderEllipticalAfterCard()}
+      ${renderEllipticalAfterCard(ex)}
       ${renderEllipticalGuide(false)}
       ${renderStepNav('Done · Next')}
     `;
@@ -7332,6 +7498,27 @@ function renderArmFeel(name: string): string {
     </div>`;
 }
 
+// v49 · look (Sep 25 2026): "41 min · both rounds · 1 of 3 this week" — every
+// value already exists on state/the week count (spec §6 "Post-log sub-lines").
+// Duration and round count are both honest previews (the real save recomputes
+// them); the week count includes the session about to be saved (+1), since
+// that's the number she's about to see on Home the moment she taps Save.
+function postLogWitnessLine(w: Workout): string {
+  const startedAt = state.startedAt;
+  const parts: string[] = [];
+  if (startedAt) {
+    const elapsedSec = Math.max(
+      0,
+      Math.round((Date.now() - new Date(startedAt).getTime() - totalPausedMs()) / 1000)
+    );
+    if (elapsedSec < MAX_PLAUSIBLE_DURATION_SEC) parts.push(formatDuration(elapsedSec));
+  }
+  if (w.rounds === 2) parts.push('both rounds');
+  else if (w.rounds > 2) parts.push(`${state.currentRound} of ${w.rounds} rounds`);
+  parts.push(`${getWeekCount(0) + 1} of 3 this week`);
+  return parts.join(' · ');
+}
+
 function renderPostLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
@@ -7366,12 +7553,18 @@ function renderPostLog(): string {
   const backLink = stopped
     ? `<button class="back-link postlog-back" id="back-to-workout" type="button">‹ Back to the workout</button>`
     : `<button class="back-link postlog-back" id="back-to-stretches" type="button">‹ Back to the stretches</button>`;
+  // v49 · look (Sep 25 2026): the witness line — spec §5 frame 5, "41 min ·
+  // both rounds · 1 of 3 this week", movement with no verdict (guide §2).
+  // Never shown on a stopped session: its duration and round count are both
+  // honest-but-partial, and the title already says "Stopped early".
+  const witnessLine = stopped ? '' : postLogWitnessLine(w);
   // v48 · final (Sep 25 2026): the way back lives at the top now. At the
   // bottom it sat exactly where Done · Finish was tapped a moment earlier, so
   // a double or slow second tap bounced her back to the stretches.
   return `
     <div class="postlog-top">${backLink}</div>
     <h2>${title}</h2>
+    ${witnessLine ? `<p class="postlog-witness">${escapeHtml(witnessLine)}</p>` : ''}
     <p class="subtitle">Quick log — or just Save.</p>
 
     <div class="card postlog-card">
@@ -7490,6 +7683,10 @@ type SessionCardio = {
   level: number | null;
   km: number | null;
   pulse: number | null;
+  // v49 (Sep 25 2026): calories + time off the console. null on every row
+  // logged before v49 — legacy notes never carried them.
+  kcal: number | null;
+  timeSec: number | null;
 };
 
 function numOrNull(s: string | undefined): number | null {
@@ -7516,6 +7713,8 @@ function splitNotes(notes: string | null | undefined): {
       level: numOrNull(ell[2]),
       km: numOrNull(ell[3]),
       pulse: numOrNull(ell[4]),
+      kcal: null,
+      timeSec: null,
     };
     rest = rest.replace(ell[0], '');
   }
@@ -7528,6 +7727,8 @@ function splitNotes(notes: string | null | undefined): {
         level: null,
         km: null,
         pulse: null,
+        kcal: null,
+        timeSec: null,
       };
     }
     rest = rest.replace(apt[0], '');
@@ -7553,17 +7754,28 @@ function sessionCardio(l: LogEntry): SessionCardio | null {
       level: ell ? (l.ellipticalLevel ?? null) : null,
       km: ell ? (l.ellipticalKm ?? null) : null,
       pulse: ell ? (l.ellipticalPulse ?? null) : null,
+      kcal: ell ? (l.ellipticalKcal ?? null) : null,
+      timeSec: ell ? (l.ellipticalTimeSec ?? null) : null,
     };
   }
   const legacy = splitNotes(l.notes).cardio;
   if (legacy) return legacy;
   if (typeof l.walkMinutes === 'number' && l.walkMinutes > 0) {
-    return { lane: 'walk', minutes: l.walkMinutes, level: null, km: null, pulse: null };
+    return {
+      lane: 'walk',
+      minutes: l.walkMinutes,
+      level: null,
+      km: null,
+      pulse: null,
+      kcal: null,
+      timeSec: null,
+    };
   }
   return null;
 }
 
-// "Elliptical 10 min · L7 · 1.4 km · pulse 128" / "Apartment 10 min" / "Walk 12 min".
+// "Elliptical 10 min · L7 · 1.4 km · 63.4 kcal · 10:02 · pulse 128" /
+// "Apartment 10 min" / "Walk 12 min".
 function cardioText(c: SessionCardio): string {
   const mins = c.minutes !== null ? ` ${c.minutes} min` : '';
   if (c.lane === 'elliptical') {
@@ -7571,6 +7783,8 @@ function cardioText(c: SessionCardio): string {
       `Elliptical${mins}`,
       c.level !== null ? `L${c.level}` : '',
       c.km !== null ? `${c.km} km` : '',
+      c.kcal !== null ? `${c.kcal} kcal` : '',
+      c.timeSec !== null ? formatMmSs(c.timeSec) : '',
       c.pulse !== null ? `pulse ${c.pulse}` : '',
     ]
       .filter((s) => s !== '')
@@ -9349,6 +9563,15 @@ function attachHandlers(): void {
   const ellPulse = document.getElementById('ell-pulse') as HTMLInputElement | null;
   ellPulse?.addEventListener('input', () =>
     setEllipticalReading(WW_ELLIPTICAL_PULSE_KEY, ellPulse.value)
+  );
+  // v49: calories + time, same per-keystroke save, no re-render.
+  const ellKcal = document.getElementById('ell-kcal') as HTMLInputElement | null;
+  ellKcal?.addEventListener('input', () =>
+    setEllipticalReading(WW_ELLIPTICAL_KCAL_KEY, ellKcal.value)
+  );
+  const ellTime = document.getElementById('ell-time') as HTMLInputElement | null;
+  ellTime?.addEventListener('input', () =>
+    setEllipticalReading(WW_ELLIPTICAL_TIME_KEY, ellTime.value)
   );
 
   // …and back out again to the three-way choice, in case she changes her mind.

@@ -28,7 +28,11 @@ test('home screen shows three workout options and zero sessions', async ({ page 
   await expect(page.locator('button.btn-chip[data-workout="B"]')).toHaveText('B · Glutes');
   await expect(page.locator('button.btn-chip[data-workout="C"]')).toHaveText('C · Cardio');
   await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
-  await expect(page.locator('.week-line')).toContainText('0 total');
+  // v49 · look (Sep 25 2026): the lifetime count moved off the week line and
+  // onto the Start → Now card's "Sessions" row — which itself only appears
+  // once there's at least one session (spec: "Only one count on Home").
+  await expect(page.locator('.week-line')).not.toContainText('total');
+  await expect(page.locator('.home-startnow-card')).toHaveCount(0);
 });
 
 test("today's pick highlights A when no history exists", async ({ page }) => {
@@ -127,8 +131,10 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
   await page.locator('#save-log').click();
 
   await expect(page.locator('.home-header h1')).toBeVisible();
-  // v48 · P4: counted in the one week line; the row itself lives in Sessions.
-  await expect(page.locator('.week-line')).toContainText('1 total');
+  // v49 · look (Sep 25 2026): the lifetime count lives in the Start → Now
+  // card's "Sessions" row, not the week line (spec: "Only one count on Home").
+  await expect(page.locator('.home-startnow-card .start-now-row').last()).toContainText('Sessions');
+  await expect(page.locator('.home-startnow-card .start-now-row').last()).toContainText('1');
   await page.locator('#view-history').click();
   await expect(page.locator('.history-word').first()).toContainText('proud');
 });
@@ -1066,7 +1072,9 @@ test('swing: a SUNDAY session never swings, even when last week is short', async
 // closed Week 3, home read "0 OF 3 THIS WEEK" next to a lit Saturday dot — the
 // win invisible at the moment she earned it (UX audit Sep 24).
 // v48 · P4 (DECISIONS Q2): in WORDS, every day — not a Saturday-only swap of
-// the big number: "0 of 3 this week · Sat's C went to Week 3 · N total".
+// the big number: "0 of 3 this week · Sat's C went to Week 3". (v49 · look,
+// Sep 25 2026: "· N total" moved off this line onto the Start → Now card's
+// own Sessions row — "Only one count on Home".)
 test('swing (v46): on the Saturday itself the week card carries the week it closed', async ({
   page,
 }) => {
@@ -1078,16 +1086,13 @@ test('swing (v46): on the Saturday itself the week card carries the week it clos
   );
   await mockDate(page, '2026-09-19T19:30:00.000Z'); // Sat Sep 19, 22:30 Jerusalem — right after the C
   await page.goto('/');
-  await expect(page.locator('.week-line')).toHaveText(
-    "0 of 3 this week · Sat's C went to Week 3 · 3 total"
-  );
+  await expect(page.locator('.week-line')).toHaveText("0 of 3 this week · Sat's C went to Week 3");
+  await expect(page.locator('.home-startnow-card .start-now-row').last()).toContainText('3');
   await expect(page.locator('.swing-note')).toHaveCount(0);
   // The next morning (Sunday) the words stay — the swing is worked out every day.
   await mockDate(page, '2026-09-20T10:00:00.000Z');
   await page.goto('/');
-  await expect(page.locator('.week-line')).toHaveText(
-    "0 of 3 this week · Sat's C went to Week 3 · 3 total"
-  );
+  await expect(page.locator('.week-line')).toHaveText("0 of 3 this week · Sat's C went to Week 3");
 });
 
 test('swing (v46): Saturday morning with last week at 2 says today will count for it', async ({
@@ -1983,19 +1988,18 @@ test('ship 4: weekly review empty state for week with no sessions', async ({ pag
   expect(empty?.toLowerCase()).not.toContain('you got');
 });
 
-// --- COOLER-LOOK (2026-05-15 evening) -----------------------------------------
+// --- COOLER-LOOK (2026-05-15 evening) → retired by v49 · look (2026-09-25) ---
 //
-// Layer of modern visual interest on top of D-1: gradients, restrained glass,
-// spring-physics motion, workout-card monograms. These tests lock in:
-//  - new motion + glass tokens exist on :root
-//  - workout-picker tiles render an aria-hidden monogram with the workout letter
-//  - today's-pick card has the accent-tinted gradient + accent glow
-//
-// If a future change strips the depth tokens or removes the monogram, one of
-// these tests fires.
+// COOLER-LOOK layered gradients, restrained glass and spring-physics motion on
+// top of D-1. The v49 visual pass (SPEC-v49.md §3, §7) retires all of it —
+// "Borders, not shadows... No new shadows, glass or gradients" — and aliases
+// the old token names to flat/no-op values so the sheet still resolves. These
+// tests now lock in THAT: the old names still resolve (nothing references an
+// undefined var), but to the new flat, no-glow values — not that glass exists.
 
-test('cooler-look: motion + glass design tokens are defined on :root', async ({ page }) => {
-  // Spring easing constant + base duration + glass background must resolve.
+test('v49 · look: the retired glass/gradient tokens still resolve, to flat/no-op values', async ({
+  page,
+}) => {
   const tokens = await page.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
     return {
@@ -2006,13 +2010,15 @@ test('cooler-look: motion + glass design tokens are defined on :root', async ({ 
       gradHero: cs.getPropertyValue('--grad-hero').trim(),
     };
   });
+  // Motion still settles (no bounce) — the alias points at the new --ease.
   expect(tokens.easeSpring).toContain('cubic-bezier');
   expect(tokens.durBase).toBeTruthy();
-  expect(tokens.glassBg).toContain('rgba');
-  // The hero gradient is the differentiator vs the plain surface gradient.
+  // Glass retired: transparent, not an rgba wash.
+  expect(tokens.glassBg).toBe('transparent');
+  // Gradients retired: both resolve to the same flat surface now.
   expect(tokens.gradSurface).toBeTruthy();
   expect(tokens.gradHero).toBeTruthy();
-  expect(tokens.gradHero).not.toBe(tokens.gradSurface);
+  expect(tokens.gradHero).toBe(tokens.gradSurface);
 });
 
 // v48 · P4 (Sep 24 2026): the three tiles became one "Up next" hero + two
@@ -2025,11 +2031,12 @@ test('cooler-look: the hero names its letter; the chips lead with theirs', async
   await expect(page.locator('.home-chip').nth(1)).toHaveText(/^C · /);
 });
 
-test("cooler-look: today's-pick card uses gradient + glow, not flat fill", async ({ page }) => {
-  // Empty history → A is today's pick (per existing test). Its computed
-  // background-image should resolve to a non-"none" gradient (the --grad-hero
-  // accent-tinted surface) AND its box-shadow should be non-"none" (the
-  // --glow-accent inset + soft outer glow).
+test("v49 · look: today's-pick card is a flat hair-strong card, no gradient or glow", async ({
+  page,
+}) => {
+  // Empty history → A is today's pick (per existing test). Spec §6
+  // .workout-card-pick: "background: var(--surface)... box-shadow: none" —
+  // depth now comes only from the hair-strong border, never a fill or glow.
   const pick = page.locator('.workout-card-pick');
   await expect(pick).toBeVisible();
   const styles = await pick.evaluate((el) => {
@@ -2040,10 +2047,8 @@ test("cooler-look: today's-pick card uses gradient + glow, not flat fill", async
       borderRadius: cs.borderRadius,
     };
   });
-  // Hero gradient resolves to a CSS image, not "none".
-  expect(styles.backgroundImage).toContain('gradient');
-  // Glow shadow renders (not "none").
-  expect(styles.boxShadow).not.toBe('none');
+  expect(styles.backgroundImage).toBe('none');
+  expect(styles.boxShadow).toBe('none');
   // Hero radius is the bigger lg value (20px) — visually breaks from the
   // sibling tiles which sit at the default 14px.
   expect(parseFloat(styles.borderRadius)).toBeGreaterThanOrEqual(18);
@@ -3471,6 +3476,8 @@ test.describe('v48 P1 data', () => {
       localStorage.setItem('workout-tracker:ww-elliptical-level', '7');
       localStorage.setItem('workout-tracker:ww-elliptical-km', '1.4');
       localStorage.setItem('workout-tracker:ww-elliptical-pulse', '128');
+      localStorage.setItem('workout-tracker:ww-elliptical-kcal', '63.4');
+      localStorage.setItem('workout-tracker:ww-elliptical-time-sec', '10:02');
       localStorage.setItem('workout-tracker:ww-lane-done-min', '10');
     });
     const log = await saveAndReadLog(page);
@@ -3480,6 +3487,9 @@ test.describe('v48 P1 data', () => {
     expect(p['elliptical_level']).toBe(7);
     expect(p['elliptical_km']).toBe(1.4);
     expect(p['elliptical_pulse']).toBe(128);
+    // v49 (Sep 25 2026): the two more the machine shows.
+    expect(p['elliptical_kcal']).toBe(63.4);
+    expect(p['elliptical_time_sec']).toBe(602);
     expect(p['walk_minutes']).toBeNull();
     expect(p['notes']).toBeNull();
     expect(p['lite_day']).toBe(false);
@@ -4516,7 +4526,7 @@ test.describe('v48 P3 cardio', () => {
       .toEqual([200, 200]);
   });
 
-  test('(f) after the ride: one card — level "—", km, pulse, in that order; untouched level saves null', async ({
+  test('(f) after the ride: one card — level "—", km, kcal, time, pulse, in that order; untouched level saves null', async ({
     page,
   }) => {
     await movableClock(page, TUE_WEEK4);
@@ -4531,26 +4541,44 @@ test.describe('v48 P3 cardio', () => {
     await expect(card).toContainText('Level you rode at');
     await expect(page.locator('#ell-level')).toHaveText('—');
     await expect(page.locator('#ell-level-same')).toHaveCount(0); // no last level yet
+    // v49 · look (Sep 25 2026): each reading is its own row, stacked — not the
+    // old 2-column grid — so the order check is vertical (y), not horizontal.
     const lvl = (await page.locator('#ell-level').boundingBox())!;
     const km = (await page.locator('#ell-km').boundingBox())!;
+    const kcal = (await page.locator('#ell-kcal').boundingBox())!;
+    const time = (await page.locator('#ell-time').boundingBox())!;
     const pulse = (await page.locator('#ell-pulse').boundingBox())!;
     expect(lvl.y).toBeLessThan(km.y);
-    expect(km.x).toBeLessThan(pulse.x);
-    // …and all three come before Done · Next (pinned at the bottom).
+    expect(km.y).toBeLessThan(kcal.y);
+    expect(kcal.y).toBeLessThan(time.y);
+    expect(time.y).toBeLessThan(pulse.y);
+    // v49: Time prefills from the app's own timer when it ran — "10:00" for a
+    // ride that ran its full 10 minutes — with a "from the app" caption.
+    await expect(page.locator('#ell-time')).toHaveValue('10:00');
+    await expect(card).toContainText('from the app');
+    // …and all five come before Done · Next (pinned at the bottom).
     const order = await page.evaluate(() =>
-      [...document.querySelectorAll('#ell-level, #ell-km, #ell-pulse, #next')].map((e) => e.id)
+      [
+        ...document.querySelectorAll(
+          '#ell-level, #ell-km, #ell-kcal, #ell-time, #ell-pulse, #next'
+        ),
+      ].map((e) => e.id)
     );
-    expect(order).toEqual(['ell-level', 'ell-km', 'ell-pulse', 'next']);
+    expect(order).toEqual(['ell-level', 'ell-km', 'ell-kcal', 'ell-time', 'ell-pulse', 'next']);
     // The setup stays shut after the ride (it used to reopen here).
     await expect(page.locator('.ell-guide .ell-steps')).toHaveCount(0);
     await expect(page.locator('#next')).toHaveClass(/btn-primary/);
     await page.locator('#ell-km').fill('1.4');
+    await page.locator('#ell-kcal').fill('63.4');
+    await page.locator('#ell-time').fill('10:02');
     await page.locator('#ell-pulse').fill('128');
     const saved = await finishAndRead(page);
     expect(saved['cardioLane']).toBe('elliptical');
     expect(saved['cardioMinutes']).toBe(10);
     expect(saved['ellipticalLevel']).toBeNull();
     expect(saved['ellipticalKm']).toBe(1.4);
+    expect(saved['ellipticalKcal']).toBe(63.4);
+    expect(saved['ellipticalTimeSec']).toBe(602);
     expect(saved['ellipticalPulse']).toBe(128);
   });
 
@@ -4709,7 +4737,9 @@ test.describe('v48 P4 home', () => {
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(1300);
       // The one week line.
       await expect(page.locator('.week-line')).toContainText('of 3 this week');
-      await expect(page.locator('.week-line')).toContainText('39 total');
+      // v49 · look (Sep 25 2026): the lifetime count moved to the Start → Now
+      // card's own Sessions row.
+      await expect(page.locator('.home-startnow-card .start-now-row').last()).toContainText('39');
     });
 
     test('(g) Sat Sep 26 (no Week 5 encoded): the header says which plan is loaded, still one line', async ({
@@ -4778,7 +4808,7 @@ test.describe('v48 P4 home', () => {
     await expect(line).toContainText('0 of 3 this week');
     await expect(line).toContainText("Sat's");
     await expect(line).toContainText('went to');
-    await expect(line).toHaveText("0 of 3 this week · Sat's C went to Week 3 · 3 total");
+    await expect(line).toHaveText("0 of 3 this week · Sat's C went to Week 3");
     // The Saturday dot is still lit, and still opens its session (not the card).
     await page.locator('.week-dot.dot-C').click();
     await expect(page.locator('#app')).toContainText('Sat, Sep 19, 2026');
@@ -5822,9 +5852,10 @@ test.describe('v48 P7 cool-down', () => {
     await expect(page.locator('.stretch-progress')).toHaveText('~13 min · 1 of 11');
     await expect(check(page)).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('.stretch-row').first()).toHaveClass(/stretch-row-done/);
-    // The check fills in the progress green, never the sage of the one action.
+    // The check fills in ink-2 (v49 · look: --accent-progress is ink, not
+    // green), never the sage of the one action.
     const fill = await check(page).evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(fill).toBe('rgb(122, 155, 122)');
+    expect(fill).toBe('rgb(184, 181, 171)');
     // Tap again = untick; then tick it back for the close.
     await check(page).click();
     await expect(page.locator('.stretch-progress')).toHaveText('~13 min · 0 of 11');
@@ -6149,20 +6180,20 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v48 · <date, no year>", Settings "Build v48 · <full date>", sw.js v48', async ({
+  test('(d) the version: home "v49 · <date, no year>", Settings "Build v49 · <full date>", sw.js v49', async ({
     page,
   }) => {
     const src = await (await page.request.get('/app.ts')).text();
     const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
     const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
-    expect(version).toBe('v48');
+    expect(version).toBe('v49');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
-      `v48 · ${built.replace(/,\s*\d{4}/, '')}`
+      `v49 · ${built.replace(/,\s*\d{4}/, '')}`
     );
     await page.locator('#open-settings').click();
-    await expect(page.locator('#app')).toContainText(`Build v48 · ${built}`);
+    await expect(page.locator('#app')).toContainText(`Build v49 · ${built}`);
     const sw = await (await page.request.get('/sw.js')).text();
-    expect(sw).toContain("'workout-tracker-v48'");
+    expect(sw).toContain("'workout-tracker-v49'");
   });
 });
