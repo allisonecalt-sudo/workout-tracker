@@ -1,0 +1,238 @@
+// ARCHIVED 2026-09-24 (v48 · P3) — the walk's GPS distance + motion-sensor step
+// counter, copied VERBATIM from app.ts on branch redesign-v48 @ 3ca6b38.
+// Reference snapshot only: it does not compile standalone (it uses app.ts
+// helpers — localStorage keys, fetchFitSteps, logWalk, state). See README.md.
+
+// --------------------------------------------------------------------------
+// Constants + sensor state (app.ts lines 2954-2976 in v48-P2, commit 3ca6b38)
+// --------------------------------------------------------------------------
+// Her Jul-4 idea: "click walking and you automatically start tracking until I
+// tell you I'm done." Start/stop timer — start timestamp lives in localStorage
+// so an in-progress walk survives closing the app (same trick as
+// ACTIVE_SESSION_KEY).
+// Same night, her calls: (1) "I don't care if the screen needs to stay open —
+// it should make the screen stay open" → wake lock + GPS distance for outdoor
+// walks; (2) "it can't track my steps at least?" → motion-sensor step estimate
+// for apartment laps, where GPS physically can't see her. Both stop the moment
+// the walk ends. Screen-locked = sensors pause = numbers undercount; the
+// wake lock exists precisely so that doesn't happen.
+const WALK_ACTIVE_KEY = 'workout-tracker:walk-active';
+const WALK_METERS_KEY = 'workout-tracker:walk-meters';
+const WALK_STEPS_KEY = 'workout-tracker:walk-steps';
+
+let walkWatchId: number | null = null;
+let walkWakeLock: { release: () => Promise<void> } | null = null;
+let walkLastFix: { lat: number; lon: number } | null = null;
+let walkTickId: number | null = null;
+let walkMotionHandler: ((e: DeviceMotionEvent) => void) | null = null;
+// step-detection state: smoothed acceleration magnitude + peak gate
+let walkAccelAvg = 9.8;
+let walkStepGateOpen = true;
+let walkLastStepAt = 0;
+
+// --------------------------------------------------------------------------
+// walkCounter + haversineMeters (app.ts 2985-3000)
+// --------------------------------------------------------------------------
+function walkCounter(key: string): number {
+  const raw = localStorage.getItem(key);
+  const n = raw ? Number(raw) : 0;
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : 0;
+}
+
+function haversineMeters(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const R = 6371000;
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLon = (b.lon - a.lon) * rad;
+  const s =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+// --------------------------------------------------------------------------
+// updateWalkLiveLine — minutes + steps + km (app.ts 3018-3029)
+// --------------------------------------------------------------------------
+function updateWalkLiveLine(): void {
+  const el = document.getElementById('walk-live');
+  if (!el) return;
+  const start = activeWalkStart() ?? workoutWalkStart();
+  const mins = start ? Math.max(0, Math.round((Date.now() - start) / 60000)) : 0;
+  const m = walkCounter(WALK_METERS_KEY);
+  const st = walkCounter(WALK_STEPS_KEY);
+  let line = `${mins} min`;
+  if (st > 0) line += ` · ${st} steps`;
+  if (m >= 10) line += ` · ${(m / 1000).toFixed(2)} km`;
+  el.textContent = line;
+}
+
+// --------------------------------------------------------------------------
+// beginWalkTracking — GPS watch + devicemotion step detector (app.ts 3031-3090)
+// --------------------------------------------------------------------------
+function beginWalkTracking(): void {
+  void acquireWalkWakeLock();
+  // GPS distance — outdoor. Slow-walker filtering: drop low-quality fixes
+  // (accuracy worse than 25 m) and only bank displacement ≥ 10 m from the last
+  // anchor. The 10 m anchor is the Jul-4 research number: at her <3 km/h pace
+  // she moves ~0.8 m per fix against a 5-13 m GPS noise floor, so anything
+  // finer measures jitter, not walking (raw summation can triple a walk).
+  // Expected honesty: ±10-20% outdoors. Indoors GPS stays blind by physics.
+  if ('geolocation' in navigator && walkWatchId === null) {
+    walkLastFix = null;
+    walkWatchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (pos.coords.accuracy > 25) return;
+        const fix = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        if (walkLastFix) {
+          const d = haversineMeters(walkLastFix, fix);
+          if (d >= 10) {
+            localStorage.setItem(WALK_METERS_KEY, String(walkCounter(WALK_METERS_KEY) + d));
+            walkLastFix = fix;
+            updateWalkLiveLine();
+          }
+        } else {
+          walkLastFix = fix;
+        }
+      },
+      () => {
+        /* permission denied / no signal — minutes and steps still log */
+      },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
+    );
+  }
+  // Step estimate — indoor-capable (apartment laps), needs the phone on her
+  // with the screen awake. Peak detection on acceleration magnitude with a
+  // slow-gait-friendly gate: ≥ 400 ms between steps, ~1.2 m/s² above the
+  // rolling baseline to open, close near baseline. Estimate-grade on purpose.
+  if (walkMotionHandler === null && typeof DeviceMotionEvent !== 'undefined') {
+    walkAccelAvg = 9.8;
+    walkStepGateOpen = true;
+    walkLastStepAt = 0;
+    walkMotionHandler = (e: DeviceMotionEvent) => {
+      const acc = e.accelerationIncludingGravity;
+      if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
+      const mag = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
+      walkAccelAvg = walkAccelAvg * 0.9 + mag * 0.1; // rolling baseline
+      const now = Date.now();
+      if (walkStepGateOpen && mag > walkAccelAvg + 1.2 && now - walkLastStepAt >= 400) {
+        walkStepGateOpen = false;
+        walkLastStepAt = now;
+        localStorage.setItem(WALK_STEPS_KEY, String(walkCounter(WALK_STEPS_KEY) + 1));
+        updateWalkLiveLine();
+      } else if (!walkStepGateOpen && mag < walkAccelAvg + 0.3) {
+        walkStepGateOpen = true;
+      }
+    };
+    window.addEventListener('devicemotion', walkMotionHandler);
+  }
+  if (walkTickId === null) {
+    walkTickId = window.setInterval(updateWalkLiveLine, 30000);
+  }
+}
+
+// --------------------------------------------------------------------------
+// endWalkTracking — tears both sensors down (app.ts 3092-3110)
+// --------------------------------------------------------------------------
+function endWalkTracking(): void {
+  if (walkWatchId !== null && 'geolocation' in navigator) {
+    navigator.geolocation.clearWatch(walkWatchId);
+  }
+  walkWatchId = null;
+  walkLastFix = null;
+  if (walkMotionHandler !== null) {
+    window.removeEventListener('devicemotion', walkMotionHandler);
+    walkMotionHandler = null;
+  }
+  if (walkTickId !== null) {
+    window.clearInterval(walkTickId);
+    walkTickId = null;
+  }
+  if (walkWakeLock) {
+    void walkWakeLock.release().catch(() => undefined);
+    walkWakeLock = null;
+  }
+}
+
+// --------------------------------------------------------------------------
+// startWalk / finishWalk — counters in, motion estimate as the Fit fallback (app.ts 3112-3138)
+// --------------------------------------------------------------------------
+function startWalk(): void {
+  localStorage.setItem(WALK_ACTIVE_KEY, String(Date.now()));
+  localStorage.removeItem(WALK_METERS_KEY);
+  localStorage.removeItem(WALK_STEPS_KEY);
+  beginWalkTracking();
+}
+
+async function finishWalk(): Promise<WalkEntry | null> {
+  const start = activeWalkStart();
+  // v45: a second "Done walking" tap (while Fit is answering) found no walk and
+  // still logged an empty one. No active walk = nothing to log.
+  if (start === null) return null;
+  const end = Date.now();
+  const meters = walkCounter(WALK_METERS_KEY);
+  let steps = walkCounter(WALK_STEPS_KEY);
+  endWalkTracking();
+  localStorage.removeItem(WALK_ACTIVE_KEY);
+  localStorage.removeItem(WALK_METERS_KEY);
+  localStorage.removeItem(WALK_STEPS_KEY);
+  // Prefer Google Fit's real count for the walk window; motion estimate if not.
+  if (start) {
+    const fit = await fetchFitSteps(start, end);
+    if (fit !== null) steps = fit;
+  }
+  const minutes = start ? Math.max(1, Math.round((end - start) / 60000)) : null;
+  return logWalk(minutes, meters >= 10 ? meters : null, steps > 0 ? steps : null);
+}
+
+// --------------------------------------------------------------------------
+// harvestWorkoutWalk — the in-workout walk's meters + steps (app.ts 3252-3269)
+// --------------------------------------------------------------------------
+function harvestWorkoutWalk(): void {
+  const start = workoutWalkStart();
+  if (start === null) return;
+  const end = Date.now();
+  const minutes = Math.max(1, Math.round((end - start) / 60000));
+  const meters = walkCounter(WALK_METERS_KEY);
+  const steps = walkCounter(WALK_STEPS_KEY);
+  // Don't kill the engine if a STANDALONE walk is (somehow) also live.
+  if (!activeWalkStart()) endWalkTracking();
+  localStorage.removeItem(WW_START_KEY);
+  localStorage.removeItem(WALK_METERS_KEY);
+  localStorage.removeItem(WALK_STEPS_KEY);
+  // Keep start/end so logCompleteAndHome can ask Google Fit for the real count.
+  workoutWalk = { minutes, meters: meters >= 10 ? meters : 0, steps, startMs: start, endMs: end };
+  // v45: persisted too — the walk is the FIRST step, so if the phone drops the
+  // app during the strength rounds, the numbers must still be there at Save.
+  localStorage.setItem(WW_RESULT_KEY, JSON.stringify(workoutWalk));
+}
+
+// --------------------------------------------------------------------------
+// syncWorkoutWalkTracking — restarted the sensors after an app close (app.ts 3301-3316)
+// --------------------------------------------------------------------------
+function syncWorkoutWalkTracking(): void {
+  const onWalkStep =
+    state.screen === 'workout' && !state.isResting && getCurrentExercise()?.name === 'Outdoor walk';
+  const started = workoutWalkStart() !== null;
+  const standaloneActive = activeWalkStart() !== null;
+  if (onWalkStep && started && !standaloneActive) {
+    if (walkWatchId === null && walkMotionHandler === null) {
+      // First tick after Start, or resumed after an app close — (re)start the
+      // sensors; any accumulated meters/steps are already in localStorage.
+      beginWalkTracking();
+    }
+    updateWalkLiveLine();
+  } else if (!onWalkStep && started) {
+    harvestWorkoutWalk();
+  }
+}
+
+// --------------------------------------------------------------------------
+// startWorkoutWalk (app.ts 3320-3326)
+// --------------------------------------------------------------------------
+function startWorkoutWalk(): void {
+  if (activeWalkStart() !== null) return; // a standalone walk owns the engine
+  localStorage.setItem(WW_START_KEY, String(Date.now()));
+  localStorage.removeItem(WALK_METERS_KEY);
+  localStorage.removeItem(WALK_STEPS_KEY);
+  beginWalkTracking();
+}

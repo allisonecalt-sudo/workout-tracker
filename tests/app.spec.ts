@@ -9,6 +9,10 @@ test.beforeEach(async ({ page }) => {
 
 // v48 (Sep 24 2026): the full cue sits behind a closed "Cue ▸" — the card face
 // carries only the one safety line. Tests that read the cue open it first.
+// v48 · P3 (Sep 24 2026): the cardio CHOICE step has no Done · Next — its way
+// on is the quiet "Skip cardio today" (#ww-skip). One tap forward on any step.
+const NEXT = 'button:has-text("Done ·"), #ww-skip';
+
 async function openCue(page: Page): Promise<void> {
   const toggle = page.locator('.cue-toggle[aria-expanded="false"]');
   if (await toggle.count()) await toggle.first().click();
@@ -88,7 +92,7 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
     if (isPostLog) break;
     // Matches both the stepped "Done · Next" and the cool-down list's
     // single "Done · Finish" button.
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -138,7 +142,7 @@ test('cool-down renders as a single stretch list with no per-stretch video', asy
       reachedStretch = true;
       break;
     }
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -186,7 +190,7 @@ test('workout B reaches the upper-back phase after main (wall angels, unloaded)'
       reachedUpperBack = true;
       break;
     }
-    const nextBtn = page.locator('button:has-text("Done · Next"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done · Next"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -222,7 +226,7 @@ test('quit during workout asks for confirmation and returns home', async ({ page
   });
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  await page.locator('button:has-text("Done · Next")').click();
+  await page.locator(NEXT).click();
   await page.locator('.quit-link').click();
   await expect(page.locator('h1')).toHaveText('Workout Tracker');
   await expect(page.locator('.stat-number').first()).toHaveText('0');
@@ -234,7 +238,7 @@ test('quit dialog cancel keeps user in workout', async ({ page }) => {
   });
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  await page.locator('button:has-text("Done · Next")').click();
+  await page.locator(NEXT).click();
   await page.locator('.quit-link').click();
   // Still in workout
   await expect(page.locator('h2')).toContainText('Workout A');
@@ -276,7 +280,7 @@ test('enriched detail card: face shows voice + muscle, sections are click-to-ope
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
   for (let i = 0; i < 4; i++) {
-    await page.locator('button:has-text("Done · Next")').click();
+    await page.locator(NEXT).click();
   }
   await expect(page.locator('.exercise-name')).toHaveText('Bodyweight squats');
 
@@ -320,7 +324,7 @@ async function walkToPostLog(page: import('@playwright/test').Page): Promise<voi
       .isVisible()
       .catch(() => false);
     if (isPostLog) return;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else return;
   }
@@ -376,8 +380,8 @@ test('scroll (v46): Done·Next opens the next step at the top of the page', asyn
   await expect(page.locator('.exercise-name')).toBeVisible();
   // Two steps in: the second step carries a long detail card, so the Done·Next
   // tap on it happens well below the fold.
-  await page.locator('button:has-text("Done · Next")').click();
-  await page.locator('button:has-text("Done · Next")').click();
+  await page.locator(NEXT).click();
+  await page.locator(NEXT).click();
   await expect(page.locator('.exercise-name')).toBeVisible();
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   const box = await page.locator('.exercise-name').boundingBox();
@@ -390,7 +394,7 @@ test('exercise visual renders for known exercises', async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
   // Walk past warmup walk to Belly breathing (no curated JPG).
-  await page.locator('button:has-text("Done · Next")').click();
+  await page.locator(NEXT).click();
   await expect(page.locator('.exercise-visual')).toBeVisible();
 });
 
@@ -401,7 +405,7 @@ test('video-only exercise still shows a picture, with the video one tap away', a
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
   // Off the walk → Belly breathing (no loop JPG; promotes its how-to SVG).
-  await page.locator('button:has-text("Done · Next")').click();
+  await page.locator(NEXT).click();
   await expect(page.locator('.exercise-name')).toHaveText('Belly breathing');
   await expect(page.locator('.exercise-visual-still')).toBeVisible();
   await expect(page.locator('.visual-video-toggle')).toBeVisible();
@@ -416,8 +420,8 @@ test('resume: reopening the app returns to the in-progress workout', async ({ pa
   await page.locator('button:has-text("Start")').click();
   await expect(page.locator('.exercise-name')).toBeVisible();
   // Advance two exercises into the warm-up.
-  await page.locator('button:has-text("Done ·")').click();
-  await page.locator('button:has-text("Done ·")').click();
+  await page.locator(NEXT).click();
+  await page.locator(NEXT).click();
   const nameBefore = await page.locator('.exercise-name').textContent();
 
   const reopened = await context.newPage();
@@ -437,7 +441,7 @@ test('resume: quitting clears the session so reopening goes home', async ({ page
   });
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  await page.locator('button:has-text("Done ·")').click();
+  await page.locator(NEXT).click();
   await page.locator('.quit-link').click();
   await expect(page.locator('h1')).toHaveText('Workout Tracker');
 
@@ -732,7 +736,7 @@ test('R2 W3: workout B carries the yellow band on the clamshells, reps back to 1
           .catch(() => '')) ?? '';
       break;
     }
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -759,7 +763,7 @@ test('R2 W3: the clamshell step carries a tying explanation AND its own video, o
         .textContent({ timeout: 1000 })
         .catch(() => '')) ?? '';
     if (name.includes('Side-lying clamshells')) break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -819,7 +823,7 @@ test('R2 W3: the tying setup does NOT leak onto Week 2, whose clamshell is bodyw
       await expect(page.locator('.exercise-notes').first()).toContainText('Bodyweight this week');
       return;
     }
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -832,7 +836,7 @@ test('R2 W3: workout C carries no setup block anywhere', async ({ page }) => {
   await page.locator('button:has-text("Start")').click();
   for (let i = 0; i < 40; i++) {
     await expect(page.locator('.setup-block')).toHaveCount(0);
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -1118,7 +1122,7 @@ test('R2 W4: the wall sit step itself reads 45 sec (the earned nudge from 40)', 
       // Catch-up, not a raise: the hinge now says she holds the 1 kg.
       await expect(page.locator('.exercise-reps')).toContainText('holding the 1 kg');
     }
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -1315,7 +1319,7 @@ test('R2 W3 (v41): the plank in B is the SAME prescription as the one in A', asy
             .catch(() => '')) ?? '';
         return `${reps.trim()} :: ${notes.trim()}`;
       }
-      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
       if (await nextBtn.isVisible()) await nextBtn.click();
       else {
         const skipRest = page.locator('#skip-rest');
@@ -1368,7 +1372,7 @@ test('setup blocks (v40): every phase that renders an Exercise also renders its 
         .catch(() => false)
     )
       break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else {
       const skipRest = page.locator('#skip-rest');
@@ -1518,7 +1522,7 @@ test('Done safety net: a session that comes out longer than 3h logs no duration,
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = reopened.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = reopened.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -1562,7 +1566,7 @@ test('detail card: a dropdown section opens and closes on click', async ({ page 
   await page.locator('button:has-text("Start")').click();
   // A opens on the walk step, which deliberately has NO card (stripped Jul 12) —
   // advance one step to the first real exercise before asserting the card.
-  await page.locator('button:has-text("Done ·")').click();
+  await page.locator(NEXT).click();
   // v48: scoped to the detail card — the step card now has its own "Cue ▸".
   const toggle = page.locator('.detail-card .detail-section-toggle').first();
   await expect(toggle).toBeVisible();
@@ -1575,7 +1579,7 @@ test('detail card: a dropdown section opens and closes on click', async ({ page 
 test("detail card: Do & Don't dropdown shows do + don't cues", async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  await page.locator('button:has-text("Done ·")').click(); // past the card-less walk step
+  await page.locator(NEXT).click(); // past the card-less walk step
   await page.locator('.detail-section-toggle', { hasText: "Do & Don't" }).click();
   await expect(page.locator('.detail-cue-do').first()).toBeVisible();
   await expect(page.locator('.detail-cue-dont').first()).toBeVisible();
@@ -1586,7 +1590,7 @@ test('detail card: face shows the voice note + muscle target on the first exerci
 }) => {
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  await page.locator('button:has-text("Done ·")').click(); // past the card-less walk step
+  await page.locator(NEXT).click(); // past the card-less walk step
   // Form guidance always renders — now as the detail card, not the how-to card.
   await expect(page.locator('.voice-note-btn')).toBeVisible();
   await expect(page.locator('.muscle-svg')).toBeVisible();
@@ -2283,7 +2287,7 @@ test('multi-week: Week 4 content active for May 25 (Session A holds — squats 1
   await page.locator('button:has-text("Start")').click();
   // Tap through warmup (4 exercises) to reach Main → Squats.
   for (let i = 0; i < 4; i++) {
-    await page.locator('button:has-text("Done · Next")').click();
+    await page.locator(NEXT).click();
   }
   await expect(page.locator('.exercise-name')).toHaveText('Bodyweight squats');
   await expect(page.locator('.exercise-reps')).toContainText('12');
@@ -2411,7 +2415,8 @@ test('walk credit: start/stop timer logs a walk, bumps week count, streak untouc
   const streakBefore = await page.locator('.streak-stat .stat-number').first().textContent();
   await expect(page.locator('.walk-text')).not.toContainText('this week');
   await page.locator('#log-walk-start').click();
-  await expect(page.locator('.walk-text')).toContainText('Walking since');
+  // v48 · P3: minutes only — "Walking · 0 min" (was "Walking since 18:02 · …").
+  await expect(page.locator('#walk-live')).toHaveText(/^Walking · \d+ min$/);
   await expect(page.locator('#finish-walk')).toBeVisible();
   await page.locator('#finish-walk').click();
   await expect(page.locator('.walk-text')).toContainText('1 this week');
@@ -2452,7 +2457,7 @@ test('lite day: pre-log toggle drops one round and marks the session lite', asyn
   await expect(page.locator('#lite-toggle')).toContainText('Lite day');
   await page.locator('button:has-text("Start")').click();
   // C's warmup is the walk step — advance past it into the main block.
-  await page.locator('button:has-text("Done ·")').click();
+  await page.locator(NEXT).click();
   // v48: one progress line — "Main · Round 1 of 1 · lite".
   await expect(page.locator('.round-indicator')).toContainText('Main · Round 1 of 1 · lite');
 });
@@ -2478,17 +2483,29 @@ test.describe('walk distance (GPS granted)', () => {
     geolocation: { latitude: 31.771, longitude: 35.2137 },
   });
 
-  test('outdoor walk accumulates km from GPS movement', async ({ page, context }) => {
-    // Jul 4 2026 — her call: screen stays awake, GPS tracks distance.
-    // Mock fixes arrive with accuracy 0 (passes the <=25 m quality gate);
-    // each ~55 m hop must bank displacement into the live line.
+  test('v48 · P3: a walk is minutes only — GPS movement shows no km and saves no meters', async ({
+    page,
+    context,
+  }) => {
+    // Jul 4 2026 her call was GPS distance; Sep 7 her words were "walk counter
+    // not important now", and the numbers never matched Fit (3 steps in 29 min,
+    // 16 m in 12 min). v48 archives the sensors: even with GPS granted and the
+    // phone moving ~55 m a hop, nothing but minutes shows, and nothing else saves.
     await page.locator('#log-walk-start').click();
-    await expect(page.locator('#walk-live')).toBeVisible();
+    await expect(page.locator('#walk-live')).toHaveText(/^Walking · \d+ min$/);
     await context.setGeolocation({ latitude: 31.7715, longitude: 35.2137 });
     await context.setGeolocation({ latitude: 31.772, longitude: 35.2137 });
-    await expect(page.locator('#walk-live')).toContainText('km', { timeout: 15000 });
+    await page.waitForTimeout(500);
+    await expect(page.locator('.walk-card')).not.toContainText('km');
+    await expect(page.locator('.walk-card')).not.toContainText(/steps/i);
     await page.locator('#finish-walk').click();
     await expect(page.locator('.walk-text')).toContainText('1 this week');
+    const walks = JSON.parse(
+      (await page.evaluate(() => localStorage.getItem('workout-tracker:walks'))) ?? '[]'
+    ) as { minutes: number | null; meters: number | null; steps: number | null }[];
+    expect(walks[0]?.minutes).toBeGreaterThanOrEqual(1);
+    expect(walks[0]?.meters).toBeNull();
+    expect(walks[0]?.steps).toBeNull();
   });
 });
 
@@ -2552,7 +2569,7 @@ test('R2 W2: workout A carries the full dead bug, bird dog legs-only, the tilted
       seen[name] = `${reps} :: ${notes}`;
     }
     if (seen['Forearm plank']) break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -2758,7 +2775,7 @@ test('cardio either/or: finishing after the apartment option saves the lane + it
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -3000,14 +3017,12 @@ test('elliptical: the cardio step offers three lanes and the elliptical swaps in
   await expect(page.locator('.exercise-reps')).toContainText('10 min');
   await expect(page.locator('.timer-display')).toHaveText('10:00');
   await expect(page.locator('#start-timed')).toBeVisible();
-  // No history → the first-ride guess, labelled as a guess.
-  await expect(page.locator('#ell-level')).toHaveText('5');
-  await expect(page.locator('.ww-start-block .gear-note')).toContainText('only a guess');
-  await page.locator('#ell-level-up').click();
-  await page.locator('#ell-level-up').click();
-  await expect(page.locator('#ell-level')).toHaveText('7');
-  await page.locator('#ell-level-down').click();
-  await expect(page.locator('#ell-level')).toHaveText('6');
+  // v48 · P3 (decision Q5): no level before the ride — the ride starts AND ends
+  // on 3, so the level is logged after it. One line says how to start instead.
+  await expect(page.locator('#ell-level')).toHaveCount(0);
+  await expect(page.locator('.exercise-safety')).toHaveText(
+    'Start on level 3, easy · stand tall, hands light'
+  );
   // The walk engine never started.
   expect(await page.evaluate(() => localStorage.getItem('workout-tracker:ww-start'))).toBeNull();
 
@@ -3028,16 +3043,21 @@ test('elliptical: finishing saves the minutes + level + readings, never POSTs, a
   page.on('request', (req) => {
     if (req.method() === 'POST') posted.push(req.url());
   });
-  await mockDate(page, '2026-09-24T08:00:00.000Z');
+  // v48 · P3: the level + readings are filled AFTER the ride, so the ride runs.
+  await movableClock(page, '2026-09-24T08:00:00.000Z');
   await page.goto('/');
   await page.locator('button[data-workout="C"]').click();
   await page.locator('button:has-text("Start")').click();
   await page.locator('#ww-elliptical').click();
   await expect(page.locator('.timer-display')).toHaveText('25:00');
+  await page.locator('#start-timed').click();
+  await advanceClock(page, 25 * 60_000 + 2_000);
+  await expect(page.locator('.timer-done')).toHaveText('✓ 25 min done');
+  // First tap on a first ride starts from level 3 and moves one: 4, then 5.
   await page.locator('#ell-level-up').click();
   await page.locator('#ell-level-up').click();
-  await expect(page.locator('#ell-level')).toHaveText('7');
-  // Copied off the machine's screen after the ride.
+  await expect(page.locator('#ell-level')).toHaveText('5');
+  // Copied off the machine's screen, before STOP.
   await page.locator('#ell-km').fill('2.15');
   await page.locator('#ell-pulse').fill('128');
 
@@ -3047,7 +3067,7 @@ test('elliptical: finishing saves the minutes + level + readings, never POSTs, a
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -3064,7 +3084,7 @@ test('elliptical: finishing saves the minutes + level + readings, never POSTs, a
   // and her note is its own field, verbatim — nothing is glued into `notes`.
   expect(logs[0]?.['cardioLane']).toBe('elliptical');
   expect(logs[0]?.['cardioMinutes']).toBe(25);
-  expect(logs[0]?.['ellipticalLevel']).toBe(7);
+  expect(logs[0]?.['ellipticalLevel']).toBe(5);
   expect(logs[0]?.['ellipticalKm']).toBe(2.15);
   expect(logs[0]?.['ellipticalPulse']).toBe(128);
   expect(logs[0]?.['sessionNote']).toBe('Knee fine, legs heavy on the elliptical');
@@ -3081,10 +3101,10 @@ test('elliptical: finishing saves the minutes + level + readings, never POSTs, a
   }
 });
 
-test('elliptical: the next ride starts at the level from the last saved session', async ({
+test('elliptical: the next ride opens on the elliptical and offers the last level again', async ({
   page,
 }) => {
-  await mockDate(page, '2026-09-24T08:00:00.000Z');
+  await movableClock(page, '2026-09-24T08:00:00.000Z');
   // Runs after the beforeEach clear, so the seeded history survives each load.
   await page.addInitScript(() => {
     window.localStorage.setItem(
@@ -3120,23 +3140,31 @@ test('elliptical: the next ride starts at the level from the last saved session'
   await page.goto('/');
   await page.locator('button[data-workout="B"]').click();
   await page.locator('button:has-text("Start")').click();
-  await page.locator('#ww-elliptical').click();
-  await expect(page.locator('#ell-level')).toHaveText('8');
-  await expect(page.locator('.ww-start-block .gear-note')).toContainText('last level (8)');
-  // v46: she knows the machine now — the setup is a one-line expander above
-  // the timer, closed until tapped.
+  // v48 · P3 lane memory: her last session rode the elliptical (the v47 marker
+  // says so), so the step opens straight on it — no choice screen.
+  await expect(page.locator('.exercise-name')).toHaveText('Elliptical');
+  await expect(page.locator('.new-tonight-badge')).toHaveCount(0); // not a first ride
+  // She knows the machine now — the setup is a one-line expander UNDER Start
+  // (v48: Start sits inside the fold), closed until tapped.
   const guide = page.locator('.ell-guide');
   await expect(guide.locator('.detail-section-toggle')).toContainText('Set up the machine');
   await expect(guide.locator('.ell-steps')).toHaveCount(0);
   const guideBox = await guide.boundingBox();
   const timerBox = await page.locator('.timer-card').boundingBox();
-  expect(guideBox!.y).toBeLessThan(timerBox!.y);
+  expect(timerBox!.y).toBeLessThan(guideBox!.y);
   await guide.locator('.detail-section-toggle').click();
-  await expect(guide.locator('.ell-steps')).toHaveCount(2);
+  await expect(guide.locator('.ell-steps li')).toHaveCount(3);
   await expect(guide).toContainText('MANUAL');
-  // The ride step no longer says "First ride" on every ride.
-  await expect(guide).not.toContainText('First ride:');
-  await expect(guide).toContainText('Not sure of your level?');
+  await expect(guide).toContainText('may be a little different');
+  // The old 6-step ride list became the live line — it is not in the setup.
+  await expect(guide).not.toContainText('Not sure of your level?');
+  // After the ride: "—" until touched, and "8 again" (the newest ride) is one tap.
+  await page.locator('#start-timed').click();
+  await advanceClock(page, 10 * 60_000 + 2_000);
+  await expect(page.locator('#ell-level')).toHaveText('—');
+  await expect(page.locator('#ell-level-same')).toHaveText('8 again');
+  await page.locator('#ell-level-same').click();
+  await expect(page.locator('#ell-level')).toHaveText('8');
 });
 
 test('elliptical: the step carries how-to guidance', () => {
@@ -3153,46 +3181,36 @@ test('elliptical: the reading boxes + setup steps hide while the timer runs and 
   page,
 }) => {
   // The timer re-renders every second; a box shown mid-ride would lose what
-  // she is typing. So the boxes (and the setup card) only show while stopped.
-  await movableClock(page, '2026-09-24T08:00:00.000Z', { skipPreCountdown: true });
+  // she is typing. v48 · P3: the boxes exist only AFTER the ride (decision Q5),
+  // and the setup never shows mid-ride or reopens after it.
+  await movableClock(page, '2026-09-24T08:00:00.000Z');
   await page.goto('/');
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
   await page.locator('#ww-elliptical').click();
-  await expect(page.locator('#ell-km')).toBeVisible();
-  await expect(page.locator('#ell-pulse')).toBeVisible();
+  await expect(page.locator('#ell-km')).toHaveCount(0);
+  await expect(page.locator('#ell-pulse')).toHaveCount(0);
   // First ride (no level on record) → the setup expander is open by default.
-  await expect(page.locator('.ell-guide')).toContainText('Setting up the machine');
   await expect(page.locator('.ell-guide')).toContainText('MANUAL');
-  // v46 order: setup ABOVE the timer, readings BELOW it (she reads it in the
-  // order she uses it), and the back-out is still offered before the ride.
-  const guideBox = await page.locator('.ell-guide').boundingBox();
-  const timerBox = await page.locator('.timer-card').boundingBox();
-  const kmBox = await page.locator('#ell-km').boundingBox();
-  expect(guideBox!.y).toBeLessThan(timerBox!.y);
-  expect(kmBox!.y).toBeGreaterThan(timerBox!.y);
   await expect(page.locator('#ww-outdoor')).toBeVisible();
-  await expect(page.locator('.ww-start-block .gear-note')).toContainText('the level you rode at');
 
   await page.locator('#start-timed').click();
   await expect(page.locator('#ell-km')).toHaveCount(0);
-  // Mid-ride the steps fold away (the card sits above the countdown), but the
-  // expander stays one tap away.
-  await expect(page.locator('.ell-guide .ell-steps')).toHaveCount(0);
-  await expect(page.locator('.ell-guide .detail-section-toggle')).toBeVisible();
+  await expect(page.locator('.ell-guide')).toHaveCount(0);
   await expect(page.locator('.timer-label')).toHaveText('Running');
-  // The level stepper stays usable mid-ride.
-  await expect(page.locator('#ell-level-up')).toBeVisible();
+  await expect(page.locator('#ell-level-up')).toHaveCount(0);
+  await expect(page.locator('#ww-outdoor')).toHaveCount(0);
 
   await advanceClock(page, 10 * 60_000 + 2_000);
   await expect(page.locator('#ell-km')).toBeVisible();
   await expect(page.locator('#ell-pulse')).toBeVisible();
   // v46: the ride ran — the card says so instead of resetting to
   // "Ready 10:00 / Start timer", and the back-out (which wipes the readings)
-  // is gone.
+  // is gone. v48: the setup stays shut.
   await expect(page.locator('.timer-done')).toHaveText('✓ 10 min done');
   await expect(page.locator('#start-timed')).toHaveCount(0);
   await expect(page.locator('#ww-outdoor')).toHaveCount(0);
+  await expect(page.locator('.ell-guide .ell-steps')).toHaveCount(0);
 });
 
 test('post-log: the free-text note saves verbatim on a session with no cardio lane picked', async ({
@@ -3208,7 +3226,7 @@ test('post-log: the free-text note saves verbatim on a session with no cardio la
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -3238,7 +3256,7 @@ test('back (v47): Back steps to the previous exercise, is hidden on the first st
   await expect(page.locator('.exercise-name')).toHaveText('Cardio');
   await expect(page.locator('#step-back')).toHaveCount(0);
 
-  await page.locator('button:has-text("Done ·")').click();
+  await page.locator(NEXT).click();
   await expect(page.locator('.exercise-name')).toHaveText('Belly breathing');
   await expect(page.locator('#step-back')).toBeVisible();
   await page.locator('#step-back').click();
@@ -3257,7 +3275,7 @@ test('back (v47): Back steps to the previous exercise, is hidden on the first st
       continue;
     }
     lastRoundOneName = (await page.locator('.exercise-name').textContent()) ?? '';
-    await page.locator('button:has-text("Done ·")').click();
+    await page.locator(NEXT).click();
   }
   await expect(page.locator('.round-indicator').first()).toContainText('Main · Round 2 of 2');
   const roundTwoStep = Number(
@@ -3284,7 +3302,7 @@ test.describe('v48 P1 data', () => {
         .isVisible()
         .catch(() => false);
       if (isPostLog) break;
-      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
+      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
       if (await nextBtn.isVisible()) await nextBtn.click();
       else break;
     }
@@ -3375,11 +3393,14 @@ test.describe('v48 P1 data', () => {
     expect(p['notes']).toBeNull();
     // A B session has no wall sit: null, not a 0 wearing a number.
     expect(p['wall_sit_seconds']).toBeNull();
-    // Her note is in the shape of the old marker — and is NOT read as her level.
+    // Her note is in the shape of the old marker — and is NOT read as her level
+    // or her lane (v48 · P3): the next A opens on the choice, and the
+    // elliptical is still a first ride.
     await page.locator('button[data-workout="A"]').click();
     await page.locator('button:has-text("Start")').click();
+    await expect(page.locator('.exercise-name')).toHaveText('Cardio');
     await page.locator('#ww-elliptical').click();
-    await expect(page.locator('#ell-level')).toHaveText('5');
+    await expect(page.locator('.new-tonight-badge')).toHaveText('First ride');
   });
 
   test('(d) Lite on pre-log saves liteDay true', async ({ page }) => {
@@ -3425,7 +3446,7 @@ test.describe('v48 P1 data', () => {
     await page.goto('/');
     await page.locator('button[data-workout="A"]').click();
     await page.locator('button:has-text("Start")').click();
-    await page.locator('button:has-text("Done ·")').click(); // past the cardio step
+    await page.locator(NEXT).click(); // past the cardio step
     await expect(page.locator('.voice-note-btn')).toBeVisible();
     await page.locator('.voice-note-btn').click();
     await page.locator('.voice-note-btn').click();
@@ -3558,7 +3579,7 @@ test.describe('v48 P1 data', () => {
         );
         return;
       }
-      await page.locator('button:has-text("Done ·"), #start-round-2').click();
+      await page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip').click();
     }
     throw new Error('never reached the hip hinge');
   });
@@ -3566,7 +3587,7 @@ test.describe('v48 P1 data', () => {
   test('(i) the next ride reads the level column first, and a marker-only legacy row still works', async ({
     page,
   }) => {
-    await mockDate(page, '2026-09-24T14:00:00.000Z');
+    await movableClock(page, '2026-09-24T14:00:00.000Z');
     const legacy: Row = {
       id: 'legacy',
       date: '2026-09-22T15:00:00.000Z',
@@ -3599,8 +3620,12 @@ test.describe('v48 P1 data', () => {
       await page.goto('/');
       await page.locator('button[data-workout="A"]').click();
       await page.locator('button:has-text("Start")').click();
-      await page.locator('#ww-elliptical').click();
-      await expect(page.locator('#ell-level')).toHaveText(expected);
+      // v48 · P3: lane memory opens the elliptical; the last level is offered
+      // after the ride as the one-tap "N again".
+      await expect(page.locator('.exercise-name')).toHaveText('Elliptical');
+      await page.locator('#start-timed').click();
+      await advanceClock(page, 10 * 60_000 + 2_000);
+      await expect(page.locator('#ell-level-same')).toHaveText(`${expected} again`);
     }
   });
 
@@ -3714,14 +3739,15 @@ test.describe('v48 P2 shell', () => {
     synced: true,
   });
 
-  // One tap forward: Done · Next / Done · Finish, or "Start round 2" on the
-  // round-break screen. Returns false once nothing is left to tap.
+  // One tap forward: Done · Next / Done · Finish, "Start round 2" on the
+  // round-break screen, or (v48 · P3) "Skip cardio today" on the cardio choice.
+  // Returns false once nothing is left to tap.
   const tapForward = async (page: Page): Promise<boolean> => {
     if (await page.locator('#start-round-2').isVisible()) {
       await page.locator('#start-round-2').click();
       return true;
     }
-    const next = page.locator('#next');
+    const next = page.locator('#next, #ww-skip');
     if (await next.isVisible()) {
       await next.click();
       return true;
@@ -3752,7 +3778,7 @@ test.describe('v48 P2 shell', () => {
     let lastName = '';
     for (let i = 0; i < 40 && !(await page.locator('#start-round-2').isVisible()); i++) {
       lastName = (await page.locator('.exercise-name').textContent()) ?? '';
-      await page.locator('#next').click();
+      await page.locator('#next, #ww-skip').click();
     }
     await expect(page.locator('#start-round-2')).toBeVisible();
     return lastName;
@@ -3778,7 +3804,7 @@ test.describe('v48 P2 shell', () => {
         if (await page.locator('text=Quick log').isVisible()) break;
         const target = (await page.locator('#start-round-2').isVisible())
           ? page.locator('#start-round-2')
-          : page.locator('#next');
+          : page.locator('#next, #ww-skip'); // v48 · P3: Skip is the cardio choice's way on
         await expect(target).toBeVisible();
         expect(await page.evaluate(() => window.scrollY)).toBe(0);
         const box = await target.boundingBox();
@@ -3817,7 +3843,7 @@ test.describe('v48 P2 shell', () => {
       if (await page.locator('#start-round-2').isVisible()) {
         await page.locator('#start-round-2').click(); // not a step — the count holds
       } else {
-        await page.locator('#next').click();
+        await page.locator('#next, #ww-skip').click();
       }
       if (await page.locator('text=Quick log').isVisible()) break;
       if (await page.locator('#start-round-2').isVisible()) continue;
@@ -4043,5 +4069,342 @@ test.describe('v48 P2 shell', () => {
     await expect(page.locator('.rest-next')).toContainText('Next · Bodyweight hip hinge · 12 reps');
     await expect(page.locator('.rest-card #step-back')).toHaveText('‹ Back');
     await expect(page.locator('.rest-card #step-back')).toHaveClass(/back-link/);
+  });
+});
+
+// --- v48 P3 · cardio (Sep 24 2026) --------------------------------------------
+// DECISIONS-v48 §1 Q4/Q5/Q7/Q8, §2 #3, §4 (slow walking). Her walk: "one green
+// Elliptical button, Walk and Apartment small and side by side, and a quiet
+// 'Skip cardio today' link"; the elliptical in the order she rides it; no 3-2-1
+// before a 10-minute ride; walks are minutes only ("walk counter not important
+// now", Sep 7).
+test.describe('v48 P3 cardio', () => {
+  type Row = Record<string, unknown>;
+  const TUE_WEEK4 = '2026-09-22T14:00:00.000Z'; // Tue inside Round 2 Week 4
+
+  const seedLogs = async (page: Page, logs: Row[]): Promise<void> => {
+    await page.addInitScript((rows) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    }, logs);
+  };
+  const log = (id: string, date: string, extra: Row = {}): Row => ({
+    id,
+    date,
+    workout: 'C',
+    capacityBefore: 6,
+    capacityAfter: 7,
+    wallSitSec: 0,
+    backPain: 0,
+    word: '',
+    synced: true,
+    ...extra,
+  });
+
+  const startA = async (page: Page): Promise<void> => {
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await expect(page.locator('.exercise-name')).toBeVisible();
+  };
+
+  const tapForward = async (page: Page): Promise<boolean> => {
+    const next = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    if (await next.isVisible()) {
+      await next.click();
+      return true;
+    }
+    return false;
+  };
+
+  const goToStep = async (page: Page, name: string): Promise<void> => {
+    for (let i = 0; i < 40; i++) {
+      const now =
+        (await page
+          .locator('.exercise-name')
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      if (now === name) return;
+      if (!(await tapForward(page))) break;
+    }
+    throw new Error(`never reached ${name}`);
+  };
+
+  const finishAndRead = async (page: Page): Promise<Row> => {
+    for (let i = 0; i < 60; i++) {
+      if (await page.locator('text=Quick log').isVisible()) break;
+      if (!(await tapForward(page))) break;
+    }
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await page.locator('button:has-text("Save & finish")').click();
+    await expect(page.locator('h1')).toHaveText('Workout Tracker');
+    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+    const logs = JSON.parse(raw ?? '[]') as Row[];
+    return [...logs].sort((a, b) => String(b['date']).localeCompare(String(a['date'])))[0]!;
+  };
+
+  test.describe('at phone size', () => {
+    test.use({ viewport: { width: 412, height: 915 } });
+
+    test('(a) fresh A: one sage (Elliptical), Walk + Apartment side by side, Skip; no picture, no Done', async ({
+      page,
+    }) => {
+      await mockDate(page, TUE_WEEK4);
+      await page.goto('/');
+      await startA(page);
+      await expect(page.locator('.exercise-name')).toHaveText('Cardio');
+      await expect(page.locator('.exercise-reps')).toHaveText('10 min');
+      await expect(page.locator('.exercise-safety')).toHaveText('Conversational pace');
+      await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
+      await expect(page.locator('#ww-elliptical')).toHaveClass(/btn-primary/);
+      await expect(page.locator('#ww-elliptical')).toHaveText('▶ Elliptical');
+      await expect(page.locator('#ww-start')).toContainText('Walk outside');
+      await expect(page.locator('#ww-start')).toContainText('tap as you head out');
+      await expect(page.locator('#ww-apartment')).toContainText('Apartment');
+      const walk = (await page.locator('#ww-start').boundingBox())!;
+      const apt = (await page.locator('#ww-apartment').boundingBox())!;
+      expect(Math.abs(walk.y - apt.y)).toBeLessThan(1);
+      expect(Math.abs(walk.width - apt.width)).toBeLessThan(1);
+      expect(walk.x).toBeLessThan(apt.x);
+      await expect(page.locator('#ww-skip')).toHaveText('Skip cardio today');
+      // No trail-runner photo, no 30-min video, no detail card, no Done.
+      await expect(page.locator('.exercise-visual')).toHaveCount(0);
+      await expect(page.locator('#app img')).toHaveCount(0);
+      await expect(page.locator('#app iframe')).toHaveCount(0);
+      await expect(page.locator('.detail-card, .how-to-card')).toHaveCount(0);
+      await expect(page.locator('#next')).toHaveCount(0);
+
+      await page.locator('#ww-skip').click();
+      await expect(page.locator('.exercise-name')).toHaveText('Belly breathing');
+      const saved = await finishAndRead(page);
+      expect(saved['cardioLane'] ?? null).toBeNull();
+      expect(saved['cardioMinutes'] ?? null).toBeNull();
+      expect(saved['walkMinutes'] ?? null).toBeNull();
+    });
+
+    test('(c) elliptical first ride: Start inside the fold, "First ride", setup open, no boxes yet', async ({
+      page,
+    }) => {
+      await mockDate(page, TUE_WEEK4);
+      await page.goto('/');
+      await startA(page);
+      await page.locator('#ww-elliptical').click();
+      await expect(page.locator('.exercise-name')).toHaveText('Elliptical');
+      await expect(page.locator('.exercise-reps')).toHaveText('10 min');
+      await expect(page.locator('.new-tonight-badge')).toHaveText('First ride');
+      await expect(page.locator('.exercise-safety')).toHaveText(
+        'Start on level 3, easy · stand tall, hands light'
+      );
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      const start = (await page.locator('#start-timed').boundingBox())!;
+      expect(start.y + start.height).toBeLessThanOrEqual(915);
+      await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
+      await expect(page.locator('#next')).not.toHaveClass(/btn-primary/);
+      // The back-out sits right under Start.
+      const out = (await page.locator('#ww-outdoor').boundingBox())!;
+      expect(out.y).toBeGreaterThan(start.y);
+      await expect(page.locator('#ww-outdoor')).toHaveText('↩ Walk or apartment instead');
+      // Setup: open on the first ride, three short steps.
+      await expect(page.locator('.ell-guide .ell-steps li')).toHaveCount(3);
+      await expect(page.locator('.ell-guide')).toContainText('Choose MANUAL');
+      // Nothing to fill in before the ride, and no generic how-to card.
+      await expect(page.locator('#ell-level')).toHaveCount(0);
+      await expect(page.locator('#ell-km')).toHaveCount(0);
+      await expect(page.locator('#ell-pulse')).toHaveCount(0);
+      await expect(page.locator('.how-to-card, .detail-card')).toHaveCount(0);
+      await expect(page.locator('#app')).not.toContainText('How to do it');
+    });
+  });
+
+  test('(b) lane memory: last lane elliptical → straight onto the Elliptical; walk → the choice', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    for (const [lane, expected] of [
+      ['elliptical', 'Elliptical'],
+      ['walk', 'Cardio'],
+      ['apartment', 'Apartment cardio'],
+    ] as const) {
+      await seedLogs(page, [
+        log('older', '2026-09-19T15:00:00.000Z', { cardioLane: 'apartment', cardioMinutes: 10 }),
+        log('newest', '2026-09-21T15:00:00.000Z', { cardioLane: lane, cardioMinutes: 10 }),
+      ]);
+      await page.goto('/');
+      await startA(page);
+      await expect(page.locator('.exercise-name')).toHaveText(expected);
+      // The apartment step isn't in PROGRAM — it must not read as "New tonight".
+      if (expected === 'Apartment cardio') {
+        await expect(page.locator('.new-tonight-badge')).toHaveCount(0);
+      }
+      // Nothing has started on its own.
+      expect(
+        await page.evaluate(() => localStorage.getItem('workout-tracker:ww-start'))
+      ).toBeNull();
+      expect(
+        await page.evaluate(() => localStorage.getItem('workout-tracker:ww-lane-started'))
+      ).toBeNull();
+    }
+  });
+
+  test('(d) no 3-2-1 before a ride; the wall sit still gets it', async ({ page }) => {
+    await movableClock(page, TUE_WEEK4); // pre-count left at its default (3 s)
+    await page.goto('/');
+    await startA(page);
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.countdown-big')).toHaveCount(0);
+    await expect(page.getByText('Get ready')).toHaveCount(0);
+    await expect(page.locator('.timer-label')).toHaveText('Running');
+    await expect(page.locator('.timer-display')).toHaveText('10:00');
+    await expect(page.locator('#stop-lane')).toBeVisible();
+    await expect(page.getByText('Running…')).toHaveCount(0);
+    // Stop keeps what she did; the step shows the after-ride face.
+    await advanceClock(page, 4 * 60_000);
+    await expect(page.locator('.timer-display')).toHaveText('6:00');
+    await page.locator('#stop-lane').click();
+    await expect(page.locator('.timer-done')).toHaveText('✓ 4 min done');
+    await goToStep(page, 'Wall sit');
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.timer-label')).toHaveText('Get ready');
+    await expect(page.locator('.countdown-big')).toBeVisible();
+  });
+
+  test('(e) the live "Right now" line follows the ride; a buzz on the grips and the ease-off', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __vib: unknown[] };
+      w.__vib = [];
+      Object.defineProperty(navigator, 'vibrate', {
+        configurable: true,
+        value: (p: unknown) => {
+          w.__vib.push(p);
+          return true;
+        },
+      });
+    });
+    await movableClock(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#start-timed').click();
+    const line = page.locator('#ride-line');
+    // During: the timer, a quiet Stop, the one line — and nothing else.
+    await expect(page.locator('.ride-title')).toContainText('Elliptical');
+    await expect(page.locator('.ride-title')).toContainText('10 min');
+    await expect(page.locator('.cardio-seg-label')).toHaveText('Right now');
+    await expect(page.locator('.ell-guide, .ell-after-card, .exercise-safety')).toHaveCount(0);
+    await expect(page.locator('.btn-primary:visible')).toHaveCount(0);
+
+    await advanceClock(page, 30_000); // elapsed 30 s
+    await expect(line).toHaveText('Easy on level 3');
+    await advanceClock(page, 270_000); // elapsed 5 min
+    await expect(line).toHaveText('Raise the level until talking takes effort — then hold it');
+    expect(await page.evaluate(() => (window as unknown as { __vib: unknown[] }).__vib)).toEqual(
+      []
+    );
+    await advanceClock(page, 255_000); // remaining 45 s
+    await expect(line).toHaveText('Hands on the fixed grips — read your pulse');
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __vib: unknown[] }).__vib.length))
+      .toBe(1);
+    await advanceClock(page, 25_000); // remaining 20 s
+    await expect(line).toHaveText('Back to level 3, easy');
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { __vib: unknown[] }).__vib))
+      .toEqual([200, 200]);
+  });
+
+  test('(f) after the ride: one card — level "—", km, pulse, in that order; untouched level saves null', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#start-timed').click();
+    await advanceClock(page, 10 * 60_000 + 2_000);
+    await expect(page.locator('.timer-done')).toHaveText('✓ 10 min done');
+    const card = page.locator('.ell-after-card');
+    await expect(card.locator('.ell-readings-title')).toHaveText('From the machine, before STOP');
+    await expect(card).toContainText('Level you rode at');
+    await expect(page.locator('#ell-level')).toHaveText('—');
+    await expect(page.locator('#ell-level-same')).toHaveCount(0); // no last level yet
+    const lvl = (await page.locator('#ell-level').boundingBox())!;
+    const km = (await page.locator('#ell-km').boundingBox())!;
+    const pulse = (await page.locator('#ell-pulse').boundingBox())!;
+    expect(lvl.y).toBeLessThan(km.y);
+    expect(km.x).toBeLessThan(pulse.x);
+    // …and all three come before Done · Next (pinned at the bottom).
+    const order = await page.evaluate(() =>
+      [...document.querySelectorAll('#ell-level, #ell-km, #ell-pulse, #next')].map((e) => e.id)
+    );
+    expect(order).toEqual(['ell-level', 'ell-km', 'ell-pulse', 'next']);
+    // The setup stays shut after the ride (it used to reopen here).
+    await expect(page.locator('.ell-guide .ell-steps')).toHaveCount(0);
+    await expect(page.locator('#next')).toHaveClass(/btn-primary/);
+    await page.locator('#ell-km').fill('1.4');
+    await page.locator('#ell-pulse').fill('128');
+    const saved = await finishAndRead(page);
+    expect(saved['cardioLane']).toBe('elliptical');
+    expect(saved['cardioMinutes']).toBe(10);
+    expect(saved['ellipticalLevel']).toBeNull();
+    expect(saved['ellipticalKm']).toBe(1.4);
+    expect(saved['ellipticalPulse']).toBe(128);
+  });
+
+  test('(f) "7 again" sets the last level in one tap and saves 7', async ({ page }) => {
+    await movableClock(page, TUE_WEEK4);
+    await seedLogs(page, [
+      log('last-ride', '2026-09-21T15:00:00.000Z', {
+        cardioLane: 'elliptical',
+        cardioMinutes: 10,
+        ellipticalLevel: 7,
+      }),
+    ]);
+    await page.goto('/');
+    await startA(page);
+    await expect(page.locator('.exercise-name')).toHaveText('Elliptical'); // lane memory
+    await expect(page.locator('.new-tonight-badge')).toHaveCount(0);
+    await expect(page.locator('.ell-guide .ell-steps')).toHaveCount(0); // not a first ride
+    await page.locator('#start-timed').click();
+    await advanceClock(page, 10 * 60_000 + 2_000);
+    await expect(page.locator('#ell-level')).toHaveText('—');
+    await page.locator('#ell-level-same').click();
+    await expect(page.locator('#ell-level')).toHaveText('7');
+    const saved = await finishAndRead(page);
+    expect(saved['ellipticalLevel']).toBe(7);
+  });
+
+  test('(g) walk lane: "Walking · N min", no km or steps anywhere; saved walkMeters null', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    // The standalone walk card on home: minutes only too.
+    await page.locator('#log-walk-start').click();
+    await expect(page.locator('#walk-live')).toHaveText(/^Walking · \d+ min$/);
+    await expect(page.locator('.walk-card')).not.toContainText('km');
+    await expect(page.locator('.walk-card')).not.toContainText(/steps/i);
+    await page.locator('#cancel-walk').click();
+
+    await startA(page);
+    await page.locator('#ww-start').click();
+    await expect(page.locator('#walk-live')).toHaveText(/^Walking · \d+ min$/);
+    const text = (await page.locator('#app').innerText()) ?? '';
+    expect(text).not.toMatch(/\bkm\b/);
+    expect(text).not.toMatch(/steps/i);
+    await expect(page.locator('.exercise-visual')).toHaveCount(0);
+    const saved = await finishAndRead(page);
+    expect(saved['cardioLane']).toBe('walk');
+    expect(saved['walkMeters']).toBeNull();
+    expect(saved['walkSteps']).toBeNull(); // Fit doesn't answer under automation
+  });
+
+  test('display name: the pre-log list says "Cardio", never "Outdoor walk"', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('.overview-phase-summary').first().click();
+    await expect(page.locator('.overview-phase-items').first()).toContainText('Cardio');
+    await expect(page.locator('#app')).not.toContainText('Outdoor walk');
   });
 });

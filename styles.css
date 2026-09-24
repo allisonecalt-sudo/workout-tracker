@@ -4081,3 +4081,165 @@ input[type='number']:focus {
   color: var(--text);
   border: 1px solid var(--border-strong);
 }
+
+/* ---- v48 P3 (Sep 24 2026) — cardio: the choice, the ride in order --------- */
+
+/* The cardio choice (walk-in-her-shoes §Step 1): one sage Elliptical, Walk and
+ * Apartment small and side by side (decision Q4), a quiet "Skip cardio today". */
+.cardio-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.cardio-choice-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.cardio-half {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 56px;
+  min-width: 0;
+  padding: 10px 8px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-small);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cardio-half:active {
+  border-color: var(--border-strong);
+  background: var(--bg-elev-2);
+}
+
+.cardio-half-sub {
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  font-weight: 400;
+}
+
+.cardio-skip {
+  margin-top: 0;
+}
+
+/* The walk, once started — minutes only. */
+.walk-live-line {
+  font-size: var(--font-subheading);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  margin: 4px 0 6px;
+}
+
+/* Elliptical, before the ride: the back-out sits under Start timer. */
+.cardio-back-out {
+  margin-top: 4px;
+}
+
+/* During the ride: name + minutes on one quiet line above the big timer. */
+.ride-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 4px 2px 10px;
+}
+
+.ride-title .exercise-name {
+  font-size: var(--font-subheading);
+  margin-bottom: 0;
+}
+
+.ride-title-reps {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Right now" — words, not an action: plain text, not sage. */
+.ride-now .cardio-seg-now {
+  color: var(--text);
+  font-size: var(--font-subheading);
+  line-height: 1.3;
+}
+
+/* After the ride: one card, level → km → pulse ("From the machine, before STOP"). */
+.ell-after-card .ell-readings-title {
+  color: var(--text);
+  font-weight: 600;
+  font-size: var(--font-body);
+  text-align: left;
+  margin-bottom: 12px;
+}
+
+.ell-field-level {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.ell-field-label {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+}
+
+.ell-level-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* The 48px stepper — a wet hand on a humming machine. */
+.ell-stepper .settings-stepper-btn {
+  width: 48px;
+  height: 48px;
+  font-size: 24px;
+}
+
+.ell-stepper .settings-stepper-val {
+  min-width: 52px;
+  font-size: var(--font-subheading);
+}
+
+.ell-same-chip {
+  min-height: 44px;
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-small);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ell-same-chip.is-on {
+  border-color: var(--accent-progress);
+}
+
+/* "—" = not recorded yet: dim, so it doesn't read as a third minus sign. */
+.ell-stepper .settings-stepper-val.is-empty {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+/* The standalone walk while it runs: "Walking · 12 min" stays on one line; the
+ * Done / Cancel pair wraps under it on a narrow phone (P4 rebuilds this row). */
+.walk-row {
+  flex-wrap: wrap;
+}
+
+#walk-live {
+  white-space: nowrap;
+}
