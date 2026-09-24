@@ -3577,6 +3577,21 @@ input[type='number']:focus {
   color: var(--accent);
 }
 
+/* Elliptical level (v43, Sep 24 2026) — one stepper, reusing the settings
+   stepper's look so the app has one kind of +/- control. */
+.ell-level-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.ell-level-label,
+.ell-level-of {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+}
+
 /* Guided indoor strip (v30, Sep 7 2026) — the apartment lane stopped being a
    timer + a decision. Five 2-minute segments cycle for the whole block; the
    card says which one is LIVE right now and shows the rest so she can see

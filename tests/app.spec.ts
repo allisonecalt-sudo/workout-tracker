@@ -12,7 +12,7 @@ test('home screen shows three workout options and zero sessions', async ({ page 
   await expect(page.locator('button[data-workout]')).toHaveCount(3);
   await expect(page.locator('text=A · Lower Body + Core')).toBeVisible();
   await expect(page.locator('text=B · Glutes + Mobility + Core')).toBeVisible();
-  await expect(page.locator('text=C · Walk + Lower Body + Core')).toBeVisible();
+  await expect(page.locator('text=C · Cardio + Lower Body + Core')).toBeVisible();
   await expect(page.locator('.stat-number').first()).toHaveText('0');
 });
 
@@ -1415,7 +1415,7 @@ test('walk step: shows no form card — Start walk is the whole interface', asyn
   // The v19 card on the walk step was clutter (handoff note, stripped Jul 12 2026).
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  await expect(page.locator('.exercise-name')).toHaveText('Outdoor walk');
+  await expect(page.locator('.exercise-name')).toHaveText('Cardio');
   await expect(page.locator('.detail-card')).toHaveCount(0);
   await expect(page.locator('.voice-note-btn')).toHaveCount(0);
 });
@@ -2531,7 +2531,7 @@ test('cardio either/or: the walk step offers an apartment option that swaps in a
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
   // Both lanes are offered on the cardio step; nothing is tracking yet.
-  await expect(page.locator('.exercise-name')).toHaveText('Outdoor walk');
+  await expect(page.locator('.exercise-name')).toHaveText('Cardio');
   await expect(page.locator('#ww-start')).toBeVisible();
   await expect(page.locator('#ww-apartment')).toBeVisible();
 
@@ -2546,7 +2546,7 @@ test('cardio either/or: the walk step offers an apartment option that swaps in a
 
   // And she can change her mind back to the outdoor walk.
   await page.locator('#ww-outdoor').click();
-  await expect(page.locator('.exercise-name')).toHaveText('Outdoor walk');
+  await expect(page.locator('.exercise-name')).toHaveText('Cardio');
   await expect(page.locator('#ww-start')).toBeVisible();
 });
 
@@ -2564,7 +2564,7 @@ test('cardio either/or: finishing after the apartment option saves walk_minutes 
   await page.goto('/');
   await page.locator('button[data-workout="C"]').click();
   await page.locator('button:has-text("Start")').click();
-  await expect(page.locator('.exercise-name')).toHaveText('Outdoor walk');
+  await expect(page.locator('.exercise-name')).toHaveText('Cardio');
   await page.locator('#ww-apartment').click();
   await expect(page.locator('.exercise-name')).toHaveText('Apartment cardio');
   await expect(page.locator('.timer-display')).toHaveText('25:00');
@@ -2753,7 +2753,7 @@ test('indoor strip: the outdoor walk is untouched — no strip, tracking still s
   await page.goto('/');
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  await expect(page.locator('.exercise-name')).toHaveText('Outdoor walk');
+  await expect(page.locator('.exercise-name')).toHaveText('Cardio');
   await expect(page.locator('.cardio-routine')).toHaveCount(0);
 
   await page.locator('#ww-start').click();
@@ -2783,4 +2783,145 @@ test('indoor strip: the card carries no baked duration (the block is 10 min in A
   // The two-minute segment length is the routine's own shape, not a weekly
   // number — it's allowed, and it's what makes the strip legible.
   expect(card).toContain('two minutes each');
+});
+
+// --- Elliptical lane (v43, Sep 24 2026) --------------------------------------
+// The York BX200 arrived Thu Sep 24. Her words: "let's start putting the
+// elliptical in" → "So no more walk it could be walk or elliptical". The cardio
+// step is now a three-way pick; the elliptical is a same-minutes timer plus the
+// level she rode at, saved in the notes marker and read back next session.
+
+test('elliptical: the cardio step offers three lanes and the elliptical swaps in a same-length timer', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-24T08:00:00.000Z');
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Cardio');
+  await expect(page.locator('#ww-elliptical')).toBeVisible();
+  await expect(page.locator('#ww-start')).toBeVisible();
+  await expect(page.locator('#ww-apartment')).toBeVisible();
+
+  await page.locator('#ww-elliptical').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Elliptical');
+  await expect(page.locator('.exercise-reps')).toContainText('10 min');
+  await expect(page.locator('.timer-display')).toHaveText('10:00');
+  await expect(page.locator('#start-timed')).toBeVisible();
+  // No history → the first-ride guess, labelled as a guess.
+  await expect(page.locator('#ell-level')).toHaveText('5');
+  await expect(page.locator('.ww-start-block .gear-note')).toContainText('only a guess');
+  await page.locator('#ell-level-up').click();
+  await page.locator('#ell-level-up').click();
+  await expect(page.locator('#ell-level')).toHaveText('7');
+  await page.locator('#ell-level-down').click();
+  await expect(page.locator('#ell-level')).toHaveText('6');
+  // The walk engine never started.
+  expect(await page.evaluate(() => localStorage.getItem('workout-tracker:ww-start'))).toBeNull();
+
+  // Back to the choice, then apartment — only one lane is ever live.
+  await page.locator('#ww-outdoor').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Cardio');
+  await page.locator('#ww-apartment').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Apartment cardio');
+  expect(
+    await page.evaluate(() => localStorage.getItem('workout-tracker:ww-elliptical'))
+  ).toBeNull();
+});
+
+test('elliptical: finishing saves the minutes + a level marker, never POSTs, and clears the lane', async ({
+  page,
+}) => {
+  const posted: string[] = [];
+  page.on('request', (req) => {
+    if (req.method() === 'POST') posted.push(req.url());
+  });
+  await mockDate(page, '2026-09-24T08:00:00.000Z');
+  await page.goto('/');
+  await page.locator('button[data-workout="C"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await page.locator('#ww-elliptical').click();
+  await expect(page.locator('.timer-display')).toHaveText('25:00');
+  await page.locator('#ell-level-up').click();
+  await page.locator('#ell-level-up').click();
+  await expect(page.locator('#ell-level')).toHaveText('7');
+
+  for (let i = 0; i < 30; i++) {
+    const isPostLog = await page
+      .locator('text=Quick log')
+      .isVisible()
+      .catch(() => false);
+    if (isPostLog) break;
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else break;
+  }
+  await expect(page.locator('text=Quick log')).toBeVisible();
+  await page.locator('#word').fill('smooth');
+  await page.locator('button:has-text("Save & finish")').click();
+  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+
+  const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+  const logs = JSON.parse(raw ?? '[]') as { walkMinutes?: number | null; notes?: string | null }[];
+  expect(logs.length).toBe(1);
+  expect(logs[0]?.walkMinutes).toBe(25);
+  expect(logs[0]?.notes).toBe('cardio: elliptical 25 min · level 7');
+  expect(posted.filter((u) => u.includes('workout_sessions'))).toEqual([]);
+  for (const key of ['workout-tracker:ww-elliptical', 'workout-tracker:ww-elliptical-level']) {
+    expect(await page.evaluate((k) => localStorage.getItem(k), key)).toBeNull();
+  }
+});
+
+test('elliptical: the next ride starts at the level from the last saved session', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-24T08:00:00.000Z');
+  // Runs after the beforeEach clear, so the seeded history survives each load.
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'workout-tracker:logs',
+      JSON.stringify([
+        {
+          id: 'seed-old',
+          date: '2026-09-22T15:00:00.000Z',
+          workout: 'B',
+          capacityBefore: 6,
+          capacityAfter: 7,
+          wallSitSec: 0,
+          backPain: 0,
+          word: '',
+          notes: 'cardio: elliptical 10 min · level 6',
+          synced: true,
+        },
+        {
+          id: 'seed-new',
+          date: '2026-09-23T15:00:00.000Z',
+          workout: 'A',
+          capacityBefore: 6,
+          capacityAfter: 7,
+          wallSitSec: 45,
+          backPain: 0,
+          word: '',
+          notes: 'cardio: elliptical 10 min · level 8',
+          synced: true,
+        },
+      ])
+    );
+  });
+  await page.goto('/');
+  await page.locator('button[data-workout="B"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await page.locator('#ww-elliptical').click();
+  await expect(page.locator('#ell-level')).toHaveText('8');
+  await expect(page.locator('.ww-start-block .gear-note')).toContainText('last level (8)');
+});
+
+test('elliptical: the step carries how-to guidance', () => {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const appSrc = fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
+  const guideStart = appSrc.indexOf('const EXERCISE_GUIDE');
+  const guideBlock = appSrc.slice(guideStart, appSrc.indexOf('\n};', guideStart));
+  // Prettier unquotes a single-word key, so accept either spelling.
+  expect(guideBlock).toMatch(/^ {2}'?Elliptical'?: \{/m);
 });

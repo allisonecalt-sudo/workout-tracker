@@ -256,8 +256,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v42';
-const BUILD_DATE = 'Sep 19, 2026 · 22:35';
+const APP_VERSION = 'v43';
+const BUILD_DATE = 'Sep 24, 2026 · 11:05';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2140,6 +2140,11 @@ PROGRAM.push({
 //   apartment cardio unchanged. The elliptical she bought tonight is NOT in the
 //   program until it is in the room. Days this week: Yom Kippur Mon Sep 21, erev
 //   Sukkot Fri Sep 25 → A Tue · B Wed · C Thu (her call).
+// v43 (Thu Sep 24) — the elliptical ARRIVED. The cardio step in A, B and C is
+//   now a three-way pick: elliptical (primary) · walk outside · apartment. Same
+//   minutes; no exercise, rep or round changed. Days moved after she was sick
+//   Wed: A Thu · B Fri · C Sat night (the Saturday swing counts C toward this
+//   week once A and B are in).
 // ---------------------------------------------------------------------------
 const R2W3_PLAN = PROGRAM[PROGRAM.length - 1]!;
 
@@ -2223,7 +2228,7 @@ PROGRAM.push({
     A: {
       ...R2W3_PLAN.workouts.A,
       description:
-        'Split squat in for the squat · wall sit 45 · 1 kg back in the arm block · 2 rounds · ~30 min (cardio optional)',
+        'Split squat in for the squat · wall sit 45 · 1 kg back in the arm block · 2 rounds · ~30 min (cardio optional: elliptical or walk)',
       main: R2W3_PLAN.workouts.A.main.map((ex) => {
         if (ex.name === 'Bodyweight squats') return R2W4_SPLIT_SQUAT;
         if (ex.name === 'Bodyweight hip hinge') return HIP_HINGE_R2W4;
@@ -2234,14 +2239,21 @@ PROGRAM.push({
     },
     B: {
       ...R2W3_PLAN.workouts.B,
-      description: 'Same as last week · hinge with the 1 kg · 1 kg back in the arm block · ~30 min',
+      description:
+        'Same as last week · hinge with the 1 kg · 1 kg back in the arm block · ~30 min (cardio optional: elliptical or walk)',
       main: R2W3_PLAN.workouts.B.main.map((ex) =>
         ex.name === 'Bodyweight hip hinge' ? HIP_HINGE_R2W4 : ex
       ),
       upperBack: UPPER_BACK_R2W4,
     },
-    // C unchanged on purpose: lighter day, its 10 squats stay, cardio slot as before.
-    C: { ...R2W3_PLAN.workouts.C },
+    // C's exercises unchanged on purpose: lighter day, its 10 squats stay. Only
+    // the labels move (v43, Sep 24): the cardio slot is elliptical OR walk now.
+    C: {
+      ...R2W3_PLAN.workouts.C,
+      id: 'C',
+      name: 'Cardio + Lower Body + Core',
+      description: '25-min cardio (elliptical or walk) + 2-round strength block · ~40 min',
+    },
   },
 });
 
@@ -2444,6 +2456,11 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   'Apartment cardio': {
     howTo:
       "The indoor half of the either/or — the same minutes as the walk, in your own front room, and you don't have to invent it. Tap the timer and the strip runs itself: five moves, two minutes each, cycling in order for however long the block is — easy marching in place, step touch side to side, knee lifts, heel kicks back, then marching a bit quicker to finish. The screen always says which one is live now, so there's nothing to remember or count. Effort stays CONVERSATIONAL the whole way: full sentences, never breathless. Nothing jumps and nothing lands hard — one foot stays on the floor throughout, which keeps it quiet for the neighbours and keeps the impact off your back. Nothing to grip and no hands on the floor either. If you'd rather do the BUILDING STAIRS instead, take the same minutes there — up at an easy effort, walk down as the rest, repeat. Stairs are the strongest option minute-for-minute (roughly 10 minutes of stairs ≈ 14 minutes of brisk walking), so it's a great swap on a day you feel like it — hand on the rail for balance is fine, no gripping and hauling. But the strip is the default, because the point of this lane is that you never have to leave the apartment. Nothing is tracked here; the timer is the whole thing.",
+  },
+  // v43 (2026-09-24) — the York BX200 arrived; the third cardio lane.
+  Elliptical: {
+    howTo:
+      "Your York BX200, for the same minutes as the walk. Step on, hands light on the handles, and skip the preset programs for now so the level only changes when you change it. Warm up for the first couple of minutes on a low level. Then raise it until you're working but can still talk in full sentences, and hold that. That's your level for today. Ease back down for the last minute. Stand tall with your weight through your heels and midfoot, not up on your toes, and don't lean on the handles. The fixed grips read your pulse if you want a number. It's zero impact and nearly silent, so it's easy on the back and on the neighbours downstairs. Before you tap Done, set the level on screen to the one you rode at. The app remembers it and starts there next time, and that is how your progress becomes visible.",
   },
 };
 
@@ -3161,6 +3178,7 @@ function walkStepMinutes(ex: Exercise): number {
 }
 
 function chooseApartmentCardio(minutes: number): void {
+  clearElliptical(); // one lane at a time
   localStorage.setItem(WW_APARTMENT_KEY, String(minutes));
 }
 
@@ -3174,6 +3192,83 @@ function apartmentCardioStep(minutes: number): Exercise {
     reps: `${minutes} min`,
     notes:
       "Same minutes as the walk, inside — and you don't have to invent it. Start the timer and the strip below runs itself: five moves, two minutes each, cycling until the time is up. Conversational effort the whole way — you should still be able to talk. Rather do the building stairs? Same minutes there works too. Nothing is tracked here; the timer is the whole thing.",
+    durationSec: minutes * 60,
+    isTimed: true,
+  };
+}
+
+// ---------- Elliptical lane (Allison Sep 24 2026, v43) ----------
+// WHAT: a third lane on the cardio step — the York BX200 elliptical, which
+// arrived Thu Sep 24. Same minutes as the walk (10 in A/B, 25 in C) on a
+// countdown, and the LEVEL she rode at saves with the session.
+// WHY: her words the morning it arrived — "let's start putting the elliptical
+// in" → "So no more walk it could be walk or elliptical". The machine was bought
+// to make the cardio she already does countable (Sep 19: "its jstu hard to
+// measuere"). Minutes + level are the countable part; the console's distance is
+// strides × an assumed stride length, so it isn't logged.
+// HOW: the apartment-lane trick again — one localStorage key holds the chosen
+// minutes (survives an app close mid-session), one holds the level, and
+// getCurrentExercise() swaps the walk step for a timed elliptical step. NO
+// Supabase change: minutes → walk_minutes, "cardio: elliptical N min · level L"
+// → notes. The next session's starting level is read back off that marker in
+// the saved logs, not from a separate remembered number.
+const WW_ELLIPTICAL_KEY = 'workout-tracker:ww-elliptical';
+const WW_ELLIPTICAL_LEVEL_KEY = 'workout-tracker:ww-elliptical-level';
+const ELLIPTICAL_NAME = 'Elliptical';
+// York BX200: 24 computerized magnetic levels (Mega Sport spec page, Sep 24).
+const ELLIPTICAL_MAX_LEVEL = 24;
+// First ride only, before any level is on record — a guess she overwrites.
+const ELLIPTICAL_FIRST_LEVEL = 5;
+const ELLIPTICAL_MARKER_RE = /cardio: elliptical \d+ min · level (\d+)/;
+
+function ellipticalMinutes(): number | null {
+  const raw = localStorage.getItem(WW_ELLIPTICAL_KEY);
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+function clampEllipticalLevel(n: number): number {
+  return Math.max(1, Math.min(ELLIPTICAL_MAX_LEVEL, Math.round(n)));
+}
+
+// The level from her most recent elliptical session, off the saved notes marker.
+function lastEllipticalLevel(): number | null {
+  const newestFirst = [...loadLogs()].sort((a, b) => b.date.localeCompare(a.date));
+  for (const l of newestFirst) {
+    const m = ELLIPTICAL_MARKER_RE.exec(l.notes ?? '');
+    if (m?.[1]) return clampEllipticalLevel(Number(m[1]));
+  }
+  return null;
+}
+
+function ellipticalLevel(): number {
+  const n = Number(localStorage.getItem(WW_ELLIPTICAL_LEVEL_KEY));
+  if (Number.isFinite(n) && n > 0) return clampEllipticalLevel(n);
+  return lastEllipticalLevel() ?? ELLIPTICAL_FIRST_LEVEL;
+}
+
+function setEllipticalLevel(n: number): void {
+  localStorage.setItem(WW_ELLIPTICAL_LEVEL_KEY, String(clampEllipticalLevel(n)));
+}
+
+function chooseElliptical(minutes: number): void {
+  clearApartmentCardio(); // one lane at a time
+  localStorage.setItem(WW_ELLIPTICAL_KEY, String(minutes));
+  setEllipticalLevel(ellipticalLevel());
+}
+
+function clearElliptical(): void {
+  localStorage.removeItem(WW_ELLIPTICAL_KEY);
+  localStorage.removeItem(WW_ELLIPTICAL_LEVEL_KEY);
+}
+
+function ellipticalStep(minutes: number): Exercise {
+  return {
+    name: ELLIPTICAL_NAME,
+    reps: `${minutes} min`,
+    notes:
+      'First two minutes easy. Then raise the level until you can still talk in full sentences, and stay there. Ease off for the last minute.',
     durationSec: minutes * 60,
     isTimed: true,
   };
@@ -3329,7 +3424,10 @@ function getCurrentExercise(): Exercise | null {
   const ex = rawCurrentExercise();
   // Cardio either/or (Sep 7 2026): while the apartment option is chosen, the
   // walk step IS the apartment timer — same minutes, no tracking.
+  // Same swap for the elliptical lane (Sep 24 2026).
   if (ex && ex.name === 'Outdoor walk') {
+    const ellMinutes = ellipticalMinutes();
+    if (ellMinutes !== null) return ellipticalStep(ellMinutes);
     const minutes = apartmentCardioMinutes();
     if (minutes !== null) return apartmentCardioStep(minutes);
   }
@@ -3361,6 +3459,7 @@ function beginExercises(): void {
   state.videoExpandedFor = null;
   workoutWalk = null; // fresh session, fresh walk numbers
   clearApartmentCardio(); // fresh session, cardio lane unchosen again
+  clearElliptical();
   render();
 }
 
@@ -3468,7 +3567,13 @@ async function logCompleteAndHome(): Promise<void> {
   // the PRESCRIBED minutes are the honest number and a marker in `notes` says
   // which lane it was — no new Supabase column, both already exist.
   const apartmentMin = apartmentCardioMinutes();
+  // Elliptical lane (Sep 24 2026): prescribed minutes + the level she set.
+  // The marker's shape is what lastEllipticalLevel() reads back next time.
+  const ellipticalMin = ellipticalMinutes();
   const notesParts: string[] = [];
+  if (ellipticalMin !== null) {
+    notesParts.push(`cardio: elliptical ${ellipticalMin} min · level ${ellipticalLevel()}`);
+  }
   if (apartmentMin !== null) notesParts.push(`cardio: apartment ${apartmentMin} min`);
   if (leftOpen) {
     notesParts.push(
@@ -3486,7 +3591,7 @@ async function logCompleteAndHome(): Promise<void> {
     startedAt,
     completedAt,
     ...(leftOpen ? {} : { durationSec: rawDurationSec }),
-    walkMinutes: workoutWalk ? workoutWalk.minutes : apartmentMin,
+    walkMinutes: workoutWalk ? workoutWalk.minutes : (ellipticalMin ?? apartmentMin),
     walkSteps: workoutWalk && workoutWalk.steps > 0 ? workoutWalk.steps : null,
     walkMeters: workoutWalk && workoutWalk.meters > 0 ? workoutWalk.meters : null,
     notes: notesParts.length > 0 ? notesParts.join(' · ') : null,
@@ -3746,6 +3851,7 @@ function resetState(): void {
   state.openSections = {};
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
+  clearElliptical();
   state.historyDetailId = null;
 }
 
@@ -5341,6 +5447,32 @@ function renderApartmentRoutine(totalSec: number, remainingSec: number, running:
   `;
 }
 
+// The elliptical step's one input (v43): the level she rode at, 1-24. Starts on
+// her last recorded level so a same-as-last-time ride is zero taps.
+function renderEllipticalControls(): string {
+  const level = ellipticalLevel();
+  const last = lastEllipticalLevel();
+  const hint =
+    last === null
+      ? `First ride — ${ELLIPTICAL_FIRST_LEVEL} is only a guess. Set it to the level you ended on.`
+      : `Starts at your last level (${last}). Change it if today was different.`;
+  return `
+    <div class="ww-start-block">
+      <div class="ell-level-row">
+        <span class="ell-level-label">Level</span>
+        <div class="settings-stepper">
+          <button class="settings-stepper-btn" id="ell-level-down" type="button" aria-label="Level down" ${level <= 1 ? 'disabled' : ''}>−</button>
+          <span class="settings-stepper-val" id="ell-level">${level}</span>
+          <button class="settings-stepper-btn" id="ell-level-up" type="button" aria-label="Level up" ${level >= ELLIPTICAL_MAX_LEVEL ? 'disabled' : ''}>+</button>
+        </div>
+        <span class="ell-level-of">of ${ELLIPTICAL_MAX_LEVEL}</span>
+      </div>
+      <p class="gear-note">${hint}</p>
+      <button class="cardio-alt-btn" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>
+    </div>
+  `;
+}
+
 function renderWorkout(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
@@ -5385,7 +5517,11 @@ function renderWorkout(): string {
     <div class="card">
       <div class="exercise-display">
         <div class="exercise-phase">${phaseLabel}</div>
-        <div class="exercise-name">${ex.name}</div>
+        <div class="exercise-name">${
+          // Before a lane is picked the step is a CHOICE, not a walk (Sep 24:
+          // "no more walk it could be walk or elliptical").
+          ex.name === 'Outdoor walk' && workoutWalkStart() === null ? 'Cardio' : ex.name
+        }</div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${ex.notes ? `<p class="exercise-notes">${ex.notes}</p>` : ''}
         ${renderExerciseSetup(ex)}
@@ -5393,10 +5529,12 @@ function renderWorkout(): string {
           ex.name === 'Outdoor walk'
             ? workoutWalkStart() !== null
               ? `<p class="gear-note">🚶 Tracking your walk: <span id="walk-live">starting…</span><br>Keep the phone on you — steps count indoors, km outdoors. It saves with this workout. Tap “Done · Next” when you finish.</p>`
-              : `<div class="ww-start-block"><button class="btn-large btn-primary" id="ww-start" type="button">▶ Start walk</button><button class="cardio-alt-btn" id="ww-apartment" type="button">🏠 Apartment instead (timer)</button><p class="gear-note">Just being on this page doesn't start the walk — tap Start when you actually head out. Nothing tracks or logs until you do. Not going out? Take the same minutes inside.</p></div>`
+              : `<div class="ww-start-block"><button class="btn-large btn-primary" id="ww-elliptical" type="button">▶ Elliptical</button><button class="cardio-alt-btn" id="ww-start" type="button">🚶 Walk outside (tracked)</button><button class="cardio-alt-btn" id="ww-apartment" type="button">🏠 Apartment instead (timer)</button><p class="gear-note">Pick one — same minutes whichever you choose. The walk only starts tracking when you tap it, so tap it as you head out.</p></div>`
             : ex.name === APARTMENT_CARDIO_NAME
-              ? `<div class="ww-start-block"><button class="cardio-alt-btn" id="ww-outdoor" type="button">🚶 Walk outside instead</button></div>`
-              : ''
+              ? `<div class="ww-start-block"><button class="cardio-alt-btn" id="ww-outdoor" type="button">↩ Elliptical or walk instead</button></div>`
+              : ex.name === ELLIPTICAL_NAME
+                ? renderEllipticalControls()
+                : ''
         }
       </div>
     </div>
@@ -6978,9 +7116,27 @@ function attachHandlers(): void {
     render();
   });
 
-  // …and back out again, in case she changes her mind before starting.
+  // Elliptical lane (Allison Sep 24 2026): "So no more walk it could be walk
+  // or elliptical". Same minutes on a timer, plus the level she rode at.
+  bindClick('ww-elliptical', () => {
+    const raw = rawCurrentExercise();
+    if (!raw) return;
+    chooseElliptical(walkStepMinutes(raw));
+    render();
+  });
+  bindClick('ell-level-down', () => {
+    setEllipticalLevel(ellipticalLevel() - 1);
+    render();
+  });
+  bindClick('ell-level-up', () => {
+    setEllipticalLevel(ellipticalLevel() + 1);
+    render();
+  });
+
+  // …and back out again to the three-way choice, in case she changes her mind.
   bindClick('ww-outdoor', () => {
     clearApartmentCardio();
+    clearElliptical();
     stopTimer();
     render();
   });
