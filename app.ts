@@ -176,13 +176,16 @@ type AppState = {
   wallSitStartedAt: number | null;
   // history-detail navigation target (group 2J)
   historyDetailId: string | null;
+  // v48 · P6 (Sep 24 2026): where the Session screen's Back goes — the screen
+  // that opened it (Weekly review, Sessions, or home's day dots). v47 always
+  // went to the Sessions list, so a session opened from the review dropped her
+  // out of the week she was reading (uxui weekly). null = Sessions.
+  detailReturnTo: AppScreen | null;
   // expander state for visual layer (group 3N) — per-render; not persisted.
   videoExpandedFor: string | null;
   // collapse state for "How to do it" — collapsed by default after first-seen-this-week.
   howToOpenFor: string | null;
-  // Ship 5 progress screen: collapsible exercise-breakdown card. Closed by
-  // default — it's reference, not primary.
-  exerciseBreakdownOpen: boolean;
+  // (v48 · P6: the Progress "Exercise breakdown" toggle is gone with its card.)
   // Enriched detail card (Allison Jul 9 2026): which dropdown sections are open,
   // keyed "<exercise>::<section>". Independent toggles, all closed by default so
   // the card face stays minimal — "show whats important, everything else i click
@@ -259,7 +262,6 @@ const SETTING_KEYS = {
   restSec: 'workout-tracker:setting-rest-sec',
   preCount: 'workout-tracker:setting-pre-count',
   howToFirstExpand: 'workout-tracker:setting-howto-first-expand',
-  autoSuggest: 'workout-tracker:setting-auto-suggest',
 } as const;
 
 function getSetting<T>(key: string, defaultValue: T): T {
@@ -307,8 +309,10 @@ function getHowToFirstExpand(): boolean {
   return getSetting<boolean>(SETTING_KEYS.howToFirstExpand, true);
 }
 
-// v48 · P4 (Sep 24 2026): getAutoSuggestEnabled() retired with its toggle; the
-// key stays listed so an old phone's stored value is simply ignored.
+// v48 · P4 (Sep 24 2026): getAutoSuggestEnabled() retired with its toggle.
+// v48 · P6 (Sep 24 2026): its SETTING_KEYS entry went too (DECISIONS §5: "no
+// evidence you ever turned it off. It turns off the one thing that carries the
+// app"); an old phone's stored value just sits unread.
 
 const SUPABASE_URL = 'https://hpiyvnfhoqnnnotrmwaz.supabase.co';
 const SUPABASE_ANON_KEY =
@@ -2594,9 +2598,9 @@ const state: AppState = {
   liteDay: false,
   wallSitStartedAt: null,
   historyDetailId: null,
+  detailReturnTo: null,
   videoExpandedFor: null,
   howToOpenFor: null,
-  exerciseBreakdownOpen: false,
   openSections: {},
   roundBreak: false,
   finishHereLitePrev: null,
@@ -4822,6 +4826,7 @@ function resetState(): void {
   clearElliptical();
   localStorage.removeItem(WW_RESULT_KEY); // the saved walk's numbers are logged now
   state.historyDetailId = null;
+  state.detailReturnTo = null;
 }
 
 // ---------- sync ----------
@@ -5261,13 +5266,9 @@ function sessionsAttributedTo(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-/** How many Saturday sessions that fell inside this week were counted toward the week before. */
-function swungOutOfWeek(logs: LogEntry[], saturday: Date): number {
-  const attribution = attributeSessionsToWeeks(logs);
-  const key = saturday.getTime();
-  return logs.filter((l) => calendarSaturdayMs(l.date) === key && attribution.get(l) !== key)
-    .length;
-}
+// (v48 · P6, Sep 24 2026: swungOutOfWeek() retired — its one reader, the
+// "Sat counted for last week" note on the Week-by-week summary, is gone; home's
+// week line names the swing in words.)
 
 function getWeekDots(offset = 0): WeekDotInfo[] {
   const logs = loadLogs();
@@ -5714,7 +5715,8 @@ function getWallSitTrend(allLogs: LogEntry[], uptoLogId: string | null, max = 10
 
 // Inline SVG sparkline. Returns '' if fewer than 2 points (flat-line reads
 // broken). The current row's value is the rightmost point and gets a filled
-// --accent dot.
+// dot. v48 · P6 (Sep 24 2026): that dot is --text, not sage — sage means "the
+// primary action right now" (DECISIONS §5, one sage per screen).
 function renderSparkline(values: number[]): string {
   if (values.length < 2) return '';
 
@@ -5753,7 +5755,7 @@ function renderSparkline(values: number[]): string {
       <title>${escapeHtml(label)}</title>
       <path d="${path}" fill="none" stroke="var(--accent-progress)" stroke-width="1.5"
             stroke-linecap="round" stroke-linejoin="round" />
-      <circle cx="${lx?.toFixed(1)}" cy="${ly?.toFixed(1)}" r="2" fill="var(--accent)" />
+      <circle cx="${lx?.toFixed(1)}" cy="${ly?.toFixed(1)}" r="2" fill="var(--text)" />
     </svg>
   `;
 }
@@ -5825,13 +5827,10 @@ function buildWeeklyTargetRows(logs: LogEntry[]): WeeklyTargetRow[] {
 function renderWeeklyTargetGrid(summaryLabel = 'Consistency'): string {
   const logs = loadLogs();
   const rows = buildWeeklyTargetRows(logs);
-  const currentWeekCount = getWeekCount(0);
-  // Swing note (v42): if this week's Saturday session was counted toward last
-  // week, say so where the number is — otherwise "0 of 3" next to a lit Saturday
-  // dot reads like a bug.
-  const swung = swungOutOfWeek(logs, saturdayForOffset(0));
-  const swingNote =
-    swung > 0 ? ` · Sat counted for last week${swung > 1 ? ` (×${swung})` : ''}` : '';
+  // v48 · P6 (Sep 24 2026): the "N of 3 this week" + swing note that sat on
+  // this summary (and again inside it) are gone — in Weekly review the count
+  // is the screen's own subtitle, and home's week line carries the swing in
+  // words (DECISIONS §2 #2: "One quiet count, not 3-5").
 
   const rowsHtml = rows
     .map((r) => {
@@ -5870,7 +5869,7 @@ function renderWeeklyTargetGrid(summaryLabel = 'Consistency'): string {
     <details class="consistency-wrap">
       <summary class="next-week-summary">
         <span class="next-week-summary-label">${summaryLabel}</span>
-        <span class="next-week-summary-meta">${currentWeekCount} of 3 this week${swingNote}</span>
+        <span class="next-week-summary-meta">3 per week · since ${formatMonthDay(PROGRAM_START_DATE + 'T00:00:00')}</span>
         <span class="next-week-chev">▸</span>
       </summary>
       <div class="past-weeks-body weekly-target-card">
@@ -5878,10 +5877,6 @@ function renderWeeklyTargetGrid(summaryLabel = 'Consistency'): string {
           <h3 class="weekly-target-title">
             Consistency · <span class="weekly-target-sub">3 per week</span>
           </h3>
-          <div class="weekly-target-stat">
-            <span class="weekly-target-count">${currentWeekCount} of 3</span>
-            <span class="weekly-target-stat-label">this week</span>
-          </div>
         </div>
         <div class="weekly-target-rows">${rowsHtml}</div>
       </div>
@@ -6055,36 +6050,34 @@ function renderPastWeeks(): string {
   `;
 }
 
-// Gear & recovery card. Equipment is ownership-gated: a move only appears in a
-// workout once Allison says she owns the kit. Until then it lives here as a
-// "worth getting" item with what it unlocks. Also holds Lisa's neck-release.
+// Gear & recovery. Equipment is ownership-gated: a move only appears in a
+// workout once Allison says she owns the kit. Also holds Lisa's neck release.
+// v48 · P6 (Sep 24 2026): the paragraphs became one row of chips (✅ = in the
+// workout now, ⬜ = worth getting) plus the Neck release as its own titled
+// card (DECISIONS §5). The "tell Claude" lines are gone — the 2 kg trigger is
+// now a question the app asks on home, from her arm-feel taps (her Jul 3 ask).
+const GEAR_CHIPS: { have: boolean; text: string }[] = [
+  { have: true, text: '1 kg · A+B arm block' },
+  { have: true, text: 'Yellow band · B clamshells' },
+  { have: false, text: '2nd 1 kg' },
+  { have: false, text: '2 kg · ask Lisa when the 1 kg feels easy' },
+  { have: false, text: 'Peanut (2 tennis balls in a sock)' },
+];
+
 function renderGearCard(): string {
+  const chips = GEAR_CHIPS.map(
+    (g) =>
+      `<span class="gear-chip${g.have ? ' gear-chip-have' : ''}">${g.have ? '✅' : '⬜'} ${escapeHtml(g.text)}</span>`
+  ).join('');
   return `
-    <details class="card gear-card">
-      <summary class="gear-summary">🎒 Gear &amp; recovery</summary>
-      <div class="gear-body">
-        <div class="gear-section">
-          <div class="gear-label">You have — in the workout now</div>
-          <ul class="gear-list">
-            <li>✅ 1 kg weight — owned, and <strong>back IN your workout as of Week 4</strong> (Sep 19 2026, your words: “im doing 1 kg in arms btw i do hip hinges with 1 kg”). The <strong>1 kg biceps curl</strong> and the <strong>prone row</strong> are in the A + B arm block again at their Jun-18 2×12, and the hip hinge says “holding the 1 kg”. Grip rule is yours: light hold, wrist and fingers neutral, <strong>pain tells</strong>. 1 kg is the ceiling for now — your 2 kg trigger is unchanged: the curl easy at 3×20, two sessions running. Still a Lisa question: the 1 kg for prone Y/T raises.</li>
-            <li>✅ TheraBand kit (Yellow / Red / Green) — <strong>the yellow band is IN your workout as of Week 3</strong> (your word, Sep 14: “build week 3”), around the thighs on the clamshells in <strong>Workout B</strong>. <strong>These are flat strips, so tie the ends in a square knot once and keep that loop</strong> — you asked, and the workout step now walks you through it. Held back one week from when you confirmed the kit was home, on your own “don’t raise too fast”. Reps went back to 10 a side because the band is the increase; it climbs to 15 before the <strong>red</strong> one. A band <em>looped</em> around the legs uses no hands while you move; a band you have to <em>hold and pull</em> is grip work — open since Week 4 at the 1 kg rung, pain tells, and not in a workout yet. If the knot annoys you, a ready-made loop band is the thing to buy — tell Claude and it goes on the list.</li>
-          </ul>
-        </div>
-        <div class="gear-section">
-          <div class="gear-label">Worth getting — unlocks more (not in your workout yet)</div>
-          <ul class="gear-list">
-            <li>⬜ A 2nd 1 kg (a pair) — lets you do both sides at once, and load the bodyweight hip-hinge later</li>
-            <li>⬜ 2 kg weights — <strong>your buy-bigger trigger (you asked Jul 3):</strong> buy when the 1 kg biceps curl feels easy at 3 sets of 20, two sessions running. The app doesn't log arm reps — tell Claude when it feels easy and this flips.</li>
-            <li>⬜ 2 tennis balls in a sock (“the peanut”) — for the neck release below</li>
-          </ul>
-          <p class="gear-note">Tell Claude when you’ve got one and the moves it unlocks get added. Nothing shows up in your workout until you own it.</p>
-        </div>
-        <div class="gear-section">
-          <div class="gear-label">Neck release — Lisa · ~10 min, anytime (not part of the workout)</div>
-          <p class="gear-note">Two tennis balls in a sock at the base of your skull — where the skull meets the neck, one ball either side of your spine. Lie back, let your head’s weight rest on them, breathe slow (3 deep breaths), and relax ~10 min. Releases the neck/shoulder tension Lisa flagged. Do it separately from your session.</p>
-        </div>
-      </div>
-    </details>
+    <div class="card settings-card gear-card">
+      <div class="settings-section-label">Gear</div>
+      <div class="gear-chips">${chips}</div>
+    </div>
+    <div class="card settings-card neck-card">
+      <div class="settings-section-label">Neck release · Lisa · ~10 min</div>
+      <p class="gear-note">Two tennis balls in a sock at the base of your skull — where the skull meets the neck, one ball either side of your spine. Lie back, let your head’s weight rest on them, breathe slow (3 deep breaths), and relax ~10 min. Releases the neck/shoulder tension Lisa flagged. Do it separately from your session.</p>
+    </div>
   `;
 }
 
@@ -7143,115 +7136,316 @@ function backToStretches(): void {
   render();
 }
 
-function renderHistory(): string {
-  const logs = loadLogs();
-  if (logs.length === 0) {
-    return `
-      <h2>History</h2>
-      <p class="empty">No sessions yet.</p>
-      <button class="btn-large" id="back-home" type="button">Back</button>
-    `;
+// ---------------------------------------------------------------------------
+// SESSIONS (v48 · P6, Sep 24 2026). DECISIONS §5 Sessions + Session detail:
+// "Three names for one thing, and a Back at the bottom only here" (uxui history
+// 3/5) → one name (Sessions / Session), ONE row template for Sessions AND Weekly
+// review, × Back in the header, the list's scroll kept when she comes back.
+// Voice rule: her words verbatim, never the tail of a machine log line.
+// ---------------------------------------------------------------------------
+
+const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const SHORT_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+// "Sat Sep 19" — the weekday makes the Saturday swing readable in the list.
+function formatRowDate(iso: string): string {
+  const d = new Date(iso);
+  return `${SHORT_WEEKDAYS[d.getDay()]} ${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+// "Sep 19" — for "since May 2" and the like.
+function formatMonthDay(iso: string): string {
+  const d = new Date(iso);
+  return `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+// "18:31" — the 24-hour clock she reads (the old locale time could come out as
+// "06:31 PM" on one phone and "18:31" on another).
+function formatClock(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// "40 min" on a row; a sub-minute session keeps its seconds.
+function formatRowDuration(sec: number): string {
+  return sec < 60 ? `${sec} s` : `${Math.round(sec / 60)} min`;
+}
+
+// v47 rows carry the cardio lane, the machine readings and her words as prose
+// in `notes` ("cardio: elliptical 10 min · level 7 · 1.4 km · pulse 128 · knee
+// fine · duration not recorded — …"). Same head as ELLIPTICAL_MARKER_RE, with
+// the readings captured too, so an old ride shows the same Cardio row as a new one.
+const LEGACY_ELLIPTICAL_RE =
+  /cardio: elliptical (\d+) min(?: · level (\d+))?(?: · (\d+(?:\.\d+)?) km)?(?: · pulse (\d+))?/;
+const LEGACY_APARTMENT_RE = /cardio: apartment (\d+) min/;
+// The app's own annotations (v32 left-open / logged after the fact, v48 "Log
+// what I did") — "System", never shown as if she wrote them.
+const SYSTEM_NOTE_RE = /^(duration not recorded|logged after the fact|stopped early at)/;
+
+type SessionCardio = {
+  lane: 'walk' | 'apartment' | 'elliptical';
+  minutes: number | null;
+  level: number | null;
+  km: number | null;
+  pulse: number | null;
+};
+
+function numOrNull(s: string | undefined): number | null {
+  if (s === undefined) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Splits a `notes` string into the legacy cardio marker, her words and the
+// app's annotations. A v48 row's notes are annotations only, so its words come
+// back empty; a v47 row gets all three pulled apart.
+function splitNotes(notes: string | null | undefined): {
+  cardio: SessionCardio | null;
+  words: string[];
+  system: string[];
+} {
+  let rest = notes ?? '';
+  let cardio: SessionCardio | null = null;
+  const ell = LEGACY_ELLIPTICAL_RE.exec(rest);
+  if (ell) {
+    cardio = {
+      lane: 'elliptical',
+      minutes: numOrNull(ell[1]),
+      level: numOrNull(ell[2]),
+      km: numOrNull(ell[3]),
+      pulse: numOrNull(ell[4]),
+    };
+    rest = rest.replace(ell[0], '');
   }
-  const rowsHtml = logs
-    .map((l) => {
-      const idAttr = l.id ? `data-detail="${escapeHtml(l.id)}"` : '';
-      const trend = l.wallSitSec > 0 ? getWallSitTrend(logs, l.id ?? null) : [];
-      const spark = renderSparkline(trend);
-      return `
-    <button class="history-row history-row-btn" ${idAttr} type="button">
-      <span class="history-workout-badge">${l.workout}</span>
-      <div>
-        <div class="history-date">${formatDate(l.date)}${l.durationSec ? ` · ${formatDuration(l.durationSec)}` : ''}${spark ? ` <span class="history-sparkline-wrap" aria-hidden="false">${spark}</span>` : ''}</div>
-        <div class="history-meta">cap ${l.capacityBefore ?? '—'}→${l.capacityAfter ?? '—'}${
-          // v46: B and C have no wall sit — "wall 0s" there read as a zero.
-          l.wallSitSec > 0 || l.workout === 'A' ? ` · wall ${l.wallSitSec}s` : ''
-        } · back ${l.backPain ?? '—'}</div>
-        ${
-          // v48 · P5: the one-word box merged into her note, so a new row
-          // shows her note here (old rows keep their word).
-          l.word || l.sessionNote
-            ? `<div class="history-word" dir="auto">"${escapeHtml(l.word || l.sessionNote || '')}"</div>`
-            : ''
-        }
-      </div>
-      <div class="history-meta">›</div>
-    </button>
-  `;
-    })
-    .join('');
+  const apt = LEGACY_APARTMENT_RE.exec(rest);
+  if (apt) {
+    if (!cardio) {
+      cardio = {
+        lane: 'apartment',
+        minutes: numOrNull(apt[1]),
+        level: null,
+        km: null,
+        pulse: null,
+      };
+    }
+    rest = rest.replace(apt[0], '');
+  }
+  const words: string[] = [];
+  const system: string[] = [];
+  for (const part of rest.split(' · ')) {
+    const t = part.trim();
+    if (!t) continue;
+    (SYSTEM_NOTE_RE.test(t) ? system : words).push(t);
+  }
+  return { cardio, words, system };
+}
+
+// The session's cardio: the v48 columns first; a v47 row falls back to its
+// notes marker; an old real walk to walkMinutes.
+function sessionCardio(l: LogEntry): SessionCardio | null {
+  if (l.cardioLane) {
+    const ell = l.cardioLane === 'elliptical';
+    return {
+      lane: l.cardioLane,
+      minutes: l.cardioMinutes ?? (l.cardioLane === 'walk' ? (l.walkMinutes ?? null) : null),
+      level: ell ? (l.ellipticalLevel ?? null) : null,
+      km: ell ? (l.ellipticalKm ?? null) : null,
+      pulse: ell ? (l.ellipticalPulse ?? null) : null,
+    };
+  }
+  const legacy = splitNotes(l.notes).cardio;
+  if (legacy) return legacy;
+  if (typeof l.walkMinutes === 'number' && l.walkMinutes > 0) {
+    return { lane: 'walk', minutes: l.walkMinutes, level: null, km: null, pulse: null };
+  }
+  return null;
+}
+
+// "Elliptical 10 min · L7 · 1.4 km · pulse 128" / "Apartment 10 min" / "Walk 12 min".
+function cardioText(c: SessionCardio): string {
+  const mins = c.minutes !== null ? ` ${c.minutes} min` : '';
+  if (c.lane === 'elliptical') {
+    return [
+      `Elliptical${mins}`,
+      c.level !== null ? `L${c.level}` : '',
+      c.km !== null ? `${c.km} km` : '',
+      c.pulse !== null ? `pulse ${c.pulse}` : '',
+    ]
+      .filter((s) => s !== '')
+      .join(' · ');
+  }
+  return `${c.lane === 'apartment' ? 'Apartment' : 'Walk'}${mins}`;
+}
+
+// Her words for one session, verbatim: the v48 note, the old one-word box, and
+// (v47 rows) whatever she wrote into notes — the machine marker and the app's
+// annotations stripped off. One entry per line.
+function sessionWords(l: LogEntry): string {
+  const parts: string[] = [];
+  const note = (l.sessionNote ?? '').trim();
+  if (note) parts.push(note);
+  const word = (l.word || '').trim();
+  if (word && word !== note) parts.push(word);
+  parts.push(...splitNotes(l.notes).words);
+  return parts.join('\n');
+}
+
+// "curl=easy;row=right" → "curl easy · row right".
+function armFeelText(raw: string | null | undefined): string {
+  if (!raw) return '';
+  return raw
+    .split(';')
+    .map((p) => p.split('=').join(' '))
+    .filter((p) => p.trim() !== '')
+    .join(' · ');
+}
+
+// The back-pain number turns amber only at her own stop line — "Back pain at
+// 3/10 → stop that exercise". A 1/10 lit up like a verdict (uxui weekly 2/5).
+const BACK_PAIN_STOP_AT = 3;
+
+// ONE row, everywhere a session is listed (Sessions, Weekly review):
+// badge · "Sat Sep 19 · 40 min" · the wall-sit sparkline (A only) · a dim meta
+// line · her words, verbatim. `logs` = newest-first by date (for the sparkline).
+function renderSessionRow(l: LogEntry, logs: LogEntry[]): string {
+  const idAttr = l.id ? `data-detail="${escapeHtml(l.id)}"` : '';
+  const trend = l.workout === 'A' && l.wallSitSec > 0 ? getWallSitTrend(logs, l.id ?? null) : [];
+  const spark = renderSparkline(trend);
+  const back =
+    l.backPain === null
+      ? 'back —'
+      : `back <span class="session-back${l.backPain >= BACK_PAIN_STOP_AT ? ' session-back-warn' : ''}">${l.backPain}</span>`;
+  const wall =
+    // v46: B and C have no wall sit — "wall 0s" there read as a zero.
+    l.wallSitSec > 0 || l.workout === 'A' ? ` · wall ${l.wallSitSec}s` : '';
+  const words = sessionWords(l).split('\n')[0] ?? '';
   return `
-    <h2>History</h2>
-    <div class="card">${rowsHtml}</div>
-    <button class="btn-large" id="back-home" type="button">Back</button>
-  `;
+    <button class="history-row history-row-btn session-row" ${idAttr} type="button">
+      <span class="history-workout-badge">${l.workout}</span>
+      <div class="session-row-body">
+        <div class="history-date">${formatRowDate(l.date)}${l.durationSec ? ` · ${formatRowDuration(l.durationSec)}` : ''}${spark ? ` <span class="history-sparkline-wrap">${spark}</span>` : ''}</div>
+        <div class="history-meta">cap ${l.capacityBefore ?? '—'}→${l.capacityAfter ?? '—'}${wall} · ${back}</div>
+        ${words ? `<div class="history-word" dir="auto">${escapeHtml(words)}</div>` : ''}
+      </div>
+      <span class="session-chev" aria-hidden="true">›</span>
+    </button>`;
+}
+
+function logsNewestFirst(): LogEntry[] {
+  return [...loadLogs()].sort((a, b) => b.date.localeCompare(a.date));
+}
+
+function renderHistory(): string {
+  const logs = logsNewestFirst();
+  const header = `
+    <div class="screen-header">
+      <h2>Sessions</h2>
+      <button class="quit-link" id="back-home" type="button">× Back</button>
+    </div>`;
+  if (logs.length === 0) {
+    return `${header}<p class="empty">No sessions yet.</p>`;
+  }
+  return `${header}<div class="card session-list">${logs.map((l) => renderSessionRow(l, logs)).join('')}</div>`;
+}
+
+// One label + value row on the Session screen; `stack` puts a long value under
+// its label (her note), so the label never runs into the text (UX audit #12).
+function detailRow(
+  label: string,
+  value: string,
+  opts: { stack?: boolean; id?: string } = {}
+): string {
+  const id = opts.id ? ` id="${opts.id}"` : '';
+  return opts.stack
+    ? `<div class="detail-row detail-row-stack"><span class="detail-label">${label}</span><div class="detail-note"${id} dir="auto">${value}</div></div>`
+    : `<div class="detail-row"><span class="detail-label">${label}</span><span${id}>${value}</span></div>`;
 }
 
 function renderHistoryDetail(): string {
   const logs = loadLogs();
   const log = logs.find((l) => l.id === state.historyDetailId);
-  if (!log) {
-    return `
-      <h2>Not found</h2>
-      <p class="empty">That session isn't here anymore.</p>
-      <button class="btn-large" id="back-history" type="button">Back to history</button>
-    `;
-  }
-  const startedAt = log.startedAt ? formatTime(log.startedAt) : '—';
-  const completedAt = log.completedAt ? formatTime(log.completedAt) : '—';
-  const duration = log.durationSec ? formatDuration(log.durationSec) : '—';
-  return `
+  const header = `
     <div class="screen-header">
-      <h2>Session detail</h2>
+      <h2>Session</h2>
       <button class="quit-link" id="back-history" type="button">× Back</button>
-    </div>
-    <div class="card detail-card">
-      <div class="detail-row"><span class="detail-label">Date</span><span>${formatDateLong(log.date)}</span></div>
-      <div class="detail-row"><span class="detail-label">Workout</span><span>${log.workout}</span></div>
-      <div class="detail-row"><span class="detail-label">Started</span><span>${startedAt}</span></div>
-      <div class="detail-row"><span class="detail-label">Finished</span><span>${completedAt}</span></div>
-      <div class="detail-row"><span class="detail-label">Duration</span><span>${duration}</span></div>
-      <div class="detail-row"><span class="detail-label">Capacity before</span><span>${log.capacityBefore ?? '—'}</span></div>
-      <div class="detail-row"><span class="detail-label">Capacity after</span><span>${log.capacityAfter ?? '—'}</span></div>
-      <div class="detail-row"><span class="detail-label">Wall sit</span><span>${log.wallSitSec}s</span></div>
-      <div class="detail-row"><span class="detail-label">Back pain</span><span>${log.backPain === null ? '—' : `${log.backPain}/10`}</span></div>
-      ${log.word ? `<div class="detail-row"><span class="detail-label">One word</span><span><em>"${escapeHtml(log.word)}"</em></span></div>` : ''}
-      ${
-        // v48 (Sep 24 2026): her post-log words live in their own column now,
-        // so they get their own row, verbatim — they never vanish between the
-        // data change and the Session-detail redesign.
-        log.sessionNote
-          ? `<div class="detail-row detail-row-stack"><span class="detail-label">Your note</span><div class="detail-note" id="detail-session-note" dir="auto">${escapeHtml(log.sessionNote)}</div></div>`
-          : ''
-      }
-      ${
-        // v46: her note gets its own block under the label — on one row the
-        // label ran straight into the text (UX audit Sep 24). From v48 this is
-        // system notes (and pre-v48 rows, where her words sat in here too).
-        log.notes
-          ? `<div class="detail-row detail-row-stack"><span class="detail-label">Note</span><div class="detail-note" dir="auto">${escapeHtml(log.notes)}</div></div>`
-          : ''
-      }
-    </div>
-    <button class="weekly-review-link progress-link" id="open-progress-from-detail" type="button">
-      <span>📈 View progress</span>
-      <span class="weekly-review-link-chev">→</span>
-    </button>
-    <button class="btn-large" id="back-history" type="button">Back to history</button>
+    </div>`;
+  if (!log) {
+    return `${header}<p class="empty">That session isn't here anymore.</p>`;
+  }
+  // 10 rows → the ones that carry something (DECISIONS §5 Session detail).
+  const rows: string[] = [];
+  const span =
+    log.startedAt && log.completedAt
+      ? `${formatClock(log.startedAt)}–${formatClock(log.completedAt)}`
+      : log.startedAt
+        ? `from ${formatClock(log.startedAt)}`
+        : '';
+  const mins = log.durationSec ? formatRowDuration(log.durationSec) : '';
+  rows.push(detailRow('Time', [span, mins].filter((s) => s !== '').join(' · ') || '—'));
+  if (log.capacityBefore !== null || log.capacityAfter !== null) {
+    rows.push(
+      detailRow(
+        'Capacity',
+        log.capacityAfter === null
+          ? `${log.capacityBefore}`
+          : `${log.capacityBefore ?? '—'} → ${log.capacityAfter}`
+      )
+    );
+  }
+  // A is the only workout with a wall sit; on B/C the row asked about nothing.
+  if (log.workout === 'A') {
+    rows.push(detailRow('Wall sit', log.wallSitSec > 0 ? `${log.wallSitSec} s` : '—'));
+  }
+  rows.push(detailRow('Back pain', log.backPain === null ? '—' : `${log.backPain}/10`));
+  const cardio = sessionCardio(log);
+  if (cardio)
+    rows.push(detailRow('Cardio', escapeHtml(cardioText(cardio)), { id: 'detail-cardio' }));
+  if (log.liteDay) {
+    // Lite = one round less than the plan that week had.
+    const rounds = Math.max(1, getWorkoutById(log.workout, new Date(log.date)).rounds - 1);
+    rows.push(detailRow('Lite', `${rounds} round${rounds === 1 ? '' : 's'}`));
+  }
+  const arms = armFeelText(log.armFeel);
+  if (arms) rows.push(detailRow('Arms', escapeHtml(arms)));
+  const words = sessionWords(log);
+  if (words) {
+    rows.push(detailRow('Note', escapeHtml(words), { stack: true, id: 'detail-session-note' }));
+  }
+  const system = splitNotes(log.notes).system;
+  if (system.length > 0) {
+    rows.push(detailRow('System', escapeHtml(system.join(' · ')), { stack: true }));
+  }
+  return `
+    ${header}
+    <p class="detail-sub">Workout ${log.workout} · ${formatDateLong(log.date)}</p>
+    <div class="card detail-card">${rows.join('')}</div>
   `;
 }
 
 // ---------- Ship 4: weekly review (2026-05-15) ----------
 //
-// A per-week debrief screen reached from home — either via the "Weekly review →"
-// button below the consistency card, or by tapping the week-nav label. The
-// screen respects `viewedWeekOffset`, so tapping the label on a past week opens
-// the review for THAT week.
+// A per-week debrief screen, reached from home's week card. The screen respects
+// `viewedWeekOffset`; v48 · P6 (Sep 24 2026) moved the ‹ › week arrows here
+// from home, so looking back lives on the one screen made for it.
 //
 // Design rules honored:
 //  - No paternalism. No motivational language. The screen reports the week;
 //    it doesn't judge it. (`feedback_no_capacity_paternalism.md` + CLAUDE.md
 //    agency rule.)
-//  - Voice rule: her one-word entries appear verbatim, never edited.
+//  - Voice rule: her words appear verbatim, never edited.
 //  - All data reads from existing loadLogs(). No new Supabase queries.
 //  - D-1 visual tokens only (no new color vars).
 
@@ -7352,17 +7546,24 @@ function formatTotalDuration(sec: number): string {
 
 // Calmly directional delta. NOT shouty — per agency rule. Show direction with
 // muted progress/dim tokens; a "worse" delta gets --text-dim, NOT a warn color.
-function renderDelta(curr: number, prev: number, kind: 'higher-better' | 'lower-better'): string {
+// v48 · P6 (Sep 24 2026): with its unit — "↓ -22m", "↑ +5s" (a bare "-22" left
+// her to guess minutes or seconds; uxui weekly).
+function renderDelta(
+  curr: number,
+  prev: number,
+  kind: 'higher-better' | 'lower-better',
+  unit = ''
+): string {
   const diff = curr - prev;
   if (diff === 0) {
-    return `<span class="weekly-review-delta-num delta-same">±0</span>`;
+    return `<span class="weekly-review-delta-num delta-same">±0${unit}</span>`;
   }
   const arrow = diff > 0 ? '↑' : '↓';
   const sign = diff > 0 ? '+' : '';
   const isImprovement =
     (kind === 'higher-better' && diff > 0) || (kind === 'lower-better' && diff < 0);
   const cls = isImprovement ? 'delta-up' : 'delta-down';
-  return `<span class="weekly-review-delta-num ${cls}">${arrow} ${sign}${diff}</span>`;
+  return `<span class="weekly-review-delta-num ${cls}">${arrow} ${sign}${diff}${unit}</span>`;
 }
 
 function renderDeltaDecimal(
@@ -7385,114 +7586,87 @@ function renderDeltaDecimal(
   return `<span class="weekly-review-delta-num ${cls}">${arrow} ${sign}${diff.toFixed(1)}</span>`;
 }
 
-function formatCapArrowColor(before: number | null, after: number | null): string {
-  // Either side missing → no direction to show.
-  if (before === null || after === null) return 'cap-arrow-same';
-  if (after > before) return 'cap-arrow-up';
-  if (after < before) return 'cap-arrow-down';
-  return 'cap-arrow-same';
+// The Saturday the program's first week starts on — the ‹ arrow stops there.
+function firstProgramSaturday(): Date {
+  const start = new Date(PROGRAM_START_DATE + 'T00:00:00');
+  start.setDate(start.getDate() - ((start.getDay() + 1) % 7));
+  start.setHours(0, 0, 0, 0);
+  return start;
 }
 
-function renderWeeklyReviewSession(s: WeekSession): string {
-  const { log } = s;
-  const idAttr = log.id ? `data-detail="${escapeHtml(log.id)}"` : '';
-  const dateStr = formatDateLong(log.date);
-  const capCls = formatCapArrowColor(log.capacityBefore, log.capacityAfter);
-
-  const wallSitLine =
-    log.wallSitSec > 0
-      ? `<div class="weekly-review-session-stat"><span class="weekly-review-session-stat-num">${log.wallSitSec}s</span><span class="weekly-review-session-stat-lbl">wall sit</span></div>`
-      : '';
-
-  const backPainLine =
-    log.backPain !== null && log.backPain > 0
-      ? `<div class="weekly-review-session-stat weekly-review-session-stat-warn"><span class="weekly-review-session-stat-num">${log.backPain}/10</span><span class="weekly-review-session-stat-lbl">back pain</span></div>`
-      : '';
-
-  // Voice rule: render her word verbatim, including any typos. Never paraphrase
-  // or omit. Empty string → skip the blockquote entirely (no placeholder).
-  const wordBlock = log.word
-    ? `<blockquote class="weekly-review-session-word">&ldquo;${escapeHtml(log.word)}&rdquo;</blockquote>`
-    : '';
-
-  return `
-    <button class="weekly-review-session" ${idAttr} type="button">
-      <div class="weekly-review-session-head">
-        <span class="weekly-review-session-badge weekly-review-session-badge-${log.workout}">${log.workout}</span>
-        <div class="weekly-review-session-meta">
-          <div class="weekly-review-session-date">${dateStr}</div>
-          <div class="weekly-review-session-dur">${s.durationStr}</div>
-        </div>
-      </div>
-      <div class="weekly-review-session-stats">
-        <div class="weekly-review-session-stat">
-          <span class="weekly-review-session-stat-num">
-            ${log.capacityBefore ?? '—'}
-            <span class="weekly-review-cap-arrow ${capCls}">→</span>
-            ${log.capacityAfter ?? '—'}
-          </span>
-          <span class="weekly-review-session-stat-lbl">capacity</span>
-        </div>
-        ${wallSitLine}
-        ${backPainLine}
-      </div>
-      ${wordBlock}
-    </button>
-  `;
+// The review's title in home's words: "This week · R2 · Week 4 · Sep 19–25",
+// a past week "R2 · Week 3 · Sep 12–18", a held week "Sick week · Jul 11–17".
+function weekReviewTitle(offset: number): string {
+  const saturday = saturdayForOffset(offset);
+  const friday = new Date(saturday);
+  friday.setDate(saturday.getDate() + 6);
+  const range = formatWeekRange(saturday, friday);
+  const pw = getProgramWeek(saturday);
+  if (pw.skippedLabel) return `${pw.skippedLabel} week · ${range}`;
+  const week = `${pw.round > 1 ? `R${pw.round} · ` : ''}Week ${pw.num}`;
+  return offset === 0 ? `This week · ${week} · ${range}` : `${week} · ${range}`;
 }
 
 function renderWeeklyReview(): string {
   const offset = viewedWeekOffset;
   const saturday = saturdayForOffset(offset);
-  const friday = new Date(saturday);
-  friday.setDate(saturday.getDate() + 6);
-  friday.setHours(23, 59, 59, 999);
-
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  const satStr = `${months[saturday.getMonth()]} ${saturday.getDate()}`;
-  const friStr =
-    saturday.getMonth() === friday.getMonth()
-      ? `${friday.getDate()}`
-      : `${months[friday.getMonth()]} ${friday.getDate()}`;
-  const rangeStr = `${satStr} — ${friStr}`;
+  const skipped = getProgramWeek(saturday).skippedLabel;
+  const canGoBack = saturdayForOffset(offset + 1).getTime() >= firstProgramSaturday().getTime();
 
   const sessions = getWeekSessions(offset);
   const totals = computeWeekTotals(sessions);
   const prevSessions = getWeekSessions(offset + 1);
   const prev = computeWeekTotals(prevSessions);
 
+  // The ‹ › arrows sit around the title (moved from home, DECISIONS §5). The
+  // live week has nothing after it, so › is hidden — not a dead button.
+  const header = `
+    <div class="screen-header review-header">
+      <div class="review-nav">
+        <button class="review-arrow${canGoBack ? '' : ' review-arrow-off'}" id="prev-week" type="button" aria-label="Previous week"${canGoBack ? '' : ' disabled'}>‹</button>
+        <h2 class="review-title">${weekReviewTitle(offset)}</h2>
+        <button class="review-arrow${offset > 0 ? '' : ' review-arrow-off'}" id="next-week" type="button" aria-label="Next week"${offset > 0 ? '' : ' disabled'}>›</button>
+      </div>
+      <button class="quit-link" id="back-home" type="button">× Back</button>
+    </div>`;
+
+  // A held week (sick / break) is not a miss (her Jul 19 rule): no "of 3".
   const sessionCountClass = totals.count >= 3 ? 'weekly-review-count-met' : 'weekly-review-count';
+  const subtitle = skipped
+    ? ''
+    : `<div class="weekly-review-subtitle">
+        Sessions: <span class="${sessionCountClass}"><strong>${totals.count}</strong> of 3</span>
+      </div>`;
 
   // Empty state — single subtle line, no nudge.
   if (sessions.length === 0) {
+    const emptyLine = skipped
+      ? 'Held the slot — doesn’t count.'
+      : offset === 0
+        ? 'No sessions this week.'
+        : 'No sessions that week.';
     return `
-      <div class="screen-header">
-        <h2>Week of ${rangeStr}</h2>
-        <button class="quit-link" id="back-home" type="button">× Back</button>
-      </div>
-      <div class="weekly-review-subtitle">
-        Sessions: <span class="${sessionCountClass}"><strong>0</strong> of 3</span>
-      </div>
-      <p class="weekly-review-empty">No sessions this week.</p>
+      ${header}
+      ${subtitle}
+      <p class="weekly-review-empty">${emptyLine}</p>
       ${renderWeeklyTargetGrid('Week by week')}
     `;
   }
 
-  const sessionCards = sessions.map(renderWeeklyReviewSession).join('');
+  const newestFirst = logsNewestFirst();
+  const sessionRows = sessions.map((s) => renderSessionRow(s.log, newestFirst)).join('');
 
+  // "6.0 → 7.0"; with no after-readings that week, just the before (the
+  // Session screen's "7 when after is null" — a hole never drawn as "→ —").
+  const capTile =
+    totals.avgCapBefore === null && totals.avgCapAfter === null
+      ? '—'
+      : totals.avgCapAfter === null
+        ? formatAvg(totals.avgCapBefore)
+        : `${formatAvg(totals.avgCapBefore)} → ${formatAvg(totals.avgCapAfter)}`;
+  const painWarn = totals.avgBackPain !== null && totals.avgBackPain >= BACK_PAIN_STOP_AT;
+  // Four tiles, an even grid (v48 · P6: one "Capacity 5.5 → 6.0" tile replaced
+  // the two average tiles; back pain always has its tile — "none" when no pain).
   const totalsCard = `
     <div class="card weekly-review-totals">
       <h3>Week totals</h3>
@@ -7506,31 +7680,26 @@ function renderWeeklyReview(): string {
           }</div>
         </div>
         <div class="weekly-review-total">
-          <div class="weekly-review-total-num">${formatAvg(totals.avgCapBefore)}</div>
-          <div class="weekly-review-total-lbl">avg capacity before</div>
-        </div>
-        <div class="weekly-review-total">
-          <div class="weekly-review-total-num">${formatAvg(totals.avgCapAfter)}</div>
-          <div class="weekly-review-total-lbl">avg capacity after</div>
+          <div class="weekly-review-total-num">${capTile}</div>
+          <div class="weekly-review-total-lbl">capacity</div>
         </div>
         <div class="weekly-review-total">
           <div class="weekly-review-total-num">${totals.maxWallSit > 0 ? `${totals.maxWallSit}s` : '—'}</div>
           <div class="weekly-review-total-lbl">max wall sit</div>
         </div>
-        ${
-          totals.avgBackPain !== null
-            ? `<div class="weekly-review-total">
-                <div class="weekly-review-total-num">${formatAvg(totals.avgBackPain)}</div>
-                <div class="weekly-review-total-lbl">avg back pain</div>
-              </div>`
-            : ''
-        }
+        <div class="weekly-review-total${painWarn ? ' weekly-review-total-warn' : ''}">
+          <div class="weekly-review-total-num">${totals.avgBackPain === null ? 'none' : formatAvg(totals.avgBackPain)}</div>
+          <div class="weekly-review-total-lbl">${totals.avgBackPain === null ? 'back pain' : 'avg back pain'}</div>
+        </div>
       </div>
     </div>
   `;
 
+  // v48 · P6 (Sep 24 2026): "vs previous week" only for a CLOSED week — on a
+  // Thursday it showed "↓ -1" for a week she was on track to finish (uxui
+  // weekly 4/5). The live week says so in one quiet line instead.
   const deltaCard =
-    prev.count > 0
+    offset > 0 && prev.count > 0
       ? `
         <div class="card weekly-review-delta">
           <h3>vs previous week</h3>
@@ -7543,14 +7712,14 @@ function renderWeeklyReview(): string {
             <div class="weekly-review-delta-row">
               <span class="weekly-review-delta-lbl">total time</span>
               <span class="weekly-review-delta-vals">${formatTotalDuration(prev.totalSec)} → ${formatTotalDuration(totals.totalSec)}</span>
-              ${renderDelta(Math.round(totals.totalSec / 60), Math.round(prev.totalSec / 60), 'higher-better')}
+              ${renderDelta(Math.round(totals.totalSec / 60), Math.round(prev.totalSec / 60), 'higher-better', 'm')}
             </div>
             ${
               prev.maxWallSit > 0 || totals.maxWallSit > 0
                 ? `<div class="weekly-review-delta-row weekly-review-delta-row-emph">
                     <span class="weekly-review-delta-lbl">max wall sit</span>
                     <span class="weekly-review-delta-vals">${prev.maxWallSit}s → ${totals.maxWallSit}s</span>
-                    ${renderDelta(totals.maxWallSit, prev.maxWallSit, 'higher-better')}
+                    ${renderDelta(totals.maxWallSit, prev.maxWallSit, 'higher-better', 's')}
                   </div>`
                 : ''
             }
@@ -7566,23 +7735,20 @@ function renderWeeklyReview(): string {
           </div>
         </div>
       `
-      : '';
+      : offset === 0
+        ? '<p class="weekly-review-open">Week still open.</p>'
+        : '';
 
   return `
-    <div class="screen-header">
-      <h2>Week of ${rangeStr}</h2>
-      <button class="quit-link" id="back-home" type="button">× Back</button>
-    </div>
-    <div class="weekly-review-subtitle">
-      Sessions: <span class="${sessionCountClass}"><strong>${totals.count}</strong> of 3</span>
-    </div>
-    <div class="weekly-review-sessions">
-      ${sessionCards}
+    ${header}
+    ${subtitle}
+    <div class="card weekly-review-sessions session-list">
+      ${sessionRows}
     </div>
     ${totalsCard}
     ${deltaCard}
     ${
-      // v48 · P4 (Sep 24 2026): re-homed from home, as-is (P6 restyles).
+      // v48 · P4 (Sep 24 2026): re-homed from home; stays at the bottom, closed.
       renderWeeklyTargetGrid('Week by week')
     }
   `;
@@ -7590,9 +7756,8 @@ function renderWeeklyReview(): string {
 
 // ---------- Ship 5: Progress screen (2026-05-15) ----------
 //
-// A read-only longitudinal view across her entire history. Reached from home
-// via the "📈 Progress →" link below the weekly-review link, and from any
-// history-detail screen. The screen reports numbers — it does NOT editorialize.
+// A read-only longitudinal view across her entire history. Reached from home's
+// Progress door. The screen reports numbers — it does NOT editorialize.
 //
 // Design rules honored (CLAUDE.md design rules + memory):
 //  - No motivational language. No "you should." No goals beyond the 3/week target.
@@ -7601,10 +7766,14 @@ function renderWeeklyReview(): string {
 //  - Archives untouched. Year-grid + hand-routine archives stay in archive/.
 //  - No new external libraries — every chart is hand-built inline SVG.
 //  - No new color tokens — only D-1 + cooler-look additions.
+//  - v48 · P6 (Sep 24 2026): chart ink is --accent-progress, never the sage
+//    that means "the primary action right now" (DECISIONS §5, one sage per screen).
 
-// Oldest → newest array of all logs (loadLogs returns newest-first).
+// Oldest → newest array of all logs. v48 · P6 (Sep 24 2026): sorted by DATE —
+// the old `.reverse()` trusted storage order, and writeLogs keeps unsynced rows
+// first, so a session saved offline could sit at the "latest" end of a chart.
 function getChronologicalLogs(): LogEntry[] {
-  return loadLogs().slice().reverse();
+  return [...loadLogs()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // Generic line-chart helper. Renders one or more series on a shared
@@ -7621,7 +7790,14 @@ type LineSeries = {
 
 function renderProgressLineChart(
   series: LineSeries[],
-  opts: { ariaLabel: string; showMaxGuide?: boolean; maxGuideLabel?: string }
+  opts: {
+    ariaLabel: string;
+    showMaxGuide?: boolean;
+    maxGuideLabel?: string;
+    // v48 · P6: indexes where a new round starts — a faint vertical rule before
+    // that point, so the post-break dip reads as a restart (DECISIONS §5).
+    boundaries?: { index: number; label: string }[];
+  }
 ): string {
   // Flatten all values to compute shared y-range across series.
   const allVals: number[] = [];
@@ -7656,17 +7832,30 @@ function renderProgressLineChart(
     return PAD_T + (1 - (v - yMin) / yRange) * innerH;
   }
 
-  // Optional dashed max guideline.
+  // Optional dashed max guideline. v48 · P6: its label sits at the LEFT end —
+  // at the right it covered the latest point whenever the latest was the best.
   let guide = '';
   if (opts.showMaxGuide) {
     const guideY = yFor(dataMax);
     guide = `
       <line x1="${PAD_L}" y1="${guideY.toFixed(1)}" x2="${(W - PAD_R).toFixed(1)}" y2="${guideY.toFixed(1)}"
             stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3" />
-      <text x="${(W - PAD_R).toFixed(1)}" y="${(guideY - 4).toFixed(1)}" text-anchor="end"
+      <text x="${PAD_L}" y="${(guideY - 4).toFixed(1)}" text-anchor="start"
             font-size="9" fill="var(--text-dim-2)" letter-spacing="1.2px">${escapeHtml(opts.maxGuideLabel ?? 'max')}</text>
     `;
   }
+
+  const rules = (opts.boundaries ?? [])
+    .filter((b) => b.index > 0 && b.index < maxLen)
+    .map((b) => {
+      const x = (xFor(b.index - 1) + xFor(b.index)) / 2;
+      return `
+        <line class="round-rule" x1="${x.toFixed(1)}" y1="${PAD_T}" x2="${x.toFixed(1)}" y2="${(H - PAD_B).toFixed(1)}"
+              stroke="var(--border-strong)" stroke-width="1" />
+        <text x="${(x + 4).toFixed(1)}" y="${(PAD_T + 8).toFixed(1)}" font-size="9"
+              fill="var(--text-dim-2)" letter-spacing="1.2px">${escapeHtml(b.label)}</text>`;
+    })
+    .join('');
 
   // Build a path + circles per series.
   const seriesHtml = series
@@ -7680,7 +7869,7 @@ function renderProgressLineChart(
         .map(([x, y], i) => {
           const isLast = i === pts.length - 1;
           if (isLast && s.emphLast) {
-            return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="var(--accent-hover)" />`;
+            return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="var(--accent-progress)" stroke="var(--text)" stroke-width="1.5" />`;
           }
           const fill = s.dotFill ?? s.colorVar;
           return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${fill}" />`;
@@ -7699,15 +7888,19 @@ function renderProgressLineChart(
          role="img" aria-label="${escapeHtml(opts.ariaLabel)}">
       <title>${escapeHtml(opts.ariaLabel)}</title>
       ${guide}
+      ${rules}
       ${seriesHtml}
     </svg>
   `;
 }
 
 // Bar chart for back pain — categorical (0-10), bar per session.
+// v48 · P6 (Sep 24 2026): a pain-free session gets a faint tick instead of
+// nothing (the chart only witnessed the bad days — uxui progress 2/5), and a
+// bar is amber only at her 3/10 stop line.
 function renderProgressBarChart(
   values: number[],
-  opts: { ariaLabel: string; yMax: number; barColorVar: string }
+  opts: { ariaLabel: string; yMax: number }
 ): string {
   if (values.length === 0) return '';
   const W = 320;
@@ -7726,13 +7919,17 @@ function renderProgressBarChart(
 
   const bars = values
     .map((v, i) => {
-      if (v <= 0) return '';
+      const x = PAD_L + i * slot + (slot - barW) / 2;
+      if (v <= 0) {
+        return `<rect class="pain-tick" x="${x.toFixed(1)}" y="${(PAD_T + innerH - 2).toFixed(1)}" width="${barW.toFixed(1)}" height="2"
+              fill="var(--text-dim-2)" opacity="0.6" rx="1" />`;
+      }
       const ratio = Math.min(1, v / opts.yMax);
       const h = ratio * innerH;
-      const x = PAD_L + i * slot + (slot - barW) / 2;
       const y = PAD_T + innerH - h;
-      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}"
-              fill="${opts.barColorVar}" rx="1" />`;
+      const fill = v >= BACK_PAIN_STOP_AT ? 'var(--accent-warn)' : 'var(--text-dim)';
+      return `<rect class="pain-bar" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}"
+              fill="${fill}" rx="1" />`;
     })
     .join('');
 
@@ -7745,62 +7942,60 @@ function renderProgressBarChart(
   `;
 }
 
-// Horizontal bar chart for sessions-per-week. Each row = one program week,
-// fill width proportional to count (capped at 3). Dashed target line at x=3.
-function renderProgressHorizontalBars(
-  rows: { label: string; value: number }[],
-  opts: { ariaLabel: string; target: number }
-): string {
-  if (rows.length === 0) return '';
-  const W = 320;
-  const rowH = 22;
-  const rowGap = 6;
-  const H = rows.length * (rowH + rowGap) - rowGap + 16;
-  const PAD_L = 56; // room for the week label
-  const PAD_R = 12;
-  const innerW = W - PAD_L - PAD_R;
+// ----- Per-card render helpers -----
 
-  const targetX = PAD_L + (opts.target / opts.target) * innerW;
-
-  const barsHtml = rows
-    .map((r, i) => {
-      const y = i * (rowH + rowGap);
-      const ratio = Math.min(1, r.value / opts.target);
-      const barW = ratio * innerW;
-      return `
-        <text x="${(PAD_L - 8).toFixed(1)}" y="${(y + rowH / 2 + 3).toFixed(1)}" text-anchor="end"
-              font-size="11" fill="var(--text-dim-2)" letter-spacing="1.2px">${escapeHtml(r.label)}</text>
-        <rect x="${PAD_L}" y="${y.toFixed(1)}" width="${innerW.toFixed(1)}" height="${rowH}"
-              fill="var(--bg-elev-2)" rx="3" />
-        ${
-          barW > 0
-            ? `<rect x="${PAD_L}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${rowH}"
-                  fill="var(--accent-progress)" rx="3" />`
-            : ''
-        }
-        <text x="${(W - PAD_R - 4).toFixed(1)}" y="${(y + rowH / 2 + 4).toFixed(1)}" text-anchor="end"
-              font-size="11" fill="var(--text-dim)">${r.value} / ${opts.target}</text>
-      `;
-    })
-    .join('');
-
-  return `
-    <svg class="progress-chart progress-chart-hbar" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
-         role="img" aria-label="${escapeHtml(opts.ariaLabel)}">
-      <title>${escapeHtml(opts.ariaLabel)}</title>
-      ${barsHtml}
-      <line x1="${targetX.toFixed(1)}" y1="0" x2="${targetX.toFixed(1)}" y2="${(H - 16).toFixed(1)}"
-            stroke="var(--accent)" stroke-width="1" stroke-dasharray="3 3" opacity="0.6" />
-    </svg>
-  `;
+// The level / km she recorded on a ride: the v48 columns, else the v47 marker.
+function rideLevel(l: LogEntry): number | null {
+  if (typeof l.ellipticalLevel === 'number' && l.ellipticalLevel > 0) return l.ellipticalLevel;
+  return l.cardioLane ? null : (splitNotes(l.notes).cardio?.level ?? null);
 }
 
-// ----- Per-card render helpers -----
+function rideKm(l: LogEntry): number | null {
+  if (typeof l.ellipticalKm === 'number' && l.ellipticalKm > 0) return l.ellipticalKm;
+  return l.cardioLane ? null : (splitNotes(l.notes).cardio?.km ?? null);
+}
+
+// v48 · P6 (Sep 24 2026): "Start → Now" — DECISIONS §2 #5 (Gemini, taken):
+// "elliptical level first → latest, km first → latest, wall sit first → latest,
+// and '40 sessions'. That's movement with no verdict (guide §2)." Rows only
+// where there's data; a latest below the first shows plainly, never coloured.
+function renderStartNowCard(logs: LogEntry[]): string {
+  const first = logs[0];
+  if (!first) return '';
+  const pair = (vals: number[], unit: string): string => {
+    const a = vals[0];
+    const b = vals[vals.length - 1];
+    if (a === undefined || b === undefined) return '';
+    return vals.length === 1
+      ? `<span class="sn-last">${a}</span>${unit}`
+      : `<span class="sn-first">${a}</span> → <span class="sn-last">${b}</span>${unit}`;
+  };
+  const rows: [string, string][] = [];
+  const levels = logs.map(rideLevel).filter((v): v is number => v !== null);
+  if (levels.length) rows.push(['Elliptical level', pair(levels, '')]);
+  const kms = logs.map(rideKm).filter((v): v is number => v !== null);
+  if (kms.length) rows.push(['Elliptical km', pair(kms, ' km')]);
+  const walls = logs.filter((l) => l.wallSitSec > 0).map((l) => l.wallSitSec);
+  if (walls.length) rows.push(['Wall sit', pair(walls, ' s')]);
+  return `
+    <div class="card progress-card start-now-card">
+      <div class="progress-card-label">Start → Now</div>
+      <div class="progress-stat-big start-now-hero">${logs.length} <span class="start-now-unit">session${logs.length === 1 ? '' : 's'}</span></div>
+      ${rows
+        .map(
+          ([label, val]) =>
+            `<div class="start-now-row"><span class="start-now-lbl">${label}</span><span class="start-now-val">${val}</span></div>`
+        )
+        .join('')}
+      <div class="progress-card-meta">since ${formatMonthDay(first.date)}</div>
+    </div>`;
+}
 
 function renderWallSitTrendCard(logs: LogEntry[]): string {
   // Wall-sit values only come from workouts that include a wall sit (A).
-  // Use every log with wallSitSec > 0, chronological.
-  const wallSits = logs.filter((l) => l.wallSitSec > 0).map((l) => l.wallSitSec);
+  // Use every log with wallSitSec > 0, chronological (by date — v48 · P6).
+  const wallLogs = logs.filter((l) => l.wallSitSec > 0);
+  const wallSits = wallLogs.map((l) => l.wallSitSec);
 
   if (wallSits.length < 2) {
     if (wallSits.length === 1) {
@@ -7808,7 +8003,7 @@ function renderWallSitTrendCard(logs: LogEntry[]): string {
       return `
         <div class="card progress-card">
           <div class="progress-card-label">Wall sit · seconds held</div>
-          <div class="progress-stat-big">${only}s</div>
+          <div class="progress-stat-big">${only} s</div>
           <p class="progress-card-empty">One value logged — chart appears after 2+ wall-sit sessions.</p>
         </div>
       `;
@@ -7820,86 +8015,43 @@ function renderWallSitTrendCard(logs: LogEntry[]): string {
   const last = wallSits[wallSits.length - 1] ?? 0;
   const maxVal = Math.max(...wallSits);
   const diff = last - first;
+  // Plain words, no colour (v48 · P6): the hero reports where she IS.
+  const sinceFirst =
+    diff === 0 ? 'same as first session' : `${diff > 0 ? '+' : ''}${diff}s since first session`;
 
-  let deltaLine: string;
-  if (diff === 0) {
-    deltaLine = `<span class="progress-delta-same">same as first session</span>`;
-  } else if (diff > 0) {
-    deltaLine = `<span class="progress-delta-up">+${diff}s since first session</span>`;
-  } else {
-    deltaLine = `<span class="progress-delta-down">${diff}s since first session</span>`;
-  }
+  // The Round 1 → 2 boundary (and any later round): the first wall sit on or
+  // after each round's start.
+  const boundaries = ROUNDS.slice(1)
+    .map((r) => ({
+      index: wallLogs.findIndex((l) => l.date >= r.start),
+      label: `R${r.num}`,
+    }))
+    .filter((b) => b.index > 0);
 
   const chart = renderProgressLineChart(
     [
       {
         values: wallSits,
         colorVar: 'var(--accent-progress)',
-        dotFill: 'var(--accent)',
         emphLast: true,
       },
     ],
     {
-      ariaLabel: `Wall sit trend: ${first} to ${last} seconds over ${wallSits.length} sessions, max ${maxVal}`,
+      ariaLabel: `Wall sit trend: ${first} to ${last} seconds over ${wallSits.length} sessions, best ${maxVal}`,
       showMaxGuide: true,
-      maxGuideLabel: 'max',
+      maxGuideLabel: 'best',
+      boundaries,
     }
   );
 
+  // v48 · P6 (Sep 24 2026): the hero is the LATEST hold, "best" sits quiet in
+  // the meta — "a hero you're not at is a misreport" (DECISIONS §5, fail-loud).
   return `
-    <div class="card progress-card">
+    <div class="card progress-card wall-sit-card">
       <div class="progress-card-label">Wall sit · seconds held</div>
-      <div class="progress-stat-big">${maxVal}s</div>
+      <div class="progress-stat-big">${last} s</div>
       <div class="progress-chart-wrap">${chart}</div>
-      <div class="progress-card-meta">${deltaLine}</div>
-    </div>
-  `;
-}
-
-function renderCapacityTrendCard(allLogs: LogEntry[]): string {
-  // Only sessions with BOTH readings — the two lines share an x-axis, so a
-  // session missing either end (v32 after-the-fact log, or a pre-v39 row with
-  // no before-reading) can't sit on it.
-  const logs = allLogs.filter((l) => l.capacityBefore !== null && l.capacityAfter !== null);
-  if (logs.length < 2) return '';
-
-  // Both filtered above; the `??` only narrows the type, it never substitutes.
-  const before = logs.map((l) => l.capacityBefore ?? 0);
-  const after = logs.map((l) => l.capacityAfter ?? 0);
-
-  const avgBefore = before.reduce((a, b) => a + b, 0) / before.length;
-  const avgAfter = after.reduce((a, b) => a + b, 0) / after.length;
-
-  const chart = renderProgressLineChart(
-    [
-      { values: before, colorVar: 'var(--text-dim)', dotFill: 'var(--text-dim)' },
-      {
-        values: after,
-        colorVar: 'var(--accent-progress)',
-        dotFill: 'var(--accent-progress)',
-        emphLast: true,
-      },
-    ],
-    {
-      ariaLabel: `Capacity trend: avg before ${avgBefore.toFixed(1)}, avg after ${avgAfter.toFixed(1)} over ${logs.length} sessions`,
-    }
-  );
-
-  return `
-    <div class="card progress-card">
-      <div class="progress-card-label">Capacity · before → after</div>
-      <div class="progress-chart-wrap">${chart}</div>
-      <div class="progress-legend">
-        <span class="progress-legend-item">
-          <span class="progress-legend-dot progress-legend-dot-before"></span>before
-        </span>
-        <span class="progress-legend-item">
-          <span class="progress-legend-dot progress-legend-dot-after"></span>after
-        </span>
-      </div>
-      <div class="progress-card-meta">
-        Avg before <strong>${avgBefore.toFixed(1)}</strong> · Avg after <strong>${avgAfter.toFixed(1)}</strong>
-      </div>
+      <div class="progress-card-meta">best ${maxVal} s · ${sinceFirst}</div>
     </div>
   `;
 }
@@ -7911,24 +8063,24 @@ function renderBackPainTrendCard(allLogs: LogEntry[]): string {
 
   const values = logs.map((l) => l.backPain ?? 0); // filtered above; ?? only narrows the type
   const positive = values.filter((v) => v > 0);
+  const painFree = values.length - positive.length;
+  const avg = positive.length ? positive.reduce((a, b) => a + b, 0) / positive.length : 0;
 
-  // Pain scale max is 10 per the post-log slider.
+  // Pain scale max is 10 per the post-log chips.
   const chart = renderProgressBarChart(values, {
     ariaLabel:
       positive.length === 0
         ? `Back pain: no pain logged across ${logs.length} sessions`
-        : `Back pain: ${positive.length} of ${logs.length} sessions with pain, avg ${(positive.reduce((a, b) => a + b, 0) / positive.length).toFixed(1)}`,
+        : `Back pain: ${positive.length} of ${logs.length} sessions with pain, avg ${avg.toFixed(1)}`,
     yMax: 10,
-    barColorVar: 'var(--accent-warn)',
   });
 
-  let metaLine: string;
-  if (positive.length === 0) {
-    metaLine = `No back pain logged across ${logs.length} sessions.`;
-  } else {
-    const avg = positive.reduce((a, b) => a + b, 0) / positive.length;
-    metaLine = `Avg <strong>${avg.toFixed(1)}</strong> across ${positive.length} session${positive.length === 1 ? '' : 's'} where pain logged.`;
-  }
+  // v48 · P6 (Sep 24 2026): the pain-free days are witnessed first
+  // ("Pain-free 24 of 30 · avg 1.8 when it hurt", DECISIONS §5).
+  const metaLine =
+    positive.length === 0
+      ? `Pain-free ${painFree} of ${values.length}`
+      : `Pain-free ${painFree} of ${values.length} · avg ${avg.toFixed(1)} when it hurt`;
 
   return `
     <div class="card progress-card">
@@ -7939,16 +8091,35 @@ function renderBackPainTrendCard(allLogs: LogEntry[]): string {
   `;
 }
 
+type PerWeekRow = {
+  label: string;
+  value: number;
+  round: number;
+  isCurrent: boolean;
+  skipped: boolean;
+};
+
+// One sessions-per-week row. v48 · P6 (Sep 24 2026): HTML, not SVG — the
+// "n / 3" sits OUTSIDE the track so a full bar stays readable (her wins were
+// the unreadable rows, 1.25:1), and a held week is its label + "—": no track,
+// no number (break weeks were scored "0 / 3" — uxui progress 3/5 ×2).
+function renderPerWeekRow(r: PerWeekRow): string {
+  if (r.skipped) {
+    return `<div class="spw-row spw-row-skipped"><span class="spw-label">${escapeHtml(r.label)}</span><span class="spw-skip">—</span></div>`;
+  }
+  const pct = Math.round(Math.min(1, r.value / SESSIONS_PER_WEEK_TARGET) * 100);
+  return `
+    <div class="spw-row${r.isCurrent ? ' spw-row-current' : ''}">
+      <span class="spw-label">${escapeHtml(r.label)}</span>
+      <span class="spw-track"><span class="spw-fill" style="width:${pct}%"></span></span>
+      <span class="spw-count">${r.value} / ${SESSIONS_PER_WEEK_TARGET}</span>
+    </div>`;
+}
+
 function renderSessionsPerWeekCard(logs: LogEntry[]): string {
-  // Build one entry per program week from PROGRAM_START_DATE forward through
-  // the current week.
-  const programStart = new Date(PROGRAM_START_DATE + 'T00:00:00');
-  // Find Saturday on/before programStart.
-  const startDow = programStart.getDay(); // 0=Sun..6=Sat
-  const daysBackToSat = (startDow + 1) % 7;
-  const firstSat = new Date(programStart);
-  firstSat.setDate(programStart.getDate() - daysBackToSat);
-  firstSat.setHours(0, 0, 0, 0);
+  // One entry per program week from PROGRAM_START_DATE forward through the
+  // current week.
+  const firstSat = firstProgramSaturday();
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -7958,7 +8129,7 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
   thisSat.setDate(today.getDate() - daysSinceSat);
   thisSat.setHours(0, 0, 0, 0);
 
-  const rows: { label: string; value: number; isCurrent: boolean; skipped: boolean }[] = [];
+  const rows: PerWeekRow[] = [];
   const cursor = new Date(firstSat);
   // Swing-aware (v42): same attribution as the 3-slot rows and the week card.
   const attribution = attributeSessionsToWeeks(logs);
@@ -7968,12 +8139,9 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
     const pw = getProgramWeek(weekStart);
     const isCurrent = weekStart.getTime() === thisSat.getTime();
     rows.push({
-      label: isCurrent
-        ? 'now'
-        : pw.skippedLabel
-          ? pw.skippedLabel.toLowerCase()
-          : `${pw.round > 1 ? `r${pw.round} ` : ''}wk ${pw.num}`,
+      label: isCurrent ? 'now' : pw.skippedLabel ? pw.skippedLabel.toLowerCase() : `wk ${pw.num}`,
       value: count,
+      round: pw.round,
       isCurrent,
       skipped: pw.skippedLabel !== null,
     });
@@ -7987,20 +8155,35 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
   // misses turned 13 of 13 training weeks into "13 of 21" (UX audit Sep 24).
   // The bars keep every week; only the score line changes.
   const judged = rows.filter((r) => !r.isCurrent && !r.skipped);
-  const hits = judged.filter((r) => r.value >= 3).length;
+  const hits = judged.filter((r) => r.value >= SESSIONS_PER_WEEK_TARGET).length;
   const scoreLine =
     judged.length === 0
       ? 'The first week is in progress.'
       : `Hit target <strong>${hits} of ${judged.length}</strong> training ${judged.length === 1 ? 'week' : 'weeks'}.`;
-  const chart = renderProgressHorizontalBars(rows, {
-    ariaLabel: `Sessions per week: hit target ${hits} of ${judged.length} training weeks`,
-    target: 3,
-  });
+
+  // v48 · P6 (Sep 24 2026): the current round's weeks open; each older round
+  // folds into one closed row — her Aug 30 words: Round 1 is "a closed
+  // chapter" (archived, still one tap away).
+  const currentRound = getRoundFor(thisSat).num;
+  const older = ROUNDS.filter((r) => r.num < currentRound)
+    .map((r) => {
+      const roundRows = rows.filter((row) => row.round === r.num);
+      if (roundRows.length === 0) return '';
+      const training = roundRows.filter((row) => !row.skipped).length;
+      return `
+        <details class="spw-older">
+          <summary class="spw-older-summary">Round ${r.num} · ${training} wks <span class="spw-older-chev" aria-hidden="true">▸</span></summary>
+          <div class="spw-rows">${roundRows.map(renderPerWeekRow).join('')}</div>
+        </details>`;
+    })
+    .join('');
+  const current = rows.filter((r) => r.round === currentRound);
 
   return `
-    <div class="card progress-card">
+    <div class="card progress-card spw-card" aria-label="Sessions per week: hit target ${hits} of ${judged.length} training weeks">
       <div class="progress-card-label">Sessions per week</div>
-      <div class="progress-chart-wrap progress-chart-wrap-hbar">${chart}</div>
+      <div class="spw-rows">${current.map(renderPerWeekRow).join('')}</div>
+      ${older}
       <div class="progress-card-meta">
         ${scoreLine}
       </div>
@@ -8008,107 +8191,48 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
   `;
 }
 
-function renderExerciseBreakdownCard(logs: LogEntry[]): string {
-  // Count how many times each workout letter appears, then list every
-  // exercise from WORKOUTS with its count (count of sessions where that
-  // workout was logged — each session does each exercise once per round).
-  const workoutCounts: Record<WorkoutId, number> = { A: 0, B: 0, C: 0 };
-  let maxWallSit = 0;
-  for (const l of logs) {
-    workoutCounts[l.workout] += 1;
-    if (l.wallSitSec > maxWallSit) maxWallSit = l.wallSitSec;
-  }
-
-  // For each exercise (warmup + main + cooldown, per workout), how many
-  // sessions has it appeared in?
-  type Row = {
-    name: string;
-    workout: WorkoutId;
-    sessions: number;
-    note: string;
-  };
-  const rows: Row[] = [];
-  for (const id of ['A', 'B', 'C'] as WorkoutId[]) {
-    const w = getWorkoutById(id);
-    const exercises = [...w.warmup, ...w.main, ...(w.upperBack ?? []), ...w.cooldown];
-    // Dedupe within a single workout in case a name appears twice.
-    const seenInWorkout = new Set<string>();
-    for (const ex of exercises) {
-      if (seenInWorkout.has(ex.name)) continue;
-      seenInWorkout.add(ex.name);
-      const isWallSit = ex.name.toLowerCase() === 'wall sit';
-      rows.push({
-        name: ex.name,
-        workout: id,
-        sessions: workoutCounts[id],
-        note: isWallSit && maxWallSit > 0 ? `max ${maxWallSit}s` : '',
-      });
-    }
-  }
-
-  const isOpen = state.exerciseBreakdownOpen;
-  const inner = isOpen
-    ? `
-      <div class="progress-breakdown-list">
-        ${rows
-          .map(
-            (r) => `
-          <div class="progress-breakdown-row">
-            <span class="progress-breakdown-badge progress-breakdown-badge-${r.workout}">${r.workout}</span>
-            <span class="progress-breakdown-name">${escapeHtml(r.name)}</span>
-            <span class="progress-breakdown-count">${r.sessions}×${r.note ? ` · ${escapeHtml(r.note)}` : ''}</span>
-          </div>
-        `
-          )
-          .join('')}
-      </div>
-    `
-    : '';
-
-  return `
-    <div class="card progress-card progress-card-breakdown ${isOpen ? 'progress-card-breakdown-open' : ''}">
-      <button class="progress-breakdown-toggle" id="toggle-exercise-breakdown" type="button"
-              aria-expanded="${isOpen}">
-        <span class="progress-card-label">Exercise breakdown</span>
-        <span class="progress-breakdown-chev">▸</span>
-      </button>
-      ${inner}
-    </div>
-  `;
-}
-
 function renderProgress(): string {
-  const logs = getChronologicalLogs(); // oldest → newest
+  const logs = getChronologicalLogs(); // oldest → newest, by date
   const count = logs.length;
 
-  // Header: subtitle counts sessions since program start.
-  const subtitle = `<span class="progress-subtitle-num">${count}</span> session${count === 1 ? '' : 's'} since May 2`;
+  // v48 · P6 (Sep 24 2026): the "Exercise breakdown" card (94 rows repeating
+  // three numbers — uxui progress 3/5) became these three chips.
+  const byWorkout: Record<WorkoutId, number> = { A: 0, B: 0, C: 0 };
+  for (const l of logs) byWorkout[l.workout] += 1;
+  const subtitle =
+    count > 0
+      ? `<div class="progress-subtitle">${(['A', 'B', 'C'] as WorkoutId[])
+          .map((id) => `<span class="progress-chip">${id} ${byWorkout[id]}</span>`)
+          .join('')}</div>`
+      : '';
+
+  const header = `
+    <div class="screen-header">
+      <h2>Progress</h2>
+      <button class="quit-link" id="back-home" type="button">× Back</button>
+    </div>`;
 
   // Empty state — fewer than 2 sessions.
   if (count < 2) {
     return `
-      <div class="screen-header">
-        <h2>Progress</h2>
-        <button class="quit-link" id="back-home" type="button">× Back</button>
-      </div>
-      <div class="progress-subtitle">${subtitle}</div>
+      ${header}
+      ${subtitle}
       <p class="progress-empty">Progress shows once you have 2+ sessions logged.</p>
       ${renderProgramArchive()}
     `;
   }
 
+  // v48 · P6: the capacity chart is gone — it charted untouched defaults (6 of
+  // 8 Round-2 after-readings were the invented 5; the real mean change is 0.00
+  // over 24 pairs). DECISIONS §2 #6.
   return `
-    <div class="screen-header">
-      <h2>Progress</h2>
-      <button class="quit-link" id="back-home" type="button">× Back</button>
-    </div>
-    <div class="progress-subtitle">${subtitle}</div>
+    ${header}
+    ${subtitle}
     <div class="progress-screen">
+      ${renderStartNowCard(logs)}
       ${renderWallSitTrendCard(logs)}
-      ${renderCapacityTrendCard(logs)}
       ${renderBackPainTrendCard(logs)}
       ${renderSessionsPerWeekCard(logs)}
-      ${renderExerciseBreakdownCard(logs)}
     </div>
     ${renderProgramArchive()}
   `;
@@ -8131,8 +8255,8 @@ function renderProgramArchive(): string {
 // ---------- Ship 6: Settings screen ----------
 //
 // Reachable via the small gear icon in the home header (top-right). NOT a
-// primary CTA — settings is reference, not action. Six sections (cards):
-// Audio, Timing, Display, Data, About.
+// primary CTA — settings is reference, not action. Sections: Audio, Timing,
+// Display, Gear, Neck release, Data (folded), About.
 //
 // All toggles persist to localStorage via setSetting/getSetting. Data section
 // has export / import / hold-to-confirm clear. Import is merge-only; Clear
@@ -8142,12 +8266,17 @@ function renderProgramArchive(): string {
 // the home-header tag); the About caption below reuses it.
 const GITHUB_REPO_URL = 'https://github.com/allisonecalt-sudo/workout-tracker';
 
+// v48 · P6: the Data fold stays open across its own re-render (an import or a
+// clear re-renders, then shows its status line inside the fold).
+let settingsDataOpen = false;
+
 function renderSettings(): string {
   const beepsOn = getBeepsEnabled();
   const restSec = getRestSec();
   const preCount = getPreCountSec();
   const howToOn = getHowToFirstExpand();
   const logCount = loadLogs().length;
+  const latestRound = ROUNDS[ROUNDS.length - 1] ?? ROUNDS[0]!;
 
   return `
     <div class="screen-header">
@@ -8176,7 +8305,7 @@ function renderSettings(): string {
         <div class="settings-stepper-row">
           <div class="settings-row-text">
             <div class="settings-row-title">Rest duration</div>
-            <div class="settings-row-caption">Between exercises in main sets. 5–180 seconds.</div>
+            <div class="settings-row-caption">Between main-set exercises. 0 = straight on · up to 180 s.</div>
           </div>
           <div class="settings-stepper" data-stepper="rest">
             <button class="settings-stepper-btn" id="rest-dec" type="button" aria-label="Decrease rest by 5 seconds">−</button>
@@ -8187,7 +8316,7 @@ function renderSettings(): string {
         <div class="settings-stepper-row">
           <div class="settings-row-text">
             <div class="settings-row-title">Pre-countdown</div>
-            <div class="settings-row-caption">3-2-1 before a timed exercise. 0–10 seconds; 0 skips.</div>
+            <div class="settings-row-caption">Before holds. 0 skips. Rides never count down.</div>
           </div>
           <div class="settings-stepper" data-stepper="pre">
             <button class="settings-stepper-btn" id="pre-dec" type="button" aria-label="Decrease pre-countdown by 1 second">−</button>
@@ -8197,18 +8326,12 @@ function renderSettings(): string {
         </div>
       </div>
 
-      ${
-        // v48 · P4 (Sep 24 2026): Gear & recovery moved here from home, as-is
-        // (P6 restyles it into chips + a Neck release card).
-        renderGearCard()
-      }
-
       <div class="card settings-card">
         <div class="settings-section-label">Display</div>
         <label class="settings-row">
           <div class="settings-row-text">
-            <div class="settings-row-title">Expand "How to do it" first time per week</div>
-            <div class="settings-row-caption">Off = always start collapsed.</div>
+            <div class="settings-row-title">Open how-to on first visit</div>
+            <div class="settings-row-caption">First time each week.</div>
           </div>
           <span class="settings-toggle ${howToOn ? 'on' : 'off'}">
             <input type="checkbox" id="setting-howto" ${howToOn ? 'checked' : ''} />
@@ -8217,26 +8340,35 @@ function renderSettings(): string {
         </label>
       </div>
 
-      <div class="card settings-card">
-        <div class="settings-section-label">Data</div>
+      ${
+        // v48 · P4 moved Gear & recovery here; P6 (Sep 24 2026) made it chips +
+        // its own Neck release card (DECISIONS §5).
+        renderGearCard()
+      }
+
+      <details class="card settings-card settings-data"${settingsDataOpen ? ' open' : ''}>
+        <summary class="settings-data-summary">
+          <span>Data · export · import · clear</span>
+          <span class="settings-data-chev" aria-hidden="true">▸</span>
+        </summary>
         <div class="settings-data-row">
-          <button class="btn settings-data-btn" id="export-sessions" type="button">Export sessions</button>
-          <div class="settings-row-caption">Downloads a JSON file of all local logs (${logCount} session${logCount === 1 ? '' : 's'}).</div>
+          <button class="btn-ghost settings-data-btn" id="export-sessions" type="button">Export sessions</button>
+          <div class="settings-row-caption">All sessions on this phone (${logCount}).</div>
         </div>
         <div class="settings-data-row">
-          <button class="btn settings-data-btn" id="import-sessions-btn" type="button">Import sessions</button>
+          <button class="btn-ghost settings-data-btn" id="import-sessions-btn" type="button">Import sessions</button>
           <input type="file" id="import-sessions-input" accept="application/json,.json" style="display:none" />
           <div class="settings-row-caption">Existing entries on this phone win.</div>
         </div>
         <div class="settings-data-row">
-          <button class="btn settings-destructive-btn hold-to-confirm" id="clear-local" type="button" data-hold-ms="${HOLD_TO_CLEAR_MS}">
+          <button class="settings-clear-link hold-to-confirm" id="clear-local" type="button" data-hold-ms="${HOLD_TO_CLEAR_MS}">
             <span class="hold-fill"></span>
-            <span class="hold-label">Hold to clear local sessions</span>
+            <span class="hold-label">Hold to clear sessions on this phone</span>
           </button>
-          <div class="settings-row-caption">Wipes localStorage only. Your Supabase rows are preserved.</div>
+          <div class="settings-row-caption">This phone only. Cloud copy stays.</div>
         </div>
         <div class="settings-data-status" id="data-status" aria-live="polite"></div>
-      </div>
+      </details>
 
       <div class="card settings-card">
         <div class="settings-section-label">About</div>
@@ -8246,7 +8378,7 @@ function renderSettings(): string {
         </div>
         <div class="settings-about-row">
           <div class="settings-row-title">Program weeks: ${getProgramWeekCount()}</div>
-          <div class="settings-row-caption">${getProgramWeekCount()} weeks encoded across ${ROUNDS.length} round${ROUNDS.length > 1 ? 's' : ''} (Round 1: weeks 1–11 · Round 2 started Aug 29 2026).</div>
+          <div class="settings-row-caption">Round ${latestRound.num} · from ${formatMonthDay(latestRound.start + 'T00:00:00')}</div>
         </div>
         <div class="settings-about-row">
           <a class="settings-link" href="${GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub →</a>
@@ -8377,7 +8509,7 @@ function clearLocalSessions(): void {
     // surface the status. If we showed status before render(), the freshly-
     // rendered DOM would have no status node and the message would vanish.
     render();
-    showDataStatus('Local sessions cleared. Supabase preserved.');
+    showDataStatus('Local sessions cleared.');
   } catch {
     showDataStatus('Clear failed.');
   }
@@ -8450,6 +8582,10 @@ function showQuitConfirmPanel(): void {
 // steps (UX audit Sep 24). Keyed on position, not on render: the timer
 // re-renders every second and must never move the page.
 let lastNavKey: string | null = null;
+// v48 · P6: the list's scroll when a Session was opened from it, per screen,
+// and the one value render() should restore on the next screen change.
+const detailOpenedAtScroll: Partial<Record<AppScreen, number>> = {};
+let pendingScrollRestore: number | null = null;
 
 function navigationKey(): string {
   if (state.screen === 'workout') {
@@ -8518,10 +8654,15 @@ function render(): void {
   }
   attachHandlers();
   // v46: a new screen or step lands at the top (see navigationKey).
+  // v48 · P6 (Sep 24 2026): except coming BACK from a Session to the list that
+  // opened it — she lands where she was, not at the top of 39 rows (DECISIONS
+  // §5 Sessions: "Scroll position is restored on back").
   const navKey = navigationKey();
   if (navKey !== lastNavKey) {
     lastNavKey = navKey;
-    window.scrollTo(0, 0);
+    const restore = pendingScrollRestore;
+    pendingScrollRestore = null;
+    window.scrollTo(0, restore ?? 0);
   }
   // Persist live position so reopening the app resumes the workout (cleared on
   // quit/finish via resetState). No-op for non-resumable screens.
@@ -8608,12 +8749,32 @@ function attachHandlers(): void {
   // shows this week; stepping back through weeks moves to Weekly review (P6).
 
   bindClick('back-home', () => {
+    // v48 · P6 (Sep 24 2026): leaving Weekly review is only a screen change —
+    // the week she stepped back to is kept for the review flow (resetState,
+    // when a session ends, is what puts it back on this week).
+    if (state.screen === 'weekly-review') {
+      state.screen = 'home';
+      render();
+      return;
+    }
     resetState();
+    render();
+  });
+
+  // v48 · P6 (Sep 24 2026): the ‹ › week arrows, moved here from home (P4) —
+  // stepping back through weeks lives on the screen made for looking back.
+  bindClick('prev-week', () => {
+    viewedWeekOffset += 1;
+    render();
+  });
+  bindClick('next-week', () => {
+    if (viewedWeekOffset > 0) viewedWeekOffset -= 1;
     render();
   });
 
   // Ship 6: Settings entry from home header.
   bindClick('open-settings', () => {
+    settingsDataOpen = false; // v48 · P6: the Data fold opens closed
     state.screen = 'settings';
     render();
   });
@@ -8639,20 +8800,11 @@ function attachHandlers(): void {
     }
   });
 
-  // Ship 5: Progress screen — full-history longitudinal view. Reached from
-  // home button or the "View progress" link on history-detail.
+  // Ship 5: Progress screen — full-history longitudinal view, from home's door.
+  // (v48 · P6: the Session screen's "📈 View progress" link and the Exercise
+  // breakdown toggle are gone with what they opened.)
   bindClick('open-progress-link', () => {
     state.screen = 'progress';
-    render();
-  });
-  bindClick('open-progress-from-detail', () => {
-    state.screen = 'progress';
-    render();
-  });
-
-  // Ship 5: collapsible exercise-breakdown card on progress screen.
-  bindClick('toggle-exercise-breakdown', () => {
-    state.exerciseBreakdownOpen = !state.exerciseBreakdownOpen;
     render();
   });
 
@@ -8673,9 +8825,14 @@ function attachHandlers(): void {
     render();
   });
 
+  // v48 · P6 (Sep 24 2026): the Session screen's × Back goes where she came
+  // from (Weekly review / Sessions / home), at the scroll she left it.
   bindClick('back-history', () => {
-    state.screen = 'history';
+    const target = state.detailReturnTo ?? 'history';
+    pendingScrollRestore = detailOpenedAtScroll[target] ?? null;
+    state.screen = target;
     state.historyDetailId = null;
+    state.detailReturnTo = null;
     render();
   });
 
@@ -8689,6 +8846,10 @@ function attachHandlers(): void {
       if (!id) return;
       // v48 · P4: a day dot inside the week card opens its session, not the card.
       e.stopPropagation();
+      // v48 · P6: remember where she opened it from, and how far down.
+      const from = state.screen;
+      state.detailReturnTo = from === 'weekly-review' || from === 'home' ? from : 'history';
+      detailOpenedAtScroll[state.detailReturnTo] = window.scrollY;
       state.historyDetailId = id;
       state.screen = 'history-detail';
       render();
@@ -9093,6 +9254,12 @@ function attachSettingsHandlers(): void {
       importInput.value = ''; // allow re-import of same filename
     });
   }
+
+  // v48 · P6: keep the Data fold's open state across its own re-render.
+  const dataFold = document.querySelector<HTMLDetailsElement>('details.settings-data');
+  dataFold?.addEventListener('toggle', () => {
+    settingsDataOpen = dataFold.open;
+  });
 
   // Data: Clear — hold-to-confirm via the same wireHoldToSkip helper.
   const clearBtn = document.getElementById('clear-local');

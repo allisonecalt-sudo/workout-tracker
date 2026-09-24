@@ -1171,11 +1171,14 @@ test('R2 W4: the split squat does NOT leak onto Week 3', async ({ page }) => {
 });
 
 test('R2 W3: gear card no longer says the band is waiting for a future week', async ({ page }) => {
-  // v48 · P4: Gear & recovery lives in Settings now.
+  // v48 · P4: Gear & recovery lives in Settings now. v48 · P6 (Sep 24 2026):
+  // chips — the band is a ✅ chip ("in the workout"), not a waiting line.
   await page.locator('#open-settings').click();
   const gear = page.locator('.gear-card');
-  await gear.locator('.gear-summary').click();
-  await expect(gear).toContainText('IN your workout as of Week 3');
+  await expect(gear.locator('.gear-chip-have')).toContainText([
+    '1 kg',
+    'Yellow band · B clamshells',
+  ]);
   await expect(gear).not.toContainText('Not in a workout yet');
   await expect(gear).not.toContainText('Booked for');
 });
@@ -1816,8 +1819,9 @@ test('ship 4: weekly review reachable from home button', async ({ page }) => {
   const reviewBtn = page.locator('#open-weekly-review');
   await expect(reviewBtn).toBeVisible();
   await reviewBtn.click();
-  // Header should now be the weekly-review screen header.
-  await expect(page.locator('h2').first()).toContainText('Week of');
+  // Header should now be the weekly-review screen header (v48 · P6: in home's
+  // words — "This week · … · Sep 19–25").
+  await expect(page.locator('h2').first()).toContainText('This week');
   // Subtitle reports session count.
   await expect(page.locator('.weekly-review-subtitle')).toContainText('Sessions:');
 });
@@ -1870,8 +1874,8 @@ test('ship 4: weekly review header shows session count for current week', async 
   const subtitle = page.locator('.weekly-review-subtitle');
   await expect(subtitle).toContainText('Sessions:');
   await expect(subtitle.locator('strong')).toHaveText('2');
-  // Two session cards rendered.
-  await expect(page.locator('.weekly-review-session')).toHaveCount(2);
+  // Two session rows rendered (v48 · P6: the same row as Sessions).
+  await expect(page.locator('.weekly-review-sessions .session-row')).toHaveCount(2);
 });
 
 test('ship 4: weekly review shows one-word verbatim including typos', async ({ page }) => {
@@ -1902,7 +1906,7 @@ test('ship 4: weekly review shows one-word verbatim including typos', async ({ p
   });
   await page.goto('/');
   await page.locator('#open-weekly-review').click();
-  const wordEl = page.locator('.weekly-review-session-word').first();
+  const wordEl = page.locator('.weekly-review-sessions .history-word').first();
   await expect(wordEl).toBeVisible();
   await expect(wordEl).toContainText('gooood start');
 });
@@ -2006,8 +2010,10 @@ test('ship 5: progress screen reachable from home button', async ({ page }) => {
   await progressBtn.click();
   // Header is the progress screen header.
   await expect(page.locator('h2').first()).toHaveText('Progress');
-  // Subtitle reports session count since program start.
-  await expect(page.locator('.progress-subtitle')).toContainText('since May 2');
+  // v48 · P6: with no sessions there are no A/B/C count chips to show — the
+  // count lives in the Start → Now card once sessions exist.
+  await expect(page.locator('.progress-subtitle')).toHaveCount(0);
+  await expect(page.locator('.progress-empty')).toBeVisible();
 });
 
 test('ship 5: wall-sit line chart renders with 2+ wall-sit values', async ({ page }) => {
@@ -2054,13 +2060,15 @@ test('ship 5: wall-sit line chart renders with 2+ wall-sit values', async ({ pag
   });
   await page.goto('/');
   await page.locator('#open-progress-link').click();
-  // Big stat shows max wall-sit (30s) as the headline number.
-  await expect(page.locator('.progress-stat-big')).toContainText('30s');
+  // v48 · P6: the hero is the LATEST hold (here also the best).
+  const card = page.locator('.wall-sit-card');
+  await expect(card.locator('.progress-stat-big')).toHaveText('30 s');
   // At least one progress-chart SVG renders for wall sit.
   await expect(page.locator('.progress-chart').first()).toBeVisible();
   // Calm delta line — "+12s since first session" (30 - 18). No motivational
   // language allowed: must NOT contain "great", "amazing", "you", etc.
-  const delta = await page.locator('.progress-card-meta').first().textContent();
+  const delta = await card.locator('.progress-card-meta').textContent();
+  expect(delta).toContain('best 30 s');
   expect(delta).toContain('+12s');
   expect(delta?.toLowerCase()).not.toContain('great');
   expect(delta?.toLowerCase()).not.toContain('you got');
@@ -2134,12 +2142,16 @@ test('ship 5: back-pain bars render only for sessions with backPain > 0', async 
   });
   await page.goto('/');
   await page.locator('#open-progress-link').click();
-  // Bar chart SVG exists. Its <rect> bars only render for backPain > 0
-  // rows — so we expect exactly 2 bars (backPain = 1 and backPain = 3).
+  // Bar chart SVG exists. Its bars only render for backPain > 0 rows — so we
+  // expect exactly 2 bars (backPain = 1 and backPain = 3). v48 · P6: the two
+  // pain-free sessions get a faint tick each (witnessed, not blank).
   const barChart = page.locator('.progress-chart-bar');
   await expect(barChart).toBeVisible();
-  const barCount = await barChart.locator('rect').count();
-  expect(barCount).toBe(2);
+  expect(await barChart.locator('rect.pain-bar').count()).toBe(2);
+  expect(await barChart.locator('rect.pain-tick').count()).toBe(2);
+  await expect(page.locator('.progress-card').filter({ hasText: 'Back pain' })).toContainText(
+    'Pain-free 2 of 4 · avg 2.0 when it hurt'
+  );
 });
 
 // ============================================================================
@@ -2152,8 +2164,17 @@ test('ship 6: settings reachable from gear icon in home header', async ({ page }
   await page.locator('#open-settings').click();
   // Lands on Settings screen.
   await expect(page.locator('h2')).toHaveText('Settings');
-  // Five section cards (Audio, Timing, Display, Data, About).
-  await expect(page.locator('.settings-section-label')).toHaveCount(5);
+  // v48 · P6: Audio, Timing, Display, Gear, Neck release, About as titled
+  // cards; Data is one closed fold ("Data · export · import · clear").
+  await expect(page.locator('.settings-section-label')).toHaveText([
+    'Audio',
+    'Timing',
+    'Display',
+    'Gear',
+    'Neck release · Lisa · ~10 min',
+    'About',
+  ]);
+  await expect(page.locator('details.settings-data')).toHaveJSProperty('open', false);
   // Back returns to home.
   await page.locator('#back-home').click();
   await expect(page.locator('.home-header h1')).toBeVisible();
@@ -2214,6 +2235,7 @@ test('ship 6: export sessions downloads a JSON file', async ({ page }) => {
   });
   await page.goto('/');
   await page.locator('#open-settings').click();
+  await page.locator('.settings-data > summary').click(); // v48 · P6: Data is a fold
   await page.locator('#export-sessions').scrollIntoViewIfNeeded();
   // Trigger download. Playwright's waitForEvent captures the file.
   const downloadPromise = page.waitForEvent('download');
@@ -2244,6 +2266,7 @@ test('ship 6: clear-data hold-to-confirm wipes localStorage', async ({ page }) =
   // Hold the clear button for 700ms (HOLD_TO_CLEAR_MS = 500ms). Scroll into
   // view first — the Data card lives near the bottom of the screen so on a
   // 1280×720 viewport the mouse coordinates would otherwise be outside it.
+  await page.locator('.settings-data > summary').click(); // v48 · P6: Data is a fold
   const clearBtn = page.locator('#clear-local');
   await clearBtn.scrollIntoViewIfNeeded();
   await page.waitForTimeout(150);
@@ -3725,7 +3748,7 @@ test.describe('v48 P1 data', () => {
     expect(p['wall_sit_seconds']).toBe(45);
   });
 
-  test('session detail shows her note verbatim under "Your note", apart from system notes', async ({
+  test('session detail shows her note verbatim under "Note", apart from system notes', async ({
     page,
   }) => {
     await mockDate(page, '2026-09-24T14:00:00.000Z');
@@ -3758,7 +3781,8 @@ test.describe('v48 P1 data', () => {
     const note = page.locator('#detail-session-note');
     await expect(note).toHaveText('Knee fine, legs heavy on the last round');
     await expect(note).toHaveAttribute('dir', 'auto');
-    await expect(page.locator('.detail-card')).toContainText('Your note');
+    // v48 · P6: the row is "Note" (DECISIONS §5 Session detail).
+    await expect(page.locator('.detail-card')).toContainText('Note');
   });
 });
 
@@ -4735,7 +4759,7 @@ test.describe('v48 P4 home', () => {
     await seedLogs(page, thirtyNine());
     await page.goto('/');
     await page.locator('#open-weekly-review').click();
-    await expect(page.locator('h2').first()).toContainText('Week of');
+    await expect(page.locator('h2').first()).toContainText('This week');
     const wbw = page.locator('details.consistency-wrap');
     await expect(wbw.locator('.next-week-summary-label')).toHaveText('Week by week');
     await expect(wbw).toHaveJSProperty('open', false);
@@ -4755,7 +4779,7 @@ test.describe('v48 P4 home', () => {
   test('(f) the week card opens from the keyboard too', async ({ page }) => {
     await page.locator('#open-weekly-review').focus();
     await page.keyboard.press('Enter');
-    await expect(page.locator('h2').first()).toContainText('Week of');
+    await expect(page.locator('h2').first()).toContainText('This week');
   });
 
   test('(h) the walk row: "4,210 steps today" only when Fit answered; one row, no paragraph', async ({
@@ -5209,5 +5233,370 @@ test.describe('v48 P5 logs', () => {
     await page.goto('/');
     await expect(page.locator('.home-header h1')).toBeVisible();
     await expect(page.locator('#twokg-card')).toHaveCount(0);
+  });
+});
+
+// --- v48 P6 · the mirror stops misreporting her (Sep 24 2026) -----------------
+// DECISIONS-v48 §2 #5-6, §5 Weekly review / Sessions / Progress / Settings rows.
+// Her words today: "really challenge everything … dont take anything at face
+// value". The review compares only closed weeks and prints its units; back pain
+// is amber only at her own 3/10 line; one session row everywhere, and Back goes
+// where she came from; Progress reports where she IS (latest, by date), with no
+// chart of invented numbers; Settings loses the switch nobody used.
+test.describe('v48 P6 mirror', () => {
+  type Row = Record<string, unknown>;
+  const THU_WEEK4 = '2026-09-24T15:00:00.000Z'; // Thu inside R2 Week 4 (Sat Sep 19 – Fri Sep 25)
+
+  const seedLogs = async (page: Page, logs: Row[]): Promise<void> => {
+    await page.addInitScript((rows) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    }, logs);
+  };
+  const log = (id: string, date: string, workout: 'A' | 'B' | 'C', extra: Row = {}): Row => ({
+    id,
+    date,
+    workout,
+    capacityBefore: 6,
+    capacityAfter: 7,
+    wallSitSec: workout === 'A' ? 45 : 0,
+    backPain: 0,
+    word: '',
+    synced: true,
+    durationSec: 2400,
+    ...extra,
+  });
+
+  // This week: Sun + Tue. Last week (R2 W3): Sun, Tue, Thu. The week before
+  // (R2 W2): Sun, Tue — so "last week" has something to be compared against.
+  const threeWeeks = (): Row[] => [
+    log('w4a', '2026-09-20T15:00:00.000Z', 'A'),
+    log('w4b', '2026-09-22T15:00:00.000Z', 'B'),
+    log('w3a', '2026-09-13T15:00:00.000Z', 'A', { durationSec: 2700, wallSitSec: 43 }),
+    log('w3b', '2026-09-15T15:00:00.000Z', 'B', { durationSec: 2700 }),
+    log('w3c', '2026-09-17T15:00:00.000Z', 'C', { durationSec: 2700 }),
+    log('w2a', '2026-09-06T15:00:00.000Z', 'A', { durationSec: 2400, wallSitSec: 40 }),
+    log('w2b', '2026-09-08T15:00:00.000Z', 'B', { durationSec: 2400 }),
+  ];
+
+  test('(a) live week: no "vs previous week", one quiet "Week still open."; ‹ to last week compares with units', async ({
+    page,
+  }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, threeWeeks());
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await expect(page.locator('.review-title')).toHaveText('This week · R2 · Week 4 · Sep 19–25');
+    await expect(page.locator('.weekly-review-sessions .session-row')).toHaveCount(2);
+    await expect(page.locator('.weekly-review-delta')).toHaveCount(0);
+    await expect(page.locator('.weekly-review-open')).toHaveText('Week still open.');
+    // Four even tiles; one capacity tile ("6.0 → 7.0"), not two averages.
+    await expect(page.locator('.weekly-review-total')).toHaveCount(4);
+    await expect(page.locator('.weekly-review-totals')).toContainText('6.0 → 7.0');
+    await expect(page.locator('.weekly-review-totals')).not.toContainText('avg capacity');
+    // The live week has nothing after it: › is hidden.
+    await expect(page.locator('#next-week')).toBeHidden();
+
+    await page.locator('#prev-week').click();
+    await expect(page.locator('.review-title')).toHaveText('R2 · Week 3 · Sep 12–18');
+    const delta = page.locator('.weekly-review-delta');
+    await expect(delta).toBeVisible();
+    await expect(page.locator('.weekly-review-open')).toHaveCount(0);
+    // 3 × 45 min vs 2 × 40 min: +55 minutes, printed with its unit.
+    const time = delta.locator('.weekly-review-delta-row').filter({ hasText: 'total time' });
+    await expect(time.locator('.weekly-review-delta-num')).toHaveText('↑ +55m');
+    const wall = delta.locator('.weekly-review-delta-row').filter({ hasText: 'max wall sit' });
+    await expect(wall.locator('.weekly-review-delta-num')).toHaveText('↑ +3s');
+    // › steps forward again.
+    await page.locator('#next-week').click();
+    await expect(page.locator('.review-title')).toContainText('This week');
+  });
+
+  test('(b) a held (break) week: "Held the slot — doesn\'t count.", no "of 3"', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-01T10:00:00.000Z'); // Tue in R2 Week 1
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await page.locator('#prev-week').click();
+    await expect(page.locator('.review-title')).toHaveText('Break week · Aug 22–28');
+    await expect(page.locator('.weekly-review-empty')).toContainText('Held the slot');
+    await expect(page.locator('.weekly-review-subtitle')).toHaveCount(0);
+    const text = await page.locator('#app').innerText();
+    expect(text).not.toContain('of 3');
+    // An ordinary past week with nothing logged says so plainly.
+    await mockDate(page, '2026-09-24T10:00:00.000Z');
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await page.locator('#prev-week').click();
+    await expect(page.locator('.weekly-review-empty')).toHaveText('No sessions that week.');
+  });
+
+  test('(c) back pain 2 is plain; 3 (her stop line) is amber', async ({ page }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, [
+      log('p2', '2026-09-20T15:00:00.000Z', 'A', { backPain: 2 }),
+      log('p3', '2026-09-22T15:00:00.000Z', 'B', { backPain: 3 }),
+    ]);
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    const two = page.locator('[data-detail="p2"] .session-back');
+    const three = page.locator('[data-detail="p3"] .session-back');
+    await expect(two).toHaveText('2');
+    await expect(two).not.toHaveClass(/session-back-warn/);
+    await expect(three).toHaveText('3');
+    await expect(three).toHaveClass(/session-back-warn/);
+    const colors = await page.evaluate(() => ({
+      two: getComputedStyle(document.querySelector('[data-detail="p2"] .session-back')!).color,
+      three: getComputedStyle(document.querySelector('[data-detail="p3"] .session-back')!).color,
+    }));
+    expect(colors.two).not.toBe(colors.three);
+  });
+
+  test('(d) a session opened from the review: × Back lands on the review, on the same week', async ({
+    page,
+  }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, threeWeeks());
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await page.locator('.weekly-review-sessions [data-detail="w4a"]').click();
+    await expect(page.locator('.screen-header h2')).toHaveText('Session');
+    await page.locator('#back-history').click();
+    await expect(page.locator('.screen-header h2')).not.toHaveText('Sessions');
+    await expect(page.locator('.review-title')).toContainText('This week');
+    // On last week: open, back — still last week (the offset is kept).
+    await page.locator('#prev-week').click();
+    await page.locator('.weekly-review-sessions [data-detail="w3b"]').click();
+    await page.locator('#back-history').click();
+    await expect(page.locator('.review-title')).toHaveText('R2 · Week 3 · Sep 12–18');
+    // × Back from the review goes home; home's card opens THIS week again.
+    await page.locator('#back-home').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await expect(page.locator('.review-title')).toContainText('This week');
+  });
+
+  test.describe('at phone size', () => {
+    test.use({ viewport: { width: 412, height: 915 } });
+
+    test('(e) Sessions: header × Back, no bottom slab, "Sat …" rows; Back from a Session keeps the scroll', async ({
+      page,
+    }) => {
+      await mockDate(page, THU_WEEK4);
+      const rows: Row[] = [];
+      let t = new Date('2026-09-19T16:30:00.000Z').getTime(); // a Saturday
+      for (let i = 0; i < 30; i++) {
+        rows.push(log(`r${i}`, new Date(t).toISOString(), (['C', 'B', 'A'] as const)[i % 3]!));
+        t -= 2 * 86_400_000;
+      }
+      await seedLogs(page, rows);
+      await page.goto('/');
+      await page.locator('#view-history').click();
+      await expect(page.locator('.screen-header h2')).toHaveText('Sessions');
+      await expect(page.locator('.screen-header #back-home')).toHaveText('× Back');
+      await expect(page.locator('.btn-large')).toHaveCount(0);
+      await expect(page.locator('.history-date').first()).toHaveText(/^Sat Sep 19 · 40 min/);
+      // Scroll down, open a row, come back: the list is where she left it.
+      const target = page.locator('[data-detail="r20"]');
+      await target.scrollIntoViewIfNeeded();
+      const before = await page.evaluate(() => window.scrollY);
+      expect(before).toBeGreaterThan(300);
+      await target.click();
+      await expect(page.locator('.screen-header h2')).toHaveText('Session');
+      expect(await page.evaluate(() => window.scrollY)).toBeLessThan(50);
+      await page.locator('#back-history').click();
+      await expect(page.locator('.screen-header h2')).toHaveText('Sessions');
+      const after = await page.evaluate(() => window.scrollY);
+      expect(Math.abs(after - before)).toBeLessThan(4);
+    });
+  });
+
+  test('(e) Session: B has no Wall sit row; a ride shows one Cardio row from columns or the old marker; Note = her words only', async ({
+    page,
+  }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, [
+      log('b-new', '2026-09-22T15:00:00.000Z', 'B', {
+        startedAt: '2026-09-22T15:31:00.000Z',
+        completedAt: '2026-09-22T16:04:00.000Z',
+        durationSec: 1980,
+        cardioLane: 'elliptical',
+        cardioMinutes: 10,
+        ellipticalLevel: 7,
+        ellipticalKm: 1.4,
+        ellipticalPulse: 128,
+        sessionNote: 'Knee fine',
+        armFeel: 'curl=easy;row=right',
+        notes: null,
+      }),
+      log('a-old', '2026-09-20T15:00:00.000Z', 'A', {
+        capacityAfter: null,
+        word: '',
+        notes:
+          'cardio: elliptical 10 min · level 7 · 1.4 km · pulse 128 · knee fine · duration not recorded — session was left open 4h before Done',
+      }),
+      log('c-apt', '2026-09-17T15:00:00.000Z', 'C', {
+        notes: 'cardio: apartment 25 min',
+        liteDay: true,
+      }),
+    ]);
+    await page.goto('/');
+    await page.locator('#view-history').click();
+    await page.locator('[data-detail="b-new"]').click();
+    const card = page.locator('.detail-card');
+    await expect(page.locator('.screen-header h2')).toHaveText('Session');
+    await expect(card.locator('.detail-label')).not.toContainText(['Wall sit']);
+    await expect(card).not.toContainText('Wall sit');
+    await expect(page.locator('#detail-cardio')).toHaveText(
+      'Elliptical 10 min · L7 · 1.4 km · pulse 128'
+    );
+    await expect(card).toContainText('Arms');
+    await expect(card).toContainText('curl easy · row right');
+    await expect(page.locator('#detail-session-note')).toHaveText('Knee fine');
+    // One Time row: "HH:MM–HH:MM · 33 min".
+    const time = card.locator('.detail-row').filter({ hasText: 'Time' });
+    await expect(time).toContainText(/\d\d:\d\d–\d\d:\d\d · 33 min/);
+    await expect(card.locator('.detail-row').filter({ hasText: 'Capacity' })).toContainText(
+      '6 → 7'
+    );
+    await expect(page.locator('.btn-large, #open-progress-from-detail')).toHaveCount(0);
+
+    // The legacy marker row reads the same, and her words are only her words.
+    await page.locator('#back-history').click();
+    await page.locator('[data-detail="a-old"]').click();
+    await expect(page.locator('#detail-cardio')).toHaveText(
+      'Elliptical 10 min · L7 · 1.4 km · pulse 128'
+    );
+    await expect(page.locator('#detail-session-note')).toHaveText('knee fine');
+    const system = card.locator('.detail-row').filter({ hasText: 'System' });
+    await expect(system).toContainText('duration not recorded');
+    await expect(page.locator('#detail-session-note')).not.toContainText('cardio');
+    // A with an after-reading missing: "Capacity 6", and the Wall sit row is there.
+    await expect(card.locator('.detail-row').filter({ hasText: 'Capacity' })).toHaveText(
+      /Capacity\s*6$/
+    );
+    await expect(card).toContainText('Wall sit');
+
+    // The apartment marker + lite.
+    await page.locator('#back-history').click();
+    await page.locator('[data-detail="c-apt"]').click();
+    await expect(page.locator('#detail-cardio')).toHaveText('Apartment 25 min');
+    await expect(card.locator('.detail-row').filter({ hasText: 'Lite' })).toContainText('1 round');
+    await expect(page.locator('#detail-session-note')).toHaveCount(0);
+  });
+
+  test('(f) Progress: Start → Now first, no capacity chart, no breakdown; A/B/C chips; latest by date; held weeks "—"; Round 1 folded', async ({
+    page,
+  }) => {
+    await mockDate(page, THU_WEEK4);
+    // Storage order OLDEST first (the reverse of newest-first): v47's
+    // `.reverse()` would have called the May 12 hold the "latest".
+    await seedLogs(page, [
+      log('may', '2026-05-12T15:00:00.000Z', 'A', { wallSitSec: 52 }),
+      log('ride1', '2026-09-06T15:00:00.000Z', 'C', {
+        cardioLane: 'elliptical',
+        cardioMinutes: 25,
+        ellipticalLevel: 3,
+      }),
+      log('sep13', '2026-09-13T15:00:00.000Z', 'A', { wallSitSec: 40 }),
+      log('ride2', '2026-09-17T15:00:00.000Z', 'C', {
+        cardioLane: 'elliptical',
+        cardioMinutes: 25,
+        ellipticalLevel: 7,
+      }),
+      log('sep20', '2026-09-20T15:00:00.000Z', 'A', { wallSitSec: 45 }),
+      log('sep22', '2026-09-22T15:00:00.000Z', 'B'),
+    ]);
+    await page.goto('/');
+    await page.locator('#open-progress-link').click();
+    const app = page.locator('#app');
+    await expect(app).not.toContainText('Exercise breakdown');
+    await expect(app).not.toContainText(/capacity/i);
+    const cards = page.locator('.progress-screen > .progress-card');
+    await expect(cards.first()).toHaveClass(/start-now-card/);
+    const sn = page.locator('.start-now-card');
+    await expect(sn.locator('.start-now-hero')).toHaveText('6 sessions');
+    await expect(
+      sn.locator('.start-now-row').filter({ hasText: 'Elliptical level' })
+    ).toContainText('3 → 7');
+    await expect(sn.locator('.start-now-row').filter({ hasText: 'Wall sit' })).toContainText(
+      '52 → 45 s'
+    );
+    await expect(sn.locator('.progress-card-meta')).toHaveText('since May 12');
+    // Latest by DATE: Sep 20's 45 s, best 52 s in the meta.
+    const wall = page.locator('.wall-sit-card');
+    await expect(wall.locator('.progress-stat-big')).toHaveText('45 s');
+    await expect(wall.locator('.progress-card-meta')).toHaveText(
+      'best 52 s · -7s since first session'
+    );
+    await expect(wall.locator('line.round-rule')).toHaveCount(1);
+    // Subtitle chips.
+    const sub = page.locator('.progress-subtitle');
+    await expect(sub).toContainText('A 3');
+    await expect(sub).toContainText('B 1');
+    await expect(sub).toContainText('C 2');
+    // Sessions per week: held weeks are "—", never "0 / 3"; Round 1 is folded.
+    const spw = page.locator('.spw-card');
+    const older = spw.locator('details.spw-older');
+    await expect(older).toHaveJSProperty('open', false);
+    await expect(older.locator('.spw-older-summary')).toContainText('Round 1 · 11 wks');
+    const breakRow = older.locator('.spw-row-skipped').filter({ hasText: 'break' }).first();
+    await expect(breakRow).toContainText('—');
+    await expect(breakRow).not.toContainText('/ 3');
+    await expect(breakRow.locator('.spw-track')).toHaveCount(0);
+    // The open rows are this round's only (R2: 4 weeks, the last "now").
+    await expect(spw.locator(':scope > .spw-rows .spw-row')).toHaveCount(4);
+    await expect(spw.locator(':scope > .spw-rows .spw-row').last()).toContainText('now');
+    await expect(spw.locator('.progress-card-meta')).toContainText('Hit target');
+    // No sage chart ink anywhere on Progress.
+    const sage = await page.evaluate(
+      () =>
+        [...document.querySelectorAll('#app svg [fill], #app svg [stroke]')].filter((el) =>
+          /var\(--accent(-hover)?\)/.test(
+            `${el.getAttribute('fill') ?? ''} ${el.getAttribute('stroke') ?? ''}`
+          )
+        ).length
+    );
+    expect(sage).toBe(0);
+  });
+
+  test('(g) Settings: no auto-suggest, Gear chips + Neck release, Data folded, honest captions, 44 px steppers', async ({
+    page,
+  }) => {
+    await page.locator('#open-settings').click();
+    const app = page.locator('#app');
+    await expect(app).not.toContainText(/auto-suggest/i);
+    await expect(page.locator('.gear-chip')).toHaveCount(5);
+    await expect(page.locator('.gear-chip').first()).toHaveText('✅ 1 kg · A+B arm block');
+    await expect(page.locator('.gear-chip').nth(3)).toHaveText(
+      '⬜ 2 kg · ask Lisa when the 1 kg feels easy'
+    );
+    await expect(app).not.toContainText('tell Claude');
+    await expect(page.locator('.neck-card')).toContainText('Two tennis balls in a sock');
+    const data = page.locator('details.settings-data');
+    await expect(data).toHaveJSProperty('open', false);
+    await expect(data.locator('summary')).toContainText('Data · export · import · clear');
+    await expect(app).toContainText('0 = straight on');
+    await expect(app).toContainText('Rides never count down.');
+    await expect(app).toContainText('Open how-to on first visit');
+    await data.locator('summary').click();
+    const text = await app.innerText();
+    expect(text).not.toContain('app.ts');
+    expect(text).not.toContain('localStorage');
+    expect(text).not.toContain('Supabase');
+    await expect(app).toContainText('This phone only. Cloud copy stays.');
+    await expect(page.locator('#data-status')).toBeHidden();
+    for (const id of ['#rest-dec', '#rest-inc', '#pre-dec', '#pre-inc']) {
+      const box = (await page.locator(id).boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    // A switch that's on is a state, not the one sage action.
+    const onTrack = await page.evaluate(
+      () =>
+        getComputedStyle(document.querySelector('.settings-toggle.on .settings-toggle-track')!)
+          .backgroundColor
+    );
+    expect(onTrack).not.toBe('rgb(143, 188, 143)');
   });
 });
