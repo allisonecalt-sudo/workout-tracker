@@ -4826,3 +4826,16 @@ input[type='number']:focus {
 .exercise-safety {
   text-align: center;
 }
+
+/* v48 · final (Sep 25 2026): the post-log's way back sits at the top, away from
+ * where Done · Finish was tapped, so a second tap can't bounce her back. */
+.postlog-top {
+  display: flex;
+  justify-content: flex-start;
+  margin: 0 0 4px;
+}
+
+.postlog-top .postlog-back {
+  min-height: 44px;
+  padding: 8px 0;
+}

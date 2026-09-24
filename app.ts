@@ -346,7 +346,7 @@ const SUPABASE_ANON_KEY =
 // (DECISIONS-v48-2026-09-24.md). Her words: "look at home ux ui and make it
 // better i feel like its a bit all over the place".
 const APP_VERSION = 'v48';
-const BUILD_DATE = 'Sep 24, 2026 · 19:54';
+const BUILD_DATE = 'Sep 25, 2026 · 00:42';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2301,6 +2301,11 @@ const R2W4_LOADED_ARMS: Exercise[] = (() => {
     // injury mechanism), pain tells.
     {
       ...row,
+      // v48 · final (Sep 25 2026): the title said "(bodyweight)" over a drawing
+      // that says 1 kg — mid-set she couldn't tell which. Display only; the key
+      // stays so the voice note, detail card and history still match.
+      label: 'Prone row',
+      reps: '2 sets · 12 reps each side · bodyweight or 1 kg',
       notes:
         'Bodyweight or holding the 1 kg — your call. Arm hanging, wrist neutral, light grip. Head down — do not lift it. Drive the elbow up, squeeze the shoulder blade toward your spine, lower slow. Pain tells — stop on any wrist signal.',
     },
@@ -6308,7 +6313,7 @@ function renderUpNextHero(id: WorkoutId): string {
       <span class="hero-title">Workout ${id}</span>
       <span class="hero-line">${escapeHtml(`${w.name} · ${rounds} · ${workoutMinutesLabel(w)}`)}</span>
       ${fresh.length ? `<span class="hero-line hero-new">New tonight: ${escapeHtml(fresh.join(' · '))}</span>` : ''}
-      ${back.length ? `<span class="hero-line hero-back">Back tonight: ${escapeHtml(back.join(' · '))}</span>` : ''}
+      ${back.length ? `<span class="hero-line hero-back">Again tonight: ${escapeHtml(back.join(' · '))}</span>` : ''}
       ${cardio ? `<span class="hero-line">${escapeHtml(cardio)}</span>` : ''}
       <span class="hero-start" aria-hidden="true">Start</span>
     </button>`;
@@ -6329,7 +6334,9 @@ function renderDoneTodayCard(log: LogEntry, weekCount: number): string {
   // v48 · fix r1 (Sep 24 2026): returning moves get their own honest word —
   // "Back: 1 kg biceps curl · prone row (bodyweight)" — never "Firsts".
   const back = lastDone && lastDone.id === log.id ? (lastDone.back ?? []) : [];
-  const backLine = back.length ? `Back: ${back.join(' · ')}` : '';
+  // v48 · final (Sep 25 2026): "Back:" for returning moves sat one screen after
+  // her back-pain check ("Back: Fine") and read like a pain report. "Again".
+  const backLine = back.length ? `Again: ${back.join(' · ')}` : '';
   return `
     <div class="card home-done-card" id="home-done-card">
       <div class="home-done-title">Done ✓ · Workout ${log.workout}</div>
@@ -6538,7 +6545,7 @@ function renderPreLog(): string {
   const meta = [
     preLogWeekLabel(),
     fresh.length ? `new tonight: ${fresh.join(' · ')}` : '',
-    back.length ? `back: ${back.join(' · ')}` : '',
+    back.length ? `again: ${back.join(' · ')}` : '',
     hasCardio && lastCardioLane() === 'elliptical' ? 'elliptical' : '',
     workoutMinutesLabel(w),
   ]
@@ -7262,7 +7269,7 @@ function renderWorkout(): string {
       <div class="exercise-display">
         <div class="exercise-name-row">
           <div class="exercise-name">${displayName(ex)}</div>
-          ${kind ? `<span class="new-tonight-badge">${kind === 'new' ? 'New tonight' : 'Back tonight'}</span>` : ''}
+          ${kind ? `<span class="new-tonight-badge">${kind === 'new' ? 'New tonight' : 'Again tonight'}</span>` : ''}
         </div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${renderArmFeel(ex.name)}
@@ -7353,11 +7360,17 @@ function renderPostLog(): string {
   // Back goes to the step she stopped on, not to stretches she never reached.
   // Still counts, no verdict.
   const stopped = state.stoppedEarlyAt !== null;
-  const title = stopped ? `Logged what you did · Workout ${w.id}` : `Nice. Workout ${w.id} done.`;
+  // v48 · final (Sep 25 2026): "Logged what you did" claimed a save before
+  // Save was tapped — if she backed out, nothing was stored. Say what IS true.
+  const title = stopped ? `Stopped early · Workout ${w.id}` : `Nice. Workout ${w.id} done.`;
   const backLink = stopped
     ? `<button class="back-link postlog-back" id="back-to-workout" type="button">‹ Back to the workout</button>`
     : `<button class="back-link postlog-back" id="back-to-stretches" type="button">‹ Back to the stretches</button>`;
+  // v48 · final (Sep 25 2026): the way back lives at the top now. At the
+  // bottom it sat exactly where Done · Finish was tapped a moment earlier, so
+  // a double or slow second tap bounced her back to the stretches.
   return `
+    <div class="postlog-top">${backLink}</div>
     <h2>${title}</h2>
     <p class="subtitle">Quick log — or just Save.</p>
 
@@ -7383,7 +7396,6 @@ function renderPostLog(): string {
 
     ${renderActionBar(`
       <button class="btn-large btn-primary" id="save-log" type="button">Save</button>
-      ${backLink}
     `)}
   `;
 }

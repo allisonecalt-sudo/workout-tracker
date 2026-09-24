@@ -4040,7 +4040,7 @@ test.describe('v48 P2 shell', () => {
 
   // v48 · fix r1 (Sep 24 2026): the 1 kg curl sat in Round 1 Week 7 (Jun 13-19)
   // before the arm pause — it's a return, not a first.
-  test('(d) a move from an earlier week reads "Back tonight", not "New tonight"', async ({
+  test('(d) a move from an earlier week reads "Again tonight", not "New tonight"', async ({
     page,
   }) => {
     await mockDate(page, TUE_WEEK4);
@@ -4048,7 +4048,7 @@ test.describe('v48 P2 shell', () => {
     await page.goto('/');
     await startA(page);
     await goToStep(page, '1 kg biceps curl');
-    await expect(page.locator('.new-tonight-badge')).toHaveText('Back tonight');
+    await expect(page.locator('.new-tonight-badge')).toHaveText('Again tonight');
   });
 
   test('(d) no "New tonight" once an A is logged on/after the week started', async ({ page }) => {
@@ -4172,7 +4172,7 @@ test.describe('v48 P2 shell', () => {
     await page.locator('#quit-log').click();
     await expect(page.locator('text=Quick log')).toBeVisible();
     // A stopped session is not called "done", and its Back goes to the workout.
-    await expect(page.locator('h2')).toHaveText('Logged what you did · Workout A');
+    await expect(page.locator('h2')).toHaveText('Stopped early · Workout A');
     await expect(page.locator('#back-to-stretches')).toHaveCount(0);
     await expect(page.locator('#back-to-workout')).toHaveText('‹ Back to the workout');
     const log = await saveAndRead(page);
@@ -4190,7 +4190,7 @@ test.describe('v48 P2 shell', () => {
     const indicator = (await page.locator('.round-indicator').textContent()) ?? '';
     await page.locator('#quit').click();
     await page.locator('#quit-log').click();
-    await expect(page.locator('h2')).toHaveText('Logged what you did · Workout A');
+    await expect(page.locator('h2')).toHaveText('Stopped early · Workout A');
     await page.locator('#back-to-workout').click();
     await expect(page.locator('.exercise-name')).toHaveText('Supported split squat');
     await expect(page.locator('.round-indicator')).toHaveText(indicator);
@@ -4693,7 +4693,7 @@ test.describe('v48 P4 home', () => {
       // v48 · fix r1: only the true first is "New"; Round 1's arm moves are "Back".
       await expect(hero.locator('.hero-new')).toHaveText('New tonight: supported split squat');
       await expect(hero.locator('.hero-back')).toHaveText(
-        'Back tonight: prone row · 1 kg biceps curl'
+        'Again tonight: prone row · 1 kg biceps curl'
       );
       await expect(hero).toContainText('Cardio: 10 min, your pick'); // no lane on the seeds
       await expect(hero.locator('.hero-start')).toHaveText('Start');
@@ -4849,7 +4849,7 @@ test.describe('v48 P4 home', () => {
     // returns, not firsts. They get their own "Back:" line.
     await expect(firsts).not.toContainText('biceps curl');
     await expect(firsts).not.toContainText('prone row');
-    await expect(done.locator('.home-done-back')).toHaveText('Back: prone row · 1 kg biceps curl');
+    await expect(done.locator('.home-done-back')).toHaveText('Again: prone row · 1 kg biceps curl');
     await expect(page.locator('.home-hero')).toHaveCount(0);
     expect(await sageFills(page)).toHaveLength(0);
     // The chips stay — the other two workouts, one tap each.
@@ -5287,7 +5287,7 @@ test.describe('v48 P5 logs', () => {
     await page.goto('/');
     await page.locator('button[data-workout="A"]').click();
     await page.locator('#begin').click();
-    await goToStep(page, 'Prone row (bodyweight)');
+    await goToStep(page, 'Prone row'); // v48 final: display label, key unchanged
     await expect(page.locator('.arm-feel-label')).toHaveText('How did it feel?');
     await page.locator('[data-arm-step="row"][data-arm-feel="right"]').click();
     await expect(page.locator('[data-arm-step="row"][data-arm-feel="right"]')).toHaveAttribute(
