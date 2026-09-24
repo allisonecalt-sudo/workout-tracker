@@ -1798,11 +1798,14 @@ test('ship 3 (replaced): weekly-target grid renders with 3 slots per row', async
 test('ship 3: sparkline renders for history row with >=2 wall-sit values', async ({ page }) => {
   // Seed two B-workouts with wall-sit values, then visit history.
   // localStorage shape is the JSON-stringified array of LogEntry rows.
+  // v49 · look fix (Sep 25 2026): dates moved to on/after Sep 24 2026 — the
+  // sparkline now reads honestWallSitLogs() only (real v45+ measurements,
+  // never a pre-v45 row that saved the week's PRESCRIBED hold as if measured).
   await page.addInitScript(() => {
     const logs = [
       {
         id: 'spark-2',
-        date: '2026-05-14T10:00:00.000Z',
+        date: '2026-09-25T10:00:00.000Z',
         workout: 'A',
         capacityBefore: 5,
         capacityAfter: 6,
@@ -1813,7 +1816,7 @@ test('ship 3: sparkline renders for history row with >=2 wall-sit values', async
       },
       {
         id: 'spark-1',
-        date: '2026-05-11T10:00:00.000Z',
+        date: '2026-09-24T10:00:00.000Z',
         workout: 'A',
         capacityBefore: 5,
         capacityAfter: 5,
@@ -2083,11 +2086,14 @@ test('ship 5: wall-sit line chart renders with 2+ wall-sit values', async ({ pag
   // Seed three A-workouts with rising wall-sit values across the program.
   // Progress screen should render the wall-sit chart with a 6px emphasized
   // last-point and a dashed max guideline.
+  // v49 · look fix (Sep 25 2026): dates moved to on/after Sep 24 2026 — the
+  // trend card now reads honestWallSitLogs() only (real v45+ measurements,
+  // never a pre-v45 row that saved the week's PRESCRIBED hold as if measured).
   await page.addInitScript(() => {
     const logs = [
       {
         id: 'p-3',
-        date: '2026-05-15T10:00:00.000Z',
+        date: '2026-09-26T10:00:00.000Z',
         workout: 'A',
         capacityBefore: 5,
         capacityAfter: 6,
@@ -2098,7 +2104,7 @@ test('ship 5: wall-sit line chart renders with 2+ wall-sit values', async ({ pag
       },
       {
         id: 'p-2',
-        date: '2026-05-11T10:00:00.000Z',
+        date: '2026-09-25T10:00:00.000Z',
         workout: 'A',
         capacityBefore: 5,
         capacityAfter: 5,
@@ -2109,7 +2115,7 @@ test('ship 5: wall-sit line chart renders with 2+ wall-sit values', async ({ pag
       },
       {
         id: 'p-1',
-        date: '2026-05-05T10:00:00.000Z',
+        date: '2026-09-24T10:00:00.000Z',
         workout: 'A',
         capacityBefore: 4,
         capacityAfter: 5,
@@ -4077,8 +4083,14 @@ test.describe('v48 P2 shell', () => {
   test('(e)(f) wall sit: Stop instead of "Running…", then "✓ held 45 s · last time 43"; one sage either side', async ({
     page,
   }) => {
-    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
-    await seedLogs(page, [aLog('seed-43', '2026-09-15T15:00:00.000Z', 43)]);
+    // v49 · look fix (Sep 25 2026): "last time" now reads honestWallSitLogs()
+    // only (real v45+ measurements, not a pre-v45 row that saved the week's
+    // PRESCRIBED hold) — so the seed moves to Sep 24 2026 (still Round 2 Week
+    // 4). Clock moves a day later (Fri Sep 25, still week 4) — same day as
+    // the seed would read as "already done today" on Home (no data-workout
+    // button to start a fresh A from).
+    await movableClock(page, '2026-09-25T14:00:00.000Z', { skipPreCountdown: true });
+    await seedLogs(page, [aLog('seed-43', '2026-09-24T15:00:00.000Z', 43)]);
     await page.goto('/');
     await startA(page);
     await goToStep(page, 'Wall sit');
@@ -4153,6 +4165,48 @@ test.describe('v48 P2 shell', () => {
     await page.locator('#step-back').click();
     await expect(page.locator('.round-break-title')).toHaveText('Round 1 done ✓');
     await expect(page.locator('.round-indicator')).toHaveText('Main · Round 1 of 2');
+  });
+
+  // v49 · look fix (Sep 25 2026): the post-log witness line used to read
+  // w.rounds (the full program) instead of the day's EFFECTIVE rounds, so it
+  // said "both rounds" even on a day she only did one — exactly the two paths
+  // that reduce rounds: Lite (toggled before Start) and "Finish here" (mid-
+  // session). Neither should ever say "both rounds" when she stopped at 1.
+  test('(h) v49 · look fix: "Finish here" on A witnesses "1 round", never "both rounds"', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await toRoundBreak(page);
+    await page.locator('#finish-here').click();
+    await page.locator('#next').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await expect(page.locator('.postlog-witness')).toContainText('1 round');
+    await expect(page.locator('.postlog-witness')).not.toContainText('both rounds');
+    const log = await saveAndRead(page);
+    expect(log['liteDay']).toBe(true);
+  });
+
+  test('(h) v49 · look fix: Lite toggled before Start on C (2 → 1 round) witnesses "1 round", never "both rounds"', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#lite-toggle').click();
+    await page.locator('button:has-text("Start")').click();
+    for (let i = 0; i < 60; i++) {
+      if (await page.locator('text=Quick log').isVisible()) break;
+      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+      if (await nextBtn.isVisible()) await nextBtn.click();
+      else break;
+    }
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    // C's own round-break never even fires (effectiveRounds is 1, the floor).
+    await expect(page.locator('#start-round-2')).toHaveCount(0);
+    await expect(page.locator('.postlog-witness')).toContainText('1 round');
+    await expect(page.locator('.postlog-witness')).not.toContainText('both rounds');
   });
 
   test('(g) round-1 floor: "Start round 2" lands on round 2 step 1; Back returns to round 1', async ({
@@ -4553,9 +4607,10 @@ test.describe('v48 P3 cardio', () => {
     expect(kcal.y).toBeLessThan(time.y);
     expect(time.y).toBeLessThan(pulse.y);
     // v49: Time prefills from the app's own timer when it ran — "10:00" for a
-    // ride that ran its full 10 minutes — with a "from the app" caption.
+    // ride that ran its full 10 minutes — with an "app timer" caption (v49 ·
+    // look fix Sep 25 2026: shortened from "from the app", one line not three).
     await expect(page.locator('#ell-time')).toHaveValue('10:00');
-    await expect(card).toContainText('from the app');
+    await expect(card).toContainText('app timer');
     // …and all five come before Done · Next (pinned at the bottom).
     const order = await page.evaluate(() =>
       [
@@ -4582,6 +4637,42 @@ test.describe('v48 P3 cardio', () => {
     expect(saved['ellipticalPulse']).toBe(128);
   });
 
+  test('(f) v49 · look fix: the Time box reads bare digits as mm:ss (the numeric pad has no colon key), and typing over the prefill drops the "app timer" caption', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#start-timed').click();
+    await advanceClock(page, 10 * 60_000 + 2_000);
+    const card = page.locator('.ell-after-card');
+    // Before she types: still prefilled "app timer".
+    await expect(page.locator('#ell-time')).toHaveValue('10:00');
+    await expect(card).toContainText('app timer');
+    // She types what her console shows, no ':' key on the numeric pad —
+    // "1002" for 10:02. parseMmSs must read the last two digits as seconds,
+    // not 1002 raw seconds (16:42).
+    await page.locator('#ell-time').fill('1002');
+    await expect(card).not.toContainText('app timer');
+    const saved = await finishAndRead(page);
+    expect(saved['ellipticalTimeSec']).toBe(602); // 10:02, not 1002
+  });
+
+  test('(f) v49 · look fix: bare "958" (no colon) reads as 9:58, not 958 raw seconds', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#start-timed').click();
+    await advanceClock(page, 10 * 60_000 + 2_000);
+    await page.locator('#ell-time').fill('958');
+    const saved = await finishAndRead(page);
+    expect(saved['ellipticalTimeSec']).toBe(598); // 9:58, not 958
+  });
+
   test('(f) "7 again" sets the last level in one tap and saves 7', async ({ page }) => {
     await movableClock(page, TUE_WEEK4);
     await seedLogs(page, [
@@ -4603,6 +4694,51 @@ test.describe('v48 P3 cardio', () => {
     await expect(page.locator('#ell-level')).toHaveText('7');
     const saved = await finishAndRead(page);
     expect(saved['ellipticalLevel']).toBe(7);
+  });
+
+  // v49 · look fix (Sep 25 2026): "first ride tonight" was shown whenever no
+  // log had a level COLUMN — true even after a real ride where the level was
+  // left null on purpose (Decision Q5). Now it only fires when she has never
+  // ridden at all.
+  test('(h) v49 · look fix: Home says "level not recorded yet" after a real ride with no level — not "first ride tonight"', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await seedLogs(page, [
+      log('ride', TUE_WEEK4, {
+        cardioLane: 'elliptical',
+        cardioMinutes: 10,
+        ellipticalLevel: null,
+        notes: 'cardio: elliptical 10 min · level 5', // stale v47 marker, still on the row
+      }),
+    ]);
+    await page.goto('/');
+    await expect(page.locator('.home-startnow-card')).toContainText('level not recorded yet');
+    await expect(page.locator('.home-startnow-card')).not.toContainText('first ride tonight');
+  });
+
+  // v49 · look fix (Sep 25 2026): lastEllipticalLevel() used to fall back to
+  // the old notes marker even on a row that HAS cardioLane — so a level left
+  // null on purpose ("5 again") got offered back as a guess.
+  test('(h) v49 · look fix: the after-ride "N again" chip never guesses a level from an old notes marker once cardioLane is set', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4);
+    await seedLogs(page, [
+      log('ride', '2026-09-21T15:00:00.000Z', {
+        cardioLane: 'elliptical',
+        cardioMinutes: 10,
+        ellipticalLevel: null,
+        notes: 'cardio: elliptical 10 min · level 5', // stale v47 marker; the level itself was left null on purpose
+      }),
+    ]);
+    await page.goto('/');
+    await startA(page);
+    await expect(page.locator('.exercise-name')).toHaveText('Elliptical'); // lane memory
+    await page.locator('#start-timed').click();
+    await advanceClock(page, 10 * 60_000 + 2_000);
+    // No "5 again" chip — a deliberately null level is never offered back.
+    await expect(page.locator('#ell-level-same')).toHaveCount(0);
   });
 
   test('(g) walk lane: "Walking · N min", no km or steps anywhere; saved walkMeters null', async ({
@@ -5688,17 +5824,15 @@ test.describe('v48 P6 mirror', () => {
     await expect(
       sn.locator('.start-now-row').filter({ hasText: 'Elliptical level' })
     ).toContainText('3 → 7');
-    await expect(sn.locator('.start-now-row').filter({ hasText: 'Wall sit' })).toContainText(
-      '52 → 45 s'
-    );
+    // v49 · look fix (Sep 25 2026): every wallSitSec here predates the v45
+    // real-timing capture (Sep 24), so honestWallSitLogs() excludes all of
+    // them — the row and the trend card both omit rather than show a
+    // prescribed number as measured (the exact "Progress disagrees with
+    // Home" bug this fix closes).
+    await expect(sn.locator('.start-now-row').filter({ hasText: 'Wall sit' })).toHaveCount(0);
     await expect(sn.locator('.progress-card-meta')).toHaveText('since May 12');
-    // Latest by DATE: Sep 20's 45 s, best 52 s in the meta.
     const wall = page.locator('.wall-sit-card');
-    await expect(wall.locator('.progress-stat-big')).toHaveText('45 s');
-    await expect(wall.locator('.progress-card-meta')).toHaveText(
-      'best 52 s · -7s since first session'
-    );
-    await expect(wall.locator('line.round-rule')).toHaveCount(1);
+    await expect(wall).toHaveCount(0);
     // Subtitle chips.
     const sub = page.locator('.progress-subtitle');
     await expect(sub).toContainText('A 3');
@@ -5985,6 +6119,11 @@ test.describe('v48 P8 sweep', () => {
 
   // Visible elements painted with the sage primary (fill or gradient), plus any
   // .btn-primary — the "one sage per screen" rule.
+  // v49 · look fix (Sep 25 2026): this only ever counted .btn-primary +
+  // background — it missed sage text/border on a :active press and sage
+  // SVG fill/stroke in the how-to illustrations, both real "second sage"
+  // violations the Opus check found. Now it checks every paint a sage token
+  // can land on: background, text color, border and SVG fill/stroke.
   const sageCount = (page: Page): Promise<string[]> =>
     page.evaluate((sage) => {
       return [...document.querySelectorAll<HTMLElement>('#app *')]
@@ -5995,7 +6134,11 @@ test.describe('v48 P8 sweep', () => {
           return (
             el.classList.contains('btn-primary') ||
             sage.includes(cs.backgroundColor) ||
-            sage.some((c) => cs.backgroundImage.includes(c))
+            sage.some((c) => cs.backgroundImage.includes(c)) ||
+            sage.includes(cs.color) ||
+            sage.includes(cs.borderTopColor) ||
+            sage.includes(cs.fill) ||
+            sage.includes(cs.stroke)
           );
         })
         .map((el) => el.id || String(el.className));
@@ -6196,4 +6339,35 @@ test.describe('v48 P8 sweep', () => {
     const sw = await (await page.request.get('/sw.js')).text();
     expect(sw).toContain("'workout-tracker-v49'");
   });
+});
+
+// v49 · look fix (Sep 25 2026): the self-hosted DM Sans ships no tabular
+// figures — font-variant-numeric: tabular-nums was a no-op on it, so every
+// centred running timer shifted sideways digit to digit. Fixed by giving
+// timer digits a system-font fallback that DOES carry tnum (--font-numeric).
+// This measures two same-length strings with maximally different digit
+// shapes off the live .timer-display CSS — no width drift means the digits
+// are truly fixed-width, not just visually close.
+test('v49 · look fix: .timer-display renders tabular digits — "1:11" and "0:00" measure the same width', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const widths = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const measure = (text: string): number => {
+      const el = document.createElement('div');
+      el.className = 'timer-display';
+      el.style.position = 'absolute';
+      el.style.visibility = 'hidden';
+      el.style.left = '-9999px';
+      el.textContent = text;
+      document.body.appendChild(el);
+      const w = el.getBoundingClientRect().width;
+      el.remove();
+      return w;
+    };
+    return { a: measure('1:11'), b: measure('0:00'), c: measure('8:88') };
+  });
+  expect(Math.abs(widths.a - widths.b)).toBeLessThanOrEqual(1); // sub-pixel rounding only
+  expect(Math.abs(widths.a - widths.c)).toBeLessThanOrEqual(1);
 });

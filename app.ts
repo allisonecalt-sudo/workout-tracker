@@ -3394,6 +3394,11 @@ function lastEllipticalLevel(): number | null {
     if (typeof l.ellipticalLevel === 'number' && l.ellipticalLevel > 0) {
       return clampEllipticalLevel(l.ellipticalLevel);
     }
+    // v49 · look fix (Sep 25 2026): skip the notes-marker fallback once a row
+    // carries cardioLane — same rule as rideLevel() at L8477. A v48+ ride with
+    // a null level was left null ON PURPOSE (Decision Q5); guessing it back
+    // from old notes text offered her "5 again" for a level she never rode.
+    if (l.cardioLane) continue;
     const m = ELLIPTICAL_MARKER_RE.exec(l.notes ?? '');
     if (m?.[1]) return clampEllipticalLevel(Number(m[1]));
   }
@@ -3468,7 +3473,11 @@ function ellipticalKcal(): number | null {
   return Number.isFinite(n) && n >= 0 && n < 5000 ? Math.round(n * 10) / 10 : null;
 }
 
-// "10:02" → 602. Accepts a bare number of seconds too ("602"). Anything else
+// "10:02" → 602. Bare 1-2 digits are a plain second count ("45" → 45).
+// v49 · look fix (Sep 25 2026): the box opens a numeric phone pad with no ':'
+// key, so she types the console's digits with nothing between them — "1002"
+// for 10:02, "958" for 9:58. Bare 3-4 digits are read as mm:ss, last two
+// digits the seconds (ss ≥ 60 is invalid, not a reading). Anything else
 // (empty, garbled) is not a reading — null, same rule as every other field.
 function parseMmSs(raw: string): number | null {
   const v = raw.trim();
@@ -3476,6 +3485,18 @@ function parseMmSs(raw: string): number | null {
   const mmss = /^(\d{1,3}):([0-5]?\d)$/.exec(v);
   if (mmss?.[1] && mmss[2]) {
     const sec = Number(mmss[1]) * 60 + Number(mmss[2]);
+    return sec > 0 && sec < 18000 ? sec : null;
+  }
+  const bareDigits = /^\d{1,4}$/.exec(v);
+  if (bareDigits) {
+    if (v.length <= 2) {
+      const sec = Number(v);
+      return sec > 0 && sec < 18000 ? sec : null;
+    }
+    const ss = Number(v.slice(-2));
+    const mm = Number(v.slice(0, -2));
+    if (ss >= 60) return null;
+    const sec = mm * 60 + ss;
     return sec > 0 && sec < 18000 ? sec : null;
   }
   const n = Number(v);
@@ -5903,8 +5924,10 @@ function getWallSitTrend(allLogs: LogEntry[], uptoLogId: string | null, max = 10
     const idx = allLogs.findIndex((l) => l.id === uptoLogId);
     if (idx >= 0) upto = allLogs.slice(idx); // newest-first slice from this row backwards in time
   }
-  const wallSits = upto
-    .filter((l) => l.wallSitSec > 0)
+  // v49 · look fix (Sep 25 2026): honestWallSitLogs() — same real-measurement
+  // filter as Home's Start → Now card (see its comment above honestWallSitLogs),
+  // so the Sessions sparkline can't show a pre-v45 prescribed number as data.
+  const wallSits = honestWallSitLogs(upto)
     .map((l) => l.wallSitSec)
     .reverse(); // now oldest → newest
   if (wallSits.length <= max) return wallSits;
@@ -6573,12 +6596,24 @@ function renderHomeStartNowCard(logs: LogEntry[]): string {
   if (!first) return '';
 
   const levels = chrono.map(rideLevel).filter((v): v is number => v !== null);
+  // v49 · look fix (Sep 25 2026): "first ride tonight" was shown whenever no
+  // log had a level column — true even after a real ride (level null on
+  // purpose), on a B day (no ride tonight at all), and in the morning. Now it
+  // only fires when she has genuinely never ridden AND tonight's pick has the
+  // ride step; a ridden-but-unrecorded level says so plainly instead (Opus
+  // check).
+  const hasRiddenBefore = chrono.some((l) => l.cardioLane === 'elliptical');
+  const picksRideToday = getWorkoutById(getTodaysPick()).warmup.some(
+    (e) => e.name === 'Outdoor walk'
+  );
   const levelVal =
-    levels.length === 0
-      ? `<span class="sn-first">${ELLIPTICAL_START_LEVEL}</span> → <span class="sn-last">first ride tonight</span>`
-      : levels.length === 1
-        ? `<span class="sn-last">${levels[0]}</span>`
-        : `<span class="sn-first">${levels[0]}</span> → <span class="sn-last">${levels[levels.length - 1]}</span>`;
+    levels.length === 1
+      ? `<span class="sn-last">${levels[0]}</span>`
+      : levels.length > 1
+        ? `<span class="sn-first">${levels[0]}</span> → <span class="sn-last">${levels[levels.length - 1]}</span>`
+        : !hasRiddenBefore && picksRideToday
+          ? `<span class="sn-first">${ELLIPTICAL_START_LEVEL}</span> → <span class="sn-last">first ride tonight</span>`
+          : `<span class="sn-last">level not recorded yet</span>`;
 
   const rows: [string, string][] = [['Elliptical level', levelVal]];
 
@@ -7092,7 +7127,7 @@ function renderEllipticalAfterCard(ex: Exercise): string {
     opts: { type?: string; step?: string; min?: string; max?: string; sub?: string } = {}
   ): string => `
       <label class="ell-reading" for="${id}">
-        <span class="ell-reading-label">${label}${opts.sub ? `<span class="ell-reading-sub">${opts.sub}</span>` : ''}</span>
+        <span class="ell-reading-label">${label}${opts.sub ? `<span class="ell-reading-sub" id="${id}-sub">${opts.sub}</span>` : ''}</span>
         <span class="ell-reading-field">
           <input type="${opts.type ?? 'number'}" id="${id}" inputmode="${opts.type === 'text' ? 'numeric' : 'decimal'}" ${opts.step ? `step="${opts.step}"` : ''} ${opts.min ? `min="${opts.min}"` : ''} ${opts.max ? `max="${opts.max}"` : ''} placeholder="–" value="${escapeHtml(value)}" />
           ${unit ? `<span class="ell-reading-unit">${unit}</span>` : ''}
@@ -7115,7 +7150,7 @@ function renderEllipticalAfterCard(ex: Exercise): string {
       <div class="ell-readings-row">
         ${readingRow('ell-km', 'Distance', km, 'km', { step: '0.01', min: '0' })}
         ${readingRow('ell-kcal', 'Calories', kcal, 'kcal', { step: '0.1', min: '0' })}
-        ${readingRow('ell-time', 'Time', time, '', { type: 'text', sub: timeFromApp ? 'from the app' : undefined })}
+        ${readingRow('ell-time', 'Time', time, '', { type: 'text', sub: timeFromApp ? 'app timer' : undefined })}
         ${readingRow('ell-pulse', 'Pulse', pulse, 'bpm', { step: '1', min: '30', max: '230' })}
       </div>
     </div>`;
@@ -7229,11 +7264,19 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
     </div>`;
 
   if (laneRan) {
-    // AFTER: the done face, then the one card, then Done · Next (sage).
+    // AFTER: v49 · look fix (Sep 25 2026) — the name card and the "Done ✓ N
+    // min done" card used to be two separate `.card` blocks; with Calories +
+    // Time added to the readings, that pushed Time/Pulse under the pinned
+    // bar — the fold check found scrollHeight 1170 in a 915 viewport (Opus
+    // check). One compact line replaces both; the readings stay their own
+    // card, then Done · Next (sage).
+    const doneMins = laneDoneMinutes() ?? minutes;
     return `
       ${header}
-      ${nameCard('')}
-      ${renderLaneTimerCard(ex, true)}
+      <div class="card ell-done-line">
+        <span class="exercise-name">${ELLIPTICAL_NAME}</span>
+        <span class="timer-done timer-held">✓ ${doneMins} min done</span>
+      </div>
       ${renderEllipticalAfterCard(ex)}
       ${renderEllipticalGuide(false)}
       ${renderStepNav('Done · Next')}
@@ -7283,8 +7326,11 @@ function renderHoldTimerCard(ex: Exercise, showTempo: boolean): string {
   } else if (held > 0) {
     // "last time" = the most recent saved session with a real wall sit (logs
     // are newest-first; this session isn't saved yet). Omitted when none.
-    const last =
-      ex.name === 'Wall sit' ? loadLogs().find((l) => l.wallSitSec > 0)?.wallSitSec : undefined;
+    // v49 · look fix (Sep 25 2026): honestWallSitLogs() only — was reading any
+    // wallSitSec>0, including a pre-v45 row that saved the week's PRESCRIBED
+    // hold, not what she actually held (Home already excluded those; this
+    // face didn't, so the two disagreed — Opus check).
+    const last = ex.name === 'Wall sit' ? honestWallSitLogs(loadLogs())[0]?.wallSitSec : undefined;
     inner = `
       <div class="timer-label">Done</div>
       <div class="timer-done timer-held">✓ held ${held} s${last ? `<span class="timer-last"> · last time ${last}</span>` : ''}</div>
@@ -7513,8 +7559,14 @@ function postLogWitnessLine(w: Workout): string {
     );
     if (elapsedSec < MAX_PLAUSIBLE_DURATION_SEC) parts.push(formatDuration(elapsedSec));
   }
-  if (w.rounds === 2) parts.push('both rounds');
-  else if (w.rounds > 2) parts.push(`${state.currentRound} of ${w.rounds} rounds`);
+  // v49 · look fix (Sep 25 2026): the round count has to be the day's EFFECTIVE
+  // rounds — Lite, or "Finish here — it still counts" (finishAtRoundOne sets
+  // liteDay too) — not the full program's w.rounds. The line was saying "both
+  // rounds" on exactly the days she only did one (Opus check).
+  const rounds = effectiveRounds(w);
+  if (rounds === 2) parts.push(state.currentRound >= 2 ? 'both rounds' : '1 round');
+  else if (rounds > 2) parts.push(`${state.currentRound} of ${rounds} rounds`);
+  else parts.push('1 round'); // effectiveRounds 1 — e.g. Lite on a 2-round day (C)
   parts.push(`${getWeekCount(0) + 1} of 3 this week`);
   return parts.join(' · ');
 }
@@ -8478,7 +8530,11 @@ function renderStartNowCard(logs: LogEntry[]): string {
   if (levels.length) rows.push(['Elliptical level', pair(levels, '')]);
   const kms = logs.map(rideKm).filter((v): v is number => v !== null);
   if (kms.length) rows.push(['Elliptical km', pair(kms, ' km')]);
-  const walls = logs.filter((l) => l.wallSitSec > 0).map((l) => l.wallSitSec);
+  // v49 · look fix (Sep 25 2026): honestWallSitLogs() — was every wallSitSec>0,
+  // including pre-v45 rows that saved the week's PRESCRIBED hold, not a real
+  // measurement (Home's own Start → Now card already excluded them; Progress's
+  // didn't, so the two disagreed on the same number — Opus check).
+  const walls = honestWallSitLogs(logs).map((l) => l.wallSitSec);
   if (walls.length) rows.push(['Wall sit', pair(walls, ' s')]);
   return `
     <div class="card progress-card start-now-card">
@@ -8496,8 +8552,12 @@ function renderStartNowCard(logs: LogEntry[]): string {
 
 function renderWallSitTrendCard(logs: LogEntry[]): string {
   // Wall-sit values only come from workouts that include a wall sit (A).
-  // Use every log with wallSitSec > 0, chronological (by date — v48 · P6).
-  const wallLogs = logs.filter((l) => l.wallSitSec > 0);
+  // v49 · look fix (Sep 25 2026): honestWallSitLogs() — was every wallSitSec>0,
+  // chronological, including pre-v45 rows that saved the week's PRESCRIBED
+  // hold, not a real measurement. That's why this card used to show "33 → 45"
+  // and "best 48 s" while Home's own card (already honest) said "44 → 45" for
+  // the same person — two cards, same name, different numbers (Opus check).
+  const wallLogs = honestWallSitLogs(logs);
   const wallSits = wallLogs.map((l) => l.wallSitSec);
 
   if (wallSits.length < 2) {
@@ -8519,8 +8579,16 @@ function renderWallSitTrendCard(logs: LogEntry[]): string {
   const maxVal = Math.max(...wallSits);
   const diff = last - first;
   // Plain words, no colour (v48 · P6): the hero reports where she IS.
+  // v49 · look fix (Sep 25 2026): names the wall sit's OWN start date (the
+  // first honest measurement, wallLogs[0]) — not "first session", which used
+  // to read as the program's start even though this trend only goes back to
+  // the real timing capture (Opus check).
+  const wallStartDate = wallLogs[0]?.date;
+  const sinceLabel = wallStartDate
+    ? `since ${formatMonthDay(wallStartDate)}`
+    : 'since first session';
   const sinceFirst =
-    diff === 0 ? 'same as first session' : `${diff > 0 ? '+' : ''}${diff}s since first session`;
+    diff === 0 ? `same ${sinceLabel}` : `${diff > 0 ? '+' : ''}${diff}s ${sinceLabel}`;
 
   // The Round 1 → 2 boundary (and any later round): the first wall sit on or
   // after each round's start.
@@ -9570,9 +9638,13 @@ function attachHandlers(): void {
     setEllipticalReading(WW_ELLIPTICAL_KCAL_KEY, ellKcal.value)
   );
   const ellTime = document.getElementById('ell-time') as HTMLInputElement | null;
-  ellTime?.addEventListener('input', () =>
-    setEllipticalReading(WW_ELLIPTICAL_TIME_KEY, ellTime.value)
-  );
+  ellTime?.addEventListener('input', () => {
+    setEllipticalReading(WW_ELLIPTICAL_TIME_KEY, ellTime.value);
+    // v49 · look fix (Sep 25 2026): "app timer" was staying up after she
+    // typed over the prefill — this field saves per-keystroke with no
+    // re-render (keeps focus), so the caption never got the chance to drop.
+    document.getElementById('ell-time-sub')?.remove();
+  });
 
   // …and back out again to the three-way choice, in case she changes her mind.
   bindClick('ww-outdoor', () => {
