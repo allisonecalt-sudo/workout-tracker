@@ -59,6 +59,12 @@
 
   /* Type */
   --font: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* v49 · look fix (Sep 25 2026): the self-hosted DM Sans ships no tabular
+     figures (checked against the Google-hosted copy too, same result) — every
+     centred running timer was shifting sideways each second, digit to digit.
+     System fonts DO carry tnum (it's why v48's system font never did this),
+     so the timer digits skip DM Sans on purpose. */
+  --font-numeric: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --t-giant: 148px; /* ride clock: the one number on the screen */
   --t-hold: 120px; /* wall sit / plank / wall lean timer */
   --t-number: 88px; /* reps on a step; level after the ride */
@@ -956,6 +962,7 @@ button:disabled {
  * readable from the floor" register at a size that still fits; splitting the
  * hold into its own modifier for the full 120px is a P10 follow-up. */
 .timer-display {
+  font-family: var(--font-numeric); /* v49 · look fix: DM Sans has no tnum */
   font-size: 72px;
   font-weight: var(--w-number);
   color: var(--ink);
@@ -966,7 +973,9 @@ button:disabled {
 }
 
 .countdown-big {
+  font-family: var(--font-numeric); /* v49 · look fix: DM Sans has no tnum */
   font-size: var(--t-giant);
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
   animation: pulse 1s var(--ease);
 }
@@ -1088,6 +1097,7 @@ button:disabled {
 }
 
 .rest-ring-num {
+  font-family: var(--font-numeric); /* v49 · look fix: DM Sans has no tnum */
   font-size: 64px;
   font-weight: 600;
   color: var(--text);
@@ -3512,6 +3522,11 @@ input[type='number']:focus {
   margin-top: 10px;
 }
 
+/* v49 · look fix (Sep 25 2026): the field was flex + min-width/min-height, so
+ * it grew or shrank with its own content — ragged left edges (x 133/128/129/
+ * 250 in the check) and a 74px Pulse box next to 201-231px others. A grid
+ * column is a HARD 132px, the same for every row, no matter what's inside. */
+
 .ell-readings-title {
   color: var(--ink-2);
   font-size: var(--t-small);
@@ -3521,9 +3536,9 @@ input[type='number']:focus {
 }
 
 .ell-reading {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 132px;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   min-height: 68px;
   border-bottom: 1px solid var(--hair);
@@ -3549,10 +3564,10 @@ input[type='number']:focus {
 
 .ell-reading-field {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
-  min-width: 132px;
-  min-height: 48px;
+  width: 132px;
+  height: 48px;
   padding: 0 10px;
   border: 1px solid var(--hair-strong);
   border-radius: var(--r-sm);
@@ -3597,6 +3612,31 @@ input[type='number']:focus {
   color: var(--ink-2);
   font-size: var(--t-caption);
   white-space: nowrap;
+}
+
+/* v49 · look fix (Sep 25 2026): one line stands in for the old separate name
+ * card + "Done ✓ N min done" card after a ride — frees the vertical room
+ * Calories + Time need to stay above the pinned bar with no scroll. */
+.ell-done-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+}
+
+.ell-done-line .exercise-name {
+  margin-bottom: 0;
+  font-size: var(--t-exercise);
+  font-weight: var(--w-title);
+}
+
+.ell-done-line .timer-done {
+  font-size: var(--t-body);
+  color: var(--ink-2);
+  text-align: right;
+  padding: 0;
 }
 
 /* Setup + ride steps (v44). */
@@ -3762,9 +3802,14 @@ input[type='number']:focus {
   cursor: pointer;
 }
 
+/* v49 · look fix (Sep 25 2026): press was flashing sage — a SECOND sage next
+ * to the real one-sage action on screen (spec §4, Opus check). Every other
+ * secondary button presses to --surface-2 (see button:active); this one now
+ * matches. */
 .walk-log-btn:active {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--surface-2);
+  border-color: var(--edge);
+  color: var(--text);
 }
 
 .walk-note {
@@ -3828,9 +3873,12 @@ input[type='number']:focus {
   cursor: pointer;
 }
 
+/* v49 · look fix (Sep 25 2026): same fix as .walk-log-btn:active above — no
+ * sage on press. */
 .pause-inline:active {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--surface-2);
+  border-color: var(--edge);
+  color: var(--text);
 }
 
 /* One sage button per screen = Done · Next. "Listen — how to do it" was a
@@ -3906,9 +3954,13 @@ input[type='number']:focus {
   border: 1px solid var(--border);
 }
 
+/* v49 · look fix (Sep 25 2026): same bug class as .walk-log-btn:active /
+ * .pause-inline:active above — the fix wasn't a line number, it's every
+ * :active rule that still flashed sage. No sage on press. */
 .step-nav .btn-back:active {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--surface-2);
+  border-color: var(--edge);
+  color: var(--text);
 }
 
 /* On the rest ring, Back sits under "Hold to skip rest" as a plain ghost link. */
@@ -4291,10 +4343,16 @@ input[type='number']:focus {
   color: var(--ink-2);
 }
 
+/* v49 · look fix (Sep 25 2026): no line-height meant the browser default
+ * (~1.5) turned an 88px numeral into a 132px-tall box — nearly triple the
+ * 48px circles beside it. The empty "—" read as a grey loading skeleton, not
+ * a dash (the check's "60px empty band"). line-height: 1 sizes the box to
+ * the glyph and centres it against the stepper buttons. */
 .ell-stepper .settings-stepper-val {
   min-width: 60px;
   font-size: var(--t-number);
   font-weight: var(--w-number);
+  line-height: 1;
   color: var(--ink);
   letter-spacing: var(--track-number);
 }
