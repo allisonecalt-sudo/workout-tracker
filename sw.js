@@ -27,6 +27,10 @@ const SHELL_ASSETS = [
   './dist/exercise-visuals.js',
   './dist/exercise-detail.js',
   './manifest.webmanifest',
+  // v49 · look (Sep 25 2026): self-hosted DM Sans (spec §3 "Font loading") —
+  // precached so it renders offline on the floor, never a runtime Google
+  // Fonts fetch.
+  './assets/fonts/DMSans-Variable.woff2',
   './icon.svg',
   './icon-192.png',
   './icon-512.png',

@@ -22,123 +22,146 @@
  * archive/redesign-pre-2026-05-15/styles.before-redesign.css (archive-not-delete).
  * --------------------------------------------------------------------------- */
 
+/* ----------------------------------------------------------------------------
+ * v49 · look (Fri Sep 25 2026) — "Calm Instrument" visual pass.
+ * Spec: second-brain/self/health/workout-app-audit-2026-09-24/design-v49/
+ * SPEC-v49.md §3. Her words: "and yeah graphic design matters" → "ok an
+ * agent decides makes decision". New tokens under the OLD names as aliases,
+ * so the 4,800-line sheet below inherits the new look with no rewrite.
+ * -------------------------------------------------------------------------- */
 :root {
-  /* --- Base surfaces (kept; dark palette is on-axis for Allison) ---------- */
+  /* Surfaces: her warm near-black (unchanged bg) */
   --bg: #1a1f1c;
-  --bg-elev: #202623; /* card surface — same hue, slight elevation */
-  --bg-elev-2: #2a312d; /* input / pressed / chip backdrops */
-  --bg-elev-3: #353d38; /* hover state — rarely needed in dark mode */
+  --surface: #1f2421; /* cards */
+  --surface-2: #262c28; /* inputs, picture well, pressed state */
 
-  /* --- Text -------------------------------------------------------------- */
-  --text: #f0ede5; /* primary, warm white */
-  --text-dim: #a8a59c; /* secondary, body-meta */
-  /* tertiary (labels, small-caps). Sep 24 2026, v48 P8: was #767368 = 3.24:1
-   * on the card surface (--bg-elev), below AA on every label tier (timer label,
-   * session meta, detail labels, section labels, progress labels, rest sub).
-   * #9c998f = 5.41:1 on --bg-elev, 4.68:1 on --bg-elev-2 (the review tiles,
-   * inputs and chips sit on that one), 5.86:1 on --bg — one token lifts them
-   * all ("fix the class, not the instance"). The tiers now differ by size,
-   * weight and caps more than by a hard-to-read grey; --text-dim stays a
-   * shade lighter. */
-  --text-dim-2: #9c998f;
+  /* Ink: three readable tiers */
+  --ink: #f0ede5;
+  --ink-2: #b8b5ab;
+  --ink-3: #9a978d; /* was --text-dim-2 #767368 (3.5:1, failed AA) */
 
-  /* --- Borders (replaces box-shadow for elevation) ----------------------- */
-  --border: rgba(255, 255, 255, 0.06); /* subtle separator */
-  --border-strong: rgba(255, 255, 255, 0.12); /* hero / picked card */
-  --border-divider: rgba(255, 255, 255, 0.04); /* hairline between rows */
+  /* Lines */
+  --hair: rgba(240, 237, 229, 0.09); /* structure: card edges, row dividers */
+  --hair-strong: rgba(240, 237, 229, 0.18); /* hero cards, input edges, tracks */
+  --edge: rgba(240, 237, 229, 0.38); /* anything tappable that isn't sage */
 
-  /* --- Accent split into roles ------------------------------------------- *
-   * The pre-redesign sheet had a single --accent doing 9 jobs (primary
-   * action + sync status + stat number + active timer + completed bar +
-   * dot A + Do-cue + range value + sage everywhere). That diluted hierarchy.
-   * Each variable below names ONE role. When you see sage, you know what it
-   * means: "this is the primary action right now" — not "this is the brand
-   * color."
-   */
-  --accent: #8fbc8f; /* PRIMARY ACTION + active timer ONLY */
-  --accent-hover: #a3cfa3;
-  --accent-progress: #7a9b7a; /* sync-good, completed-bar fill, week-dot A */
-  /* "Do" cues in how-to + detail cards. Sep 24 2026, v48 P8: was the same
-   * sage as --accent, so every ✓ Do mark, → fix arrow and chevron read as a
-   * second primary action. Now an ALIAS of --text-dim (her rule: sage = "the
-   * primary action right now"); Don't keeps its own warm-orange mark. */
-  --accent-do: var(--text-dim);
-  --accent-warn: #e6b450; /* back/wrist warnings (was --warn) */
-  --accent-danger: #d97757; /* destructive / quit / error */
-  --accent-rest: #6c8a9b; /* rest screen — blue-gray, distinct from work */
+  /* The ONE accent: the primary action on this screen */
+  --sage: #8fbc8f;
+  --sage-press: #7fae7f;
+  --on-sage: #13200f;
 
-  /* --- Workout identity dots (desaturated; let accent stay the one shouty thing) */
-  --dot-a: #7a9070; /* A — sage muted */
-  --dot-b: #7088a0; /* B — steel */
-  --dot-c: #8a7a8e; /* C — mauve */
+  /* Roles that are not decoration (not on the 5 key screens) */
+  --danger: #d97757; /* Quit-confirm "Quit" + Clear data only */
+  --warn: #e6b450; /* weekly review back pain >= 3/10 only */
+  --dot-a: #7a9070;
+  --dot-b: #7088a0;
+  --dot-c: #8a7a8e; /* Sessions / Progress / Weekly only */
 
-  /* --- Radii ------------------------------------------------------------- */
-  --radius-sm: 10px; /* chips, inputs, small buttons */
-  --radius: 14px; /* default cards */
-  --radius-lg: 20px; /* hero / picked workout card */
-  --radius-pill: 999px;
+  /* Type */
+  --font: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --t-giant: 148px; /* ride clock: the one number on the screen */
+  --t-hold: 120px; /* wall sit / plank / wall lean timer */
+  --t-number: 88px; /* reps on a step; level after the ride */
+  --t-letter: 112px; /* the workout letter on Home */
+  --t-command: 36px; /* "Raise the level" */
+  --t-exercise: 34px; /* exercise name */
+  --t-title: 30px; /* screen titles: "Ride done", "Workout A done" */
+  --t-value: 26px; /* machine read-outs, stat values */
+  --t-lead: 21px; /* hero sub-title, units beside a big number */
+  --t-body: 17px; /* base */
+  --t-small: 15px; /* labels, card heads, secondary lines */
+  --t-caption: 14px; /* the smallest thing she must READ */
+  --t-meta: 13px; /* version tag + sync word only (not must-read) */
+  --w-number: 600;
+  --w-title: 700;
+  --w-strong: 650;
+  --w-label: 600;
+  --w-body: 400;
+  --track-number: -0.04em;
+  --track-title: -0.02em;
+  --track-body: 0;
 
-  /* --- Type scale (the new ramp) ----------------------------------------
-   * 11 — micro-label small-caps (1.5px tracking)
-   * 13 — meta / sub-label
-   * 15 — small body
-   * 17 — body (base font-size)
-   * 22 — sub-heading (h2-style)
-   * 32 — heading
-   * 44 — display (big stat numbers, in-workout names on tablet)
-   *
-   * Pre-redesign was 12 / 14 / 18 / 22 / 28 / 30 — too compressed.
-   * Nothing was small enough to be a label, nothing large enough to be a moment.
-   */
+  /* Space: 4-pt rhythm */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s8: 32px;
+  --s10: 40px;
+  --gutter: 20px;
+
+  /* Radii: her 10 / 14 / 20 */
+  --r-sm: 10px;
+  --r: 14px;
+  --r-lg: 20px;
+  --r-pill: 999px;
+
+  /* Touch */
+  --tap: 48px; /* floor for every target */
+  --tap-primary: 64px; /* pinned primary + its Back */
+  --tap-step: 60px; /* − / + level stepper */
+
+  /* Motion: settle, never bounce */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 140ms;
+  --dur: 200ms;
+
+  /* ---- Aliases: old names → new values (keep until unused) ---- */
+  --bg-elev: var(--surface);
+  --bg-elev-2: var(--surface-2);
+  --bg-elev-3: var(--surface-2);
+  --text: var(--ink);
+  --text-dim: var(--ink-2);
+  --text-dim-2: var(--ink-3);
+  --border: var(--hair);
+  --border-strong: var(--hair-strong);
+  --border-divider: var(--hair);
+  --accent: var(--sage);
+  --accent-hover: var(--sage); /* no hover state on a phone */
+  --accent-progress: var(--ink-2); /* bars, fills: ink, not sage */
+  --accent-do: var(--ink-2);
+  --accent-warn: var(--warn);
+  --accent-danger: var(--danger);
+  --accent-rest: var(--ink-2); /* the rest ring goes neutral */
+  --radius-sm: var(--r-sm);
+  --radius: var(--r);
+  --radius-lg: var(--r-lg);
+  --radius-pill: var(--r-pill);
   --font-display: 44px;
-  --font-heading: 32px;
-  --font-subheading: 22px;
-  --font-body: 17px;
-  --font-small: 15px;
-  --font-meta: 13px;
-  --font-micro: 11px;
-
-  /* Letter spacing — tight on display, loose on small-caps labels */
-  --track-display: -0.025em;
-  --track-heading: -0.02em;
+  --font-heading: var(--t-title);
+  --font-subheading: var(--t-lead);
+  --font-body: var(--t-body);
+  --font-small: var(--t-small);
+  --font-meta: var(--t-caption);
+  --font-micro: var(--t-meta);
+  --track-display: var(--track-number);
+  --track-heading: var(--track-title);
   --track-tight: -0.01em;
-  --track-label: 1.5px; /* small-caps labels (Things 3 / Linear convention) */
+  --track-label: 0;
+  --font-family: var(--font);
+  --grad-surface: var(--surface); /* gradients retired: flat surfaces */
+  --grad-hero: var(--surface);
+  --grad-primary: var(--sage);
+  --glass-bg: transparent;
+  --glass-bg-strong: transparent;
+  --glass-blur: none;
+  --glow-accent: none;
+  --ease-spring: var(--ease); /* no overshoot anywhere */
+  --ease-out: var(--ease);
+  --dur-base: var(--dur);
+}
 
-  /* Font family — keep system stack; it's already on-axis for performance
-   * and accessibility. Inter Variable is an optional later upgrade. */
-  --font-family:
-    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, system-ui, sans-serif;
-
-  /* --- COOLER-LOOK additions (2026-05-15 evening) ---------------------- */
-
-  /* Same-hue gradients — depth, NOT color. Used on hero card surfaces. */
-  --grad-surface: linear-gradient(180deg, var(--bg-elev) 0%, var(--bg-elev-2) 100%);
-  --grad-hero: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--accent) 6%, var(--bg-elev)) 0%,
-    var(--bg-elev) 60%,
-    var(--bg-elev-2) 100%
-  );
-  --grad-primary: linear-gradient(180deg, var(--accent-hover) 0%, var(--accent) 100%);
-
-  /* Glass — Apple Liquid Glass on a strict diet. Used on 3 elements max. */
-  --glass-bg: rgba(255, 255, 255, 0.04);
-  --glass-bg-strong: rgba(255, 255, 255, 0.06);
-  --glass-blur: blur(10px) saturate(140%);
-
-  /* Glow / inset stroke — used on today's-pick hero card for premium feel.
-   * Two-stop inset: subtle accent glow + 1px highlight at the top edge. */
-  --glow-accent:
-    0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent) inset,
-    0 1px 0 0 rgba(255, 255, 255, 0.06) inset,
-    0 8px 24px -8px color-mix(in srgb, var(--accent) 18%, transparent);
-
-  /* Motion — spring overshoot (Linear / Apple Fitness+ register, NOT bouncy).
-   * 0.34, 1.56, 0.64, 1 = 8% overshoot on settle. */
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
-  --dur-fast: 0.16s;
-  --dur-base: 0.22s;
+/* Self-hosted (spec §3 "Font loading"): one variable woff2, weights 100-1000,
+ * Latin subset, ~36 KB. Never Google Fonts at runtime — the SW precaches this
+ * file (sw.js SHELL_ASSETS) so it renders offline on the floor. */
+@font-face {
+  font-family: 'DM Sans';
+  src: url('assets/fonts/DMSans-Variable.woff2') format('woff2-variations');
+  font-weight: 100 1000;
+  font-style: normal;
+  font-display: swap;
 }
 
 * {
@@ -174,7 +197,9 @@ body {
  * orange auto-outline, off-palette (Sep 24 2026 audit). Inputs keep their
  * own accent-border focus rules. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  /* v49 · look: off sage — sage means "the primary action right now", a
+   * focus ring is not that (spec §6 global). */
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
@@ -188,12 +213,12 @@ body {
 
 h1 {
   font-size: var(--font-heading);
-  font-weight: 600;
+  font-weight: var(--w-title);
   letter-spacing: var(--track-heading);
   line-height: 1.1;
   margin-bottom: 6px;
-  /* Subtle warmth — 1% sage hue mix on the warm-white. Reads "alive," never green. */
-  color: color-mix(in srgb, var(--accent) 1%, var(--text));
+  /* v49 · look: plain ink — the 1% sage hue-mix was a second accent (spec §6). */
+  color: var(--ink);
 }
 
 h2 {
@@ -204,11 +229,13 @@ h2 {
   margin-bottom: 12px;
 }
 
+/* v49 · look: sentence case — the tracked, grey, uppercase labels are gone
+ * (spec §1, §6 h3). */
 h3 {
-  font-size: var(--font-micro);
+  font-size: var(--t-small);
   font-weight: 600;
-  color: var(--text-dim-2);
-  text-transform: uppercase;
+  color: var(--ink-2);
+  text-transform: none;
   letter-spacing: var(--track-label);
   margin-bottom: 14px;
 }
@@ -224,66 +251,59 @@ h3 {
  * metadata. So it doesn't get sage.
  * COOLER-LOOK: restrained glass — 4% white over a 10px backdrop blur.
  * Reads "premium chip" without competing with the cards below. */
+/* v49 · look: glass retired (spec §6 global) — a plain quiet chip. */
 .week-banner {
   display: inline-block;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  color: var(--text-dim);
-  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--ink-2);
+  border: 1px solid var(--hair);
   padding: 5px 12px;
   border-radius: var(--radius-pill);
   font-weight: 500;
-  font-size: var(--font-meta);
+  font-size: var(--t-caption);
   letter-spacing: 0.02em;
   margin-bottom: 20px;
 }
 
 /* --- Cards: no drop shadow, subtle border ------------------------------ *
- * COOLER-LOOK: same-hue vertical gradient (top brighter, bottom recedes)
- * for depth without color. Border still does the visual elevation. */
+ * v49 · look: flat surface, no gradient; border only (spec §6 .card). */
 
 .card {
-  background: var(--grad-surface);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--hair);
   border-radius: var(--radius);
   padding: 20px;
   margin-bottom: 18px;
-  transition:
-    border-color var(--dur-base) var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring);
+  transition: border-color var(--dur) var(--ease);
 }
 
 /* --- Buttons ----------------------------------------------------------- */
 
+/* v49 · look: secondary-by-default — transparent + a visible edge, no hover
+ * (touch device), press = surface-2 + a settle scale (spec §4, §6 button). */
 button,
 .btn {
   font: inherit;
   cursor: pointer;
-  border: 1px solid transparent;
+  border: 1px solid var(--edge);
   border-radius: var(--radius-sm);
   padding: 13px 18px;
   font-weight: 600;
-  font-size: var(--font-small);
+  font-size: var(--t-body);
   letter-spacing: var(--track-tight);
-  /* COOLER-LOOK: spring-physics ease on both fade + transform so press feels alive. */
+  min-height: var(--tap);
   transition:
-    background var(--dur-base) var(--ease-out),
-    border-color var(--dur-base) var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring),
-    box-shadow var(--dur-base) var(--ease-out);
-  background: var(--bg-elev-2);
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    transform var(--dur-fast) var(--ease);
+  background: transparent;
   color: var(--text);
-}
-
-button:hover,
-.btn:hover {
-  background: var(--bg-elev-3);
 }
 
 button:active,
 .btn:active {
-  transform: scale(0.96);
+  background: var(--surface-2);
+  transform: scale(0.98);
 }
 
 button:disabled {
@@ -291,26 +311,25 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Primary action — the one place sage means "tap me to advance".
- * COOLER-LOOK: very subtle within-sage gradient (hover→base) reads premium. */
+/* Primary action — the one place sage means "tap me to advance" (spec §4). */
 .btn-primary {
-  background: var(--grad-primary);
-  color: var(--bg);
-  border-color: var(--accent);
-  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.12) inset;
+  background: var(--sage);
+  color: var(--on-sage);
+  border: 0;
+  box-shadow: none;
 }
 
-.btn-primary:hover {
-  background: linear-gradient(180deg, var(--accent-hover) 0%, var(--accent-hover) 100%);
-  border-color: var(--accent-hover);
+.btn-primary:active {
+  background: var(--sage-press);
 }
 
 /* Done · Next — the single big primary on workout screens */
 .btn-large {
   padding: 18px 24px;
-  font-size: var(--font-body);
+  font-size: var(--t-body);
+  font-weight: 650;
   width: 100%;
-  min-height: 60px;
+  min-height: var(--tap-primary);
   border-radius: var(--radius);
 }
 
@@ -353,20 +372,21 @@ button:disabled {
   color: var(--text);
 }
 
+/* v49 · look: full chip rule (spec §4 Chips / §6 .btn-chip) — ink text,
+ * a visible edge, the app's real tap floor. */
 .btn-chip {
   background: transparent;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
+  color: var(--ink);
+  border: 1px solid var(--edge);
   padding: 7px 14px;
+  min-height: var(--tap);
   border-radius: var(--radius-pill);
-  font-size: var(--font-meta);
-  font-weight: 500;
+  font-size: var(--t-body);
+  font-weight: 650;
 }
 
-.btn-chip:hover {
-  border-color: var(--border-strong);
-  color: var(--text);
-  background: var(--bg-elev-2);
+.btn-chip:active {
+  background: var(--surface-2);
 }
 
 /* --- Workout picker ----------------------------------------------------- *
@@ -433,24 +453,15 @@ button:disabled {
   color: var(--dot-c);
 }
 
-/* Today's pick — full hero treatment.
- *  - radius bumped (lg) so it visually breaks from the other tiles
- *  - accent-tinted gradient (6% sage in the surface; not a fill grab)
- *  - 1px accent stroke + soft inset glow (--glow-accent) — premium without shouty
- *  - more padding above so the badge sits in its own space
- *  - monogram brighter (opacity 18%) — picked tile gets more identity */
+/* v49 · look: the Up-next hero, flat (spec §6 .workout-card-pick / -badge) —
+ * a plain hairline-strong card, no glow, no hover lift (touch device). */
 .workout-card-pick {
-  background: var(--grad-hero);
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--surface);
+  border: 1px solid var(--hair-strong);
   border-radius: var(--radius-lg);
   padding: 38px 22px 22px;
   opacity: 1;
-  box-shadow: var(--glow-accent);
-}
-
-.workout-card-pick:hover {
-  border-color: var(--accent);
-  transform: translateY(-2px);
+  box-shadow: none;
 }
 
 .workout-card-pick .workout-card-monogram {
@@ -459,26 +470,22 @@ button:disabled {
   font-size: 104px;
 }
 
-/* Picked-card badge sits at the top-left, NOT overlapping the rounds badge.
- * COOLER-LOOK: glass backdrop + soft sage glow gives it the Apple-watch
- * "now playing" chip feel. */
+/* Picked-card badge: the plain "Up next" label, no glass or glow. */
 .workout-card-pick-badge {
   position: absolute;
   top: 12px;
   left: 16px;
-  background: var(--glass-bg-strong);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  padding: 3px 10px;
+  background: transparent;
+  color: var(--ink-2);
+  border: 0;
+  padding: 3px 0;
   border-radius: var(--radius-pill);
-  font-size: var(--font-micro);
+  font-size: var(--t-small);
   font-weight: 600;
   letter-spacing: var(--track-label);
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
-  box-shadow: 0 0 12px -2px color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow: none;
 }
 
 .workout-card-header {
@@ -614,12 +621,18 @@ button:disabled {
   background: var(--bg-elev-2);
 }
 
+/* v49 · look (spec §6): sentence case, no tracking; today bold ink. */
 .week-dot-label {
-  font-size: var(--font-micro);
-  color: var(--text-dim-2);
-  text-transform: uppercase;
-  letter-spacing: var(--track-label);
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  text-transform: none;
+  letter-spacing: 0;
   font-weight: 500;
+}
+
+.week-dot.is-today .week-dot-label {
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .week-dot-bubble {
@@ -629,27 +642,33 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-micro);
+  font-size: var(--t-meta);
   font-weight: 700;
   color: var(--bg);
-  background: var(--bg-elev-2);
+  background: var(--surface-2);
 }
 
-.dot-A .week-dot-bubble {
-  background: var(--dot-a);
-}
-
-.dot-B .week-dot-bubble {
-  background: var(--dot-b);
-}
-
+/* Home only — the A/B/C identity colours stay on Sessions/Progress/Weekly
+ * (spec §7 "What NOT to change"); a done day here is plain ink. */
+.dot-A .week-dot-bubble,
+.dot-B .week-dot-bubble,
 .dot-C .week-dot-bubble {
-  background: var(--dot-c);
+  background: var(--ink-2);
+  color: var(--bg);
 }
 
 .dot-empty .week-dot-bubble {
-  background: var(--bg-elev-2);
-  color: var(--text-dim-2);
+  background: transparent;
+  border: 1.5px solid var(--edge);
+  color: var(--ink-3);
+}
+
+/* Today: a ring plus a soft halo (spec §5 frame 1, §6 "is-today"). */
+.week-dot.is-today .week-dot-bubble {
+  box-shadow:
+    0 0 0 2px var(--ink),
+    0 0 0 3px var(--surface),
+    0 0 0 4.5px var(--hair-strong);
 }
 
 /* --- Exercise display --------------------------------------------------- */
@@ -676,13 +695,18 @@ button:disabled {
   line-height: 1.15;
 }
 
+/* v49 · look: heavier — numbers are the thing she reads from the floor (spec
+ * §1, §6 .exercise-reps). Size stays at the existing subheading scale: the
+ * first-ride elliptical screen is fit-tested to clear the pinned bar with no
+ * scroll (v48 fix r1/r2), and the full --t-number treatment needs the
+ * number/unit span split (P10 follow-up) to earn back that vertical space. */
 .exercise-reps {
   font-size: var(--font-subheading);
-  color: var(--text);
-  font-weight: 500;
+  color: var(--ink);
+  font-weight: var(--w-number);
   font-variant-numeric: tabular-nums;
-  letter-spacing: var(--track-tight);
-  margin-bottom: 10px;
+  letter-spacing: var(--track-number);
+  margin-bottom: 6px;
 }
 
 .exercise-notes {
@@ -924,30 +948,33 @@ button:disabled {
   text-align: center;
 }
 
+/* v49 · look: a running timer is not an action — ink, always (spec §6).
+ * Size: this one class covers both the 45 s wall-sit hold (spec's own
+ * --t-hold, 120px) AND the elliptical's 10-25 min ready/running countdown
+ * (renderLaneTimerCard) — going full --t-hold here overflows the first-ride
+ * elliptical screen's tested no-scroll fold. --t-number is the same "heavy,
+ * readable from the floor" register at a size that still fits; splitting the
+ * hold into its own modifier for the full 120px is a P10 follow-up. */
 .timer-display {
   font-size: 72px;
-  font-weight: 500;
-  color: var(--accent);
+  font-weight: var(--w-number);
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -2px;
+  letter-spacing: var(--track-number);
   line-height: 1;
   margin: 16px 0;
 }
 
 .countdown-big {
-  font-size: 140px;
-  color: var(--accent-warn);
-  animation: pulse 1s ease-out;
+  font-size: var(--t-giant);
+  color: var(--ink);
+  animation: pulse 1s var(--ease);
 }
 
 @keyframes pulse {
   0% {
-    transform: scale(0.7);
-    opacity: 0.4;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 1;
+    transform: scale(0.92);
+    opacity: 0.3;
   }
   100% {
     transform: scale(1);
@@ -955,10 +982,11 @@ button:disabled {
   }
 }
 
+/* v49 · look: sentence case, no tracking (spec §1). */
 .timer-label {
   font-size: var(--font-micro);
-  color: var(--text-dim-2);
-  text-transform: uppercase;
+  color: var(--ink-2);
+  text-transform: none;
   letter-spacing: var(--track-label);
   margin-bottom: -8px;
   font-weight: 600;
@@ -982,7 +1010,7 @@ button:disabled {
 
 .progress-bar {
   height: 4px;
-  background: var(--bg-elev-2);
+  background: var(--hair-strong);
   border-radius: 2px;
   overflow: hidden;
   margin: 14px 0 22px;
@@ -991,7 +1019,7 @@ button:disabled {
 .progress-bar-fill {
   height: 100%;
   background: var(--accent-progress);
-  transition: width 0.3s;
+  transition: width var(--dur) var(--ease);
 }
 
 .progress-text {
@@ -1061,7 +1089,7 @@ button:disabled {
 
 .rest-ring-num {
   font-size: 64px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   font-variant-numeric: tabular-nums;
   letter-spacing: -2px;
@@ -1144,24 +1172,25 @@ label.field span.label-text strong {
 
 input[type='range'] {
   width: 100%;
-  accent-color: var(--accent);
+  accent-color: var(--ink-2);
 }
 
 input[type='text'],
 input[type='number'] {
   width: 100%;
-  background: var(--bg-elev-2);
+  background: var(--surface-2);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--hair-strong);
   border-radius: var(--radius-sm);
   padding: 12px;
   font: inherit;
-  font-size: var(--font-body);
+  font-size: var(--t-body);
 }
 
+/* v49 · look: focus is ink, not sage (spec §4 Inputs, §6). */
 input[type='text']:focus,
 input[type='number']:focus {
-  border-color: var(--accent);
+  border: 2px solid var(--ink);
   outline: none;
 }
 
@@ -1593,7 +1622,7 @@ input[type='number']:focus {
 }
 
 .setup-block-open {
-  border-color: var(--accent);
+  border-color: var(--hair-strong);
 }
 
 .setup-toggle {
@@ -1774,26 +1803,27 @@ input[type='number']:focus {
   padding: 16px 16px 14px;
 }
 
-/* The star of the card — big, obvious, one-tap. */
+/* v49 · look: off sage — a secondary button, never a second primary action
+ * (spec §6 .voice-note-btn / .voice-note-playing). */
 .voice-note-btn {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 15px 18px;
-  background: var(--grad-primary);
-  color: var(--bg);
-  border: 0;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--edge);
   border-radius: var(--radius-sm);
-  font-size: var(--font-body);
-  font-weight: 700;
+  font-size: var(--t-body);
+  font-weight: 650;
   letter-spacing: var(--track-tight);
   cursor: pointer;
-  box-shadow: 0 4px 16px -8px color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: none;
 }
 
 .voice-note-btn:active {
-  transform: translateY(1px);
+  background: var(--surface-2);
 }
 
 .voice-note-icon {
@@ -1802,9 +1832,10 @@ input[type='number']:focus {
 }
 
 .voice-note-btn.voice-note-playing {
-  background: var(--bg-elev-2);
-  color: var(--accent);
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent);
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  box-shadow: none;
 }
 
 /* Muscle-target picture + label, glanceable. */
@@ -2233,7 +2264,8 @@ input[type='number']:focus {
   transform: translateY(-50%);
   width: 3px;
   height: 60%;
-  background: var(--accent);
+  /* v49 · look: no sage tint on a status marker (spec §6 .weekly-row-current). */
+  background: var(--ink-2);
   border-radius: 2px;
 }
 
@@ -2614,19 +2646,45 @@ input[type='number']:focus {
 }
 
 .start-now-lbl {
-  color: var(--text-dim);
-  font-size: var(--font-small);
+  color: var(--ink-2);
+  font-size: var(--t-small);
 }
 
 .start-now-val {
-  color: var(--text);
-  font-size: var(--font-body);
-  font-weight: 600;
+  color: var(--ink);
+  font-size: var(--t-lead);
+  font-weight: var(--w-strong);
   font-variant-numeric: tabular-nums;
 }
 
-.start-now-card .progress-card-meta {
+/* The "from" side of a pair — dimmer, so the eye lands on the latest number
+ * (spec §5 frame 1: "the 'from' value in --ink-3"). */
+.sn-first {
+  color: var(--ink-3);
+  font-weight: 500;
+}
+
+.sn-last {
+  color: var(--ink);
+}
+
+.start-now-card .progress-card-meta,
+.home-startnow-card .progress-card-meta {
   margin-top: 8px;
+}
+
+/* Home's own card + its head row (spec §5 frame 1). */
+.home-startnow-card {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--hair-strong);
+}
+
+.start-now-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 4px;
 }
 
 /* Sessions per week as rows (v48 · P6): label · track · "n / 3" outside the
@@ -2733,23 +2791,24 @@ input[type='number']:focus {
   padding: 18px 18px 20px;
 }
 
+/* v49 · look: sentence case, no tracking (spec §1 — tracked uppercase
+ * labels are gone). */
 .progress-card-label {
-  font-size: var(--font-micro);
+  font-size: var(--t-small);
+  font-weight: 600;
   letter-spacing: var(--track-label);
-  color: var(--text-dim-2);
-  text-transform: uppercase;
+  color: var(--ink-2);
+  text-transform: none;
   margin-bottom: 4px;
 }
 
-/* The headline number on the wall-sit card — big display weight, cooler-look
- * register (650 weight, slight tracking). NOT a "stat" in the streak-card
- * sense; this is the single hero number for the metric. */
+/* The headline number — plain ink, never a sage tint (spec §6). */
 .progress-stat-big {
   font-family: var(--font-family);
   font-size: var(--font-display);
   font-weight: 650;
   letter-spacing: var(--track-display);
-  color: color-mix(in srgb, var(--accent) 6%, var(--text));
+  color: var(--ink);
   line-height: 1.05;
   margin: 4px 0 14px;
 }
@@ -2866,12 +2925,13 @@ input[type='number']:focus {
   letter-spacing: 0.02em;
 }
 
+/* v49 · look: 48px icon button, hair-strong ring (spec §4 Icon button). */
 .settings-icon-btn {
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  width: 36px;
-  height: 36px;
+  border: 1px solid var(--hair-strong);
+  color: var(--ink-2);
+  width: var(--tap);
+  height: var(--tap);
   padding: 0;
   border-radius: var(--radius-pill);
   display: inline-flex;
@@ -2880,20 +2940,14 @@ input[type='number']:focus {
   font-size: 18px;
   line-height: 1;
   transition:
-    background var(--dur-base) var(--ease-out),
-    border-color var(--dur-base) var(--ease-out),
-    color var(--dur-base) var(--ease-out),
-    transform var(--dur-fast) var(--ease-spring);
-}
-
-.settings-icon-btn:hover {
-  background: var(--bg-elev-2);
-  color: var(--text);
-  border-color: var(--border-strong);
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    transform var(--dur-fast) var(--ease);
 }
 
 .settings-icon-btn:active {
-  transform: scale(0.92) rotate(20deg);
+  background: var(--surface-2);
+  transform: scale(0.96);
 }
 
 .settings-icon-glyph {
@@ -3309,9 +3363,11 @@ input[type='number']:focus {
   cursor: pointer;
 }
 
+/* v49 · look: no sage — a 2px ink border reads "armed" without a second
+ * primary action (spec §6 .lite-toggle-on). */
 .lite-toggle-on {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elev-2));
+  border: 2px solid var(--ink);
+  background: var(--surface-2);
 }
 
 .paused-overlay {
@@ -3444,43 +3500,103 @@ input[type='number']:focus {
 }
 
 .cardio-alt-btn:active {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--hair-strong);
+  color: var(--ink);
 }
 
-/* Console readings (v44) — two numbers copied off the machine's screen. */
-.ell-readings {
-  border-top: 1px solid var(--border-divider);
-  padding-top: 10px;
+/* v49 · look: console readings, one row per field (spec §5 frame 4, §6
+ * .ell-readings-row / .ell-reading / .ell-reading input) — label left, a
+ * right-aligned 132 × 48 field on the right, a hairline between rows. */
+.ell-readings-row {
+  border-top: 1px solid var(--hair);
+  margin-top: 10px;
 }
 
 .ell-readings-title {
-  color: var(--text-dim);
-  font-size: var(--font-small);
-  text-align: center;
-  margin-bottom: 8px;
-}
-
-.ell-readings-row {
-  display: flex;
-  gap: 12px;
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  font-weight: 600;
+  text-align: left;
+  margin-bottom: 4px;
 }
 
 .ell-reading {
-  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 68px;
+  border-bottom: 1px solid var(--hair);
+  color: var(--ink-2);
+  font-size: var(--t-body);
+}
+
+.ell-reading:last-child {
+  border-bottom: 0;
+}
+
+.ell-reading-label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  color: var(--text-dim);
-  font-size: var(--font-small);
-  text-align: left;
+  gap: 2px;
+}
+
+.ell-reading-sub {
+  font-size: var(--t-caption);
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.ell-reading-field {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 132px;
+  min-height: 48px;
+  padding: 0 10px;
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+
+.ell-reading-field:focus-within {
+  border: 2px solid var(--ink);
 }
 
 .ell-reading input {
   width: 100%;
   min-width: 0;
-  font-size: 18px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--ink);
+  text-align: right;
+  font-size: var(--t-value);
+  font-weight: var(--w-number);
   font-variant-numeric: tabular-nums;
+}
+
+.ell-reading input:focus {
+  border: 0;
+  outline: none;
+}
+
+/* Hide the native spinner — the field reads as a plain number, not a stepper. */
+.ell-reading input::-webkit-outer-spin-button,
+.ell-reading input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.ell-reading input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.ell-reading-unit {
+  color: var(--ink-2);
+  font-size: var(--t-caption);
+  white-space: nowrap;
 }
 
 /* Setup + ride steps (v44). */
@@ -3498,20 +3614,23 @@ input[type='number']:focus {
   line-height: 1.45;
 }
 
+/* v49 · look: the note box (spec §4 "Inputs + note box") — surface-2,
+ * hair-strong border, min height 104. */
 #session-note {
   width: 100%;
   resize: vertical;
-  background: var(--bg-elev-2);
+  min-height: 104px;
+  background: var(--surface-2);
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--hair-strong);
   border-radius: var(--radius-sm);
   padding: 12px;
   font: inherit;
-  font-size: var(--font-body);
+  font-size: var(--t-body);
 }
 
 #session-note:focus {
-  border-color: var(--accent);
+  border: 2px solid var(--ink);
   outline: none;
 }
 
@@ -3524,11 +3643,13 @@ input[type='number']:focus {
   text-align: center;
 }
 
+/* v49 · look: sentence case, no tracking (spec §1, §5 frame 3 "Right now"). */
 .cardio-seg-label {
-  font-size: var(--font-micro);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-dim-2);
+  font-size: var(--t-small);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-2);
   margin-bottom: 6px;
 }
 
@@ -3730,20 +3851,17 @@ input[type='number']:focus {
   padding: 0 4px 4px;
 }
 
-.card > .ell-readings {
+.card > .ell-readings-row {
   border-top: 0;
-  padding-top: 0;
+  margin-top: 0;
 }
 
-.ell-readings-wait {
-  text-align: center;
-}
-
-/* "✓ 10 min done" face of the timer card once an indoor ride has run. */
+/* "✓ 10 min done" face of the timer card once an indoor ride has run — a
+ * witness, not a second primary (spec §6 .timer-done / .timer-held). */
 .timer-done {
-  font-size: var(--font-heading);
-  font-weight: 600;
-  color: var(--accent);
+  font-size: var(--t-title);
+  font-weight: var(--w-title);
+  color: var(--ink);
   padding: 12px 0 4px;
 }
 
@@ -3870,27 +3988,30 @@ input[type='number']:focus {
 
 .exercise-name-row .exercise-name {
   margin-bottom: 0;
+  font-size: var(--t-exercise);
+  font-weight: var(--w-title);
 }
 
-/* Outlined, never a sage fill — the sage is the one primary action. */
+/* v49 · look: outlined in --edge, never a sage-adjacent tint (spec §6). */
 .new-tonight-badge {
   display: inline-block;
-  border: 1px solid var(--accent-progress);
+  border: 1px solid var(--edge);
   color: var(--text);
   border-radius: var(--radius-pill);
   padding: 3px 10px;
-  font-size: var(--font-meta);
+  font-size: var(--t-caption);
   font-weight: 500;
   white-space: nowrap;
 }
 
-/* The one safety line on the card face; the full cue sits behind "Cue ▸". */
+/* The one safety line — readable ink, not dimmed (spec §5 frame 2: "17 --ink").
+ * The full cue sits behind "Cue ▸". */
 .exercise-safety {
-  color: var(--text-dim);
-  font-size: var(--font-small);
-  line-height: 1.45;
+  color: var(--ink);
+  font-size: var(--t-body);
+  line-height: 1.4;
   text-align: left;
-  margin: 4px 0 6px;
+  margin: 4px 0 4px;
 }
 
 .cue-section {
@@ -3929,11 +4050,8 @@ input[type='number']:focus {
   margin-top: 8px;
 }
 
-/* Hold timer: the idle number is plain text — sage only while counting
- * (one sage per screen = the Start button). */
-.timer-display.timer-idle {
-  color: var(--text);
-}
+/* v49 · look: .timer-display is ink always now (spec §6) — this modifier is
+ * redundant, removed rather than kept dead. */
 
 /* "✓ held 45 s · last time 43" — a witness, not a second primary. */
 .timer-done.timer-held {
@@ -4125,11 +4243,12 @@ input[type='number']:focus {
   line-height: 1.3;
 }
 
-/* After the ride: one card, level → km → pulse ("From the machine, before STOP"). */
+/* After the ride: one card, level → km → kcal → time → pulse ("From the
+ * machine, before STOP"). */
 .ell-after-card .ell-readings-title {
-  color: var(--text);
+  color: var(--ink);
   font-weight: 600;
-  font-size: var(--font-body);
+  font-size: var(--t-body);
   text-align: left;
   margin-bottom: 12px;
 }
@@ -4142,48 +4261,64 @@ input[type='number']:focus {
 }
 
 .ell-field-label {
-  color: var(--text-dim);
-  font-size: var(--font-small);
+  color: var(--ink-2);
+  font-size: var(--t-small);
 }
 
 .ell-level-controls {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
-/* The 48px stepper — a wet hand on a humming machine. */
+/* v49 · look: the − / + level stepper as two separate 60px circles with the
+ * number floating between them (spec §5 frame 4, §6 .ell-stepper), not the
+ * grouped pill the generic Settings stepper uses. */
+.ell-stepper {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  gap: 16px;
+}
+
 .ell-stepper .settings-stepper-btn {
-  width: 48px;
-  height: 48px;
+  width: var(--tap-step);
+  height: var(--tap-step);
+  border: 1px solid var(--edge);
+  border-radius: 50%;
   font-size: 24px;
+  color: var(--ink-2);
 }
 
 .ell-stepper .settings-stepper-val {
-  min-width: 52px;
-  font-size: var(--font-subheading);
+  min-width: 60px;
+  font-size: var(--t-number);
+  font-weight: var(--w-number);
+  color: var(--ink);
+  letter-spacing: var(--track-number);
 }
 
+/* v49 · look: off sage — a plain outlined chip (spec §4 Toggle chips). */
 .ell-same-chip {
-  min-height: 44px;
+  min-height: var(--tap);
   padding: 8px 14px;
   background: transparent;
-  color: var(--text);
-  border: 1px solid var(--border);
+  color: var(--ink);
+  border: 1px solid var(--edge);
   border-radius: var(--radius-pill);
-  font-size: var(--font-small);
+  font-size: var(--t-small);
   font-weight: 500;
   cursor: pointer;
 }
 
 .ell-same-chip.is-on {
-  border-color: var(--accent-progress);
+  border: 2px solid var(--ink);
 }
 
 /* "—" = not recorded yet: dim, so it doesn't read as a third minus sign. */
 .ell-stepper .settings-stepper-val.is-empty {
-  color: var(--text-dim);
+  color: var(--ink-3);
   font-weight: 500;
 }
 
@@ -4221,7 +4356,8 @@ input[type='number']:focus {
 }
 
 .home-header h1 {
-  font-size: var(--font-subheading);
+  font-size: 18px;
+  font-weight: var(--w-strong);
   line-height: 1.25;
   white-space: nowrap;
   /* v48 · final (Sep 25 2026): with Android/Linux font metrics the Saturday
@@ -4235,22 +4371,22 @@ input[type='number']:focus {
 
 .app-version {
   white-space: nowrap;
-  font-size: var(--font-meta);
-  color: var(--text-dim);
+  font-size: var(--t-meta);
+  color: var(--ink-3);
 }
 
 /* "· Week 4's plan" — the fail-loud note when no plan for this week is encoded
  * yet; smaller, so "Round 2 · Week 5 · Week 4's plan" still fits one line. */
 .h1-plan {
-  font-size: var(--font-small);
+  font-size: var(--t-small);
   font-weight: 500;
-  color: var(--text-dim);
+  color: var(--ink-2);
   letter-spacing: 0;
 }
 
 .home-header .settings-icon-btn {
-  width: 44px;
-  height: 44px;
+  width: var(--tap);
+  height: var(--tap);
   flex-shrink: 0;
 }
 
@@ -4285,11 +4421,12 @@ input[type='number']:focus {
   color: var(--text);
 }
 
+/* v49 · look: sentence case "Up next" (spec §1, §5 frame 1). */
 .hero-label {
-  font-size: var(--font-micro);
+  font-size: var(--t-small);
   font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
+  color: var(--ink-2);
+  text-transform: none;
   letter-spacing: var(--track-label);
 }
 
@@ -4609,26 +4746,27 @@ input[type='number']:focus {
   gap: 8px;
 }
 
+/* v49 · look: answer chips — 56 high, 22/600 tabular (spec §4 Chips). */
 .body-chip {
   min-width: 56px;
-  min-height: 48px;
+  min-height: 56px;
   padding: 0;
   background: transparent;
   color: var(--text);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  font-size: var(--font-body);
+  font-size: var(--t-value);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 
-/* A reading, not the primary action: --accent-progress, never the sage.
- * Two classes so the global button:hover (0,1,1) can't grey it out. */
+/* A reading, not the primary action: an ink fill, never sage — sage is Save
+ * (spec §4 "Selected = --ink fill with --bg text"). */
 .body-chip.body-chip-on,
 .back-chip.body-chip-on {
-  background: var(--accent-progress);
-  border-color: var(--accent-progress);
+  background: var(--ink);
+  border-color: var(--ink);
   color: var(--bg);
 }
 
@@ -4674,6 +4812,13 @@ input[type='number']:focus {
   margin: 0 0 8px;
 }
 
+/* v49 · look: the witness line — plain ink-2, no verdict (spec §5 frame 5). */
+.postlog-witness {
+  color: var(--ink-2);
+  font-size: var(--t-body);
+  margin: -4px 0 4px;
+}
+
 /* Post-log. */
 .postlog-card {
   padding: 16px 18px;
@@ -4704,18 +4849,18 @@ input[type='number']:focus {
 }
 
 .back-chip {
-  min-height: 48px;
+  min-height: 56px;
   background: transparent;
   color: var(--text);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  font-size: var(--font-small);
-  font-weight: 500;
+  font-size: var(--t-body);
+  font-weight: 650;
   cursor: pointer;
 }
 
 .back-chip-open {
-  border-color: var(--text-dim);
+  border: 2px solid var(--ink);
 }
 
 /* Save + "‹ Back to the stretches" in the pinned bar. */
