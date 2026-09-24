@@ -114,6 +114,13 @@ type AppState = {
   capacityAfter: number;
   wallSitSec: number;
   backPain: number;
+  // v46: did she actually MOVE the slider? The three sliders start at 5/5/0 and
+  // used to save as if she chose them — capacity-after was exactly 5 in 6 of 8
+  // sessions since Aug 30, a "decline" the mirror invented (UX audit Sep 24).
+  // Untouched → saved as null ("—"), the sliders still show 5/5/0 to start.
+  capacityBeforeTouched: boolean;
+  capacityAfterTouched: boolean;
+  backPainTouched: boolean;
   word: string;
   // Post-log free text (v44): "any information at the end about what I did".
   sessionNote: string;
@@ -258,8 +265,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v45';
-const BUILD_DATE = 'Sep 24, 2026 · 15:50';
+const APP_VERSION = 'v46';
+const BUILD_DATE = 'Sep 24, 2026 · 16:25';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -606,8 +613,10 @@ const UPPER_BACK_SAFE: Exercise[] = [
   {
     name: 'IWYT raises',
     reps: '2 sets · 8 each (I, W, Y, T)',
+    // v46: halved — the change-log (Lisa Jun 18, the I from Jul 4) lives in the
+    // week label + this comment now; the card's Steps carry the letters too.
     notes:
-      'Lisa Cohen (Jun 18) + the I you added (Jul 4 — keep it). Face DOWN on the mat, forehead on a towel, THUMBS UP throughout (wrist neutral, no palm load). Each letter: make the shape, small lift OFF the floor from the upper back, brief hold, lower. Hands touching the floor between reps is RIGHT — the floor is the rest position. I = arms straight down along your sides. W = elbows bent toward your ribs, squeeze the blades. Y = narrow overhead V. T = straight out to the sides at shoulder height. Lift from the UPPER BACK, not the neck — neck long, eyes on the towel. Keep it gentle for the neck (agreed Jul 4); stop if it complains.',
+      'Face down, forehead on a towel, thumbs up throughout (wrist neutral, no palm load). Make the letter, small lift from the upper back, one breath, lower. Hands rest on the floor between reps. I = arms along your sides · W = elbows bent to the ribs · Y = narrow V · T = out to the sides. Neck long, eyes on the towel; stop if the neck complains.',
   },
 ];
 
@@ -621,8 +630,11 @@ const WRIST_ONRAMP: Exercise[] = [
   {
     name: 'Wall lean (wrist on-ramp)',
     reps: '2 × 15-20 sec',
+    // v46: halved, and ONE stop threshold across the session — bird dog, the
+    // banner and this all say "pressure fine, pain = stop" (her Sep 14: "it
+    // shouldn't hurt"). The Jul-3 provenance lives in the comment above.
     notes:
-      'NEW (Jul 3 — your call: start weight-bearing, nothing intense). Stand a small step from a wall, palms FLAT on it at shoulder height, fingers up, elbows soft. Lean in gently so the palms take LIGHT weight — breathe, nothing intense. 15-20 sec, shake the hands out, once more. STOP at ANY wrist or thumb sensation — this is a rehab on-ramp, not a strength move. When this feels like nothing, say so and the next rung (counter-height lean) unlocks.',
+      'Stand a small step from a wall, palms flat on it at shoulder height, fingers up, elbows soft. Lean in gently so the palms take light weight — breathe. 15-20 sec, shake the hands out, once more. Pressure is fine; pain = stop. When this feels like nothing, say so and the next rung (counter-height lean) unlocks.',
     // Timed hold → gets a timer (TIMER RULE, 2026-07-08). 20 sec = top of the
     // 15-20 range; do 2 rounds (restart the timer for round 2, shake out between).
     durationSec: 20,
@@ -644,8 +656,10 @@ const UPPER_BACK_SAFE_W10: Exercise[] = [...UPPER_BACK_SAFE, ...WRIST_ONRAMP];
 const BIRD_DOG_LEGS: Exercise = {
   name: 'Bird dog (legs only)',
   reps: '2 sets · 6 each side · 2-sec hold',
+  // v46: halved — the Sep-7 provenance is in the comment above; every safety
+  // line stays (pressure fine / pain = done / tomorrow not worse).
   notes:
-    'NEW (Sep 7 — your words: "i can go on my arms i just have to stop with pain"). Hands and knees. Hands FLAT under the shoulders, fingers turned slightly out — or on fists if flat palms bother, or hands up on the couch / a low step for less load. BOTH hands stay down the whole time. Extend ONE leg straight back, hold 2 sec, lower with control. STOP AT PAIN — pressure is fine, pain means shake the hands out and you are done for today. Next morning must not be worse. First hands-on-floor move since April; the full bird dog (opposite arm too) is the next rung, later.',
+    'Hands and knees, hands flat under the shoulders (fists, or hands up on the couch, if flat palms complain). Both hands stay down. One leg straight back to level, hold 2 sec, lower with control. Pressure is fine; pain = shake the hands out, done for today — and tomorrow must not be worse.',
 };
 
 // A + B upper-back block for R2 Week 2 — the same wrist-safe wall angels + IWYT,
@@ -2155,8 +2169,10 @@ const R2W4_SPLIT_SQUAT: Exercise = {
   // v45: was "2 sets · 6-8 each side" inside a 2-round block — readable as 4
   // sets a side on her first-ever split squat. One set per round = 2 in all.
   reps: '6-8 each side · one set per round',
+  // v46: halved — "NEW" is the week label's job. Safety lines kept: balance
+  // only (no weight through the hands), smaller range on a pinch or wobble.
   notes:
-    'NEW — this takes the place of your squats in A (C keeps its 10 squats). Stand a long step in front of the couch or a chair, fingertips resting on it for BALANCE ONLY — light touch, no gripping, no weight through the hands. Front foot flat, back heel up. Chest tall, lower straight down so the back knee heads toward the floor and the front thigh comes near parallel. Push through the front heel to stand. 6-8 each side; last set stop about 2 short. Front knee pinches or you wobble a lot? Make the range smaller — the right call, not a failure.',
+    'In for the squats in A (C keeps its 10). Fingertips on the couch for balance only — no gripping, no weight through the hands. Front foot flat, back heel up, chest tall. Straight down, back knee toward the floor; push through the front heel to stand. Last set stop about 2 short. Knee pinches or you wobble? Smaller range — the right call.',
 };
 
 // The Week-2 wall sit, re-read from the plan object so the depth cue and the
@@ -2190,15 +2206,19 @@ const R2W4_LOADED_ARMS: Exercise[] = (() => {
   const curl = UPPER_BACK_W7.find((ex) => ex.name === '1 kg biceps curl');
   if (!row || !curl) throw new Error('R2W4: expected the prone row + 1 kg curl in UPPER_BACK_W7');
   return [
+    // v46: the "BACK IN (Sep 19 …)" provenance moved up into this comment (her
+    // words: "im doing 1 kg in arms"); the cues keep every safety line — head
+    // down (Lisa's Jun-18 neck cue), wrist never bending back (the Jun-18
+    // injury mechanism), pain tells.
     {
       ...row,
       notes:
-        'BACK IN (Sep 19 — your words: "im doing 1 kg in arms"). Bodyweight or holding the 1 kg — your call, you already hold it. Arm hanging, wrist NEUTRAL/straight, light grip. HEAD DOWN — do not lift it (Lisa, Jun 18). Drive the elbow UP, squeeze the shoulder blade toward your spine, lower slow. Pain tells — stop on any wrist signal.',
+        'Bodyweight or holding the 1 kg — your call. Arm hanging, wrist neutral, light grip. Head down — do not lift it. Drive the elbow up, squeeze the shoulder blade toward your spine, lower slow. Pain tells — stop on any wrist signal.',
     },
     {
       ...curl,
       notes:
-        'BACK IN (Sep 19 — you already do this off-app). Hold the 1 kg LIGHTLY — wrist AND fingers neutral, never bending back (Lisa, Jun 18: the too-heavy grip was the mechanism). Elbow tucked, forearm hanging; only the forearm moves. Lower slow. Pain tells — stop on any wrist signal. Your 2 kg trigger is unchanged: easy at 3×20, two sessions running.',
+        'Hold the 1 kg lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging; only the forearm moves. Lower slow. Pain tells — stop on any wrist signal. 2 kg trigger unchanged: easy at 3×20, two sessions running.',
     },
   ];
 })();
@@ -2419,7 +2439,7 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   },
   'Outdoor walk': {
     howTo:
-      "Conversational pace — you should be able to talk in full sentences without getting breathless. 20 minutes minimum. Walking is genuinely your most underrated exercise: it preserves joint health, supports digestion (especially good with Crohn's), and clears mental fog. Take it outdoors when possible — the visual variety and sunlight matter. Tap done when you finish.",
+      "Conversational pace — you should be able to talk in full sentences without getting breathless. Do the minutes on your screen. Walking is genuinely your most underrated exercise: it preserves joint health, supports digestion (especially good with Crohn's), and clears mental fog. Take it outdoors when possible — the visual variety and sunlight matter. Tap done when you finish.",
   },
   // Week-6 additions (2026-06-06).
   'Bodyweight hip hinge': {
@@ -2441,7 +2461,7 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   // Week-10 addition (2026-07-04) — from the Jun-20 deep research.
   'Eccentric step-down': {
     howTo:
-      'The single best move for hiking DOWNHILL — where most hiking knee trouble happens. Stand on a low, sturdy step: a single stair, a thick book, or a low stool. Put your whole weight on ONE leg on the step and let the other foot hang just off the edge. SLOWLY lower the hanging heel toward the floor, taking 3-4 full seconds — your standing thigh is doing the controlling. Lightly tap the floor (or just hover), then push back up through the standing leg. A fingertip on a wall or rail for balance is fine — but NO gripping and no weight through the hand (your wrist stays out of this entirely). Keep the standing knee pointing over your toes, not caving inward. Start with a low step and a small range; the magic is the SLOW lowering, not the height. Stop the set if the knee pinches.',
+      'A quad-control move for stairs and slopes. Stand on a low, sturdy step: a single stair, a thick book, or a low stool. Put your whole weight on ONE leg on the step and let the other foot hang just off the edge. SLOWLY lower the hanging heel toward the floor, taking 3-4 full seconds — your standing thigh is doing the controlling. Lightly tap the floor (or just hover), then push back up through the standing leg. A fingertip on a wall or rail for balance is fine — but NO gripping and no weight through the hand (your wrist stays out of this entirely). Keep the standing knee pointing over your toes, not caving inward. Start with a low step and a small range; the magic is the SLOW lowering, not the height. Stop the set if the knee pinches.',
   },
   // Round-2 Week-2 additions (2026-09-07).
   'Full dead bug': {
@@ -2475,6 +2495,9 @@ const state: AppState = {
   capacityAfter: 5,
   wallSitSec: 0,
   backPain: 0,
+  capacityBeforeTouched: false,
+  capacityAfterTouched: false,
+  backPainTouched: false,
   word: '',
   sessionNote: '',
   currentRound: 1,
@@ -2578,6 +2601,25 @@ type TimerHandle = {
 let activeTimer: TimerHandle | null = null;
 let rafHandle: number | null = null;
 
+// v46: keep the screen awake through a long timed block (the 10-25 min
+// elliptical / apartment rides). Only walks held a wake lock; on a ride the
+// Pixel slept, the timer loop stopped with it, and no 3-2-1 or finish chime
+// played until she woke the phone (UX audit Sep 24; her Jul-4 walk rule was
+// "it should make the screen stay open"). Reuses the walk's lock; released when
+// the timer ends or stops — unless a walk still needs it.
+const TIMER_WAKE_LOCK_MIN_SEC = 60;
+let timerHoldsWakeLock = false;
+
+function releaseTimerWakeLock(): void {
+  if (!timerHoldsWakeLock) return;
+  timerHoldsWakeLock = false;
+  if (activeWalkStart() !== null || workoutWalkStart() !== null) return; // a walk still holds it
+  if (walkWakeLock) {
+    void walkWakeLock.release().catch(() => undefined);
+    walkWakeLock = null;
+  }
+}
+
 function stopTimer(): void {
   if (rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
     cancelAnimationFrame(rafHandle);
@@ -2586,6 +2628,7 @@ function stopTimer(): void {
   activeTimer = null;
   state.timerSeconds = 0;
   state.preCountdown = 0;
+  releaseTimerWakeLock();
 }
 
 function startTimerCore(kind: TimerKind, seconds: number, onComplete: () => void): void {
@@ -2600,6 +2643,10 @@ function startTimerCore(kind: TimerKind, seconds: number, onComplete: () => void
     state.preCountdown = seconds;
   } else {
     state.timerSeconds = seconds;
+  }
+  if (kind === 'timed-exercise' && seconds >= TIMER_WAKE_LOCK_MIN_SEC) {
+    timerHoldsWakeLock = true;
+    void acquireWalkWakeLock(); // guarded inside: no-op without navigator.wakeLock
   }
   render();
   timerLoop();
@@ -2633,6 +2680,7 @@ function timerLoop(): void {
     const t = activeTimer;
     activeTimer = null;
     rafHandle = null;
+    releaseTimerWakeLock();
     if (t.kind === 'pre-countdown') {
       playGoBeep();
     } else {
@@ -2737,8 +2785,12 @@ if (typeof document !== 'undefined') {
     }
     // Wake lock auto-releases when the app is backgrounded; if a walk is
     // still running when she comes back, grab it again so the screen stays
-    // on for the rest of the walk (her Jul-4 call).
-    if (document.visibilityState === 'visible' && activeWalkStart()) {
+    // on for the rest of the walk (her Jul-4 call). v46: same for a long
+    // timed block still counting down.
+    if (
+      document.visibilityState === 'visible' &&
+      (activeWalkStart() || (activeTimer !== null && timerHoldsWakeLock))
+    ) {
       void acquireWalkWakeLock();
     }
   });
@@ -3577,6 +3629,10 @@ function beginExercises(): void {
   state.startedAt = new Date().toISOString();
   state.pausedAt = null; // fresh session, no paused time carried in
   state.pausedMs = 0;
+  // v46: the post-log sliders haven't been seen yet (capacity-before was just
+  // set on pre-log, so its flag stays as it is).
+  state.capacityAfterTouched = false;
+  state.backPainTouched = false;
   state.howToOpenFor = null;
   state.videoExpandedFor = null;
   clearWorkoutWalk(); // fresh session, fresh walk numbers
@@ -3736,10 +3792,11 @@ async function saveCompletedSession(): Promise<void> {
   const stored = saveLog({
     date: completedAt,
     workout: state.selectedWorkout,
-    capacityBefore: state.capacityBefore,
-    capacityAfter: state.capacityAfter,
+    // v46: a slider she never moved is not a reading — null, shown as "—".
+    capacityBefore: state.capacityBeforeTouched ? state.capacityBefore : null,
+    capacityAfter: state.capacityAfterTouched ? state.capacityAfter : null,
     wallSitSec: state.wallSitSec,
-    backPain: state.backPain,
+    backPain: state.backPainTouched ? state.backPain : null,
     word: state.word,
     startedAt,
     completedAt,
@@ -3769,6 +3826,11 @@ type ActiveSessionSnapshot = {
   capacityAfter: number;
   wallSitSec: number;
   backPain: number;
+  // v46: which sliders she actually moved (see AppState). A snapshot written
+  // before v46 has no flags and is read as "chosen", the way v45 saved it.
+  capacityBeforeTouched: boolean;
+  capacityAfterTouched: boolean;
+  backPainTouched: boolean;
   word: string;
   // v45: the post-log note survives an app close (it was lost before).
   sessionNote: string;
@@ -3792,6 +3854,9 @@ function saveActiveSession(): void {
       capacityAfter: state.capacityAfter,
       wallSitSec: state.wallSitSec,
       backPain: state.backPain,
+      capacityBeforeTouched: state.capacityBeforeTouched,
+      capacityAfterTouched: state.capacityAfterTouched,
+      backPainTouched: state.backPainTouched,
       word: state.word,
       sessionNote: state.sessionNote,
       currentRound: state.currentRound,
@@ -3853,6 +3918,11 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       capacityAfter: snap.capacityAfter ?? 5,
       wallSitSec: snap.wallSitSec ?? 0,
       backPain: snap.backPain ?? 0,
+      // Pre-v46 snapshot (no flags) → the numbers were saved as chosen then;
+      // keep that reading rather than blank a session already under way.
+      capacityBeforeTouched: snap.capacityBeforeTouched ?? true,
+      capacityAfterTouched: snap.capacityAfterTouched ?? true,
+      backPainTouched: snap.backPainTouched ?? true,
       word: snap.word ?? '',
       sessionNote: typeof snap.sessionNote === 'string' ? snap.sessionNote : '',
       currentRound: snap.currentRound ?? 1,
@@ -3881,6 +3951,9 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.capacityAfter = snap.capacityAfter;
   state.wallSitSec = snap.wallSitSec;
   state.backPain = snap.backPain;
+  state.capacityBeforeTouched = snap.capacityBeforeTouched;
+  state.capacityAfterTouched = snap.capacityAfterTouched;
+  state.backPainTouched = snap.backPainTouched;
   state.word = snap.word;
   state.sessionNote = snap.sessionNote;
   state.startedAt = snap.startedAt ?? new Date().toISOString();
@@ -3929,7 +4002,7 @@ function logStaleSessionAsDone(): void {
   const stored = saveLog({
     date: startedAt,
     workout: snap.selectedWorkout,
-    capacityBefore: snap.capacityBefore,
+    capacityBefore: snap.capacityBeforeTouched ? snap.capacityBefore : null, // v46: only if she moved it
     capacityAfter: null,
     wallSitSec: snap.wallSitSec,
     backPain: null,
@@ -3992,6 +4065,9 @@ function resetState(): void {
   state.capacityAfter = 5;
   state.wallSitSec = 0;
   state.backPain = 0;
+  state.capacityBeforeTouched = false;
+  state.capacityAfterTouched = false;
+  state.backPainTouched = false;
   state.word = '';
   state.sessionNote = '';
   state.currentRound = 1;
@@ -4729,7 +4805,7 @@ function renderDetailCard(exerciseName: string): string {
   return `
     <div class="detail-card">
       <div class="detail-face">
-        <button class="voice-note-btn" data-voice-src="${escapeHtml(d.voiceSrc)}" type="button">
+        <button class="voice-note-btn is-secondary" data-voice-src="${escapeHtml(d.voiceSrc)}" type="button">
           <span class="voice-note-icon" aria-hidden="true">▶</span>
           <span class="voice-note-label">Listen — how to do it</span>
         </button>
@@ -5204,7 +5280,7 @@ function renderGearCard(): string {
           <div class="gear-label">Worth getting — unlocks more (not in your workout yet)</div>
           <ul class="gear-list">
             <li>⬜ A 2nd 1 kg (a pair) — lets you do both sides at once, and load the bodyweight hip-hinge later</li>
-            <li>⬜ 2 kg weights — <strong>your buy-bigger trigger (you asked Jul 3):</strong> buy when the 1 kg biceps curl feels easy at 3 sets of 20, two sessions running (after Lisa un-pauses arms). The app doesn't log arm reps — tell Claude when it feels easy and this flips.</li>
+            <li>⬜ 2 kg weights — <strong>your buy-bigger trigger (you asked Jul 3):</strong> buy when the 1 kg biceps curl feels easy at 3 sets of 20, two sessions running. The app doesn't log arm reps — tell Claude when it feels easy and this flips.</li>
             <li>⬜ 2 tennis balls in a sock (“the peanut”) — for the neck release below</li>
           </ul>
           <p class="gear-note">Tell Claude when you’ve got one and the moves it unlocks get added. Nothing shows up in your workout until you own it.</p>
@@ -5239,6 +5315,27 @@ function renderHome(): string {
     return t < saturdayForOffset(viewedWeekOffset).getTime();
   });
   const isCurrentWeek = viewedWeekOffset === 0;
+  // v46: Saturday is the swing day (v42), and the card must say so where the
+  // big number is. The night she closed Week 3 with a Saturday session, home
+  // read "0 OF 3 THIS WEEK" next to a lit Saturday dot — the win invisible at
+  // the exact moment she earned it (UX audit Sep 24). On a Saturday whose
+  // session swung back, the card carries the week it closed; on a Saturday
+  // morning with last week at 1-2, one quiet line says today will count for it.
+  const todayIsSaturday = new Date().getDay() === 6;
+  const swungToday =
+    isCurrentWeek && todayIsSaturday ? swungOutOfWeek(logs, saturdayForOffset(0)) : 0;
+  const lastWeek = getViewedProgramWeek(1);
+  const lastWeekCount = getWeekCount(1);
+  const lastWeekTitle = `${lastWeek.round > 1 ? `R${lastWeek.round} · ` : ''}Week ${lastWeek.num}`;
+  const saturdayNote =
+    isCurrentWeek &&
+    todayIsSaturday &&
+    swungToday === 0 &&
+    viewedWeekCount === 0 &&
+    lastWeekCount > 0 &&
+    lastWeekCount < SESSIONS_PER_WEEK_TARGET
+      ? `<p class="gear-note swing-note">Last week's at ${lastWeekCount} — today's session will count for it.</p>`
+      : '';
 
   const dotsHtml = weekDots
     .map((d) => {
@@ -5325,8 +5422,16 @@ function renderHome(): string {
       </div>
       <div class="streak-stat">
         <div class="stat-block">
-          <div class="stat-number">${viewedWeekCount}</div>
-          <div class="stat-label">${isCurrentWeek ? 'of 3 this week' : 'sessions that week'}</div>
+          <div class="stat-number">${swungToday > 0 ? lastWeekCount : viewedWeekCount}</div>
+          <div class="stat-label">${
+            swungToday > 0
+              ? lastWeekCount >= SESSIONS_PER_WEEK_TARGET
+                ? `of 3 · ${lastWeekTitle} closed ✓`
+                : `of 3 · counted for ${lastWeekTitle}`
+              : isCurrentWeek
+                ? 'of 3 this week'
+                : 'sessions that week'
+          }</div>
         </div>
         <div class="stat-block">
           <div class="stat-number">${logs.length}</div>
@@ -5335,6 +5440,7 @@ function renderHome(): string {
       </div>
       <div class="week-dots">${dotsHtml}</div>
     </div>
+    ${saturdayNote}
 
     ${renderWeeklyTargetGrid()}
 
@@ -5357,7 +5463,7 @@ function renderHome(): string {
       <p class="gear-note walk-note">${
         walkStartedAt
           ? 'Tracking minutes + steps (+ km outdoors via GPS). Keep the phone on you and the screen stays awake by itself — tap Done when you finish, or Cancel if you were just checking (nothing logs). If the screen does lock, minutes still count; steps/km pause until you come back.'
-          : 'Tap start, walk any pace — apartment laps count (steps), outdoors adds km. Tap done when finished. Extra credit on top of your 3/week; never part of the streak math.'
+          : 'Tap start, walk any pace — apartment laps count (steps), outdoors adds km. Tap done when finished. Extra credit on top of your 3/week; never part of your 3.'
       }</p>
     </div>
 
@@ -5425,8 +5531,8 @@ function renderPreLog(): string {
     <button class="card lite-toggle${state.liteDay ? ' lite-toggle-on' : ''}" id="lite-toggle" type="button">
       ${
         state.liteDay
-          ? `<p class="gear-note"><strong>✓ Lite day.</strong> Main ×${Math.max(1, w.rounds - 1)} round${Math.max(1, w.rounds - 1) === 1 ? '' : 's'} instead of ${w.rounds} — same moves, same walk, streak intact. Stretch what you need at the end. Showing up IS the win. (Tap to undo)</p>`
-          : `<p class="gear-note">🪫 Hard day? <strong>Tap for Lite</strong> — one round less (${w.rounds}→${Math.max(1, w.rounds - 1)}), same moves, same walk, streak intact.</p>`
+          ? `<p class="gear-note"><strong>✓ Lite day.</strong> Main ×${Math.max(1, w.rounds - 1)} round${Math.max(1, w.rounds - 1) === 1 ? '' : 's'} instead of ${w.rounds} — same moves, same walk, your 3 stay yours. Stretch what you need at the end. Showing up IS the win. (Tap to undo)</p>`
+          : `<p class="gear-note">🪫 Hard day? <strong>Tap for Lite</strong> — one round less (${w.rounds}→${Math.max(1, w.rounds - 1)}), same moves, same walk, your 3 stay yours.</p>`
       }
     </button>
 
@@ -5457,7 +5563,11 @@ function renderWorkoutOverview(w: Workout): string {
   const rows = phases
     .map((p) => {
       const count = p.items.length;
-      const names = p.items.map((e) => e.name).join(' · ');
+      // v46: the warm-up step is a three-way pick now (her Sep 24: "no more
+      // walk it could be walk or elliptical") — display only; the key stays.
+      const names = p.items
+        .map((e) => (e.name === 'Outdoor walk' ? 'Cardio · elliptical / walk / apartment' : e.name))
+        .join(' · ');
       return `
         <details class="overview-phase">
           <summary class="overview-phase-summary">
@@ -5507,7 +5617,10 @@ function renderRestScreen(workoutId: WorkoutId, phaseLabel: string): string {
   return `
     <div class="screen-header">
       <h2>Workout ${workoutId}</h2>
-      <button class="quit-link" id="quit" type="button">× Quit workout</button>
+      <div class="screen-header-actions">
+        ${renderPauseButton()}
+        <button class="quit-link" id="quit" type="button">× Quit workout</button>
+      </div>
     </div>
     <span class="round-indicator">${phaseLabel}</span>
     <div class="card rest-card">
@@ -5562,7 +5675,10 @@ function renderCooldownList(w: Workout): string {
   return `
     <div class="screen-header">
       <h2>Workout ${w.id}</h2>
-      <button class="quit-link" id="quit" type="button">× Quit workout</button>
+      <div class="screen-header-actions">
+        ${renderPauseButton()}
+        <button class="quit-link" id="quit" type="button">× Quit workout</button>
+      </div>
     </div>
     <span class="round-indicator">Stretch · ${stretches.length} stretches</span>
     <p class="subtitle">${
@@ -5579,10 +5695,13 @@ function renderCooldownList(w: Workout): string {
   `;
 }
 
-// Floating pause pill — same spot on every workout sub-view (exercise / rest /
-// cooldown). Small and out of the way of the primary Done button.
+// Pause control — a quiet button in every workout sub-view's header, left of
+// Quit (v46). It was a fixed pill at the bottom-left, which sat on top of
+// Start timer and the setup steps on the elliptical screen (UI audit Sep 24).
+// Nothing while paused: the overlay's Resume is the only control then.
 function renderPauseButton(): string {
-  return `<button class="pause-fab" id="pause-toggle" type="button" aria-label="Pause workout">⏸ Pause</button>`;
+  if (state.pausedAt !== null) return '';
+  return `<button class="pause-inline" id="pause-toggle" type="button" aria-label="Pause workout">⏸ Pause</button>`;
 }
 
 // Full-screen "Paused" overlay — freezes the workout clock and any countdown
@@ -5627,30 +5746,22 @@ function renderApartmentRoutine(totalSec: number, remainingSec: number, running:
 }
 
 // The elliptical step's one input (v43): the level she rode at, 1-24. Starts on
-// her last recorded level so a same-as-last-time ride is zero taps.
+// her last recorded level so a same-as-last-time ride is zero taps. v46: the
+// readings moved under the timer (renderEllipticalReadings) so the screen reads
+// in the order she uses it — level, set up, ride, copy the numbers, Done.
 function renderEllipticalControls(): string {
   const level = ellipticalLevel();
   const last = lastEllipticalLevel();
+  // "the level you rode at", not "ended on": the ride ends on level 3 (the
+  // last-minute ease-off), so a literal reading logged 3 every time.
   const hint =
     last === null
-      ? `First ride — ${ELLIPTICAL_FIRST_LEVEL} is only a guess. Set it to the level you ended on.`
+      ? `First ride — ${ELLIPTICAL_FIRST_LEVEL} is only a guess. Set it to the level you rode at.`
       : `Starts at your last level (${last}). Change it if today was different.`;
-  // The timer re-renders this screen every second while it runs, which would
-  // wipe a half-typed number — so the copy-from-the-screen boxes only show
-  // while it is NOT running (before the ride, and once it ends).
   const running = state.timerSeconds > 0 || state.preCountdown > 0;
-  const km = localStorage.getItem(WW_ELLIPTICAL_KM_KEY) ?? '';
-  const pulse = localStorage.getItem(WW_ELLIPTICAL_PULSE_KEY) ?? '';
-  const readings = running
-    ? `<p class="gear-note">When the timer ends, boxes for distance + pulse appear here.</p>`
-    : `
-      <div class="ell-readings">
-        <div class="ell-readings-title">From the elliptical's screen, after the ride</div>
-        <div class="ell-readings-row">
-          <label class="ell-reading"><span>Distance (km)</span><input type="number" id="ell-km" inputmode="decimal" step="0.01" min="0" placeholder="—" value="${escapeHtml(km)}" /></label>
-          <label class="ell-reading"><span>Pulse</span><input type="number" id="ell-pulse" inputmode="numeric" step="1" min="30" max="230" placeholder="—" value="${escapeHtml(pulse)}" /></label>
-        </div>
-      </div>`;
+  // The back-out wipes the level + readings — gone once the ride has run (it
+  // sat right under the km box and cost her the numbers; UX audit Sep 24).
+  const rideRan = localStorage.getItem(WW_LANE_STARTED_KEY) !== null;
   return `
     <div class="ww-start-block">
       <div class="ell-level-row">
@@ -5663,10 +5774,31 @@ function renderEllipticalControls(): string {
         <span class="ell-level-of">of ${ELLIPTICAL_MAX_LEVEL}</span>
       </div>
       <p class="gear-note">${hint}</p>
-      ${readings}
-      <button class="cardio-alt-btn" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>
+      ${running || rideRan ? '' : `<button class="cardio-alt-btn" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>`}
     </div>
   `;
+}
+
+// Copy-from-the-screen boxes (v44), under the timer since v46. The timer
+// re-renders this screen every second while it runs, which would wipe a
+// half-typed number — so the boxes only show while it is NOT running (before
+// the ride, and once it ends).
+function renderEllipticalReadings(): string {
+  if (state.timerSeconds > 0 || state.preCountdown > 0) {
+    return `<p class="gear-note ell-readings-wait">When the timer ends, boxes for distance + pulse appear here.</p>`;
+  }
+  const km = localStorage.getItem(WW_ELLIPTICAL_KM_KEY) ?? '';
+  const pulse = localStorage.getItem(WW_ELLIPTICAL_PULSE_KEY) ?? '';
+  return `
+    <div class="card">
+      <div class="ell-readings">
+        <div class="ell-readings-title">From the elliptical's screen, after the ride</div>
+        <div class="ell-readings-row">
+          <label class="ell-reading"><span>Distance (km)</span><input type="number" id="ell-km" inputmode="decimal" step="0.01" min="0" placeholder="—" value="${escapeHtml(km)}" /></label>
+          <label class="ell-reading"><span>Pulse</span><input type="number" id="ell-pulse" inputmode="numeric" step="1" min="30" max="230" placeholder="—" value="${escapeHtml(pulse)}" /></label>
+        </div>
+      </div>
+    </div>`;
 }
 
 // Setup + ride steps (v44, her ask: "make sure you tell me how to do it and how
@@ -5683,26 +5815,46 @@ const ELLIPTICAL_SETUP_STEPS: readonly string[] = [
 
 const ELLIPTICAL_RIDE_STEPS: readonly string[] = [
   'Start the app timer. Ride the first 2 minutes on level 3, easy.',
-  'First ride: go up 1 level every 30 seconds until talking in full sentences starts to take effort. Then go back down 1 level. That is your level today. After this, go straight to your last level once the warm-up ends.',
+  // v46: was "First ride: …" — it showed on every ride.
+  'Not sure of your level? Go up 1 every 30 seconds until talking in full sentences starts to take effort, then back down 1. That is your level today.',
   'Stay there. Stand tall, feet flat on the pedals, hands light. Wrist complains? Rest your hands on the fixed grips.',
   // v45: pulse is read at the WORKING level, before the cool-down — read
   // after it, the number was recovery, not how hard the ride was.
   'About a minute before the end, still on your level, hold the fixed metal grips until your pulse shows.',
   'For the last minute, go back to level 3.',
-  'Before you step off, copy the Distance and Pulse into the boxes above, and set the Level to the one you rode at. Then press STOP on the machine.',
+  'Before you step off, copy the Distance and Pulse into the boxes under the timer, and set the Level to the one you rode at. Then press STOP on the machine.',
 ];
 
+// v46: one expander, "🛠 Set up the machine", sitting ABOVE the timer (she needs
+// it before Start; it used to render after). Open by default on the very first
+// ride only — once a level is on record she knows the machine, and the steps
+// are one tap away. Never auto-open while the timer runs: the card is above
+// the countdown. Same toggle handler as the detail-card sections.
 function renderEllipticalGuide(): string {
-  if (state.timerSeconds > 0 || state.preCountdown > 0) return '';
+  const key = `${ELLIPTICAL_NAME}::setup`;
+  const running = state.timerSeconds > 0 || state.preCountdown > 0;
+  const firstRide = lastEllipticalLevel() === null;
+  const isOpen =
+    running || !firstRide ? state.openSections[key] === true : state.openSections[key] !== false;
   const ol = (steps: readonly string[]): string =>
     `<ol class="ell-steps">${steps.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ol>`;
   return `
-    <div class="card ell-guide">
-      <div class="ell-guide-title">Setting up the machine</div>
-      ${ol(ELLIPTICAL_SETUP_STEPS)}
-      <p class="gear-note">These are the usual steps for this kind of console. The button names on yours may be a little different.</p>
-      <div class="ell-guide-title">The ride</div>
-      ${ol(ELLIPTICAL_RIDE_STEPS)}
+    <div class="card ell-guide ${isOpen ? 'detail-section-open' : 'ell-guide-collapsed'}">
+      <button class="detail-section-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${isOpen}">
+        <span class="detail-section-label"><span class="detail-section-icon" aria-hidden="true">🛠</span> Set up the machine</span>
+        <span class="detail-chev" aria-hidden="true">▸</span>
+      </button>
+      ${
+        isOpen
+          ? `<div class="detail-section-body ell-guide-body">
+        <div class="ell-guide-title">Setting up the machine</div>
+        ${ol(ELLIPTICAL_SETUP_STEPS)}
+        <p class="gear-note">These are the usual steps for this kind of console. The button names on yours may be a little different.</p>
+        <div class="ell-guide-title">The ride</div>
+        ${ol(ELLIPTICAL_RIDE_STEPS)}
+      </div>`
+          : ''
+      }
     </div>
   `;
 }
@@ -5736,11 +5888,20 @@ function renderWorkout(): string {
   }
 
   const showTempo = ex.reps?.includes('3-1-3') ?? false;
+  // v46: an indoor lane whose timer has RUN this session and is idle again =
+  // the ride is done. The card used to reset to "Ready 10:00 / Start timer",
+  // which looked like the ride never happened (UX audit Sep 24).
+  const indoorLane = isIndoorLane(ex.name);
+  const laneRan = indoorLane && localStorage.getItem(WW_LANE_STARTED_KEY) !== null;
+  const timerIdle = state.timerSeconds === 0 && state.preCountdown === 0;
 
   return `
     <div class="screen-header">
       <h2>Workout ${w.id}</h2>
-      <button class="quit-link" id="quit" type="button">× Quit workout</button>
+      <div class="screen-header-actions">
+        ${renderPauseButton()}
+        <button class="quit-link" id="quit" type="button">× Quit workout</button>
+      </div>
     </div>
     <span class="round-indicator">${phaseLabel}</span>
     <div class="progress-text">Exercise ${state.currentExerciseIndex + 1} of ${total}</div>
@@ -5776,6 +5937,12 @@ function renderWorkout(): string {
     ${renderExerciseVisual(ex.name)}
 
     ${
+      // v46: the machine setup sits ABOVE the timer — she needs it before
+      // Start, and it used to render after (UX audit Sep 24).
+      ex.name === ELLIPTICAL_NAME ? renderEllipticalGuide() : ''
+    }
+
+    ${
       ex.isTimed
         ? `
       <div class="card timer-card">
@@ -5785,8 +5952,13 @@ function renderWorkout(): string {
           <div class="timer-label">Get ready</div>
           <div class="timer-display countdown-big">${state.preCountdown}</div>
         `
-            : `
-          <div class="timer-label">${state.timerSeconds > 0 ? 'Hold' : 'Ready'}</div>
+            : laneRan && timerIdle
+              ? `
+          <div class="timer-label">Done</div>
+          <div class="timer-done">✓ ${Math.round((ex.durationSec ?? 0) / 60)} min done</div>
+        `
+              : `
+          <div class="timer-label">${state.timerSeconds > 0 ? (indoorLane ? 'Running' : 'Hold') : 'Ready'}</div>
           <div class="timer-display">${formatTimerDisplay(state.timerSeconds || ex.durationSec || 0)}</div>
           <button class="btn-large btn-primary" id="start-timed" type="button" ${state.timerSeconds > 0 ? 'disabled' : ''}>${state.timerSeconds > 0 ? 'Running…' : 'Start timer'}</button>
         `
@@ -5801,7 +5973,8 @@ function renderWorkout(): string {
 
     ${
       // The guided indoor strip sits directly under the countdown it's derived
-      // from, so "how long left" and "what am I doing" read as one block.
+      // from, so "how long left" and "what am I doing" read as one block. The
+      // elliptical's copy-from-the-screen boxes take the same spot (v46).
       ex.name === APARTMENT_CARDIO_NAME
         ? renderApartmentRoutine(
             ex.durationSec ?? 0,
@@ -5809,7 +5982,7 @@ function renderWorkout(): string {
             state.timerSeconds > 0
           )
         : ex.name === ELLIPTICAL_NAME
-          ? renderEllipticalGuide()
+          ? renderEllipticalReadings()
           : ''
     }
 
@@ -5885,7 +6058,7 @@ function renderHistory(): string {
   if (logs.length === 0) {
     return `
       <h2>History</h2>
-      <p class="empty">No sessions yet. Do a workout!</p>
+      <p class="empty">No sessions yet.</p>
       <button class="btn-large" id="back-home" type="button">Back</button>
     `;
   }
@@ -5899,7 +6072,10 @@ function renderHistory(): string {
       <span class="history-workout-badge">${l.workout}</span>
       <div>
         <div class="history-date">${formatDate(l.date)}${l.durationSec ? ` · ${formatDuration(l.durationSec)}` : ''}${spark ? ` <span class="history-sparkline-wrap" aria-hidden="false">${spark}</span>` : ''}</div>
-        <div class="history-meta">cap ${l.capacityBefore ?? '—'}→${l.capacityAfter ?? '—'} · wall ${l.wallSitSec}s · back ${l.backPain ?? '—'}</div>
+        <div class="history-meta">cap ${l.capacityBefore ?? '—'}→${l.capacityAfter ?? '—'}${
+          // v46: B and C have no wall sit — "wall 0s" there read as a zero.
+          l.wallSitSec > 0 || l.workout === 'A' ? ` · wall ${l.wallSitSec}s` : ''
+        } · back ${l.backPain ?? '—'}</div>
         ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
       </div>
       <div class="history-meta">›</div>
@@ -5943,7 +6119,13 @@ function renderHistoryDetail(): string {
       <div class="detail-row"><span class="detail-label">Wall sit</span><span>${log.wallSitSec}s</span></div>
       <div class="detail-row"><span class="detail-label">Back pain</span><span>${log.backPain === null ? '—' : `${log.backPain}/10`}</span></div>
       ${log.word ? `<div class="detail-row"><span class="detail-label">One word</span><span><em>"${escapeHtml(log.word)}"</em></span></div>` : ''}
-      ${log.notes ? `<div class="detail-row"><span class="detail-label">Note</span><span>${escapeHtml(log.notes)}</span></div>` : ''}
+      ${
+        // v46: her note gets its own block under the label — on one row the
+        // label ran straight into the text (UX audit Sep 24).
+        log.notes
+          ? `<div class="detail-row detail-row-stack"><span class="detail-label">Note</span><div class="detail-note" dir="auto">${escapeHtml(log.notes)}</div></div>`
+          : ''
+      }
     </div>
     <button class="weekly-review-link progress-link" id="open-progress-from-detail" type="button">
       <span>📈 View progress</span>
@@ -6666,7 +6848,7 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
   thisSat.setDate(today.getDate() - daysSinceSat);
   thisSat.setHours(0, 0, 0, 0);
 
-  const rows: { label: string; value: number; isCurrent: boolean }[] = [];
+  const rows: { label: string; value: number; isCurrent: boolean; skipped: boolean }[] = [];
   const cursor = new Date(firstSat);
   // Swing-aware (v42): same attribution as the 3-slot rows and the week card.
   const attribution = attributeSessionsToWeeks(logs);
@@ -6683,15 +6865,25 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
           : `${pw.round > 1 ? `r${pw.round} ` : ''}wk ${pw.num}`,
       value: count,
       isCurrent,
+      skipped: pw.skippedLabel !== null,
     });
     cursor.setDate(cursor.getDate() + 7);
   }
 
   if (rows.length === 0) return '';
 
-  const hits = rows.filter((r) => r.value >= 3).length;
+  // v46: only COMPLETED program weeks are judged. Break and sick weeks were
+  // never a target and the week in progress isn't over — counting them as
+  // misses turned 13 of 13 training weeks into "13 of 21" (UX audit Sep 24).
+  // The bars keep every week; only the score line changes.
+  const judged = rows.filter((r) => !r.isCurrent && !r.skipped);
+  const hits = judged.filter((r) => r.value >= 3).length;
+  const scoreLine =
+    judged.length === 0
+      ? 'The first week is in progress.'
+      : `Hit target <strong>${hits} of ${judged.length}</strong> training ${judged.length === 1 ? 'week' : 'weeks'}.`;
   const chart = renderProgressHorizontalBars(rows, {
-    ariaLabel: `Sessions per week: hit target ${hits} of ${rows.length} weeks`,
+    ariaLabel: `Sessions per week: hit target ${hits} of ${judged.length} training weeks`,
     target: 3,
   });
 
@@ -6700,7 +6892,7 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
       <div class="progress-card-label">Sessions per week</div>
       <div class="progress-chart-wrap progress-chart-wrap-hbar">${chart}</div>
       <div class="progress-card-meta">
-        Hit target <strong>${hits} of ${rows.length}</strong> ${rows.length === 1 ? 'week' : 'weeks'}.
+        ${scoreLine}
       </div>
     </div>
   `;
@@ -6895,7 +7087,7 @@ function renderSettings(): string {
         <label class="settings-row">
           <div class="settings-row-text">
             <div class="settings-row-title">Auto-suggest today's workout</div>
-            <div class="settings-row-caption">Off = all three workout cards render equally.</div>
+            <div class="settings-row-caption">Off: all three cards shown alike.</div>
           </div>
           <span class="settings-toggle ${autoSuggestOn ? 'on' : 'off'}">
             <input type="checkbox" id="setting-suggest" ${autoSuggestOn ? 'checked' : ''} />
@@ -6913,7 +7105,7 @@ function renderSettings(): string {
         <div class="settings-data-row">
           <button class="btn settings-data-btn" id="import-sessions-btn" type="button">Import sessions</button>
           <input type="file" id="import-sessions-input" accept="application/json,.json" style="display:none" />
-          <div class="settings-row-caption">Merges by id. Existing local entries win on conflict.</div>
+          <div class="settings-row-caption">Existing entries on this phone win.</div>
         </div>
         <div class="settings-data-row">
           <button class="btn settings-destructive-btn hold-to-confirm" id="clear-local" type="button" data-hold-ms="${HOLD_TO_CLEAR_MS}">
@@ -6933,7 +7125,7 @@ function renderSettings(): string {
         </div>
         <div class="settings-about-row">
           <div class="settings-row-title">Program weeks: ${getProgramWeekCount()}</div>
-          <div class="settings-row-caption">${getProgramWeekCount()} weeks encoded across ${ROUNDS.length} round${ROUNDS.length > 1 ? 's' : ''} (Round 1: weeks 1–11 · Round 2 started Aug 29 2026). Add new weeks in <code>app.ts</code> PROGRAM array.</div>
+          <div class="settings-row-caption">${getProgramWeekCount()} weeks encoded across ${ROUNDS.length} round${ROUNDS.length > 1 ? 's' : ''} (Round 1: weeks 1–11 · Round 2 started Aug 29 2026).</div>
         </div>
         <div class="settings-about-row">
           <a class="settings-link" href="${GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub →</a>
@@ -7103,6 +7295,21 @@ function showQuitConfirmPanel(): void {
   });
 }
 
+// v46: WHERE she is, for the scroll reset in render(). Done·Next at the bottom
+// of one step used to open the next step at the same scroll depth — the
+// exercise name 69px off the top, another Done·Next under her thumb, 22 of 22
+// steps (UX audit Sep 24). Keyed on position, not on render: the timer
+// re-renders every second and must never move the page.
+let lastNavKey: string | null = null;
+
+function navigationKey(): string {
+  if (state.screen === 'workout') {
+    return `workout|${state.currentPhase}|${state.currentRound}|${state.currentExerciseIndex}|${state.isResting ? 'rest' : 'go'}`;
+  }
+  if (state.screen === 'history-detail') return `history-detail|${state.historyDetailId ?? ''}`;
+  return state.screen;
+}
+
 function render(): void {
   const root = document.getElementById('app');
   if (!root) return;
@@ -7136,15 +7343,12 @@ function render(): void {
       html = renderSettings();
       break;
   }
-  // Pause affordance — available throughout the active workout (exercise, rest,
-  // and cooldown all render under the 'workout' screen). When paused, a full
-  // overlay replaces the pill so Resume is unmissable on any sub-view.
-  if (state.screen === 'workout') {
-    html += state.pausedAt !== null ? renderPausedOverlay() : renderPauseButton();
+  // Pause affordance — the Pause button sits in each workout sub-view's header
+  // (exercise, rest, cooldown; v46). When paused, a full overlay replaces it so
+  // Resume is unmissable on any sub-view.
+  if (state.screen === 'workout' && state.pausedAt !== null) {
+    html += renderPausedOverlay();
   }
-  // The floating pause pill overlapped the last line of content at the bottom-left
-  // (her Jul-9 note) — give the workout screen extra bottom room to scroll past it.
-  root.classList.toggle('has-pause-fab', state.screen === 'workout');
   // Ship 6: screen transitions — apply enter-animation class except on
   // workout/timer screens where it would feel laggy mid-rep. The class
   // triggers a 220ms fade + 8px translateY with the spring ease curve.
@@ -7161,6 +7365,12 @@ function render(): void {
     root.classList.remove('screen-enter');
   }
   attachHandlers();
+  // v46: a new screen or step lands at the top (see navigationKey).
+  const navKey = navigationKey();
+  if (navKey !== lastNavKey) {
+    lastNavKey = navKey;
+    window.scrollTo(0, 0);
+  }
   // Persist live position so reopening the app resumes the workout (cleared on
   // quit/finish via resetState). No-op for non-resumable screens.
   saveActiveSession();
@@ -7533,14 +7743,18 @@ function attachHandlers(): void {
     });
   });
 
+  // v46: the flag is what makes the number a reading (see AppState).
   bindRange('cap-before', 'cap-before-val', (v) => {
     state.capacityBefore = v;
+    state.capacityBeforeTouched = true;
   });
   bindRange('cap-after', 'cap-after-val', (v) => {
     state.capacityAfter = v;
+    state.capacityAfterTouched = true;
   });
   bindRange('back', 'back-val', (v) => {
     state.backPain = v;
+    state.backPainTouched = true;
   });
 }
 

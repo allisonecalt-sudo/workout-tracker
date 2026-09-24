@@ -241,11 +241,14 @@ test('pause overlay opens and resume returns to the same exercise', async ({ pag
   await expect(page.locator('.exercise-name')).toBeVisible();
   const firstExercise = await page.locator('.exercise-name').textContent();
 
-  // Pill is present on the workout screen; tapping it opens the overlay.
-  await expect(page.locator('#pause-toggle')).toBeVisible();
+  // v46: the control lives in the screen header, left of Quit (the old fixed
+  // pill sat on top of Start timer on the elliptical screen); tapping it opens
+  // the overlay.
+  await expect(page.locator('.screen-header #pause-toggle')).toBeVisible();
+  await expect(page.locator('.pause-fab')).toHaveCount(0);
   await page.locator('#pause-toggle').click();
   await expect(page.locator('#paused-overlay')).toBeVisible();
-  await expect(page.locator('#pause-toggle')).toHaveCount(0); // pill hidden while paused
+  await expect(page.locator('#pause-toggle')).toHaveCount(0); // button hidden while paused
 
   // Resume closes the overlay and lands back on the same exercise.
   await page.locator('#pause-resume').click();
@@ -297,6 +300,82 @@ test('capacity slider updates value display', async ({ page }) => {
   const slider = page.locator('#cap-before');
   await slider.fill('8');
   await expect(page.locator('#cap-before-val')).toHaveText('8');
+});
+
+// v46: a slider she never moved is not a reading. The three sliders start at
+// 5/5/0 and used to save as if she chose them — capacity-after was exactly 5 in
+// 6 of 8 sessions since Aug 30, a "decline" the mirror invented (UX audit
+// Sep 24). Untouched → null ("—"); moved → her number.
+async function walkToPostLog(page: import('@playwright/test').Page): Promise<void> {
+  for (let i = 0; i < 40; i++) {
+    const isPostLog = await page
+      .locator('text=Quick log')
+      .isVisible()
+      .catch(() => false);
+    if (isPostLog) return;
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else return;
+  }
+}
+
+test('untouched sliders (v46): a workout with no slider moved saves null, not 5/5/0', async ({
+  page,
+}) => {
+  await page.locator('button[data-workout="C"]').click();
+  // The pre-log slider still SHOWS 5 as its starting position.
+  await expect(page.locator('#cap-before-val')).toHaveText('5');
+  await page.locator('button:has-text("Start")').click();
+  await walkToPostLog(page);
+  await expect(page.locator('#cap-after-val')).toHaveText('5');
+  await expect(page.locator('#back-val')).toHaveText('0');
+  await page.locator('button:has-text("Save & finish")').click();
+  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+
+  const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+  const logs = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>;
+  expect(logs).toHaveLength(1);
+  expect(logs[0]?.['capacityBefore']).toBeNull();
+  expect(logs[0]?.['capacityAfter']).toBeNull();
+  expect(logs[0]?.['backPain']).toBeNull();
+  // And the row reads "—", never an invented number.
+  await expect(page.locator('.last-line')).toContainText('capacity —→—');
+});
+
+test('untouched sliders (v46): a slider she DID move saves her number; the others stay null', async ({
+  page,
+}) => {
+  await page.locator('button[data-workout="C"]').click();
+  await page.locator('#cap-before').fill('7');
+  await page.locator('button:has-text("Start")').click();
+  await walkToPostLog(page);
+  await page.locator('#back').fill('2');
+  await page.locator('button:has-text("Save & finish")').click();
+  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+
+  const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+  const logs = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>;
+  expect(logs[0]?.['capacityBefore']).toBe(7);
+  expect(logs[0]?.['capacityAfter']).toBeNull();
+  expect(logs[0]?.['backPain']).toBe(2);
+});
+
+// v46: every new screen / step lands at the top. Done·Next at the bottom of one
+// step used to open the next step at the same scroll depth, with the exercise
+// name off the top of the screen (22 of 22 steps, UX audit Sep 24).
+test('scroll (v46): Done·Next opens the next step at the top of the page', async ({ page }) => {
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await expect(page.locator('.exercise-name')).toBeVisible();
+  // Two steps in: the second step carries a long detail card, so the Done·Next
+  // tap on it happens well below the fold.
+  await page.locator('button:has-text("Done · Next")').click();
+  await page.locator('button:has-text("Done · Next")').click();
+  await expect(page.locator('.exercise-name')).toBeVisible();
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  const box = await page.locator('.exercise-name').boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
 });
 
 test('exercise visual renders for known exercises', async ({ page }) => {
@@ -910,6 +989,96 @@ test('swing: a SUNDAY session never swings, even when last week is short', async
   await page.locator('.consistency-wrap > summary').click();
   const wk3 = page.locator('.weekly-row').filter({ hasText: 'R2 · Wk 3' }).first();
   await expect(wk3.locator('button.weekly-slot')).toHaveCount(2);
+});
+
+// v46: the swing must show where the big number is. On the Saturday night she
+// closed Week 3, home read "0 OF 3 THIS WEEK" next to a lit Saturday dot — the
+// win invisible at the moment she earned it (UX audit Sep 24).
+test('swing (v46): on the Saturday itself the week card carries the week it closed', async ({
+  page,
+}) => {
+  await page.addInitScript(
+    (rows: unknown[]) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    },
+    [SWING_WEEK3_A, SWING_WEEK3_B, SWING_SAT_C]
+  );
+  await mockDate(page, '2026-09-19T19:30:00.000Z'); // Sat Sep 19, 22:30 Jerusalem — right after the C
+  await page.goto('/');
+  const card = page.locator('.streak-stat .stat-block').first();
+  await expect(card.locator('.stat-number')).toHaveText('3');
+  await expect(card.locator('.stat-label')).toContainText('R2 · Week 3 closed ✓');
+  await expect(page.locator('.swing-note')).toHaveCount(0);
+  // The next morning (Sunday) it is a new week again — the v42 wording holds.
+  await mockDate(page, '2026-09-20T10:00:00.000Z');
+  await page.goto('/');
+  await expect(page.locator('.streak-stat .stat-number').first()).toHaveText('0');
+  await expect(page.locator('.streak-stat .stat-label').first()).toHaveText('of 3 this week');
+});
+
+test('swing (v46): Saturday morning with last week at 2 says today will count for it', async ({
+  page,
+}) => {
+  await page.addInitScript(
+    (rows: unknown[]) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    },
+    [SWING_WEEK3_A, SWING_WEEK3_B]
+  );
+  await mockDate(page, '2026-09-19T06:00:00.000Z'); // Sat Sep 19, 09:00 Jerusalem — nothing done yet
+  await page.goto('/');
+  await expect(page.locator('.streak-stat .stat-number').first()).toHaveText('0');
+  await expect(page.locator('.swing-note')).toHaveText(
+    "Last week's at 2 — today's session will count for it."
+  );
+});
+
+// v46: only completed program weeks are judged. Break + sick weeks and the week
+// in progress were counted as misses, turning 13 of 13 training weeks into
+// "13 of 21" (UX audit Sep 24).
+test('progress (v46): "Hit target" counts training weeks only — no break, sick or in-progress weeks', async ({
+  page,
+}) => {
+  const mk = (id: string, date: string, workout: 'A' | 'B' | 'C') => ({
+    id,
+    date,
+    workout,
+    capacityBefore: 6,
+    capacityAfter: 6,
+    wallSitSec: 0,
+    backPain: 0,
+    word: '',
+  });
+  await page.addInitScript(
+    (rows: unknown[]) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    },
+    [
+      // R2 Week 1 (Aug 29–Sep 4): 3 — hit.
+      mk('w1a', '2026-08-30T15:00:00.000Z', 'A'),
+      mk('w1b', '2026-09-01T15:00:00.000Z', 'B'),
+      mk('w1c', '2026-09-03T15:00:00.000Z', 'C'),
+      // R2 Week 2 (Sep 5–11): 3 — hit.
+      mk('w2a', '2026-09-06T15:00:00.000Z', 'A'),
+      mk('w2b', '2026-09-08T15:00:00.000Z', 'B'),
+      mk('w2c', '2026-09-10T15:00:00.000Z', 'C'),
+      // R2 Week 3 (Sep 12–18): 2 — a real miss, stays counted.
+      mk('w3a', '2026-09-13T15:00:00.000Z', 'A'),
+      mk('w3b', '2026-09-15T15:00:00.000Z', 'B'),
+      // R2 Week 4, in progress: 1 — not judged yet.
+      mk('w4a', '2026-09-22T15:00:00.000Z', 'A'),
+    ]
+  );
+  await mockDate(page, '2026-09-24T08:00:00.000Z'); // Thu inside R2 Week 4
+  await page.goto('/');
+  await page.locator('#open-progress-link').click();
+  const card = page.locator('.progress-card').filter({ hasText: 'Sessions per week' });
+  // 21 calendar weeks since May 2 = 11 R1 program weeks + 1 sick + 5 break +
+  // 3 completed R2 weeks + the current one → 14 judged; the two 3/3 weeks hit.
+  await expect(card.locator('.progress-card-meta')).toContainText('2 of 14 training weeks');
+  // The bars still show every week, breaks included.
+  await expect(card).toContainText('break');
+  await expect(card).toContainText('now');
 });
 
 // The overview lists names, not reps — so the wall-sit seconds are checked inside
@@ -2926,6 +3095,20 @@ test('elliptical: the next ride starts at the level from the last saved session'
   await page.locator('#ww-elliptical').click();
   await expect(page.locator('#ell-level')).toHaveText('8');
   await expect(page.locator('.ww-start-block .gear-note')).toContainText('last level (8)');
+  // v46: she knows the machine now — the setup is a one-line expander above
+  // the timer, closed until tapped.
+  const guide = page.locator('.ell-guide');
+  await expect(guide.locator('.detail-section-toggle')).toContainText('Set up the machine');
+  await expect(guide.locator('.ell-steps')).toHaveCount(0);
+  const guideBox = await guide.boundingBox();
+  const timerBox = await page.locator('.timer-card').boundingBox();
+  expect(guideBox!.y).toBeLessThan(timerBox!.y);
+  await guide.locator('.detail-section-toggle').click();
+  await expect(guide.locator('.ell-steps')).toHaveCount(2);
+  await expect(guide).toContainText('MANUAL');
+  // The ride step no longer says "First ride" on every ride.
+  await expect(guide).not.toContainText('First ride:');
+  await expect(guide).toContainText('Not sure of your level?');
 });
 
 test('elliptical: the step carries how-to guidance', () => {
@@ -2950,18 +3133,38 @@ test('elliptical: the reading boxes + setup steps hide while the timer runs and 
   await page.locator('#ww-elliptical').click();
   await expect(page.locator('#ell-km')).toBeVisible();
   await expect(page.locator('#ell-pulse')).toBeVisible();
+  // First ride (no level on record) → the setup expander is open by default.
   await expect(page.locator('.ell-guide')).toContainText('Setting up the machine');
   await expect(page.locator('.ell-guide')).toContainText('MANUAL');
+  // v46 order: setup ABOVE the timer, readings BELOW it (she reads it in the
+  // order she uses it), and the back-out is still offered before the ride.
+  const guideBox = await page.locator('.ell-guide').boundingBox();
+  const timerBox = await page.locator('.timer-card').boundingBox();
+  const kmBox = await page.locator('#ell-km').boundingBox();
+  expect(guideBox!.y).toBeLessThan(timerBox!.y);
+  expect(kmBox!.y).toBeGreaterThan(timerBox!.y);
+  await expect(page.locator('#ww-outdoor')).toBeVisible();
+  await expect(page.locator('.ww-start-block .gear-note')).toContainText('the level you rode at');
 
   await page.locator('#start-timed').click();
   await expect(page.locator('#ell-km')).toHaveCount(0);
-  await expect(page.locator('.ell-guide')).toHaveCount(0);
+  // Mid-ride the steps fold away (the card sits above the countdown), but the
+  // expander stays one tap away.
+  await expect(page.locator('.ell-guide .ell-steps')).toHaveCount(0);
+  await expect(page.locator('.ell-guide .detail-section-toggle')).toBeVisible();
+  await expect(page.locator('.timer-label')).toHaveText('Running');
   // The level stepper stays usable mid-ride.
   await expect(page.locator('#ell-level-up')).toBeVisible();
 
   await advanceClock(page, 10 * 60_000 + 2_000);
   await expect(page.locator('#ell-km')).toBeVisible();
   await expect(page.locator('#ell-pulse')).toBeVisible();
+  // v46: the ride ran — the card says so instead of resetting to
+  // "Ready 10:00 / Start timer", and the back-out (which wipes the readings)
+  // is gone.
+  await expect(page.locator('.timer-done')).toHaveText('✓ 10 min done');
+  await expect(page.locator('#start-timed')).toHaveCount(0);
+  await expect(page.locator('#ww-outdoor')).toHaveCount(0);
 });
 
 test('post-log: the free-text note saves verbatim on a session with no cardio lane picked', async ({

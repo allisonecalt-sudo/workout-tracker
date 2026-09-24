@@ -152,7 +152,24 @@ body {
   max-width: 560px;
   margin: 0 auto;
   padding: 28px 20px 48px;
+  /* viewport-fit=cover was declared but never honored — keep the last line
+   * above the Pixel gesture bar (Sep 24 2026 audit). */
+  padding-bottom: calc(48px + env(safe-area-inset-bottom));
   min-height: 100dvh;
+}
+
+/* Keyboard focus ring in the app's own accent — Chromium's fallback was an
+ * orange auto-outline, off-palette (Sep 24 2026 audit). Inputs keep their
+ * own accent-border focus rules. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Chromium's default placeholder (#757575) sits at 2.89:1 on the input
+ * backdrop; dim-2 is the app's own quiet tone (Sep 24 2026 audit). */
+::placeholder {
+  color: var(--text-dim-2);
 }
 
 /* --- Typography -------------------------------------------------------- */
@@ -309,6 +326,10 @@ button:disabled {
   background: transparent;
   color: var(--text-dim);
   padding: 6px 10px;
+  /* 44px tap target (Sep 24 2026 audit) — the negative margin keeps the
+   * header the same height so the text stays exactly where it was. */
+  min-height: 44px;
+  margin: -6px 0;
   font-size: var(--font-meta);
   font-weight: 500;
   border-radius: var(--radius-sm);
@@ -492,7 +513,8 @@ button:disabled {
 .last-line {
   margin-top: 14px;
   font-size: var(--font-meta);
-  color: var(--text-dim-2);
+  /* dim (6.26:1), not dim-2 (3.5:1) — it's a sentence she reads (Sep 24 2026 audit). */
+  color: var(--text-dim);
   text-align: center;
 }
 
@@ -1090,7 +1112,8 @@ input[type='number']:focus {
   justify-content: space-between;
   margin-top: 6px;
   font-size: var(--font-micro);
-  color: var(--text-dim-2);
+  /* dim, not dim-2 — 3.24:1 on a card was below AA (Sep 24 2026 audit). */
+  color: var(--text-dim);
   letter-spacing: 0.02em;
 }
 
@@ -1167,8 +1190,9 @@ input[type='number']:focus {
   color: var(--text-dim-2);
 }
 
-/* History detail */
-.detail-card {
+/* History detail — scoped to .card so the 8px 4px padding stops leaking into
+ * the exercise detail card, which shares the class name (Sep 24 2026 audit). */
+.card.detail-card {
   padding: 8px 4px;
 }
 
@@ -1243,7 +1267,7 @@ input[type='number']:focus {
   color: var(--text-dim-2);
   margin-left: auto;
   font-size: 10px;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.18s var(--ease-spring);
 }
 
 .overview-phase[open] .overview-phase-summary::after {
@@ -1328,7 +1352,8 @@ input[type='number']:focus {
 }
 
 .next-week-summary-meta {
-  color: var(--text-dim-2);
+  /* dim, not dim-2 — 3.24:1 on a card was below AA (Sep 24 2026 audit). */
+  color: var(--text-dim);
   font-size: var(--font-meta);
   margin-left: auto;
 }
@@ -1337,7 +1362,7 @@ input[type='number']:focus {
   color: var(--text-dim-2);
   font-size: 12px;
   margin-left: 4px;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.18s var(--ease-spring);
 }
 
 .next-week-preview[open] .next-week-chev {
@@ -1362,7 +1387,8 @@ input[type='number']:focus {
 }
 
 .next-week-block {
-  background: var(--bg-elev-1);
+  /* was an "elev-1" token that never existed → rendered transparent (Sep 24 2026 audit). */
+  background: var(--bg-elev-2);
   border: 1px solid var(--border-divider);
   border-radius: var(--radius-sm, 10px);
   padding: 12px 14px;
@@ -1439,7 +1465,7 @@ input[type='number']:focus {
 .past-weeks-body .next-week-preview {
   margin-top: 10px;
   margin-bottom: 0;
-  background: var(--bg-elev-1);
+  background: var(--bg-elev-2); /* was the undefined "elev-1" token (Sep 24 2026 audit) */
 }
 
 /* --- Banners — warning is status, not panic ---------------------------- */
@@ -1623,8 +1649,10 @@ input[type='number']:focus {
 /* ── Enriched detail card (Allison Jul 9 2026) ──────────────────────────────
  * Face = only the important, low-reading things (voice note + muscle target).
  * Everything else is a collapsed dropdown. "show whats important, everything
- * else i click to open." */
-.detail-card {
+ * else i click to open."
+ * :not(.card) — the history detail card (class="card detail-card") shares the
+ * name; without this it lost the .card gradient (Sep 24 2026 audit). */
+.detail-card:not(.card) {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -2025,7 +2053,7 @@ input[type='number']:focus {
   color: var(--text-dim-2);
 }
 
-/* --- Ship 3 (2026-05-15) data viz: sparkline + year-grid ---------------- *
+/* --- Ship 3 (2026-05-15) data viz: sparkline (heatmap CSS removed Sep 24 2026) *
  * Inline SVG only. Matches D-1 visual language: no drop shadows, 1px
  * borders, role-named accent tokens. */
 
@@ -2052,7 +2080,7 @@ input[type='number']:focus {
   pointer-events: none; /* row button stays the click target */
 }
 
-/* --- 3-per-week target view (replaces year-grid, 2026-05-15) ---------- */
+/* --- 3-per-week target view (replaces the retired heatmap, 2026-05-15) --- */
 
 .weekly-target-card {
   padding: 20px;
@@ -2227,115 +2255,8 @@ input[type='number']:focus {
   box-shadow: 0 0 12px -2px color-mix(in srgb, var(--dot-c) 35%, transparent);
 }
 
-/* --- Year-grid heatmap card (ARCHIVED 2026-05-15 — see app.ts comment) -- */
-
-.year-grid-card {
-  padding: 20px;
-}
-
-.year-grid-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: 14px;
-  gap: 12px;
-}
-
-.year-grid-title {
-  margin-bottom: 0;
-  font-size: var(--font-micro);
-  font-weight: 600;
-  color: var(--text-dim-2);
-  text-transform: uppercase;
-  letter-spacing: var(--track-label);
-}
-
-.year-grid-sub {
-  color: var(--text-dim-2);
-  font-weight: 500;
-}
-
-.year-grid-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.1;
-}
-
-.year-grid-count {
-  font-size: var(--font-subheading);
-  font-weight: 600;
-  color: var(--accent-progress);
-  letter-spacing: var(--track-tight);
-}
-
-.year-grid-stat-label {
-  font-size: var(--font-micro);
-  color: var(--text-dim-2);
-  text-transform: uppercase;
-  letter-spacing: var(--track-label);
-  margin-top: 2px;
-}
-
-.year-grid-scroll {
-  /* horizontally scrollable container so the grid stays usable on narrow viewports */
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-  margin: 0 -4px;
-  padding: 0 4px 4px;
-}
-
-.year-grid-scroll::-webkit-scrollbar {
-  height: 4px;
-}
-
-.year-grid-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 2px;
-}
-
-.year-grid {
-  display: block;
-  height: auto;
-}
-
-.year-grid-month {
-  font-size: 9px;
-  fill: var(--text-dim-2);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
-}
-
-.year-grid-row-label {
-  font-size: 8px;
-  fill: var(--text-dim-2);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
-}
-
-.year-grid-cell {
-  stroke-width: 1;
-}
-
-.year-grid-cell-empty {
-  /* transparent fill — the 1px border-token stroke does the visual */
-}
-
-.year-grid-cell-today {
-  stroke-width: 1;
-}
-
-.year-grid-cell-clickable {
-  cursor: pointer;
-}
-
-.year-grid-cell-clickable:hover {
-  /* subtle brightness lift on hover — keeps the workout-letter color identity */
-  filter: brightness(1.2);
-}
+/* Year-grid heatmap CSS (14 selectors) removed Sep 24 2026 — the feature was
+ * archived 2026-05-15 (see archive/ + the app.ts comment); nothing renders it. */
 
 /* --- Ship 4 (2026-05-15) Weekly review screen -------------------------- *
  * Per-week debrief reached from home — either via the "Weekly review →"
@@ -2386,16 +2307,13 @@ input[type='number']:focus {
 }
 
 .weekly-review-link-chev {
+  color: var(--text-dim-2);
+  font-size: var(--font-body);
   transition: transform var(--dur-base) var(--ease-spring);
 }
 
 .weekly-review-link:hover .weekly-review-link-chev {
   transform: translateX(4px);
-}
-
-.weekly-review-link-chev {
-  color: var(--text-dim-2);
-  font-size: var(--font-body);
 }
 
 /* Subtitle under the weekly-review h2 */
@@ -2676,13 +2594,10 @@ input[type='number']:focus {
  * easing on interactives, monogram-style identity badges in the breakdown).
  * --------------------------------------------------------------------------- */
 
-/* The "📈 Progress →" link on home — sibling of .weekly-review-link.
- * Shares the same surface treatment so the two chips read as a pair. */
-.progress-link {
-  /* All visual styling inherits from .weekly-review-link. This selector
-   * exists for forward-extension only (e.g. if Progress ever needs a
-   * different accent). */
-}
+/* The "📈 Progress →" link on home — sibling of .weekly-review-link, styled
+ * entirely by that class so the two chips read as a pair. (Its empty
+ * placeholder rule was removed Sep 24 2026; add .progress-link back only if
+ * Progress ever needs its own look.) */
 
 .progress-subtitle {
   font-size: var(--font-small);
@@ -3366,7 +3281,8 @@ input[type='number']:focus {
 .pause-fab {
   position: fixed;
   left: 14px;
-  bottom: 16px;
+  /* + safe-area so the pill clears the gesture bar on the Pixel (Sep 24 2026 audit). */
+  bottom: calc(16px + env(safe-area-inset-bottom));
   z-index: 900;
   display: inline-flex;
   align-items: center;
@@ -3378,7 +3294,7 @@ input[type='number']:focus {
   color: var(--accent-rest);
   background: color-mix(in srgb, var(--accent-rest) 16%, var(--bg-elev-2));
   border: 1px solid color-mix(in srgb, var(--accent-rest) 45%, transparent);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   box-shadow: 0 4px 14px -6px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
@@ -3392,7 +3308,7 @@ input[type='number']:focus {
 /* Room to scroll the last line of workout content clear of the floating pill
  * (it overlapped a word at the bottom-left — Allison, Jul 9 2026). */
 #app.has-pause-fab {
-  padding-bottom: 84px;
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
 }
 
 /* Lite-day toggle on pre-log (Jul 12 2026): a tappable card — one round less on
@@ -3500,7 +3416,7 @@ input[type='number']:focus {
   color: var(--text-dim-2);
   margin-left: auto;
   font-size: 10px;
-  transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.18s var(--ease-spring);
 }
 
 .gear-card[open] .gear-summary::after {
@@ -3545,7 +3461,9 @@ input[type='number']:focus {
   margin: 6px 0 0;
   font-size: var(--font-small);
   line-height: 1.45;
-  color: var(--text-dim-2);
+  /* dim (6.26:1), not dim-2 (3.24:1) — these are 15px sentences she reads on
+   * the floor, incl. the level hint (Sep 24 2026 audit). */
+  color: var(--text-dim);
 }
 
 /* In-workout walk: explicit Start (Jul 9 2026 — being on the page != started).
@@ -3566,7 +3484,7 @@ input[type='number']:focus {
   background: transparent;
   color: var(--text-dim);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   font-size: var(--font-small);
   cursor: pointer;
@@ -3714,7 +3632,7 @@ input[type='number']:focus {
   align-items: center;
   gap: 10px;
   padding: 9px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   font-size: var(--font-small);
   color: var(--text-dim-2);
@@ -3775,7 +3693,7 @@ input[type='number']:focus {
   background: transparent;
   color: var(--text);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 8px 14px;
   font-size: var(--font-small);
   white-space: nowrap;
@@ -3819,4 +3737,99 @@ input[type='number']:focus {
 .walk-cancel-btn:active {
   border-color: var(--accent-danger);
   color: var(--accent-danger);
+}
+
+/* ---- v46 (Sep 24 2026) — audit fixes, appended only ---------------------- */
+
+/* Pause moved from a fixed bottom-left pill into the workout header, left of
+ * Quit: the pill sat on top of Start timer and the setup steps on the
+ * elliptical screen (UI audit #1). Quiet secondary look. */
+.screen-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pause-inline {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  height: 36px;
+  padding: 8px 12px;
+  font-size: var(--font-meta);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pause-inline:active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* One sage button per screen = Done · Next. "Listen — how to do it" was a
+ * second sage slab on every step (UI audit #3). */
+.voice-note-btn.is-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--accent-progress);
+}
+
+/* The elliptical level is the ONE number she sets on the floor; the 30px
+ * settings stepper was smaller than its own "of 24" caption (UI audit #5). */
+.ell-level-row .settings-stepper-btn {
+  width: 48px;
+  height: 48px;
+  font-size: 22px;
+}
+
+.ell-level-row .settings-stepper-val {
+  font-size: var(--font-subheading);
+}
+
+/* Setup expander above the timer (v46): compact while collapsed; the readings
+ * card under the timer drops the divider it had inside the exercise card. */
+.ell-guide-collapsed {
+  padding: 2px 4px;
+}
+
+.ell-guide-body {
+  padding: 0 4px 4px;
+}
+
+.card > .ell-readings {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.ell-readings-wait {
+  text-align: center;
+}
+
+/* "✓ 10 min done" face of the timer card once an indoor ride has run. */
+.timer-done {
+  font-size: var(--font-heading);
+  font-weight: 600;
+  color: var(--accent);
+  padding: 12px 0 4px;
+}
+
+/* Session detail: her note in its own block under the label — the label ran
+ * straight into the text on one row (UX audit #12). */
+.detail-row-stack {
+  display: block;
+}
+
+.detail-note {
+  margin-top: 4px;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+/* Saturday-morning line under the week card: informational, not a prompt. */
+.swing-note {
+  margin: -6px 0 12px;
+  text-align: center;
 }
