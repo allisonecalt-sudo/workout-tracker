@@ -206,7 +206,18 @@ type AppState = {
   // "phase|round|index" — for the "✓ held 45 s" done-face only (the saved wall
   // sit number stays wallSitSec). Transient; not in the resume snapshot.
   heldSecFor: Record<string, number>;
+  // v48 · P5 (Sep 24 2026): the one-tap Easy / Right / Hard on the 1 kg curl
+  // and the prone row — saved as arm_feel "curl=easy;row=right". The 2 kg
+  // trigger is her Jul 3 ask, and until now it depended on her "telling
+  // Claude" (DECISIONS §4). Optional; a step she doesn't tap stays unset.
+  armFeel: ArmFeelState;
+  // v48 · P5: post-log "Back: Something" was tapped — the 1-10 row is open but
+  // no number is chosen yet (untouched = null). Transient.
+  backSomethingOpen: boolean;
 };
+
+type ArmFeel = 'easy' | 'right' | 'hard';
+type ArmFeelState = { curl?: ArmFeel; row?: ArmFeel };
 
 const STORAGE_KEY = 'workout-tracker:logs';
 const HOWTO_SEEN_KEY_PREFIX = 'workout-tracker:howto-seen-week-';
@@ -2591,6 +2602,8 @@ const state: AppState = {
   finishHereLitePrev: null,
   stoppedEarlyAt: null,
   heldSecFor: {},
+  armFeel: {},
+  backSomethingOpen: false,
 };
 
 // ---------- audio ----------
@@ -3829,10 +3842,12 @@ function beginExercises(): void {
   state.finishHereLitePrev = null;
   state.stoppedEarlyAt = null;
   state.heldSecFor = {};
+  state.armFeel = {}; // v48 · P5: a feel belongs to one session
   // v46: the post-log sliders haven't been seen yet (capacity-before was just
   // set on pre-log, so its flag stays as it is).
   state.capacityAfterTouched = false;
   state.backPainTouched = false;
+  state.backSomethingOpen = false;
   state.howToOpenFor = null;
   state.videoExpandedFor = null;
   clearWorkoutWalk(); // fresh session, fresh walk numbers
@@ -4292,6 +4307,82 @@ function loadLastDone(): LastDone | null {
   }
 }
 
+// ---------- v48 · P5 (Sep 24 2026): arm feel + the 2 kg question ----------
+// The 2 kg trigger is her Jul 3 buy-bigger ask; until now it waited on her
+// "telling Claude" (gear card), and the app logs no arm reps (assumptions, 19).
+// One optional tap on the two 1 kg moves — inside her 2-tap line — and home
+// ASKS once two sessions in a row felt easy. A question, never a tell: the
+// program is Lisa's call (DECISIONS §4).
+const ARM_FEEL_STEPS: Record<string, keyof ArmFeelState> = {
+  '1 kg biceps curl': 'curl',
+  'Prone row (bodyweight)': 'row',
+};
+const ARM_FEEL_VALUES: readonly ArmFeel[] = ['easy', 'right', 'hard'];
+const TWO_KG_NOTED_KEY = 'workout-tracker:twokg-noted';
+
+function isArmFeel(v: unknown): v is ArmFeel {
+  return typeof v === 'string' && (ARM_FEEL_VALUES as readonly string[]).includes(v);
+}
+
+function sanitizeArmFeel(v: unknown): ArmFeelState {
+  if (!v || typeof v !== 'object') return {};
+  const o = v as { curl?: unknown; row?: unknown };
+  const out: ArmFeelState = {};
+  if (isArmFeel(o.curl)) out.curl = o.curl;
+  if (isArmFeel(o.row)) out.row = o.row;
+  return out;
+}
+
+// "curl=easy;row=right" — the shape the arm_feel CHECK accepts; null when none.
+function armFeelString(f: ArmFeelState): string | null {
+  const parts = [f.curl ? `curl=${f.curl}` : '', f.row ? `row=${f.row}` : ''].filter(
+    (p) => p !== ''
+  );
+  return parts.length > 0 ? parts.join(';') : null;
+}
+
+// Every value in a saved "curl=easy;row=right" (unknown parts are ignored).
+function armFeelValues(s: string): string[] {
+  return s
+    .split(';')
+    .map((part) => part.split('=')[1] ?? '')
+    .filter((v) => v !== '');
+}
+
+// The two newest sessions that carry a feel: both exist and every value in
+// both is "easy" → the newer one's id (the "Noted" key). Otherwise null.
+function twoKgQuestionDue(logs: LogEntry[]): string | null {
+  const felt = logs
+    .filter((l) => typeof l.armFeel === 'string' && l.armFeel.trim() !== '')
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 2);
+  if (felt.length < 2) return null;
+  const allEasy = felt.every((l) => {
+    const values = armFeelValues(l.armFeel ?? '');
+    return values.length > 0 && values.every((v) => v === 'easy');
+  });
+  return allEasy ? (felt[0]?.id ?? null) : null;
+}
+
+function twoKgNotedId(): string | null {
+  try {
+    return localStorage.getItem(TWO_KG_NOTED_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// A quiet question card, never sage (the hero keeps the one sage).
+function renderTwoKgQuestion(logs: LogEntry[]): string {
+  const due = twoKgQuestionDue(logs);
+  if (!due || twoKgNotedId() === due) return '';
+  return `
+    <div class="card twokg-card" id="twokg-card">
+      <p class="twokg-text">The 1 kg felt easy twice. Ask Lisa about 2 kg?</p>
+      <button class="btn-chip twokg-noted" id="twokg-noted" type="button" data-twokg-id="${escapeHtml(due)}">Noted</button>
+    </div>`;
+}
+
 // v45: one save at a time. The walk lane awaits Google Fit (up to 5 s) before
 // saving, and a second tap on "Save & finish" in that window wrote a 2nd row.
 let savingLog = false;
@@ -4402,7 +4493,9 @@ async function saveCompletedSession(): Promise<void> {
     ellipticalPulse: onElliptical ? ellipticalPulse() : null,
     sessionNote,
     liteDay: state.liteDay,
-    armFeel: null, // v48: P5 fills the one-tap Easy/Right/Hard
+    // v48 · P5 (Sep 24 2026): "curl=easy;row=right" — only the parts she
+    // tapped, null when none (matches the arm_feel CHECK).
+    armFeel: armFeelString(state.armFeel),
     voicePlays: state.voicePlays,
   });
   if (stored.id) saveLastDone({ id: stored.id, firsts });
@@ -4448,6 +4541,8 @@ type ActiveSessionSnapshot = {
   roundBreak: boolean;
   finishHereLitePrev: boolean | null;
   stoppedEarlyAt: string | null;
+  // v48 · P5: the arm-feel taps so far survive an app close.
+  armFeel: ArmFeelState;
 };
 
 function saveActiveSession(): void {
@@ -4477,6 +4572,7 @@ function saveActiveSession(): void {
       roundBreak: state.roundBreak,
       finishHereLitePrev: state.finishHereLitePrev,
       stoppedEarlyAt: state.stoppedEarlyAt,
+      armFeel: state.armFeel,
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
   } catch {
@@ -4552,6 +4648,8 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
           ? snap.finishHereLitePrev
           : null,
       stoppedEarlyAt: typeof snap.stoppedEarlyAt === 'string' ? snap.stoppedEarlyAt : null,
+      // v48 · P5: a pre-P5 snapshot has no feel → none, never a guess.
+      armFeel: sanitizeArmFeel(snap.armFeel),
     };
   } catch {
     clearActiveSession();
@@ -4583,6 +4681,8 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.finishHereLitePrev = snap.finishHereLitePrev;
   state.stoppedEarlyAt = snap.stoppedEarlyAt;
   state.heldSecFor = {}; // v48: display-only, not carried across a close
+  state.armFeel = snap.armFeel;
+  state.backSomethingOpen = false;
   // Preserve pause accounting across an app close. If she closed while paused,
   // she stays paused on reopen (the closed span counts as paused, so it's
   // subtracted from duration — faithful to "I stepped away").
@@ -4715,6 +4815,8 @@ function resetState(): void {
   state.finishHereLitePrev = null;
   state.stoppedEarlyAt = null;
   state.heldSecFor = {};
+  state.armFeel = {}; // v48 · P5
+  state.backSomethingOpen = false;
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
   clearElliptical();
@@ -6198,6 +6300,11 @@ function renderHome(): string {
 
     ${doneToday ? renderDoneTodayCard(doneToday, weekCount) : renderUpNextHero(pick)}
     ${renderWorkoutChips(doneToday ? doneToday.workout : pick)}
+    ${
+      // v48 · P5: the 2 kg question sits right under the hero + its chips (the
+      // chips read as part of the hero, so the card goes after them).
+      renderTwoKgQuestion(logs)
+    }
 
     <div class="card week-card" id="open-weekly-review" role="button" tabindex="0" aria-label="Open weekly review for this week">
       <div class="week-card-head">
@@ -6222,54 +6329,118 @@ function renderHome(): string {
   `;
 }
 
+// v48 · P5 (Sep 24 2026) — the body reading as 1-10 tap chips (DECISIONS Q6).
+// BLANK until she taps: the v46 fix was made because the invented 5 faked a
+// decline (after = 5 in 6 of 8 Round-2 sessions), and a slider pre-set to her
+// last number would bring the same lie back as "same as last time". A chip
+// keeps an honest reading at one tap; tapping the chosen one again clears it.
+// Selected = --accent-progress (a reading, not the primary action — no sage).
+function renderChipRow(
+  idPrefix: string,
+  value: number,
+  touched: boolean,
+  ariaLabel: string
+): string {
+  const chip = (n: number): string => {
+    const on = touched && value === n;
+    return `<button class="body-chip${on ? ' body-chip-on' : ''}" id="${idPrefix}-${n}" type="button" role="radio" aria-checked="${on ? 'true' : 'false'}" data-body-chip="${idPrefix}" data-value="${n}">${n}</button>`;
+  };
+  const row = (from: number): string =>
+    `<div class="body-chip-row">${[0, 1, 2, 3, 4].map((i) => chip(from + i)).join('')}</div>`;
+  return `<div class="body-chips" role="radiogroup" aria-label="${escapeHtml(ariaLabel)}">${row(1)}${row(6)}</div>`;
+}
+
+function renderBodyChips(idPrefix: string, value: number, touched: boolean, label = ''): string {
+  return `
+    <div class="field body-field">
+      <span class="label-text body-label">${escapeHtml(label)}</span>
+      ${renderChipRow(idPrefix, value, touched, label)}
+      <div class="body-anchor">1 empty · 5 ordinary · 10 strong</div>
+    </div>`;
+}
+
+// Moves that put pressure on the palms or the grip — where the one wrist + back
+// line belongs (DECISIONS §5: the amber box was 58 words, the same every
+// session, and shown on C too, where none of these moves exist).
+const WRIST_BACK_MOVES: readonly string[] = [
+  'Bird dog (legs only)',
+  'Wall lean (wrist on-ramp)',
+  '1 kg biceps curl',
+  'Prone row (bodyweight)',
+  'Bodyweight hip hinge',
+];
+
+function workoutNeedsWristLine(w: Workout): boolean {
+  return [...w.warmup, ...w.main, ...(w.upperBack ?? [])].some((ex) =>
+    WRIST_BACK_MOVES.includes(ex.name)
+  );
+}
+
+// "R2 · Week 4" from the calendar; when the loaded plan is a different week
+// (Sat Sep 26 has no Week 5 encoded) it names the plan instead — the same
+// fail-loud as the home header (DECISIONS §5).
+function preLogWeekLabel(): string {
+  const week = getProgramWeek();
+  const plan = getWeekPlan();
+  const planRound = plan.round ?? 1;
+  const round = week.round > 1 ? `R${week.round} · ` : '';
+  if (plan.weekNum === week.num && planRound === week.round) return `${round}Week ${week.num}`;
+  return `${planRound > 1 ? `R${planRound} · ` : ''}Week ${plan.weekNum}'s plan`;
+}
+
 function renderPreLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
-  // 2026-05-15 18:07 — overview block. Allison wants to see the structure at
-  // a glance before starting so she knows what's coming.
-  const overview = renderWorkoutOverview(w);
+  // v48 · P5 (Sep 24 2026): one quiet line instead of a subtitle, a counts card
+  // and an amber box — her walk: "it asks 'how do you feel?', then the slider
+  // says 'your BODY, not your mood' … Start is cut off at the bottom".
+  const fresh = newTonightNames(w, w.id);
+  const hasCardio = w.warmup.some((e) => e.name === 'Outdoor walk');
+  const meta = [
+    preLogWeekLabel(),
+    fresh.length ? `new tonight: ${fresh.join(' · ')}` : '',
+    hasCardio && lastCardioLane() === 'elliptical' ? 'elliptical' : '',
+    workoutMinutesLabel(w),
+  ]
+    .filter((s) => s !== '')
+    .join(' · ');
+  // Lite = one round less, never below 1 — the chip says how many rounds today.
+  const liteRounds = Math.max(1, w.rounds - 1);
+  const liteWord = liteRounds === 1 ? 'one round' : `${liteRounds} rounds`;
+  // A low body reading SUGGESTS Lite with a gentle outline; it never switches
+  // itself on (agency rule: ask or suggest, never tell).
+  const suggestLite = !state.liteDay && state.capacityBeforeTouched && state.capacityBefore <= 3;
+  const liteChip = state.liteDay
+    ? `<button class="lite-chip lite-toggle-on" id="lite-toggle" type="button" aria-pressed="true">✓ Lite · ${liteRounds} round${liteRounds === 1 ? '' : 's'} today · tap to undo</button>`
+    : `<button class="lite-chip${suggestLite ? ' lite-suggest' : ''}" id="lite-toggle" type="button" aria-pressed="false">🪫 Hard day? Lite — ${liteWord}, still counts</button>`;
   return `
-    <div class="screen-header">
-      <h2>Workout ${w.id} · ${w.name}</h2>
+    <div class="screen-header prelog-header">
+      <div class="prelog-title">
+        <h2>Workout ${w.id}</h2>
+        <span class="subtitle-inline">${escapeHtml(w.name)}</span>
+      </div>
       <button class="quit-link" id="back-home" type="button">× Back</button>
     </div>
-    <p class="subtitle">Before we start — how do you feel?</p>
+    <p class="prelog-meta">${escapeHtml(meta)}</p>
 
-    ${overview}
+    ${renderWorkoutOverview(w)}
 
-    <div class="card">
-      <label class="field">
-        <span class="label-text">Your BODY right now, not your mood (1-10)</span>
-        <div class="range-row">
-          <input type="range" id="cap-before" min="1" max="10" value="${state.capacityBefore}" />
-          <span class="range-value" id="cap-before-val">${state.capacityBefore}</span>
-        </div>
-        <div class="range-anchors">
-          <span>1 — running on empty</span>
-          <span>5 — an ordinary day</span>
-          <span>10 — strong</span>
-        </div>
-      </label>
+    <div class="card body-card">
+      ${renderBodyChips('cap-before', state.capacityBefore, state.capacityBeforeTouched, 'Your BODY right now, not your mood')}
     </div>
 
-    <button class="card lite-toggle${state.liteDay ? ' lite-toggle-on' : ''}" id="lite-toggle" type="button">
-      ${
-        state.liteDay
-          ? `<p class="gear-note"><strong>✓ Lite day.</strong> Main ×${Math.max(1, w.rounds - 1)} round${Math.max(1, w.rounds - 1) === 1 ? '' : 's'} instead of ${w.rounds} — same moves, same walk, your 3 stay yours. Stretch what you need at the end. Showing up IS the win. (Tap to undo)</p>`
-          : `<p class="gear-note">🪫 Hard day? <strong>Tap for Lite</strong> — one round less (${w.rounds}→${Math.max(1, w.rounds - 1)}), same moves, same walk, your 3 stay yours.</p>`
-      }
-    </button>
+    ${liteChip}
 
-    <div class="warning-banner">
-      ⚠️ <strong>Wrist:</strong> forearms fine. Palms take weight in the <strong>bird dog</strong> and the <strong>wall lean</strong> (your call, Sep 7) — stop at pain, and tomorrow morning must not be worse. Holding the <strong>1 kg</strong> is back (your word, Sep 19: “i can grip”) — light hold, wrist neutral, <strong>pain tells</strong>. Back pain at 3/10 → stop that exercise.
-    </div>
+    ${workoutNeedsWristLine(w) ? `<p class="safety-line">Wrist + back: pressure fine, pain = stop.</p>` : ''}
 
-    <button class="btn-large btn-primary" id="begin" type="button">Start</button>
+    ${renderActionBar(`<button class="btn-large btn-primary" id="begin" type="button">Start</button>`)}
   `;
 }
 
-// Workout overview — three-phase summary shown on pre-log so she sees the
-// structure before starting. Tap a row to expand and see the exercises.
+// Workout overview — the structure before starting (2026-05-15 18:07: "see the
+// structure at a glance"). v48 · P5 (Sep 24 2026): folded into ONE closed row
+// "What's in it ▸" — the counts card (4 / 6 / 6 / 18) never said what was new
+// tonight, and it pushed Start below the fold. Open, each phase lists its moves.
 function renderWorkoutOverview(w: Workout): string {
   const phases: { key: Phase; label: string; emoji: string; items: Exercise[] }[] = [
     { key: 'warmup', label: 'Warm-up', emoji: '🚶', items: w.warmup },
@@ -6291,27 +6462,25 @@ function renderWorkoutOverview(w: Workout): string {
       // walk it could be walk or elliptical") — display only; the key stays.
       // v48 · P3: one helper for it everywhere (displayName).
       const names = p.items.map((e) => displayName(e.name)).join(' · ');
+      // v48 · P5: flat inside the one fold — a second tap per phase was a
+      // second door to the same list.
       return `
-        <details class="overview-phase">
-          <summary class="overview-phase-summary">
+        <div class="overview-phase overview-phase-flat">
+          <div class="overview-phase-summary">
             <span class="overview-phase-emoji">${p.emoji}</span>
             <span class="overview-phase-label">${p.label}</span>
             <span class="overview-phase-count">${count}</span>
-          </summary>
+          </div>
           <div class="overview-phase-items">${escapeHtml(names)}</div>
-        </details>`;
+        </div>`;
     })
     .join('');
-  // Week badge in the heading so Allison sees WHICH week of programming this
-  // workout is from. PROGRAM has weeks 1..N — `getWeekPlan()` resolves the
-  // current one from today's date.
-  const wp = getWeekPlan();
-  const weekBadge = `<span class="overview-week-badge">${weekPlanTitle(wp)}</span>`;
+  // The week now lives in the pre-log's one quiet line ("R2 · Week 4 · …").
   return `
-    <div class="card overview-card">
-      <h3 class="overview-title">What's in this workout ${weekBadge}</h3>
+    <details class="card overview-card prelog-overview">
+      <summary class="prelog-overview-summary">What's in it</summary>
       <div class="overview-phases">${rows}</div>
-    </div>
+    </details>
   `;
 }
 
@@ -6849,6 +7018,7 @@ function renderWorkout(): string {
           ${newTonight ? `<span class="new-tonight-badge">New tonight</span>` : ''}
         </div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
+        ${renderArmFeel(ex.name)}
         ${safety ? `<p class="exercise-safety">${escapeHtml(safety)}</p>` : ''}
         ${renderCueExpander(ex)}
         ${renderExerciseSetup(ex)}
@@ -6889,57 +7059,88 @@ function renderWorkout(): string {
   `;
 }
 
+// v48 · P5 (Sep 24 2026): "How did it feel?" on the 1 kg curl and the prone
+// row — three small chips, optional; tap selects, tap again clears. Quiet
+// (outlined), so Done · Next stays the one sage on the step.
+function renderArmFeel(name: string): string {
+  const step = ARM_FEEL_STEPS[name];
+  if (!step) return '';
+  const current = state.armFeel[step];
+  const chips = ARM_FEEL_VALUES.map((v) => {
+    const on = current === v;
+    const label = v === 'easy' ? 'Easy' : v === 'right' ? 'Right' : 'Hard';
+    return `<button class="arm-chip${on ? ' arm-chip-on' : ''}" type="button" data-arm-step="${step}" data-arm-feel="${v}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
+  }).join('');
+  return `
+    <div class="arm-feel" role="group" aria-label="How did it feel?">
+      <span class="arm-feel-label">How did it feel?</span>
+      <div class="arm-feel-chips">${chips}</div>
+    </div>`;
+}
+
 function renderPostLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
-  const wallSitDisplay =
-    state.wallSitSec > 0
-      ? `Wall sit: <strong>${state.wallSitSec}s</strong> (tap to adjust)`
-      : 'Wall sit time held (seconds)';
+  // v48 · P5 (Sep 24 2026) — every field is one tap or skippable, and Save is
+  // pinned (her walk: "the body slider starts at 5 again. The keyboard covers
+  // Save while I type my word"). Untouched still saves null (v46).
+  // Wall sit only on a workout that has one — on C it asked a question she
+  // can't answer (uxui post-log 3/5). Pre-filled from the timer.
+  const wallSitField = workoutHasWallSit(w)
+    ? `<label class="field">
+        <span class="label-text">${state.wallSitSec > 0 ? `Wall sit ${state.wallSitSec} s (tap to adjust)` : 'Wall sit (s)'}</span>
+        <input type="number" id="wallsit" min="0" max="600" inputmode="numeric" value="${state.wallSitSec > 0 ? state.wallSitSec : ''}" />
+      </label>`
+    : '';
+  // Back: "Fine / Something" (DECISIONS §5 — 34 of 39 rows are 0, and a
+  // truthful 0 used to take a drag away and back). Something opens 1-10 chips,
+  // none chosen until she taps one.
+  const backFine = state.backPainTouched && state.backPain === 0;
+  const backSome = state.backSomethingOpen || (state.backPainTouched && state.backPain > 0);
+  const backRow = backSome
+    ? `${renderChipRow('back', state.backPain, state.backPainTouched && state.backPain > 0, 'Back pain, 1 to 10')}
+       <div class="body-anchor">1 barely · 10 worst</div>`
+    : '';
   return `
     <h2>Nice. Workout ${w.id} done.</h2>
-    <p class="subtitle">Quick log — takes 30 seconds.</p>
+    <p class="subtitle">Quick log — or just Save.</p>
 
-    <div class="card">
-      <label class="field">
-        <span class="label-text">Your BODY now, not your mood (1-10)</span>
-        <div class="range-row">
-          <input type="range" id="cap-after" min="1" max="10" value="${state.capacityAfter}" />
-          <span class="range-value" id="cap-after-val">${state.capacityAfter}</span>
+    <div class="card postlog-card">
+      ${renderBodyChips('cap-after', state.capacityAfter, state.capacityAfterTouched, 'Your BODY now, not your mood')}
+
+      ${wallSitField}
+
+      <div class="field back-field">
+        <span class="label-text">Back</span>
+        <div class="back-choice">
+          <button class="back-chip${backFine ? ' body-chip-on' : ''}" id="back-fine" type="button" aria-pressed="${backFine ? 'true' : 'false'}">Fine</button>
+          <button class="back-chip${backSome ? ' back-chip-open' : ''}" id="back-some" type="button" aria-pressed="${backSome ? 'true' : 'false'}">Something</button>
         </div>
-        <div class="range-anchors">
-          <span>1 — running on empty</span>
-          <span>5 — an ordinary day</span>
-          <span>10 — strong</span>
-        </div>
-      </label>
+        ${backRow}
+      </div>
 
-      <label class="field">
-        <span class="label-text">${wallSitDisplay}</span>
-        <input type="number" id="wallsit" min="0" max="600" value="${state.wallSitSec}" />
-      </label>
-
-      <label class="field">
-        <span class="label-text">Back pain (0-10)</span>
-        <div class="range-row">
-          <input type="range" id="back" min="0" max="10" value="${state.backPain}" />
-          <span class="range-value" id="back-val">${state.backPain}</span>
-        </div>
-      </label>
-
-      <label class="field">
-        <span class="label-text">One word for how it felt</span>
-        <input type="text" id="word" placeholder="proud, tired, looser…" maxlength="40" value="${escapeHtml(state.word)}" />
-      </label>
-
-      <label class="field">
-        <span class="label-text">Anything else about what you did? (optional)</span>
-        <textarea id="session-note" rows="3" maxlength="500" dir="auto" placeholder="Did 3 rounds, knee felt fine, stopped the elliptical early…">${escapeHtml(state.sessionNote)}</textarea>
+      <label class="field note-field">
+        <span class="label-text">Anything about today? (optional)</span>
+        <textarea id="session-note" rows="3" maxlength="500" dir="auto" enterkeyhint="done" placeholder="Knee fine, stopped the elliptical early…">${escapeHtml(state.sessionNote)}</textarea>
       </label>
     </div>
 
-    <button class="btn-large btn-primary" id="save-log" type="button">Save & finish</button>
+    ${renderActionBar(`
+      <button class="btn-large btn-primary" id="save-log" type="button">Save</button>
+      <button class="back-link postlog-back" id="back-to-stretches" type="button">‹ Back to the stretches</button>
+    `)}
   `;
+}
+
+// v48 · P5 (Sep 24 2026): the one screen v47's Back missed — her words: "i need
+// to be able to go back". Returns to the cool-down list; nothing is logged.
+function backToStretches(): void {
+  state.screen = 'workout';
+  state.currentPhase = 'cooldown';
+  state.currentExerciseIndex = 0;
+  state.isResting = false;
+  state.roundBreak = false;
+  render();
 }
 
 function renderHistory(): string {
@@ -6965,7 +7166,13 @@ function renderHistory(): string {
           // v46: B and C have no wall sit — "wall 0s" there read as a zero.
           l.wallSitSec > 0 || l.workout === 'A' ? ` · wall ${l.wallSitSec}s` : ''
         } · back ${l.backPain ?? '—'}</div>
-        ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
+        ${
+          // v48 · P5: the one-word box merged into her note, so a new row
+          // shows her note here (old rows keep their word).
+          l.word || l.sessionNote
+            ? `<div class="history-word" dir="auto">"${escapeHtml(l.word || l.sessionNote || '')}"</div>`
+            : ''
+        }
       </div>
       <div class="history-meta">›</div>
     </button>
@@ -8502,16 +8709,103 @@ function attachHandlers(): void {
   });
 
   // v45: the post-log text is kept as she types, so an app close on that
-  // screen doesn't lose it (the resume snapshot now carries both).
-  const wordInput = document.getElementById('word') as HTMLInputElement | null;
-  wordInput?.addEventListener('input', () => {
-    state.word = wordInput.value;
-    saveActiveSession();
-  });
+  // screen doesn't lose it (the resume snapshot carries it).
+  // v48 · P5 (Sep 24 2026): the one-word box is gone (filled 0 of 9 since Aug
+  // 30; its 40-character cap cut her May 11 entry mid-word) — one note box.
   const noteInput = document.getElementById('session-note') as HTMLTextAreaElement | null;
   noteInput?.addEventListener('input', () => {
     state.sessionNote = noteInput.value;
     saveActiveSession();
+  });
+  // Enter = "done typing" (the keyboard's Done key): it closes the keyboard so
+  // Save is in view — it never saves by itself (a save she didn't choose is a
+  // surprise). Shift+Enter still makes a new line.
+  noteInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      noteInput.blur();
+    }
+  });
+  // The wall-sit number survives a chip tap's re-render.
+  const wallsitInput = document.getElementById('wallsit') as HTMLInputElement | null;
+  wallsitInput?.addEventListener('input', () => {
+    const raw = parseInt(wallsitInput.value, 10);
+    state.wallSitSec = Math.max(0, Math.min(600, Number.isFinite(raw) ? raw : 0));
+    saveActiveSession();
+  });
+
+  // v48 · P5: the 1-10 body/back chips. Tap = that number; tap the chosen one
+  // again = no reading (null), the way an untouched slider saved since v46.
+  document.querySelectorAll<HTMLButtonElement>('[data-body-chip]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const group = btn.dataset['bodyChip'];
+      const v = Number(btn.dataset['value']);
+      if (!Number.isFinite(v)) return;
+      const again = btn.getAttribute('aria-checked') === 'true';
+      if (group === 'cap-before') {
+        state.capacityBefore = v;
+        state.capacityBeforeTouched = !again;
+      } else if (group === 'cap-after') {
+        state.capacityAfter = v;
+        state.capacityAfterTouched = !again;
+      } else if (group === 'back') {
+        state.backPain = v;
+        state.backPainTouched = !again;
+        state.backSomethingOpen = true;
+      }
+      render();
+    });
+  });
+  // Back: Fine = 0 (one tap); tap again = no reading.
+  bindClick('back-fine', () => {
+    const wasFine = state.backPainTouched && state.backPain === 0;
+    state.backPain = 0;
+    state.backPainTouched = !wasFine;
+    state.backSomethingOpen = false;
+    render();
+  });
+  // Something = open the 1-10 row, nothing chosen yet; tap again = close it
+  // and drop any number picked there.
+  bindClick('back-some', () => {
+    const open = state.backSomethingOpen || (state.backPainTouched && state.backPain > 0);
+    if (open) {
+      state.backSomethingOpen = false;
+      state.backPainTouched = false;
+    } else {
+      state.backSomethingOpen = true;
+      state.backPainTouched = false; // "Fine" is no longer the answer
+    }
+    render();
+  });
+  bindClick('back-to-stretches', () => {
+    backToStretches();
+  });
+  // v48 · P5: arm feel on the 1 kg curl / prone row — tap selects, tap clears.
+  document.querySelectorAll<HTMLButtonElement>('[data-arm-step]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const step = btn.dataset['armStep'];
+      const feel = btn.dataset['armFeel'];
+      if ((step !== 'curl' && step !== 'row') || !isArmFeel(feel)) return;
+      state.armFeel = {
+        ...state.armFeel,
+        [step]: state.armFeel[step] === feel ? undefined : feel,
+      };
+      if (state.armFeel[step] === undefined) delete state.armFeel[step];
+      saveActiveSession();
+      render();
+    });
+  });
+  // v48 · P5: the 2 kg question's "Noted" — hidden until two NEW easy sessions.
+  // If storage is blocked the card simply stays (nothing else depends on it).
+  bindClick('twokg-noted', () => {
+    const id = document.getElementById('twokg-noted')?.dataset['twokgId'];
+    if (!id) return;
+    try {
+      localStorage.setItem(TWO_KG_NOTED_KEY, id);
+    } catch {
+      // storage blocked — the question stays up
+    }
+    render();
   });
 
   // Explicit Start for the in-workout walk — nothing tracks until she taps it
@@ -8663,8 +8957,6 @@ function attachHandlers(): void {
       const raw = parseInt(wallsitEl.value, 10);
       state.wallSitSec = Math.max(0, Math.min(600, Number.isFinite(raw) ? raw : 0));
     }
-    const wordEl = document.getElementById('word') as HTMLInputElement | null;
-    if (wordEl) state.word = wordEl.value.trim();
     const noteEl = document.getElementById('session-note') as HTMLTextAreaElement | null;
     if (noteEl) state.sessionNote = noteEl.value;
     void logCompleteAndHome();
@@ -8722,20 +9014,8 @@ function attachHandlers(): void {
       render();
     });
   });
-
-  // v46: the flag is what makes the number a reading (see AppState).
-  bindRange('cap-before', 'cap-before-val', (v) => {
-    state.capacityBefore = v;
-    state.capacityBeforeTouched = true;
-  });
-  bindRange('cap-after', 'cap-after-val', (v) => {
-    state.capacityAfter = v;
-    state.capacityAfterTouched = true;
-  });
-  bindRange('back', 'back-val', (v) => {
-    state.backPain = v;
-    state.backPainTouched = true;
-  });
+  // v48 · P5 (Sep 24 2026): the three range sliders became tap chips (see
+  // renderChipRow) — the touched flag is still what makes a number a reading.
 }
 
 // Ship 6: settings handlers — toggles persist immediately; steppers clamp and
@@ -8826,17 +9106,6 @@ function attachSettingsHandlers(): void {
 function bindClick(id: string, fn: () => void): void {
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', fn);
-}
-
-function bindRange(rangeId: string, valId: string, onChange: (v: number) => void): void {
-  const range = document.getElementById(rangeId) as HTMLInputElement | null;
-  const val = document.getElementById(valId);
-  if (!range || !val) return;
-  range.addEventListener('input', () => {
-    const n = parseInt(range.value, 10);
-    val.textContent = String(n);
-    onChange(n);
-  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {

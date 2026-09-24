@@ -49,22 +49,24 @@ test('selecting workout A goes to pre-log screen', async ({ page }) => {
   await expect(page.locator('button:has-text("Start")')).toBeVisible();
 });
 
-test('pre-log shows current wrist banner (Sep-7 bird dog, not stale wall-lean or May text)', async ({
+test('pre-log wrist line: one grey line on A (pressure fine, pain = stop), no amber banner', async ({
   page,
 }) => {
-  // Group 2K, refreshed twice. May 2026: "cleared by Lisa Cohen (May 10)".
-  // Jul 3 2026: the wall-lean on-ramp (her relay). Sep 7 2026: her relay
-  // "i can go on my arms i just have to stop with pain" opened palms-on-floor
-  // at the bird-dog rung, so the banner must name the bird dog and must NOT
-  // regress to either older wording. This banner is the last thing she reads
-  // before every session — it has to describe today's actual permission.
+  // Group 2K, refreshed twice (May 10 → the Jul 3 wall-lean on-ramp → Sep 7:
+  // "i can go on my arms i just have to stop with pain"). v48 · P5 (Sep 24
+  // 2026): the 58-word amber box, the same every session, became ONE grey line
+  // on workouts with a palm or grip move (DECISIONS §5). It still states
+  // today's permission — pressure fine, pain = stop — and never the old
+  // "cleared May 10" wording.
   await page.locator('button[data-workout="A"]').click();
-  await expect(page.locator('.warning-banner')).toContainText('bird dog');
-  await expect(page.locator('.warning-banner')).not.toContainText('wall-lean on-ramp');
-  await expect(page.locator('.warning-banner')).not.toContainText('May 10');
+  await expect(page.locator('.warning-banner')).toHaveCount(0);
+  await expect(page.locator('.safety-line')).toHaveText(
+    'Wrist + back: pressure fine, pain = stop.'
+  );
+  await expect(page.locator('#app')).not.toContainText('May 10');
 });
 
-test('pre-log capacity slider asks about the BODY, not mood, and shows anchor labels', async ({
+test('pre-log body reading asks about the BODY, not mood, and shows anchor labels', async ({
   page,
 }) => {
   // Group 2L: anchor labels. Reworded Sep 7 2026 — she said of her three
@@ -73,11 +75,10 @@ test('pre-log capacity slider asks about the BODY, not mood, and shows anchor la
   // capacity label, which quietly invalidated the under-recovery watch
   // signal (capacity-after < capacity-before for 2+ sessions → dial back).
   // The label now says which one it wants; the anchors avoid mood words.
+  // v48 · P5: the slider became 1-10 chips; the anchors are one short line.
   await page.locator('button[data-workout="A"]').click();
   await expect(page.locator('.label-text').first()).toContainText('not your mood');
-  await expect(page.locator('.range-anchors').first()).toContainText('running on empty');
-  await expect(page.locator('.range-anchors').first()).toContainText('an ordinary day');
-  await expect(page.locator('.range-anchors').first()).toContainText('strong');
+  await expect(page.locator('.body-anchor').first()).toHaveText('1 empty · 5 ordinary · 10 strong');
 });
 
 test('full workout C flow: pre-log → exercises → post-log → save → home with 1 session', async ({
@@ -118,10 +119,12 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
 
   await expect(page.locator('text=Quick log')).toBeVisible();
 
-  await page.locator('#wallsit').fill('25');
-  await page.locator('#word').fill('proud');
+  // v48 · P5: C has no wall sit, so no wall-sit field; the one-word box merged
+  // into the note, which the Sessions row shows.
+  await expect(page.locator('#wallsit')).toHaveCount(0);
+  await page.locator('#session-note').fill('proud');
 
-  await page.locator('button:has-text("Save & finish")').click();
+  await page.locator('#save-log').click();
 
   await expect(page.locator('.home-header h1')).toBeVisible();
   // v48 · P4: counted in the one week line; the row itself lives in Sessions.
@@ -312,11 +315,14 @@ test('enriched detail card: face shows voice + muscle, sections are click-to-ope
   await expect(page.locator('.detail-steps')).toHaveCount(0);
 });
 
-test('capacity slider updates value display', async ({ page }) => {
+// v48 · P5: the body reading is a chip — tap selects it, tap again clears it.
+test('body chip: tap selects the number, a second tap clears it', async ({ page }) => {
   await page.locator('button[data-workout="A"]').click();
-  const slider = page.locator('#cap-before');
-  await slider.fill('8');
-  await expect(page.locator('#cap-before-val')).toHaveText('8');
+  await page.locator('#cap-before-8').click();
+  await expect(page.locator('#cap-before-8')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('[data-body-chip="cap-before"][aria-checked="true"]')).toHaveCount(1);
+  await page.locator('#cap-before-8').click();
+  await expect(page.locator('[data-body-chip="cap-before"][aria-checked="true"]')).toHaveCount(0);
 });
 
 // v46: a slider she never moved is not a reading. The three sliders start at
@@ -340,13 +346,14 @@ test('untouched sliders (v46): a workout with no slider moved saves null, not 5/
   page,
 }) => {
   await page.locator('button[data-workout="C"]').click();
-  // The pre-log slider still SHOWS 5 as its starting position.
-  await expect(page.locator('#cap-before-val')).toHaveText('5');
+  // v48 · P5 (DECISIONS Q6): the chips start BLANK — no number is shown as
+  // chosen, so there is nothing to mistake for a reading.
+  await expect(page.locator('[data-body-chip][aria-checked="true"]')).toHaveCount(0);
   await page.locator('button:has-text("Start")').click();
   await walkToPostLog(page);
-  await expect(page.locator('#cap-after-val')).toHaveText('5');
-  await expect(page.locator('#back-val')).toHaveText('0');
-  await page.locator('button:has-text("Save & finish")').click();
+  await expect(page.locator('[data-body-chip][aria-checked="true"]')).toHaveCount(0);
+  await expect(page.locator('#back-fine')).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#save-log').click();
   await expect(page.locator('.home-header h1')).toBeVisible();
 
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
@@ -365,11 +372,12 @@ test('untouched sliders (v46): a slider she DID move saves her number; the other
   page,
 }) => {
   await page.locator('button[data-workout="C"]').click();
-  await page.locator('#cap-before').fill('7');
+  await page.locator('#cap-before-7').click();
   await page.locator('button:has-text("Start")').click();
   await walkToPostLog(page);
-  await page.locator('#back').fill('2');
-  await page.locator('button:has-text("Save & finish")').click();
+  await page.locator('#back-some').click();
+  await page.locator('#back-2').click();
+  await page.locator('#save-log').click();
   await expect(page.locator('.home-header h1')).toBeVisible();
 
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
@@ -1562,7 +1570,7 @@ test('Done safety net: a session that comes out longer than 3h logs no duration,
     }
   }
   await expect(reopened.locator('text=Quick log')).toBeVisible();
-  await reopened.locator('button:has-text("Save & finish")').click();
+  await reopened.locator('#save-log').click();
   await expect(reopened.locator('.home-header h1')).toBeVisible();
 
   const row = await reopened.evaluate(
@@ -2291,8 +2299,8 @@ test('multi-week: pre-log overview shows Week 3 badge in May 16-22 range', async
   await mockDate(page, '2026-05-18T10:00:00.000Z'); // Mon May 18 = Week 3
   await page.goto('/');
   await page.locator('button[data-workout="A"]').click();
-  // Heading "What's in this workout" plus a Week 3 badge.
-  await expect(page.locator('.overview-week-badge')).toHaveText(/Week 3/);
+  // v48 · P5: the week leads the pre-log's one quiet line (was a badge).
+  await expect(page.locator('.prelog-meta')).toHaveText(/^Week 3 · /);
 });
 
 test('multi-week: Week 4 content active for May 25 (Session A holds — squats 12, plank 1x15s)', async ({
@@ -2301,10 +2309,11 @@ test('multi-week: Week 4 content active for May 25 (Session A holds — squats 1
   await mockDate(page, '2026-05-25T10:00:00.000Z'); // Mon May 25 = Week 4
   await page.goto('/');
   await page.locator('button[data-workout="A"]').click();
-  // Badge says Week 4.
-  await expect(page.locator('.overview-week-badge')).toHaveText(/Week 4/);
-  // Open the Main phase and verify Week 4 numbers are encoded.
-  await page.locator('.overview-phase').nth(1).locator('summary').click();
+  // The quiet line says Week 4 (v48 · P5: was a badge).
+  await expect(page.locator('.prelog-meta')).toHaveText(/^Week 4 · /);
+  // Open "What's in it" and verify Week 4 numbers are encoded (v48 · P5: one
+  // fold; the phases list their moves inside it).
+  await page.locator('.prelog-overview-summary').click();
   const mainNames = await page
     .locator('.overview-phase')
     .nth(1)
@@ -2423,9 +2432,9 @@ test('round 2: banner reads Round 2 · Week 1 from Aug 29 2026 and restart numbe
   await mockDate(page, '2026-08-30T15:00:00.000Z'); // Sun in R2 Week 1
   await page.goto('/');
   await expect(page.locator('.home-header h1')).toContainText('Round 2 · Week 1');
-  // Pre-log overview badge carries the round too.
+  // The pre-log's quiet line carries the round too (v48 · P5: was a badge).
   await page.locator('button[data-workout="A"]').click();
-  await expect(page.locator('.overview-week-badge')).toHaveText(/R2 · Week 1/);
+  await expect(page.locator('.prelog-meta')).toHaveText(/^R2 · Week 1 · /);
 });
 
 test('round 2: break weeks Jul 25–Aug 28 hold blank labeled rows, round-1 weeks keep plain labels', async ({
@@ -2494,7 +2503,8 @@ test('lite day: pre-log toggle drops one round and marks the session lite', asyn
   await page.locator('button[data-workout="C"]').click();
   await expect(page.locator('#lite-toggle')).toBeVisible();
   await page.locator('#lite-toggle').click();
-  await expect(page.locator('#lite-toggle')).toContainText('Lite day');
+  // v48 · P5: the chip says what Lite is today, and how to undo it.
+  await expect(page.locator('#lite-toggle')).toHaveText('✓ Lite · 1 round today · tap to undo');
   await page.locator('button:has-text("Start")').click();
   // C's warmup is the walk step — advance past it into the main block.
   await page.locator(NEXT).click();
@@ -2563,7 +2573,7 @@ test('R2 W2: a date inside Sep 5-11 2026 resolves to Round 2 · Week 2', async (
   await page.goto('/');
   await expect(page.locator('.home-header h1')).toContainText('Round 2 · Week 2');
   await page.locator('button[data-workout="A"]').click();
-  await expect(page.locator('.overview-week-badge')).toHaveText(/Week 2/);
+  await expect(page.locator('.prelog-meta')).toHaveText(/^R2 · Week 2 · /); // v48 · P5
 });
 
 test('R2 W2: workout A carries the full dead bug, bird dog legs-only, the tilted plank and a 40 s wall sit', async ({
@@ -2820,8 +2830,8 @@ test('cardio either/or: finishing after the apartment option saves the lane + it
     else break;
   }
   await expect(page.locator('text=Quick log')).toBeVisible();
-  await page.locator('#word').fill('inside');
-  await page.locator('button:has-text("Save & finish")').click();
+  await page.locator('#session-note').fill('inside');
+  await page.locator('#save-log').click();
   await expect(page.locator('.home-header h1')).toBeVisible();
 
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
@@ -3112,9 +3122,8 @@ test('elliptical: finishing saves the minutes + level + readings, never POSTs, a
     else break;
   }
   await expect(page.locator('text=Quick log')).toBeVisible();
-  await page.locator('#word').fill('smooth');
   await page.locator('#session-note').fill('Knee fine, legs heavy on the elliptical');
-  await page.locator('button:has-text("Save & finish")').click();
+  await page.locator('#save-log').click();
   await expect(page.locator('.home-header h1')).toBeVisible();
 
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
@@ -3272,7 +3281,7 @@ test('post-log: the free-text note saves verbatim on a session with no cardio la
   }
   await expect(page.locator('#session-note')).toBeVisible();
   await page.locator('#session-note').fill('skipped the bird dog, wrist tired');
-  await page.locator('button:has-text("Save & finish")').click();
+  await page.locator('#save-log').click();
   await expect(page.locator('.home-header h1')).toBeVisible();
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
   const logs = JSON.parse(raw ?? '[]') as { notes?: string | null; sessionNote?: string | null }[];
@@ -3350,7 +3359,7 @@ test.describe('v48 P1 data', () => {
   }
 
   async function saveAndReadLog(page: import('@playwright/test').Page): Promise<Row> {
-    await page.locator('button:has-text("Save & finish")').click();
+    await page.locator('#save-log').click();
     await expect(page.locator('.home-header h1')).toBeVisible();
     const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
     const logs = JSON.parse(raw ?? '[]') as Row[];
@@ -3825,7 +3834,7 @@ test.describe('v48 P2 shell', () => {
   };
 
   const saveAndRead = async (page: Page): Promise<Row> => {
-    await page.locator('button:has-text("Save & finish")').click();
+    await page.locator('#save-log').click();
     await expect(page.locator('.home-header h1')).toBeVisible();
     const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
     const logs = JSON.parse(raw ?? '[]') as Row[];
@@ -4174,7 +4183,7 @@ test.describe('v48 P3 cardio', () => {
       if (!(await tapForward(page))) break;
     }
     await expect(page.locator('text=Quick log')).toBeVisible();
-    await page.locator('button:has-text("Save & finish")').click();
+    await page.locator('#save-log').click();
     await expect(page.locator('.home-header h1')).toBeVisible();
     const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
     const logs = JSON.parse(raw ?? '[]') as Row[];
@@ -4443,7 +4452,7 @@ test.describe('v48 P3 cardio', () => {
     await mockDate(page, TUE_WEEK4);
     await page.goto('/');
     await page.locator('button[data-workout="A"]').click();
-    await page.locator('.overview-phase-summary').first().click();
+    await page.locator('.prelog-overview-summary').click(); // v48 · P5: one fold
     await expect(page.locator('.overview-phase-items').first()).toContainText('Cardio');
     await expect(page.locator('#app')).not.toContainText('Outdoor walk');
   });
@@ -4569,6 +4578,11 @@ test.describe('v48 P4 home', () => {
       expect((await tag.boundingBox())!.height).toBeLessThan(24);
       const h1 = (await page.locator('.home-header h1').boundingBox())!;
       expect(h1.height).toBeLessThan(40); // the title stays on one line too
+      // v48 · P5: measure after home's 0.22 s entry slide settles — mid-slide
+      // the fractional translateY read the 44 px gear as 43.999998 under load.
+      await page.waitForFunction(() =>
+        document.getAnimations().every((a) => a.playState !== 'running')
+      );
       const gear = (await page.locator('#open-settings').boundingBox())!;
       expect(gear.width).toBeGreaterThanOrEqual(44);
       expect(gear.height).toBeGreaterThanOrEqual(44);
@@ -4669,7 +4683,7 @@ test.describe('v48 P4 home', () => {
       if (await page.locator('text=Quick log').isVisible()) break;
       if (!(await tapForward(page))) break;
     }
-    await page.locator('button:has-text("Save & finish")').click();
+    await page.locator('#save-log').click();
     const done = page.locator('#home-done-card');
     await expect(done.locator('.home-done-title')).toHaveText('Done ✓ · Workout A');
     await expect(done).toContainText('1 of 3 this week');
@@ -4759,5 +4773,441 @@ test.describe('v48 P4 home', () => {
     await expect(page.locator('#finish-walk')).toHaveText('■ Done');
     await page.locator('#finish-walk').click();
     await expect(walk.locator('.walk-text')).toHaveText('1 this week · 4,210 steps today');
+  });
+});
+
+// --- v48 P5 · logs (Sep 24 2026) ---------------------------------------------
+// DECISIONS-v48 §1 Q6, §4 (2 kg row), §5 Pre-log / Post-log rows. The body
+// reading is 1-10 tap chips, BLANK until she taps (the v46 fix against the
+// invented 5); one quiet line + one wrist line on pre-log; one-tap back
+// ("Fine / Something"); one note box; a way back to the stretches; one-tap arm
+// feel on the 1 kg moves, and home ASKS about 2 kg (her Jul 3 ask) — a
+// question, never a tell.
+test.describe('v48 P5 logs', () => {
+  type Row = Record<string, unknown>;
+  const TUE_WEEK4 = '2026-09-22T14:00:00.000Z'; // Tue inside Round 2 Week 4
+  const THU_WEEK4 = '2026-09-24T15:00:00.000Z';
+
+  const seedLogs = async (page: Page, logs: Row[]): Promise<void> => {
+    await page.addInitScript((rows) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    }, logs);
+  };
+
+  const tapForward = async (page: Page): Promise<boolean> => {
+    if (await page.locator('#start-round-2').isVisible()) {
+      await page.locator('#start-round-2').click();
+      return true;
+    }
+    const next = page.locator('#next, #ww-skip');
+    if (await next.isVisible()) {
+      await next.click();
+      return true;
+    }
+    return false;
+  };
+
+  const goToStep = async (page: Page, name: string): Promise<void> => {
+    for (let i = 0; i < 60; i++) {
+      const now =
+        (await page
+          .locator('.exercise-name')
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      if (now === name) return;
+      if (!(await tapForward(page))) break;
+    }
+    throw new Error(`never reached ${name}`);
+  };
+
+  const toPostLog = async (page: Page): Promise<void> => {
+    for (let i = 0; i < 80; i++) {
+      if (await page.locator('#save-log').isVisible()) break;
+      if (!(await tapForward(page))) break;
+    }
+    await expect(page.locator('text=Quick log')).toBeVisible();
+  };
+
+  const readLogs = async (page: Page): Promise<Row[]> => {
+    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+    return JSON.parse(raw ?? '[]') as Row[];
+  };
+
+  const saveAndRead = async (page: Page): Promise<Row> => {
+    await page.locator('#save-log').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    const logs = await readLogs(page);
+    expect(logs.length).toBe(1);
+    return logs[0]!;
+  };
+
+  const logRow = (id: string, date: string, armFeel: string | null): Row => ({
+    id,
+    date,
+    workout: 'A',
+    capacityBefore: 7,
+    capacityAfter: 7,
+    wallSitSec: 45,
+    backPain: 0,
+    word: '',
+    armFeel,
+    synced: true,
+  });
+
+  test.describe('at phone size', () => {
+    test.use({ viewport: { width: 412, height: 915 } });
+
+    test('(a) pre-log: blank chips, one quiet line, Start in the fold on A, B and C with Lite on and off', async ({
+      page,
+    }) => {
+      await mockDate(page, TUE_WEEK4);
+      await page.goto('/');
+      for (const id of ['A', 'B', 'C'] as const) {
+        await page.locator(`button[data-workout="${id}"]`).click();
+        await expect(page.locator('.screen-header h2')).toHaveText(`Workout ${id}`);
+        await expect(page.locator('.prelog-header .subtitle-inline')).not.toBeEmpty();
+        await expect(page.locator('.prelog-meta')).toContainText('R2 · Week 4');
+        await expect(page.locator('.prelog-meta')).toContainText('min');
+        await expect(page.locator('[data-body-chip="cap-before"]')).toHaveCount(10);
+        await expect(page.locator('[data-body-chip][aria-checked="true"]')).toHaveCount(0);
+        await expect(page.locator('.warning-banner')).toHaveCount(0);
+        expect((await page.locator('#app').innerText()).toLowerCase()).not.toContain(
+          'how do you feel'
+        );
+        // Chips: >= 56 × 48, two rows of five.
+        const one = (await page.locator('#cap-before-1').boundingBox())!;
+        const six = (await page.locator('#cap-before-6').boundingBox())!;
+        expect(one.width).toBeGreaterThanOrEqual(56);
+        expect(one.height).toBeGreaterThanOrEqual(48);
+        expect(six.y).toBeGreaterThan(one.y);
+        for (const liteOn of [false, true]) {
+          if (liteOn) await page.locator('#lite-toggle').click();
+          const begin = (await page.locator('#begin').boundingBox())!;
+          expect(begin.y + begin.height).toBeLessThanOrEqual(915);
+          // Everything she decides on sits above the pinned bar, no scroll.
+          const bar = (await page.locator('.action-bar').boundingBox())!;
+          const lite = (await page.locator('#lite-toggle').boundingBox())!;
+          expect(lite.y + lite.height).toBeLessThanOrEqual(bar.y);
+          expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        }
+        await expect(page.locator('#lite-toggle')).toContainText('✓ Lite');
+        await page.locator('#back-home').click();
+      }
+    });
+  });
+
+  test("(a) the wrist + back line shows on A and not on C; What's in it is one closed row", async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await expect(page.locator('.safety-line')).toHaveText(
+      'Wrist + back: pressure fine, pain = stop.'
+    );
+    await expect(page.locator('.prelog-meta')).toContainText('new tonight: supported split squat');
+    const fold = page.locator('details.prelog-overview');
+    await expect(fold).toHaveJSProperty('open', false);
+    await expect(fold.locator('summary')).toHaveText("What's in it");
+    await page.locator('#back-home').click();
+    await page.locator('button[data-workout="C"]').click();
+    await expect(page.locator('.safety-line')).toHaveCount(0);
+  });
+
+  test('(a) chip 7 then Start saves capacityBefore 7; untouched saves null', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#cap-before-7').click();
+    await expect(page.locator('#cap-before-7')).toHaveAttribute('aria-checked', 'true');
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    expect(log['capacityBefore']).toBe(7);
+    // …and a session where she taps nothing saves null (v46 intent kept). A
+    // fresh load (storage cleared): C is done today, so home has no C chip.
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    const blank = await saveAndRead(page);
+    expect(blank['capacityBefore']).toBeNull();
+    expect(blank['capacityAfter']).toBeNull();
+    expect(blank['backPain']).toBeNull();
+  });
+
+  test('(b) a body reading of 2 SUGGESTS Lite (outline) but never switches it on', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await expect(page.locator('#lite-toggle')).not.toHaveClass(/lite-suggest/);
+    await page.locator('#cap-before-2').click();
+    await expect(page.locator('#lite-toggle')).toHaveClass(/lite-suggest/);
+    await expect(page.locator('#lite-toggle')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#lite-toggle')).toContainText(
+      'Hard day? Lite — one round, still counts'
+    );
+    await page.locator('#begin').click();
+    await expect(page.locator('.round-indicator')).not.toContainText('lite');
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    expect(log['liteDay']).toBe(false);
+    expect(log['capacityBefore']).toBe(2);
+  });
+
+  test('(b) once Lite is on, the outline goes and the chip says how to undo it', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#cap-before-3').click();
+    await page.locator('#lite-toggle').click();
+    await expect(page.locator('#lite-toggle')).toHaveText('✓ Lite · 1 round today · tap to undo');
+    await expect(page.locator('#lite-toggle')).not.toHaveClass(/lite-suggest/);
+    await page.locator('#lite-toggle').click();
+    await expect(page.locator('#lite-toggle')).toHaveClass(/lite-suggest/);
+  });
+
+  test('(c) post-log on C has no wall-sit field', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    await expect(page.locator('#wallsit')).toHaveCount(0);
+    await expect(page.locator('#app')).not.toContainText('Wall sit');
+  });
+
+  test('(c) post-log on A after a held wall sit: the field is pre-filled with the real seconds', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, 'Wall sit');
+    await page.locator('#start-timed').click();
+    await advanceClock(page, 30_000);
+    await expect(page.locator('.timer-display')).toHaveText('15');
+    await page.locator('#stop-timed').click();
+    await toPostLog(page);
+    await expect(page.locator('#wallsit')).toHaveValue('30');
+    await expect(page.locator('.postlog-card')).toContainText('Wall sit 30 s (tap to adjust)');
+    // A chip tap re-renders the screen — an edited number survives it.
+    await page.locator('#wallsit').fill('33');
+    await page.locator('#cap-after-6').click();
+    await expect(page.locator('#wallsit')).toHaveValue('33');
+    const log = await saveAndRead(page);
+    expect(log['wallSitSec']).toBe(33);
+    expect(log['capacityAfter']).toBe(6);
+  });
+
+  test('(d) back: "Fine" saves 0', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    await expect(page.locator('#back-1')).toHaveCount(0);
+    await page.locator('#back-fine').click();
+    await expect(page.locator('#back-fine')).toHaveAttribute('aria-pressed', 'true');
+    const log = await saveAndRead(page);
+    expect(log['backPain']).toBe(0);
+  });
+
+  test('(d) back: untouched saves null; "Fine" tapped twice is untouched again', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    await page.locator('#back-fine').click();
+    await page.locator('#back-fine').click();
+    await expect(page.locator('#back-fine')).toHaveAttribute('aria-pressed', 'false');
+    const log = await saveAndRead(page);
+    expect(log['backPain']).toBeNull();
+  });
+
+  test('(d) back: "Something" opens a blank 1-10 row; tapping 4 saves 4', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    await page.locator('#back-some').click();
+    await expect(page.locator('[data-body-chip="back"]')).toHaveCount(10);
+    await expect(page.locator('[data-body-chip="back"][aria-checked="true"]')).toHaveCount(0);
+    await page.locator('#back-4').click();
+    await expect(page.locator('#back-4')).toHaveAttribute('aria-checked', 'true');
+    const log = await saveAndRead(page);
+    expect(log['backPain']).toBe(4);
+  });
+
+  test('(d) back: "Something" opened but no number tapped saves null', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    await page.locator('#back-some').click();
+    const log = await saveAndRead(page);
+    expect(log['backPain']).toBeNull();
+  });
+
+  test.describe('at phone size', () => {
+    test.use({ viewport: { width: 412, height: 915 } });
+
+    test('(e) one note box: no #word, the note saves verbatim, Save stays in view while typing', async ({
+      page,
+    }) => {
+      await mockDate(page, TUE_WEEK4);
+      await page.goto('/');
+      await page.locator('button[data-workout="C"]').click();
+      await page.locator('#begin').click();
+      await toPostLog(page);
+      await expect(page.locator('#word')).toHaveCount(0);
+      await expect(page.locator('.postlog-card')).toContainText('Anything about today? (optional)');
+      const note = page.locator('#session-note');
+      await expect(note).toHaveAttribute('dir', 'auto');
+      await expect(note).toHaveAttribute('maxlength', '500');
+      await expect(note).toHaveAttribute('enterkeyhint', 'done');
+      await note.click();
+      await note.pressSequentially('knee fine');
+      await expect(note).toBeFocused();
+      const save = page.locator('.action-bar #save-log');
+      await expect(save).toBeVisible();
+      const box = (await save.boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(915);
+      // Enter = done typing: the field lets go, nothing is saved by itself.
+      await note.press('Enter');
+      await expect(note).not.toBeFocused();
+      await expect(note).toHaveValue('knee fine');
+      await expect(page.locator('text=Quick log')).toBeVisible();
+      expect(await readLogs(page)).toHaveLength(0);
+      const log = await saveAndRead(page);
+      expect(log['sessionNote']).toBe('knee fine');
+      expect(log['word']).toBe('');
+      const p = await page.evaluate(
+        (e) =>
+          (window as unknown as { __wtSessionPayload: (x: unknown) => Row }).__wtSessionPayload(e),
+        log
+      );
+      expect(p['one_word']).toBeNull();
+    });
+  });
+
+  test('(e) "‹ Back to the stretches" returns to the cool-down list without saving', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    await page.locator('#session-note').fill('almost done');
+    await page.locator('#back-to-stretches').click();
+    await expect(page.locator('.stretch-list')).toBeVisible();
+    await expect(page.locator('.round-indicator')).toContainText('Cool-down');
+    expect(await readLogs(page)).toHaveLength(0);
+    // Done · Finish brings her back to the log with her words still there.
+    await page.locator('#next').click();
+    await expect(page.locator('#session-note')).toHaveValue('almost done');
+    const log = await saveAndRead(page);
+    expect(log['sessionNote']).toBe('almost done');
+  });
+
+  test('(f) arm feel: Right on the row and Easy on the curl save "curl=easy;row=right"', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, 'Prone row (bodyweight)');
+    await expect(page.locator('.arm-feel-label')).toHaveText('How did it feel?');
+    await page.locator('[data-arm-step="row"][data-arm-feel="right"]').click();
+    await expect(page.locator('[data-arm-step="row"][data-arm-feel="right"]')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    // Quiet: Done · Next is still the one sage on the step.
+    await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
+    await goToStep(page, '1 kg biceps curl');
+    // Tap Hard, then change her mind: tap Hard again clears, then Easy.
+    await page.locator('[data-arm-step="curl"][data-arm-feel="hard"]').click();
+    await page.locator('[data-arm-step="curl"][data-arm-feel="hard"]').click();
+    await expect(page.locator('[data-arm-step="curl"][aria-pressed="true"]')).toHaveCount(0);
+    await page.locator('[data-arm-step="curl"][data-arm-feel="easy"]').click();
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    expect(log['armFeel']).toBe('curl=easy;row=right');
+  });
+
+  test('(f) arm feel: no tap on either move saves null; no chips on other moves', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, 'Wall angels');
+    await expect(page.locator('.arm-feel')).toHaveCount(0);
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    expect(log['armFeel']).toBeNull();
+  });
+
+  test('(g) two easy sessions in a row: home asks about 2 kg; "Noted" hides it, also after a reload', async ({
+    page,
+    context,
+  }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, [
+      logRow('s1', '2026-09-19T15:00:00.000Z', 'curl=easy'),
+      logRow('s2', '2026-09-22T15:00:00.000Z', 'curl=easy;row=easy'),
+      logRow('s3', '2026-09-23T15:00:00.000Z', null), // a session with no feel — skipped
+    ]);
+    await page.goto('/');
+    const card = page.locator('#twokg-card');
+    await expect(card).toContainText('The 1 kg felt easy twice. Ask Lisa about 2 kg?');
+    await expect(card.locator('#twokg-noted')).toHaveText('Noted');
+    // A question, never a second primary: the hero keeps the one sage.
+    await expect(card.locator('.btn-primary')).toHaveCount(0);
+    await page.locator('#twokg-noted').click();
+    await expect(page.locator('#twokg-card')).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem('workout-tracker:twokg-noted'))).toBe(
+      's2'
+    );
+    // A fresh page in the same context (`page` clears storage on every load).
+    const reopened = await context.newPage();
+    await mockDate(reopened, THU_WEEK4);
+    await reopened.goto('/');
+    await expect(reopened.locator('.home-header h1')).toBeVisible();
+    await expect(reopened.locator('#twokg-card')).toHaveCount(0);
+    await reopened.close();
+  });
+
+  test('(g) one easy + one right: no 2 kg question', async ({ page }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, [
+      logRow('s1', '2026-09-19T15:00:00.000Z', 'curl=easy'),
+      logRow('s2', '2026-09-22T15:00:00.000Z', 'curl=right'),
+    ]);
+    await page.goto('/');
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    await expect(page.locator('#twokg-card')).toHaveCount(0);
+  });
+
+  test('(g) only one session with a feel: no 2 kg question yet', async ({ page }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, [logRow('s1', '2026-09-22T15:00:00.000Z', 'curl=easy;row=easy')]);
+    await page.goto('/');
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    await expect(page.locator('#twokg-card')).toHaveCount(0);
   });
 });

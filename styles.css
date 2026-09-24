@@ -4532,3 +4532,292 @@ input[type='number']:focus {
 .program-archive-label {
   margin-bottom: 10px;
 }
+
+/* ---- v48 P5 (Sep 24 2026) — pre-log, post-log, arm feel, the 2 kg question - */
+
+/* Pre-log header: "Workout A" with the name under it; × Back never wraps. */
+.prelog-header {
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.prelog-title {
+  min-width: 0;
+}
+
+.prelog-title h2 {
+  margin-bottom: 2px;
+}
+
+.subtitle-inline {
+  display: block;
+  color: var(--text-dim);
+  font-size: var(--font-small);
+}
+
+.prelog-header .quit-link {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* The one quiet line: week · new tonight · lane · minutes. */
+.prelog-meta {
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  line-height: 1.45;
+  margin: 0 0 14px;
+}
+
+/* "What's in it ▸" — one closed row; open, each phase lists its moves. */
+.prelog-overview {
+  padding: 0;
+}
+
+.prelog-overview-summary {
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 48px;
+  padding: 12px 18px;
+  color: var(--text);
+  font-size: var(--font-small);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.prelog-overview-summary::-webkit-details-marker {
+  display: none;
+}
+
+.prelog-overview-summary::after {
+  content: '▸';
+  color: var(--text-dim);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.prelog-overview[open] .prelog-overview-summary::after {
+  transform: rotate(90deg);
+}
+
+.prelog-overview .overview-phases {
+  padding: 0 18px 14px;
+}
+
+.overview-phase-flat .overview-phase-summary {
+  cursor: default;
+}
+
+.overview-phase-flat .overview-phase-summary::after {
+  content: none;
+}
+
+/* Body reading: 1-10 tap chips, two rows of five, none chosen until tapped. */
+.body-card {
+  padding: 16px 18px;
+}
+
+.body-field {
+  display: block;
+  margin: 0;
+}
+
+.body-label {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  font-weight: 500;
+}
+
+.body-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.body-chip-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(56px, 1fr));
+  gap: 8px;
+}
+
+.body-chip {
+  min-width: 56px;
+  min-height: 48px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-body);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+/* A reading, not the primary action: --accent-progress, never the sage.
+ * Two classes so the global button:hover (0,1,1) can't grey it out. */
+.body-chip.body-chip-on,
+.back-chip.body-chip-on {
+  background: var(--accent-progress);
+  border-color: var(--accent-progress);
+  color: var(--bg);
+}
+
+.body-anchor {
+  margin-top: 8px;
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+}
+
+/* Lite: a small chip. Off = quiet; on = a stronger border (no sage, no tint);
+ * a low body reading only SUGGESTS it with a gentle outline. */
+.lite-chip {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  text-align: left;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-small);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.lite-chip.lite-toggle-on {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: transparent;
+}
+
+.lite-chip.lite-suggest {
+  color: var(--text);
+  border-color: var(--accent-progress);
+}
+
+/* The one wrist + back line (was a 58-word amber box). */
+.safety-line {
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  margin: 0 0 8px;
+}
+
+/* Post-log. */
+.postlog-card {
+  padding: 16px 18px;
+}
+
+.postlog-card .field {
+  display: block;
+  margin-bottom: 18px;
+}
+
+.postlog-card .field:last-child {
+  margin-bottom: 0;
+}
+
+.postlog-card .field > .label-text {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  font-weight: 500;
+}
+
+.back-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.back-chip {
+  min-height: 48px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-small);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.back-chip-open {
+  border-color: var(--text-dim);
+}
+
+/* Save + "‹ Back to the stretches" in the pinned bar. */
+.action-bar .postlog-back {
+  margin-top: 4px;
+  min-height: 40px;
+  padding: 4px 12px;
+}
+
+#app.has-action-bar:has(.postlog-back) {
+  padding-bottom: calc(160px + env(safe-area-inset-bottom));
+}
+
+/* Arm feel on the 1 kg curl and the prone row: quiet, optional. */
+.arm-feel {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 6px 0 8px;
+}
+
+.arm-feel-label {
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+}
+
+.arm-feel-chips {
+  display: flex;
+  gap: 6px;
+}
+
+.arm-chip {
+  min-width: 64px;
+  min-height: 40px;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-meta);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.arm-chip.arm-chip-on {
+  color: var(--text);
+  border-color: var(--accent-progress);
+  background: color-mix(in srgb, var(--accent-progress) 18%, transparent);
+}
+
+/* The 2 kg question on home: a quiet card, never sage. */
+.twokg-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.twokg-text {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-small);
+  line-height: 1.4;
+}
+
+.twokg-noted {
+  flex-shrink: 0;
+  min-height: 44px;
+}
