@@ -252,12 +252,16 @@ test('quit during workout asks for confirmation and returns home', async ({ page
     'Quit without saving',
   ]);
   await expect(panel.locator('#quit-yes')).toHaveClass(/back-link/);
-  const log = (await panel.locator('#quit-log').boundingBox())!;
-  const cancel = (await panel.locator('#quit-cancel').boundingBox())!;
-  const quit = (await panel.locator('#quit-yes').boundingBox())!;
-  expect(log.y).toBeLessThan(cancel.y);
-  expect(cancel.y).toBeLessThan(quit.y);
-  expect(log.width).toBeGreaterThan(cancel.width - 1); // full width
+  // The panel slides in; measure once it has settled (flaked once on CI,
+  // Sep 25 2026, when the boxes were read mid-animation).
+  await expect(async () => {
+    const log = (await panel.locator('#quit-log').boundingBox())!;
+    const cancel = (await panel.locator('#quit-cancel').boundingBox())!;
+    const quit = (await panel.locator('#quit-yes').boundingBox())!;
+    expect(log.y).toBeLessThan(cancel.y);
+    expect(cancel.y).toBeLessThan(quit.y);
+    expect(log.width).toBeGreaterThan(cancel.width - 1); // full width
+  }).toPass({ timeout: 3000 });
   await panel.locator('#quit-yes').click();
   await expect(page.locator('.home-header h1')).toBeVisible();
   await expect(page.locator('.week-line')).toContainText('0 of 3 this week');

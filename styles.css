@@ -4224,6 +4224,13 @@ input[type='number']:focus {
   font-size: var(--font-subheading);
   line-height: 1.25;
   white-space: nowrap;
+  /* v48 · final (Sep 25 2026): with Android/Linux font metrics the Saturday
+   * "Round 2 · Week 5 · Week 4's plan" ran under the ⚙ button (CI caught it).
+   * The title may shrink and end in "…"; it never overlaps the gear. */
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-version {
