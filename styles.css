@@ -3245,25 +3245,21 @@ input[type='number']:focus {
   margin-bottom: 18px;
 }
 
-.quit-confirm-row {
-  display: flex;
-  gap: 10px;
-}
-
-.quit-confirm-row > button {
-  flex: 1;
-}
-
+/* v48 · fix r2 (Sep 25 2026): one column — Log what I did (sage, first),
+ * Cancel (neutral border), then "Quit without saving" as a quiet text link.
+ * The filled orange Quit is gone (no red; it was the loudest button for the
+ * choice that throws the half session away). */
 .quit-confirm-cancel {
-  background: var(--bg-elev-2);
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  background: transparent;
   color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
 }
 
 .quit-confirm-yes {
-  background: color-mix(in srgb, var(--accent-danger) 22%, var(--bg-elev-2));
-  color: var(--accent-danger);
-  border: 1px solid color-mix(in srgb, var(--accent-danger) 50%, transparent);
+  margin-top: 6px;
 }
 
 /* Pause pill + paused overlay (Allison Jul 7 2026 — step away without inflating
@@ -4004,14 +4000,16 @@ input[type='number']:focus {
   margin-top: 18px;
 }
 
-/* Quit panel's third choice — quiet, full width under Cancel / Quit. */
+/* Quit panel's first choice — v48 · fix r2 (Sep 25 2026): the panel's one
+ * sage, full width, on top (was last and quiet under Cancel / Quit). */
 .quit-confirm-log {
   display: block;
   width: 100%;
-  margin-top: 10px;
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--border-strong);
+  min-height: 52px;
+  background: var(--grad-primary);
+  color: var(--bg);
+  border: 1px solid var(--accent);
+  font-weight: 600;
 }
 
 /* ---- v48 P3 (Sep 24 2026) — cardio: the choice, the ride in order --------- */
@@ -4076,6 +4074,29 @@ input[type='number']:focus {
 /* Elliptical, before the ride: the back-out sits under Start timer. */
 .cardio-back-out {
   margin-top: 4px;
+}
+
+/* v48 · fix r2 (Sep 25 2026): the FIRST ride stacks name → setup (open) →
+ * Start, and "↩ Walk or apartment instead" — the way out on a day the machine
+ * won't start — landed half under the pinned Done · Next bar (807-851 px vs the
+ * bar at 827 on her 412×915). The page-level padding under the bar already lets
+ * it scroll clear; this makes it clear WITHOUT a scroll: tighter gaps on this
+ * one screen only, nothing removed. */
+#app:has(.ell-guide-first) > .card {
+  margin-bottom: 10px;
+}
+
+#app:has(.ell-guide-first) .exercise-display {
+  padding-top: 4px;
+  padding-bottom: 0;
+}
+
+#app:has(.ell-guide-first) .timer-card .timer-display {
+  margin: 10px 0 12px;
+}
+
+#app:has(.ell-guide-first) .ell-steps {
+  margin-bottom: 8px;
 }
 
 /* During the ride: name + minutes on one quiet line above the big timer. */

@@ -28,6 +28,12 @@ type Exercise = {
   //     per-side timer can come back if she asks for it; only the list ignores them.
   durationSec?: number;
   isTimed?: boolean;
+  // v48 · fix r2 (Sep 25 2026): what she SEES as the title, when it must differ
+  // from `name`. `name` stays the key (detail card, stick figure, voice note,
+  // history, "last time" lookups); `label` is display only, read by
+  // displayName(). First use: the Week-4 hinge held the 1 kg under the title
+  // "Bodyweight hip hinge" — the same misreading class the relabel fixed.
+  label?: string;
   // v48 (Sep 24 2026): the ONE line that belongs on the card face mid-set — the
   // safety rule, not the whole cue. Falls back to SAFETY_LINE by name. The full
   // `notes` moves behind a closed "Cue ▸" (47-70 words on the face, mid-set, on 7
@@ -2270,6 +2276,10 @@ const R2W4_WALL_SIT: Exercise = (() => {
 // existing practice, now written down.
 const HIP_HINGE_R2W4: Exercise = {
   name: 'Bodyweight hip hinge',
+  // v48 · fix r2 (Sep 25 2026): "Bodyweight hip hinge" sat right over "holding
+  // the 1 kg" — the title contradicted the line under it. Display only; the
+  // key above is unchanged so the voice note and history still match.
+  label: 'Hip hinge',
   // v48 (Sep 24 2026): she does 2 sets in EACH of the 2 rounds; "2 sets · 12
   // reps" inside "Round 1/2" read as 2 in total (same class as the v45 split-
   // squat label). Label only — the prescription is unchanged.
@@ -3855,8 +3865,12 @@ function startWorkout(id: WorkoutId): void {
 // v48 · P3 (Sep 24 2026): the cardio step's name on screen. The key stays
 // 'Outdoor walk' in PROGRAM / DETAIL / HOWTO / VISUALS (and in saved data); she
 // sees "Cardio" — her Sep 24 words: "no more walk it could be walk or elliptical".
-function displayName(name: string): string {
-  return name === 'Outdoor walk' ? 'Cardio' : name;
+// v48 · fix r2 (Sep 25 2026): takes the Exercise, so a per-week `label` (the
+// Week-4 "Hip hinge") wins everywhere she reads the name — step title, the
+// pre-log list, the rest screen's "Next ·" line, the round-break line.
+function displayName(ex: Pick<Exercise, 'name' | 'label'>): string {
+  if (ex.label) return ex.label;
+  return ex.name === 'Outdoor walk' ? 'Cardio' : ex.name;
 }
 
 // v48 · P3 — lane memory (DECISIONS §2 #3): the lane of her newest saved
@@ -4263,7 +4277,7 @@ function logWhatIDid(): void {
     state.currentPhase === 'cooldown'
       ? 'the cool-down'
       : ex
-        ? displayName(ex.name) // v48 · P3: "Cardio", not the internal key
+        ? displayName(ex) // v48 · P3: "Cardio", not the internal key
         : state.currentPhase;
   if (
     state.currentRound === 1 &&
@@ -6254,7 +6268,7 @@ function tonightNames(
     for (const ex of w[p] ?? []) {
       // Terse: "prone row", not "prone row (bodyweight)" — the hero line stays
       // one line at phone width (the step itself keeps the full name).
-      const name = displayName(ex.name)
+      const name = displayName(ex)
         .replace(/\s*\([^)]*\)/g, '')
         .toLowerCase();
       if (tonightKind(ex, id) === want && !out.includes(name)) out.push(name);
@@ -6587,7 +6601,7 @@ function renderWorkoutOverview(w: Workout): string {
       // v46: the warm-up step is a three-way pick now (her Sep 24: "no more
       // walk it could be walk or elliptical") — display only; the key stays.
       // v48 · P3: one helper for it everywhere (displayName).
-      const names = p.items.map((e) => displayName(e.name)).join(' · ');
+      const names = p.items.map((e) => displayName(e)).join(' · ');
       // v48 · P5: flat inside the one fold — a second tap per phase was a
       // second door to the same list.
       return `
@@ -6639,8 +6653,8 @@ function renderRestScreen(w: Workout): string {
     state.currentPhase === 'main' && state.currentExerciseIndex === 0 && state.currentRound > 1;
   const nextLine = next
     ? roundStart
-      ? `Next · Round ${state.currentRound} · ${displayName(next.name)}`
-      : `Next · ${displayName(next.name)}${next.reps ? ` · ${next.reps}` : ''}`
+      ? `Next · Round ${state.currentRound} · ${displayName(next)}`
+      : `Next · ${displayName(next)}${next.reps ? ` · ${next.reps}` : ''}`
     : '';
   return `
     <div class="screen-header">
@@ -6691,7 +6705,7 @@ function renderRoundBreak(w: Workout): string {
     ${renderProgressLine(w)}
     <div class="card round-break-card">
       <h2 class="round-break-title">Round 1 done ✓</h2>
-      ${first ? `<p class="round-break-next">Next · Round 2 · ${escapeHtml(first.name)}</p>` : ''}
+      ${first ? `<p class="round-break-next">Next · Round 2 · ${escapeHtml(displayName(first))}</p>` : ''}
       <button class="back-link round-break-finish" id="finish-here" type="button">Finish here — it still counts</button>
     </div>
     ${renderActionBar(`
@@ -6955,8 +6969,12 @@ function renderEllipticalGuide(beforeFirstRide: boolean): string {
   const isOpen = beforeFirstRide
     ? state.openSections[key] !== false
     : state.openSections[key] === true;
+  // v48 · fix r2 (Sep 25 2026): marks the tall first-ride screen (setup open
+  // above Start) so styles.css can tighten it — "↩ Walk or apartment instead"
+  // sat half under the pinned Done · Next bar.
+  const firstMark = isOpen && beforeFirstRide ? ' ell-guide-first' : '';
   return `
-    <div class="card ell-guide ${isOpen ? 'detail-section-open' : 'ell-guide-collapsed'}">
+    <div class="card ell-guide ${isOpen ? 'detail-section-open' : 'ell-guide-collapsed'}${firstMark}">
       <button class="detail-section-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${isOpen}">
         <span class="detail-section-label"><span class="detail-section-icon" aria-hidden="true">🛠</span> Set up the machine</span>
         <span class="detail-chev" aria-hidden="true">▸</span>
@@ -7171,7 +7189,7 @@ function renderWorkout(): string {
       ${header}
       <div class="card">
         <div class="exercise-display">
-          <div class="exercise-name-row"><div class="exercise-name">${displayName(ex.name)}</div></div>
+          <div class="exercise-name-row"><div class="exercise-name">${displayName(ex)}</div></div>
           <div class="exercise-reps">${walkStepMinutes(ex)} min</div>
           <p class="exercise-safety">Conversational pace</p>
           <div class="cardio-choice">
@@ -7196,7 +7214,7 @@ function renderWorkout(): string {
       ${header}
       <div class="card">
         <div class="exercise-display">
-          <div class="exercise-name-row"><div class="exercise-name">${displayName(ex.name)}</div></div>
+          <div class="exercise-name-row"><div class="exercise-name">${displayName(ex)}</div></div>
           <div class="exercise-reps">${walkStepMinutes(ex)} min</div>
           <p class="walk-live-line">🚶 <span id="walk-live">${walkLiveText(workoutWalkStart())}</span></p>
           <p class="gear-note">It saves with this workout. Tap Done · Next when you're back.</p>
@@ -7243,7 +7261,7 @@ function renderWorkout(): string {
     <div class="card">
       <div class="exercise-display">
         <div class="exercise-name-row">
-          <div class="exercise-name">${displayName(ex.name)}</div>
+          <div class="exercise-name">${displayName(ex)}</div>
           ${kind ? `<span class="new-tonight-badge">${kind === 'new' ? 'New tonight' : 'Back tonight'}</span>` : ''}
         </div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
@@ -8824,15 +8842,19 @@ function showQuitConfirmPanel(): void {
   const panel = document.createElement('div');
   panel.id = 'quit-confirm-panel';
   panel.className = 'quit-confirm-panel';
+  // v48 · fix r2 (Sep 25 2026): the kind way out comes FIRST. It was last and
+  // quiet while "Quit" (nothing saved) was a filled orange button — the panel
+  // leaned toward the half session vanishing, which DECISIONS names "the quiet
+  // quit" (ux.md #8), and the orange broke the no-red rule. Now: "Log what I
+  // did" (full width, the panel's one sage), Cancel, then a quiet text link
+  // that says exactly what it does.
   panel.innerHTML = `
     <div class="quit-confirm-card">
       <div class="quit-confirm-title">Quit this workout?</div>
-      <div class="quit-confirm-sub">Quit = nothing saved.</div>
-      <div class="quit-confirm-row">
-        <button class="btn quit-confirm-cancel" id="quit-cancel" type="button">Cancel</button>
-        <button class="btn quit-confirm-yes" id="quit-yes" type="button">Quit</button>
-      </div>
+      <div class="quit-confirm-sub">What you did so far still counts.</div>
       <button class="btn quit-confirm-log" id="quit-log" type="button">Log what I did</button>
+      <button class="btn quit-confirm-cancel" id="quit-cancel" type="button">Cancel</button>
+      <button class="back-link quit-confirm-yes" id="quit-yes" type="button">Quit without saving</button>
     </div>
   `;
   document.body.appendChild(panel);

@@ -244,9 +244,20 @@ test('quit during workout asks for confirmation and returns home', async ({ page
   await page.locator('.quit-link').click();
   const panel = page.locator('#quit-confirm-panel');
   await expect(panel).toBeVisible();
-  await expect(panel.locator('#quit-cancel')).toHaveText('Cancel');
-  await expect(panel.locator('#quit-yes')).toHaveText('Quit');
-  await expect(panel.locator('#quit-log')).toHaveText('Log what I did');
+  // v48 · fix r2 (Sep 25 2026): the kind way out first — Log what I did, then
+  // Cancel, then a quiet "Quit without saving" (no filled orange Quit).
+  await expect(panel.locator('button')).toHaveText([
+    'Log what I did',
+    'Cancel',
+    'Quit without saving',
+  ]);
+  await expect(panel.locator('#quit-yes')).toHaveClass(/back-link/);
+  const log = (await panel.locator('#quit-log').boundingBox())!;
+  const cancel = (await panel.locator('#quit-cancel').boundingBox())!;
+  const quit = (await panel.locator('#quit-yes').boundingBox())!;
+  expect(log.y).toBeLessThan(cancel.y);
+  expect(cancel.y).toBeLessThan(quit.y);
+  expect(log.width).toBeGreaterThan(cancel.width - 1); // full width
   await panel.locator('#quit-yes').click();
   await expect(page.locator('.home-header h1')).toBeVisible();
   await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
@@ -1189,7 +1200,8 @@ test('R2 W4: the wall sit step itself reads 45 sec (the earned nudge from 40)', 
     if (name.includes('Supported split squat')) {
       await expect(page.locator('.exercise-reps')).toContainText('6-8 each side');
     }
-    if (name.includes('Bodyweight hip hinge')) {
+    // v48 · fix r2 (Sep 25 2026): Week 4 titles it "Hip hinge" (label only).
+    if (/hip hinge/i.test(name)) {
       // Catch-up, not a raise: the hinge now says she holds the 1 kg.
       await expect(page.locator('.exercise-reps')).toContainText('holding the 1 kg');
     }
@@ -3687,10 +3699,14 @@ test.describe('v48 P1 data', () => {
     await page.locator('button:has-text("Start")').click();
     for (let i = 0; i < 20; i++) {
       const name = (await page.locator('.exercise-name').textContent()) ?? '';
-      if (name.includes('Bodyweight hip hinge')) {
+      if (/hip hinge/i.test(name)) {
         await expect(page.locator('.exercise-reps')).toContainText(
           '12 reps · 2 sets each round · holding the 1 kg'
         );
+        // v48 · fix r2 (Sep 25 2026): the title no longer says "Bodyweight"
+        // over "holding the 1 kg" — display label only, the key is unchanged.
+        await expect(page.locator('.exercise-name')).toHaveText('Hip hinge');
+        expect(name).not.toContain('Bodyweight');
         return;
       }
       await page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip').click();
@@ -4018,7 +4034,7 @@ test.describe('v48 P2 shell', () => {
     await goToStep(page, 'Supported split squat');
     await expect(page.locator('.new-tonight-badge')).toHaveText('New tonight');
     // A move that was already in last week's A carries no badge.
-    await goToStep(page, 'Bodyweight hip hinge');
+    await goToStep(page, 'Hip hinge'); // v48 · fix r2: Week 4's display label
     await expect(page.locator('.new-tonight-badge')).toHaveCount(0);
   });
 
@@ -4152,7 +4168,7 @@ test.describe('v48 P2 shell', () => {
     // v48 · fix r1: a plain tap (it used to take a 500 ms hold nothing mentioned).
     await page.locator('#quit').click();
     await expect(page.locator('#quit-confirm-panel')).toBeVisible();
-    await expect(page.locator('.quit-confirm-sub')).toHaveText('Quit = nothing saved.');
+    await expect(page.locator('.quit-confirm-sub')).toHaveText('What you did so far still counts.'); // v48 · fix r2
     await page.locator('#quit-log').click();
     await expect(page.locator('text=Quick log')).toBeVisible();
     // A stopped session is not called "done", and its Back goes to the workout.
@@ -4216,7 +4232,7 @@ test.describe('v48 P2 shell', () => {
     await row.click();
     await expect(page.locator('.visual-video-wrap iframe')).toHaveCount(1);
     // A move WITH a still is folded in round 2 as well.
-    await goToStep(page, 'Bodyweight hip hinge');
+    await goToStep(page, 'Hip hinge'); // v48 · fix r2: Week 4's display label
     await expect(page.locator('.exercise-visual-still')).toHaveCount(0);
     await expect(page.locator('.exercise-visual-compact')).toHaveCount(1);
   });
@@ -4231,7 +4247,7 @@ test.describe('v48 P2 shell', () => {
     await goToStep(page, 'Supported split squat');
     await page.locator('#next').click();
     await expect(page.locator('.rest-card')).toBeVisible();
-    await expect(page.locator('.rest-next')).toContainText('Next · Bodyweight hip hinge · 12 reps');
+    await expect(page.locator('.rest-next')).toContainText('Next · Hip hinge · 12 reps'); // v48 · fix r2: label
     await expect(page.locator('.rest-card #step-back')).toHaveText('‹ Back');
     await expect(page.locator('.rest-card #step-back')).toHaveClass(/back-link/);
   });
@@ -4372,6 +4388,10 @@ test.describe('v48 P3 cardio', () => {
       // The back-out sits right under Start.
       const out = (await page.locator('#ww-outdoor').boundingBox())!;
       expect(out.y).toBeGreaterThan(start.y);
+      // v48 · fix r2 (Sep 25 2026): …and clears the pinned bar with no scroll —
+      // it's the way out on a day the machine won't start (was 807-851 px under
+      // a bar at 827).
+      expect(out.y + out.height).toBeLessThanOrEqual(bar.y);
       await expect(page.locator('#ww-outdoor')).toHaveText('↩ Walk or apartment instead');
       // Setup: open on the first ride, three short steps.
       await expect(page.locator('.ell-guide .ell-steps li')).toHaveCount(3);
