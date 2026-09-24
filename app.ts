@@ -258,8 +258,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v44';
-const BUILD_DATE = 'Sep 24, 2026 · 14:50';
+const APP_VERSION = 'v45';
+const BUILD_DATE = 'Sep 24, 2026 · 15:50';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2152,7 +2152,9 @@ const R2W3_PLAN = PROGRAM[PROGRAM.length - 1]!;
 
 const R2W4_SPLIT_SQUAT: Exercise = {
   name: 'Supported split squat',
-  reps: '2 sets · 6-8 each side',
+  // v45: was "2 sets · 6-8 each side" inside a 2-round block — readable as 4
+  // sets a side on her first-ever split squat. One set per round = 2 in all.
+  reps: '6-8 each side · one set per round',
   notes:
     'NEW — this takes the place of your squats in A (C keeps its 10 squats). Stand a long step in front of the couch or a chair, fingertips resting on it for BALANCE ONLY — light touch, no gripping, no weight through the hands. Front foot flat, back heel up. Chest tall, lower straight down so the back knee heads toward the floor and the front thigh comes near parallel. Push through the front heel to stand. 6-8 each side; last set stop about 2 short. Front knee pinches or you wobble a lot? Make the range smaller — the right call, not a failure.',
 };
@@ -2725,6 +2727,12 @@ function totalPausedMs(): number {
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && activeTimer) {
+      // v45: cancel the pending frame first, or every background/foreground
+      // cycle added one more parallel loop until the timer ended.
+      if (rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
+        cancelAnimationFrame(rafHandle);
+      }
+      rafHandle = null;
       timerLoop();
     }
     // Wake lock auto-releases when the app is backgrounded; if a walk is
@@ -2744,7 +2752,9 @@ function loadLogs(): LogEntry[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed as LogEntry[];
+    // v45: one malformed row used to blank the whole app (sort on a missing
+    // date threw inside render). Drop what doesn't validate.
+    return parsed.filter(isValidLogEntry);
   } catch {
     return [];
   }
@@ -2761,7 +2771,7 @@ function writeLogs(logs: LogEntry[]): void {
     if (aUn !== bUn) return aUn - bUn; // unsynced first
     return b.date.localeCompare(a.date); // newest first
   });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted.slice(0, 50)));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted.slice(0, PULL_LIMIT)));
 }
 
 function saveLog(entry: LogEntry): LogEntry {
@@ -2979,8 +2989,11 @@ function startWalk(): void {
   beginWalkTracking();
 }
 
-async function finishWalk(): Promise<WalkEntry> {
+async function finishWalk(): Promise<WalkEntry | null> {
   const start = activeWalkStart();
+  // v45: a second "Done walking" tap (while Fit is answering) found no walk and
+  // still logged an empty one. No active walk = nothing to log.
+  if (start === null) return null;
   const end = Date.now();
   const meters = walkCounter(WALK_METERS_KEY);
   let steps = walkCounter(WALK_STEPS_KEY);
@@ -3116,6 +3129,34 @@ function harvestWorkoutWalk(): void {
   localStorage.removeItem(WALK_STEPS_KEY);
   // Keep start/end so logCompleteAndHome can ask Google Fit for the real count.
   workoutWalk = { minutes, meters: meters >= 10 ? meters : 0, steps, startMs: start, endMs: end };
+  // v45: persisted too — the walk is the FIRST step, so if the phone drops the
+  // app during the strength rounds, the numbers must still be there at Save.
+  localStorage.setItem(WW_RESULT_KEY, JSON.stringify(workoutWalk));
+}
+
+const WW_RESULT_KEY = 'workout-tracker:ww-result';
+
+function storedWorkoutWalk(): WorkoutWalkResult | null {
+  try {
+    const raw = localStorage.getItem(WW_RESULT_KEY);
+    if (!raw) return null;
+    const r = JSON.parse(raw) as Partial<WorkoutWalkResult>;
+    if (typeof r.minutes !== 'number') return null;
+    return {
+      minutes: r.minutes,
+      meters: typeof r.meters === 'number' ? r.meters : 0,
+      steps: typeof r.steps === 'number' ? r.steps : 0,
+      ...(typeof r.startMs === 'number' ? { startMs: r.startMs } : {}),
+      ...(typeof r.endMs === 'number' ? { endMs: r.endMs } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function clearWorkoutWalk(): void {
+  workoutWalk = null;
+  localStorage.removeItem(WW_RESULT_KEY);
 }
 
 // The in-workout walk no longer auto-starts just because she lands on the step
@@ -3186,6 +3227,7 @@ function chooseApartmentCardio(minutes: number): void {
 }
 
 function clearApartmentCardio(): void {
+  clearLaneProgress();
   localStorage.removeItem(WW_APARTMENT_KEY);
 }
 
@@ -3299,7 +3341,37 @@ function ellipticalMarker(minutes: number): string {
   return parts.join(' · ');
 }
 
+// v45 — minutes actually done on an indoor lane (elliptical / apartment). Set
+// when she leaves the step after running its timer: the timer's elapsed time,
+// or the full block if it ran out. Never started the timer → nothing stored,
+// and the prescription stands (she may have used the machine's own clock).
+const WW_LANE_STARTED_KEY = 'workout-tracker:ww-lane-started';
+const WW_LANE_DONE_MIN_KEY = 'workout-tracker:ww-lane-done-min';
+
+function isIndoorLane(name: string): boolean {
+  return name === ELLIPTICAL_NAME || name === APARTMENT_CARDIO_NAME;
+}
+
+function captureLaneMinutesIfLeaving(): void {
+  const ex = getCurrentExercise();
+  if (!ex || !isIndoorLane(ex.name) || !ex.durationSec) return;
+  if (localStorage.getItem(WW_LANE_STARTED_KEY) === null) return;
+  const doneSec = Math.max(0, ex.durationSec - state.timerSeconds); // 0 left once it ran out
+  localStorage.setItem(WW_LANE_DONE_MIN_KEY, String(Math.max(1, Math.round(doneSec / 60))));
+}
+
+function laneDoneMinutes(): number | null {
+  const n = Number(localStorage.getItem(WW_LANE_DONE_MIN_KEY) ?? '');
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+function clearLaneProgress(): void {
+  localStorage.removeItem(WW_LANE_STARTED_KEY);
+  localStorage.removeItem(WW_LANE_DONE_MIN_KEY);
+}
+
 function clearElliptical(): void {
+  clearLaneProgress();
   localStorage.removeItem(WW_ELLIPTICAL_KEY);
   localStorage.removeItem(WW_ELLIPTICAL_LEVEL_KEY);
   localStorage.removeItem(WW_ELLIPTICAL_KM_KEY);
@@ -3384,7 +3456,14 @@ async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/workout_sessions`, {
       method: 'POST',
-      headers: supabaseHeaders(),
+      // v45: ignore-duplicates — if an earlier push already landed (the reply
+      // was lost), the retry is a no-op success instead of a 409 forever.
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal,resolution=ignore-duplicates',
+      },
       body: JSON.stringify([
         {
           id: entry.id,
@@ -3500,7 +3579,7 @@ function beginExercises(): void {
   state.pausedMs = 0;
   state.howToOpenFor = null;
   state.videoExpandedFor = null;
-  workoutWalk = null; // fresh session, fresh walk numbers
+  clearWorkoutWalk(); // fresh session, fresh walk numbers
   clearApartmentCardio(); // fresh session, cardio lane unchosen again
   clearElliptical();
   render();
@@ -3513,6 +3592,7 @@ function advanceExercise(): void {
   // Group 1D: if we're leaving a timed wall-sit and the user tapped Done
   // before the timer ran out, capture actual held duration.
   captureWallSitIfPending();
+  captureLaneMinutesIfLeaving(); // v45: minutes actually done on the elliptical/apartment
 
   stopTimer();
   state.isResting = false;
@@ -3570,10 +3650,16 @@ function startTimedExercise(): void {
   const duration = ex.durationSec;
   const exerciseName = ex.name;
   unlockAudio(); // Group 1C: synchronous resume in user-gesture handler
-  if (exerciseName === 'Wall sit') {
-    state.wallSitStartedAt = Date.now();
-  }
   startPreCountdown(() => {
+    // v45: the hold clock starts on GO, not on the tap. It used to start
+    // before the 3-2-1, so every completed wall sit logged target + 3 s
+    // (10 of 10 timed holds, May 19 → Sep 14).
+    if (exerciseName === 'Wall sit') {
+      state.wallSitStartedAt = Date.now();
+    }
+    if (isIndoorLane(exerciseName)) {
+      localStorage.setItem(WW_LANE_STARTED_KEY, String(Date.now()));
+    }
     startTimerCore('timed-exercise', duration, () => {
       if (exerciseName === 'Wall sit') {
         captureWallSitIfPending();
@@ -3583,9 +3669,24 @@ function startTimedExercise(): void {
   });
 }
 
+// v45: one save at a time. The walk lane awaits Google Fit (up to 5 s) before
+// saving, and a second tap on "Save & finish" in that window wrote a 2nd row.
+let savingLog = false;
+
 async function logCompleteAndHome(): Promise<void> {
+  if (!state.selectedWorkout || savingLog) return;
+  savingLog = true;
+  try {
+    await saveCompletedSession();
+  } finally {
+    savingLog = false;
+  }
+}
+
+async function saveCompletedSession(): Promise<void> {
   if (!state.selectedWorkout) return;
   harvestWorkoutWalk(); // no-op unless a walk step is somehow still open
+  if (!workoutWalk) workoutWalk = storedWorkoutWalk(); // survived an app close (v45)
   // By now the walk (first exercise) ended long ago, so Google Fit has synced it —
   // prefer Fit's real step count for the walk window; keep the motion estimate if
   // Fit is unavailable. Brief await (Fit replies fast); never blocks the log itself.
@@ -3609,10 +3710,15 @@ async function logCompleteAndHome(): Promise<void> {
   // Cardio either/or (Sep 7 2026): the apartment lane has nothing to track, so
   // the PRESCRIBED minutes are the honest number and a marker in `notes` says
   // which lane it was — no new Supabase column, both already exist.
-  const apartmentMin = apartmentCardioMinutes();
-  // Elliptical lane (Sep 24 2026): prescribed minutes + the level she set.
+  // v45: when she ran the lane's timer, the minutes she actually did win over
+  // the prescription (Done at 4 of 10 min used to log 10).
+  const laneDone = laneDoneMinutes();
+  const prescribedApartment = apartmentCardioMinutes();
+  const apartmentMin = prescribedApartment !== null ? (laneDone ?? prescribedApartment) : null;
+  // Elliptical lane (Sep 24 2026): minutes + the level she set.
   // The marker's shape is what lastEllipticalLevel() reads back next time.
-  const ellipticalMin = ellipticalMinutes();
+  const prescribedElliptical = ellipticalMinutes();
+  const ellipticalMin = prescribedElliptical !== null ? (laneDone ?? prescribedElliptical) : null;
   const notesParts: string[] = [];
   if (ellipticalMin !== null) {
     notesParts.push(ellipticalMarker(ellipticalMin));
@@ -3664,6 +3770,8 @@ type ActiveSessionSnapshot = {
   wallSitSec: number;
   backPain: number;
   word: string;
+  // v45: the post-log note survives an app close (it was lost before).
+  sessionNote: string;
   currentRound: number;
   currentPhase: Phase;
   currentExerciseIndex: number;
@@ -3685,6 +3793,7 @@ function saveActiveSession(): void {
       wallSitSec: state.wallSitSec,
       backPain: state.backPain,
       word: state.word,
+      sessionNote: state.sessionNote,
       currentRound: state.currentRound,
       currentPhase: state.currentPhase,
       currentExerciseIndex: state.currentExerciseIndex,
@@ -3745,6 +3854,7 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       wallSitSec: snap.wallSitSec ?? 0,
       backPain: snap.backPain ?? 0,
       word: snap.word ?? '',
+      sessionNote: typeof snap.sessionNote === 'string' ? snap.sessionNote : '',
       currentRound: snap.currentRound ?? 1,
       currentPhase: phase,
       currentExerciseIndex: phase === 'cooldown' ? 0 : idx,
@@ -3772,6 +3882,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.wallSitSec = snap.wallSitSec;
   state.backPain = snap.backPain;
   state.word = snap.word;
+  state.sessionNote = snap.sessionNote;
   state.startedAt = snap.startedAt ?? new Date().toISOString();
   state.liteDay = snap.liteDay;
   // Preserve pause accounting across an app close. If she closed while paused,
@@ -3900,6 +4011,7 @@ function resetState(): void {
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
   clearElliptical();
+  localStorage.removeItem(WW_RESULT_KEY); // the saved walk's numbers are logged now
   state.historyDetailId = null;
 }
 
@@ -3918,11 +4030,16 @@ type RemoteSession = {
   completed_at: string | null;
   duration_seconds: number | null;
   notes?: string | null;
+  walk_minutes?: number | null;
+  walk_steps?: number | null;
+  walk_meters?: number | null;
 };
 
-// How many sessions a pull fetches (newest first). The merge below uses it to
-// know whether the server's answer is the WHOLE history or just a window.
-const PULL_LIMIT = 50;
+// How many sessions a pull fetches (newest first) and the phone keeps. The
+// merge below uses it to know whether the server's answer is the WHOLE history
+// or just a window. v45: 50 → 200 — she had 39 rows and ~12 a month, so the
+// phone's History was about a month from silently dropping her oldest weeks.
+const PULL_LIMIT = 200;
 
 // Group 1E: id-keyed merge. Remote rows replace local-synced rows with the same
 // id; a local-unsynced row never loses its write.
@@ -3948,7 +4065,12 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
   }
   for (const r of remote) {
     const existing = byId.get(r.id);
-    if (existing && !existing.synced) continue; // local-unsynced wins
+    if (existing && !existing.synced) {
+      // Local-unsynced wins on content. But the server having its id means an
+      // earlier push DID land — mark it synced so it stops re-pushing (v45).
+      byId.set(r.id, { ...existing, synced: true });
+      continue;
+    }
     byId.set(r.id, {
       id: r.id,
       date: r.date,
@@ -3964,6 +4086,11 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       completedAt: r.completed_at ?? undefined,
       durationSec: r.duration_seconds ?? undefined,
       notes: r.notes ?? null,
+      // v45: the cardio numbers round-trip too — before this, every app open
+      // rebuilt synced rows without them, so the phone forgot what Supabase held.
+      walkMinutes: r.walk_minutes ?? null,
+      walkSteps: r.walk_steps ?? null,
+      walkMeters: r.walk_meters ?? null,
       synced: true,
     });
   }
@@ -3994,7 +4121,11 @@ async function pullFromSupabase(): Promise<void> {
         headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
       }
     );
-    if (sRes.ok) {
+    if (sRes.ok && sRes.headers.get('X-SW-Cache') === '1') {
+      // v45: offline — the service worker answered from its cache. The phone's
+      // own list is at least as fresh as that copy, so don't merge (the v33
+      // delete rule would drop anything synced after the cache was taken).
+    } else if (sRes.ok) {
       const remote: RemoteSession[] = await sRes.json();
       writeLogs(mergeRemoteSessions(loadLogs(), remote));
     } else {
@@ -5553,9 +5684,11 @@ const ELLIPTICAL_SETUP_STEPS: readonly string[] = [
 const ELLIPTICAL_RIDE_STEPS: readonly string[] = [
   'Start the app timer. Ride the first 2 minutes on level 3, easy.',
   'First ride: go up 1 level every 30 seconds until talking in full sentences starts to take effort. Then go back down 1 level. That is your level today. After this, go straight to your last level once the warm-up ends.',
-  'Stay there. Stand tall, feet flat on the pedals, and keep your hands light.',
+  'Stay there. Stand tall, feet flat on the pedals, hands light. Wrist complains? Rest your hands on the fixed grips.',
+  // v45: pulse is read at the WORKING level, before the cool-down — read
+  // after it, the number was recovery, not how hard the ride was.
+  'About a minute before the end, still on your level, hold the fixed metal grips until your pulse shows.',
   'For the last minute, go back to level 3.',
-  'For the last 30 seconds, hold the fixed metal grips until your pulse shows.',
   'Before you step off, copy the Distance and Pulse into the boxes above, and set the Level to the one you rode at. Then press STOP on the machine.',
 ];
 
@@ -7207,6 +7340,19 @@ function attachHandlers(): void {
     advanceExercise();
   });
 
+  // v45: the post-log text is kept as she types, so an app close on that
+  // screen doesn't lose it (the resume snapshot now carries both).
+  const wordInput = document.getElementById('word') as HTMLInputElement | null;
+  wordInput?.addEventListener('input', () => {
+    state.word = wordInput.value;
+    saveActiveSession();
+  });
+  const noteInput = document.getElementById('session-note') as HTMLTextAreaElement | null;
+  noteInput?.addEventListener('input', () => {
+    state.sessionNote = noteInput.value;
+    saveActiveSession();
+  });
+
   // Explicit Start for the in-workout walk — nothing tracks until she taps it
   // (Allison Jul 9 2026: being on the page ≠ walking started).
   bindClick('ww-start', () => {
@@ -7503,6 +7649,12 @@ document.addEventListener('DOMContentLoaded', () => {
   render();
   void pullFromSupabase().then(() => flushPendingSyncs());
   void flushPendingWalks();
+  // v45: a session saved offline (gym basement, airplane mode) now syncs the
+  // moment the signal comes back — before, only on the next app open.
+  window.addEventListener('online', () => {
+    void flushPendingSyncs();
+    void flushPendingWalks();
+  });
   // Resume an in-progress WALK too (Jul 4): restart GPS + step tracking and
   // the wake lock — accumulated meters/steps live in localStorage, so a
   // mid-walk app close only pauses the sensors, it never loses the walk.

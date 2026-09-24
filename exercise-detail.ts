@@ -157,7 +157,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Eccentric step-down',
     voiceSrc: './assets/voice/eccentric-step-down.mp3',
     voiceScript:
-      'Eccentric step-down. This is the single best move for protecting your knees going downhill on a hike. Stand on a low, sturdy step, like a single stair or a thick book. Put your whole weight on one leg on the step, and let the other foot hang just off the edge. Now slowly lower the hanging heel toward the floor, taking three to four full seconds. Your standing thigh is doing all the controlling. Lightly tap the floor, or just hover, then push back up through the standing leg. A fingertip on a wall for balance is fine, but no gripping and no weight through your hand. Your wrist stays completely out of this. Keep your standing knee pointing over your toes, not caving in. Start with a low step and a small range. The magic is the slow lowering, not the height. Stop the set if the knee pinches.',
+      'Eccentric step-down. This is a quad-control move for stairs and slopes. Stand on a low, sturdy step, like a single stair or a thick book. Put your whole weight on one leg on the step, and let the other foot hang just off the edge. Now slowly lower the hanging heel toward the floor, taking three to four full seconds. Your standing thigh is doing all the controlling. Lightly tap the floor, or just hover, then push back up through the standing leg. A fingertip on a wall for balance is fine, but no gripping and no weight through your hand. Your wrist stays completely out of this. Keep your standing knee pointing over your toes, not caving in. Start with a low step and a small range. The magic is the slow lowering, not the height. Stop the set if the knee pinches.',
     muscles: ['quads'],
     muscleLabel: 'Quads (eccentric control)',
     steps: [
@@ -196,14 +196,14 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: '1 kg biceps curl',
     voiceSrc: './assets/voice/1-kg-biceps-curl.mp3',
     voiceScript:
-      "This is the one kilogram biceps curl. Hold the weight lightly with your elbow tucked at your side and your forearm hanging straight down. Keep your wrist and fingers neutral and straight the whole time. Curl the forearm up toward your shoulder, keeping the elbow pinned in place, so only the forearm moves. Then lower slowly under control. Two sets of twelve. The main cue: hold light and stay controlled. The main don't: don't let the wrist bend back, and don't swing your body for momentum. One safety note: loaded arm work like this is on hold until Lisa clears it, so only do it once she says you're ready.",
+      "This is the one kilogram biceps curl. Hold the weight lightly with your elbow tucked at your side and your forearm hanging straight down. Keep your wrist and fingers neutral and straight the whole time. Curl the forearm up toward your shoulder, keeping the elbow pinned in place, so only the forearm moves. Then lower slowly under control. Do the reps on your screen. The main cue: hold light and stay controlled. The main don't: don't let the wrist bend back, and don't swing your body for momentum. Light hold, wrist neutral, and pain tells. If the wrist hurts, stop there.",
     muscles: ['forearms'],
     muscleLabel: 'Biceps (arm)',
     steps: [
       'Hold the 1 kg lightly, elbow tucked at your side, forearm hanging down, wrist and fingers neutral and straight.',
       'Curl the forearm up toward your shoulder, keeping the elbow pinned in place so only the forearm moves.',
       'Lower slowly under control.',
-      '2 sets of 12. Stop on any wrist signal.',
+      'Do the reps on your screen. Pain tells — stop on any wrist signal.',
     ],
     dos: [
       'Hold the weight lightly, wrist and fingers neutral',
@@ -259,7 +259,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       "Don't jump or add hops — no flight phase in this one.",
       "Don't put your hands on the floor or grip anything.",
       "Don't push the pace until your breathing goes ragged.",
-      "Don't skip it because you can't go outside — that's exactly what this lane is for.",
+      "Can't go out? This is the lane.",
     ],
     mistakes: [
       {
@@ -280,12 +280,12 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Belly breathing',
     voiceSrc: './assets/voice/belly-breathing.mp3',
     voiceScript:
-      "Belly breathing. Lie on your back with your knees bent and feet flat, and let your arms rest relaxed at your sides. Breathe in through your nose for four seconds, and let your belly rise while your chest stays still. Then breathe out slowly through your mouth for six seconds, longer than the inhale, and feel your belly settle flat. The main thing here: let your belly lead, not your chest. Don't put any weight on your palms — keep your arms loose. If your chest starts rising instead, slow down and put less effort into the inhale. Take five to eight slow breaths.",
+      'Belly breathing. Lie on your back with your knees bent and feet flat, and let your arms rest relaxed at your sides. Breathe in through your nose for four seconds, and let your belly rise while your chest stays still. Then breathe out slowly through your mouth for six seconds, longer than the inhale, and feel your belly settle flat. The main thing here: let your belly lead, not your chest. Keep your arms loose. If your chest starts rising instead, slow down and put less effort into the inhale. Take five to eight slow breaths.',
     muscles: ['core'],
     muscleLabel: 'Diaphragm / core',
     steps: [
       'Lie on your back, knees bent, feet flat.',
-      'Rest your arms at your sides — no weight on your hands.',
+      'Rest your arms loosely at your sides.',
       'Inhale through your nose for 4 seconds — let your belly rise while your chest stays still.',
       'Exhale slowly through your mouth for 6 seconds, letting your belly settle flat.',
       'Repeat for 5 to 8 slow breaths.',
@@ -296,7 +296,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       'Keep your arms relaxed at your sides.',
     ],
     donts: [
-      "Don't put weight on your palms — arms relaxed at your sides.",
+      "Don't tense your shoulders or arms — let them rest loose at your sides.",
       "Don't rush the exhale.",
       "Don't let your chest rise instead of your belly.",
     ],
@@ -397,7 +397,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Supported split squat',
     voiceSrc: './assets/voice/supported-split-squat.mp3',
     voiceScript:
-      'Supported split squat. New this week, and it takes the place of your squats in workout A. Stand a long step in front of the couch or a chair, and rest your fingertips on it, for balance only. Light touch. No gripping, and no weight through your hands. Front foot flat, back heel up. Keep your chest tall and lower straight down, so the back knee moves toward the floor and the front thigh comes near parallel. Think elevator, not escalator. Then push through the front heel to stand. Six to eight each side, two sets. On the last set, stop about two reps short. If the front knee pinches, or you wobble a lot, make the range smaller and keep your fingertips down. That is the right call, not a failure.',
+      'Supported split squat. It takes the place of your squats in workout A. Stand a long step in front of the couch or a chair, and rest your fingertips on it, for balance only. Light touch. No gripping, and no weight through your hands. Front foot flat, back heel up. Keep your chest tall and lower straight down, so the back knee moves toward the floor and the front thigh comes near parallel. Think elevator, not escalator. Then push through the front heel to stand. Six to eight each side, one set each round. On the last round, stop about two reps short. If the front knee pinches, or you wobble a lot, make the range smaller and keep your fingertips down. That is the right call, not a failure.',
     muscles: ['quads', 'glutes', 'core'],
     muscleLabel: 'Quads + glutes, one leg at a time',
     steps: [
@@ -405,7 +405,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       'One foot forward and flat; the other foot back with the heel up. Chest tall.',
       'Lower straight down — back knee toward the floor, front thigh near parallel. Elevator, not escalator.',
       'Push through the front heel to stand.',
-      '6-8 each side, 2 sets. Last set: stop about 2 short.',
+      '6-8 each side, one set each round. Last round: stop about 2 short.',
     ],
     dos: [
       'Keep the fingertips down the whole set — a light touch is the support.',
@@ -456,7 +456,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       'Raise your hands onto the couch or a step if the floor is too much.',
     ],
     donts: [
-      "Don't lift a hand or an arm — that is the next rung, not this week.",
+      "Don't lift a hand or an arm — the full bird dog is the next rung.",
       "Don't push through pain. Pressure is fine; pain means stop for today.",
       "Don't let the low back sag or the leg swing up past level.",
       "Don't crane your neck up to look forward.",
@@ -480,14 +480,14 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Bodyweight hip hinge',
     voiceSrc: './assets/voice/bodyweight-hip-hinge.mp3',
     voiceScript:
-      "Bodyweight hip hinge. Stand tall, feet hip-width, with soft, unlocked knees and your hands resting on the front of your thighs. Now hinge at the hips — push your butt back as your hands slide down your thighs toward your knees. Keep your spine flat and neutral the whole way, and you'll feel it in your hamstrings and glutes. Then stand back up by driving your hips forward and squeezing your glutes. The main thing: push your hips back, don't squat down. And don't round your low back — keep it flat the whole way. Bodyweight only, no weight.",
+      "Bodyweight hip hinge. Stand tall, feet hip-width, with soft, unlocked knees and your hands resting on the front of your thighs. Now hinge at the hips — push your butt back as your hands slide down your thighs toward your knees. Keep your spine flat and neutral the whole way, and you'll feel it in your hamstrings and glutes. Then stand back up by driving your hips forward and squeezing your glutes. The main thing: push your hips back, don't squat down. And don't round your low back — keep it flat the whole way. Bodyweight, or holding the one kilo — nothing heavier without Lisa.",
     muscles: ['hamstrings', 'glutes', 'hips'],
     muscleLabel: 'Hamstrings + glutes (hip hinge)',
     steps: [
       'Stand tall, feet hip-width, knees soft and unlocked, hands resting on the front of your thighs.',
       'Hinge at the hips — push your butt back as your hands slide down your thighs toward your knees.',
       'Keep your spine flat and neutral the whole way; feel the load in your hamstrings and glutes.',
-      'Stand back up by driving your hips forward and squeezing your glutes. 2 sets of 12 reps.',
+      'Stand back up by driving your hips forward and squeezing your glutes. Do the reps on your screen.',
     ],
     dos: [
       'Push your hips back, not down.',
@@ -499,7 +499,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       "Don't round your low back — flat spine the whole way.",
       "Don't squat down — the move is hips back, not knees forward.",
       "Don't lock your knees.",
-      "Don't add load — bodyweight only.",
+      "Don't go heavier than the 1 kg without Lisa — bodyweight, or holding the 1 kg.",
     ],
     mistakes: [
       {
@@ -693,7 +693,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Forearm plank',
     voiceSrc: './assets/voice/forearm-plank.mp3',
     voiceScript:
-      "Forearm plank. Set your forearms on the mat with your elbows right under your shoulders, and tuck your toes. Here's the key: stay up on your forearms only — your hands and wrists stay off the floor. Lift into a straight line from your head all the way to your heels. Now the part that does the work: tuck your tailbone under, squeeze your glutes, and pull your ribs down. That small tuck roughly doubles what your abs are doing, without holding it a second longer. Hold for the time on your screen and keep breathing through it. Quality beats survival time — come down when the line breaks, not when the timer ends.",
+      "Forearm plank. Set your forearms on the mat with your elbows right under your shoulders, and tuck your toes. Here's the key: stay up on your forearms only — your hands and wrists stay off the floor. Lift into a straight line from your head all the way to your heels. Now the part that does the work: tuck your tailbone under, squeeze your glutes, and pull your ribs down. That small tuck makes the same hold harder, without adding a second. Hold for the time on your screen and keep breathing through it. Quality beats survival time — come down when the line breaks, not when the timer ends.",
     muscles: ['core', 'glutes', 'shoulders'],
     muscleLabel: 'Core + glutes (trunk stability)',
     steps: [
@@ -724,8 +724,8 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
         fix: 'Squeeze your glutes and core to hold a flat line from head to heels.',
       },
       {
-        mistake: 'Jumping to a longer 30-second hold too soon.',
-        fix: 'Keep it to 15 seconds for now and build up gradually.',
+        mistake: 'Jumping to a longer hold too soon.',
+        fix: 'Hold the time on your screen — the tuck is the progression.',
       },
     ],
   },
@@ -1226,14 +1226,14 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Modified dead bug',
     voiceSrc: './assets/voice/modified-dead-bug.mp3',
     voiceScript:
-      'Modified dead bug. Lie on your back and lift both legs so your hips and knees are at 90 degrees, shins parallel to the ceiling in a tabletop position. Rest your arms flat at your sides with your palms facing up, no weight through your hands, that protects your wrists. Slowly extend one leg straight out, hovering it above the floor, and exhale as it goes. Bring it back to tabletop, then switch sides, six each side. Keep your lower back glued to the mat the whole time. If it arches, your range is too big, so shorten it. Slow is harder and better here.',
+      'Modified dead bug. Lie on your back and lift both legs so your hips and knees are at 90 degrees, shins parallel to the ceiling in a tabletop position. Rest your arms flat and relaxed at your sides, palms facing up. Slowly extend one leg straight out, hovering it above the floor, and exhale as it goes. Bring it back to tabletop, then switch sides. Do the reps on your screen. Keep your lower back glued to the mat the whole time. If it arches, your range is too big, so shorten it. Slow is harder and better here.',
     muscles: ['core'],
     muscleLabel: 'Abs / deep core (anti-arch)',
     steps: [
       'Lie on your back, hips and knees both at 90 degrees in the air, shins parallel to the ceiling (tabletop position).',
-      'Rest your arms flat at your sides on the mat, palms UP (not down) to protect your wrists.',
+      'Rest your arms flat and relaxed at your sides on the mat, palms up.',
       'Slowly extend ONE leg straight out, hovering it above the floor; exhale on the extension.',
-      'Bring it back to tabletop, then switch sides. 6 each side.',
+      'Bring it back to tabletop, then switch sides. The reps on your screen, each side.',
       'Keep your lower back glued to the mat the whole time.',
     ],
     dos: [
@@ -1244,7 +1244,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     ],
     donts: [
       "Don't put your hands behind your head - arms stay flat.",
-      "Don't lift your palms or load your wrists - palms stay up.",
+      "Don't press down through your hands - arms stay relaxed, palms up.",
       "Don't let your lower back arch - shorten the range if it does.",
       "Don't rush the movement.",
     ],
@@ -1255,8 +1255,8 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       },
       { mistake: 'Moving too fast.', fix: 'Slow down; slow is harder and better here.' },
       {
-        mistake: 'Loading the wrists or resting palms down.',
-        fix: 'Keep arms relaxed and flat with palms up - no weight through the hands.',
+        mistake: 'Pressing down through the hands to hold the back flat.',
+        fix: 'Keep arms relaxed and flat with palms up - let the core do the work.',
       },
     ],
   },
@@ -1338,7 +1338,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Pelvic tilts',
     voiceSrc: './assets/voice/pelvic-tilts.mp3',
     voiceScript:
-      "Pelvic tilts. Lie on your back with your knees bent and your feet flat, hip-width apart. Let your arms rest at your sides, palms up, and don't push through your palms. Tilt your pelvis so your lower back gently flattens into the mat, tucking your tailbone slightly toward you. Exhale as you tilt, hold for a second or two, then inhale and release back to neutral. Keep the movement small, just an inch or two at the hip. The main thing to avoid is over-arching on the release. Just come back to neutral, never into a backbend. Do ten slow reps.",
+      'Pelvic tilts. Lie on your back with your knees bent and your feet flat, hip-width apart. Let your arms rest loosely at your sides, palms up. Tilt your pelvis so your lower back gently flattens into the mat, tucking your tailbone slightly toward you. Exhale as you tilt, hold for a second or two, then inhale and release back to neutral. Keep the movement small, just an inch or two at the hip. The main thing to avoid is over-arching on the release. Just come back to neutral, never into a backbend. Do ten slow reps.',
     muscles: ['core', 'hips'],
     muscleLabel: 'Pelvis-spine connection / core',
     steps: [
@@ -1353,7 +1353,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       'Flatten your lower back into the mat, then return to neutral.',
     ],
     donts: [
-      "Don't load your palms, keep arms relaxed at your sides, palms up.",
+      "Don't tense your arms, keep them relaxed at your sides, palms up.",
       "Don't over-arch on the release.",
       "Don't push into a backbend, flat back then neutral.",
     ],
@@ -1372,16 +1372,16 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Prone row (bodyweight)',
     voiceSrc: './assets/voice/prone-row-bodyweight.mp3',
     voiceScript:
-      "Prone row, bodyweight only. Lie face down on a bed or bench edge, or stand and hinge over, with your arm hanging straight down toward the floor and your wrist neutral and straight. No weight yet — you're building the pattern and endurance toward adding the one kilo later. Keep your head down, don't lift it, because lifting strains the neck. Drive your elbow up toward the ceiling, leading with the elbow and squeezing your shoulder blade toward your spine, then lower slowly. Two sets of twelve each side. Keep the wrist straight throughout, and stop on any wrist signal. Add the one kilo only when you say you're ready.",
+      "Prone row. Lie face down on a bed or bench edge, or stand and hinge over, with your arm hanging straight down toward the floor and your wrist neutral and straight. Bodyweight, or holding the one kilo — your call. Keep your head down, don't lift it, because lifting strains the neck. Drive your elbow up toward the ceiling, leading with the elbow and squeezing your shoulder blade toward your spine, then lower slowly. Do the reps on your screen, each side. Keep the wrist straight and the grip light. Pain tells — stop on any wrist signal.",
     muscles: ['back'],
     muscleLabel: 'Lower trap + mid-back (shoulder blade)',
     steps: [
       'Lie face-down on a bed or bench edge (or stand and hinge over), arm hanging straight down toward the floor.',
-      'Set the wrist neutral and straight — no weight yet.',
+      'Set the wrist neutral and straight — light grip if you hold the 1 kg.',
       'Keep your head DOWN — do not lift it (lifting strains the neck).',
       'Drive your elbow UP toward the ceiling, leading with the elbow.',
       'Squeeze your shoulder blade toward your spine, then lower slowly.',
-      'Do 2 sets of 12 each side; add the 1 kg only when you say you are ready.',
+      'Do the reps on your screen, each side. Bodyweight or holding the 1 kg — your call.',
     ],
     dos: [
       'Lead with the elbow, driving it up toward the ceiling',
@@ -1511,15 +1511,15 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Side-lying clamshells',
     voiceSrc: './assets/voice/side-lying-clamshells.mp3',
     voiceScript:
-      "Side-lying clamshells. Lie on your side with your hips and shoulders stacked vertically and your knees bent about ninety degrees. Rest your head on the mat or a thin pillow. Don't prop up on your forearm, and keep your wrists off the floor. Your bottom arm just extends along the floor, relaxed. Keep your feet together, then open your top knee like a clam shell, lifting only to a comfortable range. Exhale as you open, inhale as you lower with control. The main thing: keep those hips stacked. Don't roll the top hip backward to lift higher. Smaller and clean beats big and sloppy. Ten each side.",
+      "Side-lying clamshells. Lie on your side with your hips and shoulders stacked vertically and your knees bent about ninety degrees. Rest your head on the mat or a thin pillow, and let your bottom arm extend along the floor, relaxed. Keep your feet together, then open your top knee like a clam shell, lifting only to a comfortable range. Exhale as you open, inhale as you lower with control. The main thing: keep those hips stacked. Don't roll the top hip backward to lift higher. Smaller and clean beats big and sloppy. Do the reps on your screen.",
     muscles: ['glutes', 'hips'],
     muscleLabel: 'Glute medius + hips',
     steps: [
       'Lie on your side with hips and shoulders stacked vertically, knees bent about 90 degrees.',
-      'Rest your head on the mat or a thin pillow, not propped on your forearm. Let your bottom arm extend along the floor under your head, wrists off the ground.',
+      'Rest your head on the mat or a thin pillow, not propped on your forearm. Let your bottom arm extend along the floor under your head.',
       'Keep your feet together throughout.',
       'Open your top knee like a clam shell, keeping the bottom knee on the mat. Lift only to a comfortable range, exhaling as you open.',
-      'Lower with control, inhaling on the way down. Do 10 each side.',
+      'Lower with control, inhaling on the way down. The reps on your screen, each side.',
     ],
     dos: [
       'Keep hips and shoulders stacked vertically through the whole rep.',
@@ -1528,7 +1528,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       'Lower with control: exhale as you open, inhale as you lower.',
     ],
     donts: [
-      "Don't prop up on your forearm; wrists stay off the floor.",
+      "Don't prop your head on your forearm; head down keeps your neck in line.",
       "Don't roll the top hip backward to lift higher.",
       "Don't force the range; smaller and clean beats big and sloppy.",
     ],
@@ -1539,7 +1539,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       },
       {
         mistake: 'Propping your head up on your forearm.',
-        fix: 'Rest your head directly on the mat or a thin pillow, with the bottom arm extended along the floor and wrists off the ground.',
+        fix: 'Rest your head directly on the mat or a thin pillow, with the bottom arm extended along the floor.',
       },
       {
         mistake: 'Forcing a bigger range of motion.',
@@ -1700,7 +1700,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Standing calf raises',
     voiceSrc: './assets/voice/standing-calf-raises.mp3',
     voiceScript:
-      "Standing calf raises. Stand tall with your feet about hip-width apart. Rest just a light fingertip touch on the wall for balance — no gripping, and no weight on your hand. Slowly lift your heels until you're up on the balls of your feet, taking about three seconds to rise. Hold for one second at the top, then lower back down slowly over three seconds. Breathe out as you lift, and in as you lower. The main thing: don't bounce for momentum — that slow, controlled tempo is what does the work. Aim for fifteen reps.",
+      "Standing calf raises. Stand tall with your feet about hip-width apart. Rest just a light fingertip touch on the wall for balance — no gripping, and no weight on your hand. Slowly lift your heels until you're up on the balls of your feet, taking about three seconds to rise. Hold for one second at the top, then lower back down slowly over three seconds. Breathe out as you lift, and in as you lower. The main thing: don't bounce for momentum — that slow, controlled tempo is what does the work. Do the reps on your screen.",
     muscles: ['calves'],
     muscleLabel: 'Calves',
     steps: [
@@ -1709,7 +1709,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       "Slowly lift your heels until you're on the balls of your feet — 3 seconds up.",
       'Hold 1 second at the top.',
       'Lower slowly back down — 3 seconds down.',
-      'Exhale as you rise onto your toes, inhale as you lower. 15 reps.',
+      'Exhale as you rise onto your toes, inhale as you lower. The reps on your screen.',
     ],
     dos: [
       'Stand tall, feet hip-width apart.',
@@ -1775,7 +1775,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Wall lean (wrist on-ramp)',
     voiceSrc: './assets/voice/wall-lean-wrist-on-ramp.mp3',
     voiceScript:
-      "Wall lean, your wrist on-ramp. Stand a small step back from a wall, and place your palms flat on it at shoulder height, fingers pointing up. Keep your elbows soft — don't lock them. Now lean in gently, just enough that your palms take light weight, and keep breathing. This is a gentle rehab on-ramp, not a push-up, so nothing intense. Hold for fifteen to twenty seconds, shake your hands out, then do one more round. And the important one: stop right away if you feel anything in your wrist or thumb. When this feels like nothing, tell me and the next step unlocks.",
+      "Wall lean, your wrist on-ramp. Stand a small step back from a wall, and place your palms flat on it at shoulder height, fingers pointing up. Keep your elbows soft — don't lock them. Now lean in gently, just enough that your palms take light weight, and keep breathing. This is a gentle rehab on-ramp, not a push-up, so nothing intense. Hold for fifteen to twenty seconds, shake your hands out, then do one more round. And the important one: pressure is fine; pain means stop. When this feels like nothing, tell me and the next step unlocks.",
     muscles: ['forearms'],
     muscleLabel: 'Wrist / forearm (weight-bearing on-ramp)',
     steps: [
@@ -1794,7 +1794,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     donts: [
       "Don't lock your elbows.",
       "Don't push hard — this is a rehab on-ramp, not a push-up.",
-      "Don't continue through any wrist or thumb sensation — stop.",
+      "Don't push through pain — pressure is fine; pain means stop.",
     ],
     mistakes: [
       { mistake: 'Locking your elbows straight.', fix: 'Keep them soft and slightly bent.' },
@@ -1803,8 +1803,8 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
         fix: 'Lean gently so your palms take only LIGHT weight.',
       },
       {
-        mistake: 'Pushing through a wrist or thumb twinge.',
-        fix: 'Stop immediately at ANY wrist or thumb sensation.',
+        mistake: 'Pushing through wrist or thumb pain.',
+        fix: 'Pressure is fine; pain means stop.',
       },
     ],
   },

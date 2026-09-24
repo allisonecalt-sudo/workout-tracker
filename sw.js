@@ -9,7 +9,7 @@
 
 // Keep this version number in sync with APP_VERSION in app.ts (shown in the
 // home header) so a deploy visibly busts the cache AND the on-screen tag moves.
-const VERSION = 'workout-tracker-v44';
+const VERSION = 'workout-tracker-v45';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -104,6 +104,8 @@ const SHELL_ASSETS = [
   './assets/voice/wall-angels.mp3',
   './assets/voice/wall-lean-wrist-on-ramp.mp3',
   './assets/voice/wall-sit.mp3',
+  // R2 Week 4 (Sep 19 2026) — was missing from the precache until v45.
+  './assets/voice/supported-split-squat.mp3',
   './assets/voice/wrist-extension-left.mp3',
   './assets/voice/wrist-extension-right.mp3',
   './assets/voice/wrist-flexion-left.mp3',
@@ -121,7 +123,9 @@ self.addEventListener('install', (event) => {
       // doesn't abort the whole install.
       Promise.all(
         SHELL_ASSETS.map((url) =>
-          cache.add(url).catch((err) => {
+          // cache: 'reload' skips the browser's HTTP cache, so a new install
+          // precaches THIS build, not a copy up to 10 minutes old (v45).
+          cache.add(new Request(url, { cache: 'reload' })).catch((err) => {
             console.warn('[SW] Failed to cache shell asset', url, err);
           })
         )
@@ -135,8 +139,14 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
+      // v45: only OUR old caches. Her apps share one github.io origin, and
+      // deleting every other cache wiped the budget app's offline copy on each
+      // workout deploy (and budget's SW did the same back).
       await Promise.all(
-        keys.filter((k) => k !== SHELL_CACHE && k !== RUNTIME_CACHE).map((k) => caches.delete(k))
+        keys
+          .filter((k) => k.startsWith('workout-tracker-'))
+          .filter((k) => k !== SHELL_CACHE && k !== RUNTIME_CACHE)
+          .map((k) => caches.delete(k))
       );
       await self.clients.claim();
     })()
@@ -249,11 +259,18 @@ async function handleSupabaseGet(request) {
     if (res && res.ok) cache.put(request, res.clone()).catch(() => {});
     return res;
   } catch (err) {
+    // v45: offline answers are STAMPED so the app can tell them from a live
+    // one. An old cached list read as "the server's truth" made the app drop
+    // sessions synced after that cache was taken.
     const cached = await cache.match(request);
-    if (cached) return cached;
+    if (cached) {
+      const headers = new Headers(cached.headers);
+      headers.set('X-SW-Cache', '1');
+      return new Response(await cached.text(), { status: 200, headers });
+    }
     return new Response('[]', {
       status: 200,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-SW-Cache': '1' },
     });
   }
 }

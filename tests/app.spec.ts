@@ -544,7 +544,7 @@ test('pull merge (v33): a row deleted on the server disappears; unsynced, out-of
     });
     const ids = (rows: Row[]) => rows.map((r) => r.id).sort();
 
-    // Case 1: the server answered with its WHOLE history (fewer than 50 rows).
+    // Case 1: the server answered with its WHOLE history (fewer than PULL_LIMIT = 200 rows).
     const whole = merge(
       [
         local('deleted-on-server', '2026-09-10T17:24:38.715Z', true),
@@ -558,8 +558,8 @@ test('pull merge (v33): a row deleted on the server disappears; unsynced, out-of
       ]
     );
 
-    // Case 2: the server answered with a full 50-row WINDOW (Sep 2026 dates).
-    const window50 = Array.from({ length: 50 }, (_, i) =>
+    // Case 2: the server answered with a full 200-row WINDOW (v45 raised PULL_LIMIT 50 → 200).
+    const window50 = Array.from({ length: 200 }, (_, i) =>
       remote(`w${i}`, `2026-09-${String(1 + (i % 28)).padStart(2, '0')}T10:00:00+00:00`)
     );
     const windowed = merge(
@@ -586,7 +586,7 @@ test('pull merge (v33): a row deleted on the server disappears; unsynced, out-of
   expect(result.whole).toEqual(['server-new', 'still-there', 'unsynced-local']);
   expect(result.serverNewSynced).toBe(true);
   expect(result.windowedKept).toEqual(['older-than-window', 'unsynced-local']);
-  expect(result.windowedCount).toBe(52);
+  expect(result.windowedCount).toBe(202); // 200-row window + older-than-window + unsynced-local
   expect(result.empty).toEqual(['keep-me']);
 });
 
