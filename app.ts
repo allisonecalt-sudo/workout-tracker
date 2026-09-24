@@ -209,6 +209,10 @@ type AppState = {
   // "stopped early at …" annotation (ux.md #8: "a half session vanishing is the
   // quiet quit"). null = she didn't stop early.
   stoppedEarlyAt: string | null;
+  // v48 · fix r1 (Sep 24 2026): the liteDay value from BEFORE "Log what I did"
+  // (which marks a round-1 stop as lite), so "‹ Back to the workout" undoes it
+  // honestly. null = she didn't stop early.
+  stoppedEarlyLitePrev: boolean | null;
   // v48: real seconds held on each hold STEP (wall sit, plank, wall lean), keyed
   // "phase|round|index" — for the "✓ held 45 s" done-face only (the saved wall
   // sit number stays wallSitSec). Transient; not in the resume snapshot.
@@ -259,7 +263,6 @@ const DEFAULT_REST_SEC = 0;
 const DEFAULT_PRE_COUNT_SEC = 3;
 const COUNT_BEEP_FROM_SEC = 3;
 const HOLD_TO_SKIP_MS = 500;
-const HOLD_TO_QUIT_MS = 500;
 const HOLD_TO_CLEAR_MS = 500;
 
 // ---------- Ship 6 settings helpers ----------
@@ -2620,6 +2623,7 @@ const state: AppState = {
   roundBreak: false,
   finishHereLitePrev: null,
   stoppedEarlyAt: null,
+  stoppedEarlyLitePrev: null,
   heldSecFor: {},
   armFeel: {},
   backSomethingOpen: false,
@@ -3622,6 +3626,26 @@ function workoutHasWallSit(w: Workout): boolean {
   return [...w.warmup, ...w.main, ...(w.upperBack ?? [])].some((ex) => ex.name === 'Wall sit');
 }
 
+// v48 · fix r1 (Sep 24 2026): after "Log what I did", did she get past the wall
+// sit? A stop before it (at the hinge, round 1) left an empty "Wall sit (s)"
+// asking about a hold she never reached — the post-log hides it then. Reached =
+// held something, or stopped on/after its step (phase order warmup → main →
+// upperBack → cooldown; any later round of main is past round 1's).
+function reachedWallSit(w: Workout): boolean {
+  if (state.wallSitSec > 0) return true;
+  const order: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
+  const here = order.indexOf(state.currentPhase);
+  for (const p of order) {
+    const i = (w[p] ?? []).findIndex((ex) => ex.name === 'Wall sit');
+    if (i < 0) continue;
+    const at = order.indexOf(p);
+    if (here !== at) return here > at;
+    if (p === 'main' && state.currentRound > 1) return true;
+    return state.currentExerciseIndex > i;
+  }
+  return false;
+}
+
 // The nine columns added in v48 (migrations/2026-09-24-v48-session-columns.sql).
 const V48_SESSION_COLUMNS = [
   'cardio_lane',
@@ -3861,6 +3885,7 @@ function beginExercises(): void {
   state.roundBreak = false;
   state.finishHereLitePrev = null;
   state.stoppedEarlyAt = null;
+  state.stoppedEarlyLitePrev = null;
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
   state.stretchTicks = {}; // v48 · P7: ticks belong to one session
@@ -4129,6 +4154,29 @@ function isNewTonight(ex: Exercise, id: WorkoutId): boolean {
   return !loadLogs().some((l) => l.workout === id && new Date(l.date).getTime() >= startMs);
 }
 
+// v48 · fix r1 (Sep 24 2026): "new" splits in two. A move that sat in ANY
+// earlier week of the program (any workout, any block) is a RETURN, not a first
+// — the 1 kg curl and the prone row were in her Round 1 Week 7 (UPPER_BACK_W7,
+// Jun 13-19) before the arm pause, so "Firsts: 1 kg biceps curl" told her
+// something untrue about her own history (fail-loud rule). Returns read "Back".
+type TonightKind = 'new' | 'back';
+
+function wasInEarlierWeek(name: string): boolean {
+  const idx = PROGRAM.indexOf(getWeekPlan());
+  if (idx <= 0) return false;
+  const phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
+  return PROGRAM.slice(0, idx).some((week) =>
+    (['A', 'B', 'C'] as WorkoutId[]).some((wid) =>
+      phases.some((p) => (week.workouts[wid][p] ?? []).some((e) => e.name === name))
+    )
+  );
+}
+
+function tonightKind(ex: Exercise, id: WorkoutId): TonightKind | null {
+  if (!isNewTonight(ex, id)) return null;
+  return wasInEarlierWeek(ex.name) ? 'back' : 'new';
+}
+
 // v48: is the current step a hold (wall sit, plank, wall lean) rather than a
 // cardio lane? Lanes keep their v46 face — P3 owns them.
 function isHoldStep(ex: Exercise): boolean {
@@ -4210,6 +4258,7 @@ function logWhatIDid(): void {
   captureWallSitIfPending(); // a hold she was in the middle of still counts
   captureLaneMinutesIfLeaving();
   stopTimer();
+  state.stoppedEarlyLitePrev = state.liteDay; // v48 · fix r1: for Back to the workout
   state.stoppedEarlyAt =
     state.currentPhase === 'cooldown'
       ? 'the cool-down'
@@ -4287,14 +4336,19 @@ function startTimedExercise(): void {
 // reads "Done ✓ · Workout A · 1 of 3 this week".
 const LAST_DONE_KEY = 'workout-tracker:last-done';
 
-type LastDone = { id: string; firsts: string[] };
+// v48 · fix r1 (Sep 24 2026): `back` = moves returning from an earlier week
+// (the 1 kg curl, the prone row) — kept apart from true firsts. Optional so a
+// card saved before this fix still loads.
+type LastDone = { id: string; firsts: string[]; back?: string[] };
 
 // Names that were "New tonight" in the session being saved, plus "first
 // elliptical ride" when no earlier session was on the elliptical. A session
 // stopped early names no move firsts (she may not have reached them); finish-
 // here at round 1 skipped the upper-back block, so its moves don't count.
-function sessionFirsts(onElliptical: boolean): string[] {
-  const out: string[] = [];
+// v48 · fix r1: returning moves go to `back`, never to firsts.
+function sessionFirsts(onElliptical: boolean): { firsts: string[]; back: string[] } {
+  let out: string[] = [];
+  let back: string[] = [];
   const id = state.selectedWorkout;
   const w = getCurrentWorkout();
   if (id && w && !state.stoppedEarlyAt) {
@@ -4302,12 +4356,8 @@ function sessionFirsts(onElliptical: boolean): string[] {
       state.finishHereLitePrev !== null
         ? ['warmup', 'main', 'cooldown']
         : ['warmup', 'main', 'upperBack', 'cooldown'];
-    for (const p of phases) {
-      for (const ex of w[p] ?? []) {
-        const name = displayName(ex.name).toLowerCase();
-        if (isNewTonight(ex, id) && !out.includes(name)) out.push(name);
-      }
-    }
+    out = tonightNames(w, id, 'new', phases);
+    back = tonightNames(w, id, 'back', phases);
   }
   if (onElliptical) {
     const rodeBefore = loadLogs().some(
@@ -4318,7 +4368,7 @@ function sessionFirsts(onElliptical: boolean): string[] {
     );
     if (!rodeBefore) out.push('first elliptical ride');
   }
-  return out;
+  return { firsts: out, back };
 }
 
 function saveLastDone(d: LastDone): void {
@@ -4335,9 +4385,14 @@ function loadLastDone(): LastDone | null {
     if (!raw) return null;
     const v: unknown = JSON.parse(raw);
     if (!v || typeof v !== 'object') return null;
-    const o = v as { id?: unknown; firsts?: unknown };
+    const o = v as { id?: unknown; firsts?: unknown; back?: unknown };
     if (typeof o.id !== 'string' || !Array.isArray(o.firsts)) return null;
-    return { id: o.id, firsts: o.firsts.filter((f): f is string => typeof f === 'string') };
+    const strings = (a: unknown[]): string[] => a.filter((f): f is string => typeof f === 'string');
+    return {
+      id: o.id,
+      firsts: strings(o.firsts),
+      back: Array.isArray(o.back) ? strings(o.back) : [],
+    };
   } catch {
     return null;
   }
@@ -4516,7 +4571,7 @@ async function saveCompletedSession(): Promise<void> {
   // v48 · P4 (Sep 24 2026): the firsts of THIS session, worked out before the
   // save (after it, "New tonight" is already false). Home's "Done ✓" card
   // shows them until midnight — uxui post-log 4/5: "the win went unwitnessed".
-  const firsts = sessionFirsts(onElliptical);
+  const { firsts, back } = sessionFirsts(onElliptical);
   const stored = saveLog({
     date: completedAt,
     workout: state.selectedWorkout,
@@ -4545,7 +4600,7 @@ async function saveCompletedSession(): Promise<void> {
     armFeel: armFeelString(state.armFeel),
     voicePlays: state.voicePlays,
   });
-  if (stored.id) saveLastDone({ id: stored.id, firsts });
+  if (stored.id) saveLastDone({ id: stored.id, firsts, back });
   resetState();
   render();
   state.syncStatus = 'syncing';
@@ -4588,6 +4643,7 @@ type ActiveSessionSnapshot = {
   roundBreak: boolean;
   finishHereLitePrev: boolean | null;
   stoppedEarlyAt: string | null;
+  stoppedEarlyLitePrev: boolean | null; // v48 · fix r1: Back to the workout
   // v48 · P5: the arm-feel taps so far survive an app close.
   armFeel: ArmFeelState;
   // v48 · P7: her cool-down ticks survive an app close (she keeps her place).
@@ -4621,6 +4677,7 @@ function saveActiveSession(): void {
       roundBreak: state.roundBreak,
       finishHereLitePrev: state.finishHereLitePrev,
       stoppedEarlyAt: state.stoppedEarlyAt,
+      stoppedEarlyLitePrev: state.stoppedEarlyLitePrev,
       armFeel: state.armFeel,
       stretchTicks: state.stretchTicks,
     };
@@ -4698,6 +4755,10 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
           ? snap.finishHereLitePrev
           : null,
       stoppedEarlyAt: typeof snap.stoppedEarlyAt === 'string' ? snap.stoppedEarlyAt : null,
+      stoppedEarlyLitePrev:
+        typeof snap.stoppedEarlyLitePrev === 'boolean' && typeof snap.stoppedEarlyAt === 'string'
+          ? snap.stoppedEarlyLitePrev
+          : null,
       // v48 · P5: a pre-P5 snapshot has no feel → none, never a guess.
       armFeel: sanitizeArmFeel(snap.armFeel),
       // v48 · P7: a pre-P7 snapshot has no ticks → {} (nothing ticked).
@@ -4732,6 +4793,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.roundBreak = snap.roundBreak;
   state.finishHereLitePrev = snap.finishHereLitePrev;
   state.stoppedEarlyAt = snap.stoppedEarlyAt;
+  state.stoppedEarlyLitePrev = snap.stoppedEarlyLitePrev;
   state.heldSecFor = {}; // v48: display-only, not carried across a close
   state.armFeel = snap.armFeel;
   state.stretchTicks = snap.stretchTicks;
@@ -4867,6 +4929,7 @@ function resetState(): void {
   state.roundBreak = false;
   state.finishHereLitePrev = null;
   state.stoppedEarlyAt = null;
+  state.stoppedEarlyLitePrev = null;
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5
   state.backSomethingOpen = false;
@@ -6178,14 +6241,23 @@ function heroCardioLine(w: Workout): string {
   return lane ? `Cardio: ${lane} ${minutes} min` : `Cardio: ${minutes} min, your pick`;
 }
 
-// Moves new in this workout tonight (P2's isNewTonight), lower-cased, once each.
-function newTonightNames(w: Workout, id: WorkoutId): string[] {
+// Moves new (or back, v48 · fix r1) in this workout tonight, lower-cased, once
+// each, over the given blocks.
+function tonightNames(
+  w: Workout,
+  id: WorkoutId,
+  want: TonightKind,
+  phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown']
+): string[] {
   const out: string[] = [];
-  const phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
   for (const p of phases) {
     for (const ex of w[p] ?? []) {
-      const name = displayName(ex.name).toLowerCase();
-      if (isNewTonight(ex, id) && !out.includes(name)) out.push(name);
+      // Terse: "prone row", not "prone row (bodyweight)" — the hero line stays
+      // one line at phone width (the step itself keeps the full name).
+      const name = displayName(ex.name)
+        .replace(/\s*\([^)]*\)/g, '')
+        .toLowerCase();
+      if (tonightKind(ex, id) === want && !out.includes(name)) out.push(name);
     }
   }
   return out;
@@ -6211,7 +6283,9 @@ function renderWorkoutChips(exclude: WorkoutId): string {
 // target (→ pre-log), so Home → working out stays 2 taps (guide §1).
 function renderUpNextHero(id: WorkoutId): string {
   const w = getWorkoutById(id);
-  const fresh = newTonightNames(w, id);
+  const fresh = tonightNames(w, id, 'new');
+  // v48 · fix r1: moves she's done before (Round 1) come back — named as such.
+  const back = tonightNames(w, id, 'back');
   const cardio = heroCardioLine(w);
   const rounds = `${w.rounds} round${w.rounds === 1 ? '' : 's'}`;
   return `
@@ -6220,6 +6294,7 @@ function renderUpNextHero(id: WorkoutId): string {
       <span class="hero-title">Workout ${id}</span>
       <span class="hero-line">${escapeHtml(`${w.name} · ${rounds} · ${workoutMinutesLabel(w)}`)}</span>
       ${fresh.length ? `<span class="hero-line hero-new">New tonight: ${escapeHtml(fresh.join(' · '))}</span>` : ''}
+      ${back.length ? `<span class="hero-line hero-back">Back tonight: ${escapeHtml(back.join(' · '))}</span>` : ''}
       ${cardio ? `<span class="hero-line">${escapeHtml(cardio)}</span>` : ''}
       <span class="hero-start" aria-hidden="true">Start</span>
     </button>`;
@@ -6237,11 +6312,16 @@ function renderDoneTodayCard(log: LogEntry, weekCount: number): string {
     : km
       ? `Elliptical · ${km}`
       : '';
+  // v48 · fix r1 (Sep 24 2026): returning moves get their own honest word —
+  // "Back: 1 kg biceps curl · prone row (bodyweight)" — never "Firsts".
+  const back = lastDone && lastDone.id === log.id ? (lastDone.back ?? []) : [];
+  const backLine = back.length ? `Back: ${back.join(' · ')}` : '';
   return `
     <div class="card home-done-card" id="home-done-card">
       <div class="home-done-title">Done ✓ · Workout ${log.workout}</div>
       <div class="home-done-line">${weekCount} of 3 this week</div>
       ${firstsLine ? `<div class="home-done-firsts" dir="auto">${escapeHtml(firstsLine)}</div>` : ''}
+      ${backLine ? `<div class="home-done-back" dir="auto">${escapeHtml(backLine)}</div>` : ''}
     </div>`;
 }
 
@@ -6437,11 +6517,14 @@ function renderPreLog(): string {
   // v48 · P5 (Sep 24 2026): one quiet line instead of a subtitle, a counts card
   // and an amber box — her walk: "it asks 'how do you feel?', then the slider
   // says 'your BODY, not your mood' … Start is cut off at the bottom".
-  const fresh = newTonightNames(w, w.id);
+  const fresh = tonightNames(w, w.id, 'new');
+  // v48 · fix r1: returning moves are "back", not "new" (Round 1 had them).
+  const back = tonightNames(w, w.id, 'back');
   const hasCardio = w.warmup.some((e) => e.name === 'Outdoor walk');
   const meta = [
     preLogWeekLabel(),
     fresh.length ? `new tonight: ${fresh.join(' · ')}` : '',
+    back.length ? `back: ${back.join(' · ')}` : '',
     hasCardio && lastCardioLane() === 'elliptical' ? 'elliptical' : '',
     workoutMinutesLabel(w),
   ]
@@ -6882,7 +6965,7 @@ function renderEllipticalGuide(beforeFirstRide: boolean): string {
         isOpen
           ? `<div class="detail-section-body ell-guide-body">
         <ol class="ell-steps">${ELLIPTICAL_SETUP_STEPS.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
-        <p class="gear-note">These are the usual steps for this kind of console. The button names on yours may be a little different.</p>
+        <p class="gear-note">${/* v48 · fix r1: one line (was 3), so Start clears the pinned bar with the steps above it. Same honesty: no BX200 manual online. */ 'Typical steps — your buttons may differ.'}</p>
       </div>`
           : ''
       }
@@ -6966,14 +7049,22 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
     `;
   }
 
-  // BEFORE: one line, then Start (inside the fold even on a first ride, with
-  // the setup open under it), then the setup. Done stays quiet — the sage is
-  // Start's (one sage per screen).
+  // BEFORE: one line, then Start, then the setup. Done stays quiet — the sage
+  // is Start's (one sage per screen).
+  // v48 · fix r1 (Sep 24 2026): on the FIRST ride the 3 setup steps come BEFORE
+  // Start — she sets the machine up, then starts the timer (the verifier found
+  // Start at y≈470 and the steps under it, from y≈620). Tapping Start closes
+  // the card (it isn't drawn while the timer runs, and stays closed after).
+  const timer = renderLaneTimerCard(
+    ex,
+    false,
+    `<button class="back-link cardio-back-out" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>`
+  );
+  const guide = renderEllipticalGuide(firstRide);
   return `
     ${header}
     ${nameCard(firstRide ? `<span class="new-tonight-badge">First ride</span>` : '')}
-    ${renderLaneTimerCard(ex, false, `<button class="back-link cardio-back-out" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>`)}
-    ${renderEllipticalGuide(firstRide)}
+    ${firstRide ? `${guide}${timer}` : `${timer}${guide}`}
     ${renderStepNav('Done · Next', true)}
   `;
 }
@@ -7130,8 +7221,9 @@ function renderWorkout(): string {
   const safety = ex.safety ?? SAFETY_LINE[ex.name];
   // v48 · P3: never on a lane — the apartment step isn't in PROGRAM, so it read
   // as "New tonight" every week (the elliptical has its own "First ride").
-  const newTonight =
-    !indoorLane && state.selectedWorkout !== null && isNewTonight(ex, state.selectedWorkout);
+  // v48 · fix r1: a returning move reads "Back tonight", never "New".
+  const kind =
+    !indoorLane && state.selectedWorkout !== null ? tonightKind(ex, state.selectedWorkout) : null;
 
   // v48: a hold's timer comes straight after name + reps + safety line — it IS
   // the step. It used to sit under a 257 px picture, below the fold.
@@ -7152,7 +7244,7 @@ function renderWorkout(): string {
       <div class="exercise-display">
         <div class="exercise-name-row">
           <div class="exercise-name">${displayName(ex.name)}</div>
-          ${newTonight ? `<span class="new-tonight-badge">New tonight</span>` : ''}
+          ${kind ? `<span class="new-tonight-badge">${kind === 'new' ? 'New tonight' : 'Back tonight'}</span>` : ''}
         </div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${renderArmFeel(ex.name)}
@@ -7223,12 +7315,13 @@ function renderPostLog(): string {
   // Save while I type my word"). Untouched still saves null (v46).
   // Wall sit only on a workout that has one — on C it asked a question she
   // can't answer (uxui post-log 3/5). Pre-filled from the timer.
-  const wallSitField = workoutHasWallSit(w)
-    ? `<label class="field">
+  const wallSitField =
+    workoutHasWallSit(w) && (state.stoppedEarlyAt === null || reachedWallSit(w))
+      ? `<label class="field">
         <span class="label-text">${state.wallSitSec > 0 ? `Wall sit ${state.wallSitSec} s (tap to adjust)` : 'Wall sit (s)'}</span>
         <input type="number" id="wallsit" min="0" max="600" inputmode="numeric" value="${state.wallSitSec > 0 ? state.wallSitSec : ''}" />
       </label>`
-    : '';
+      : '';
   // Back: "Fine / Something" (DECISIONS §5 — 34 of 39 rows are 0, and a
   // truthful 0 used to take a drag away and back). Something opens 1-10 chips,
   // none chosen until she taps one.
@@ -7238,8 +7331,16 @@ function renderPostLog(): string {
     ? `${renderChipRow('back', state.backPain, state.backPainTouched && state.backPain > 0, 'Back pain, 1 to 10')}
        <div class="body-anchor">1 barely · 10 worst</div>`
     : '';
+  // v48 · fix r1 (Sep 24 2026): a stopped session is not called "done", and its
+  // Back goes to the step she stopped on, not to stretches she never reached.
+  // Still counts, no verdict.
+  const stopped = state.stoppedEarlyAt !== null;
+  const title = stopped ? `Logged what you did · Workout ${w.id}` : `Nice. Workout ${w.id} done.`;
+  const backLink = stopped
+    ? `<button class="back-link postlog-back" id="back-to-workout" type="button">‹ Back to the workout</button>`
+    : `<button class="back-link postlog-back" id="back-to-stretches" type="button">‹ Back to the stretches</button>`;
   return `
-    <h2>Nice. Workout ${w.id} done.</h2>
+    <h2>${title}</h2>
     <p class="subtitle">Quick log — or just Save.</p>
 
     <div class="card postlog-card">
@@ -7264,7 +7365,7 @@ function renderPostLog(): string {
 
     ${renderActionBar(`
       <button class="btn-large btn-primary" id="save-log" type="button">Save</button>
-      <button class="back-link postlog-back" id="back-to-stretches" type="button">‹ Back to the stretches</button>
+      ${backLink}
     `)}
   `;
 }
@@ -7275,6 +7376,20 @@ function backToStretches(): void {
   state.screen = 'workout';
   state.currentPhase = 'cooldown';
   state.currentExerciseIndex = 0;
+  state.isResting = false;
+  state.roundBreak = false;
+  render();
+}
+
+// v48 · fix r1 (Sep 24 2026): after "Log what I did" the log's Back returns to
+// the step she stopped on — not to stretches she never reached — and undoes the
+// stop (marker cleared, Lite back to what it was). logWhatIDid left the phase,
+// round and step untouched, so the workout picks up exactly there.
+function backToWorkoutFromStop(): void {
+  if (state.stoppedEarlyLitePrev !== null) state.liteDay = state.stoppedEarlyLitePrev;
+  state.stoppedEarlyAt = null;
+  state.stoppedEarlyLitePrev = null;
+  state.screen = 'workout';
   state.isResting = false;
   state.roundBreak = false;
   render();
@@ -8241,6 +8356,9 @@ type PerWeekRow = {
   round: number;
   isCurrent: boolean;
   skipped: boolean;
+  // v48 · fix r1: a 0-session week inside a sick/break stretch or after a
+  // closed round's last session — shown as "—", not scored.
+  held?: boolean;
 };
 
 // One sessions-per-week row. v48 · P6 (Sep 24 2026): HTML, not SVG — the
@@ -8248,7 +8366,7 @@ type PerWeekRow = {
 // the unreadable rows, 1.25:1), and a held week is its label + "—": no track,
 // no number (break weeks were scored "0 / 3" — uxui progress 3/5 ×2).
 function renderPerWeekRow(r: PerWeekRow): string {
-  if (r.skipped) {
+  if (r.skipped || r.held) {
     return `<div class="spw-row spw-row-skipped"><span class="spw-label">${escapeHtml(r.label)}</span><span class="spw-skip">—</span></div>`;
   }
   const pct = Math.round(Math.min(1, r.value / SESSIONS_PER_WEEK_TARGET) * 100);
@@ -8294,21 +8412,45 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
 
   if (rows.length === 0) return '';
 
-  // v46: only COMPLETED program weeks are judged. Break and sick weeks were
-  // never a target and the week in progress isn't over — counting them as
-  // misses turned 13 of 13 training weeks into "13 of 21" (UX audit Sep 24).
-  // The bars keep every week; only the score line changes.
-  const judged = rows.filter((r) => !r.isCurrent && !r.skipped);
+  // v48 · fix r1 (Sep 24 2026): a 0-session week that sits next to a sick/break
+  // week, or after a closed round's last session, is part of that stretch —
+  // "—" with no track, never an empty "0 / 3" (her real Round 1: wk 11 sat
+  // between "sick" and "break" scored 0/3; DECISIONS §5: "Skipped weeks show
+  // '—' with no track"; her Jul 19 rule: a break is not a miss). The flag is
+  // worked out from the original rows, so it never chains across a run.
+  const currentRoundNum = getRoundFor(thisSat).num;
+  const lastActiveIdx = new Map<number, number>();
+  rows.forEach((r, i) => {
+    if (r.value > 0) lastActiveIdx.set(r.round, i);
+  });
+  const held = rows.map((r, i) => {
+    if (r.skipped || r.isCurrent || r.value > 0) return false;
+    if (rows[i - 1]?.skipped || rows[i + 1]?.skipped) return true;
+    const last = lastActiveIdx.get(r.round);
+    return r.round < currentRoundNum && last !== undefined && i > last;
+  });
+  held.forEach((h, i) => {
+    const r = rows[i];
+    if (h && r) r.held = true;
+  });
+
+  // v46: only COMPLETED program weeks are counted. Break and sick weeks were
+  // never a target and the week in progress isn't over. v48 · fix r1: the line
+  // is a plain count of full weeks — no "target", no "of N" verdict.
+  const judged = rows.filter((r) => !r.isCurrent && !r.skipped && !r.held);
   const hits = judged.filter((r) => r.value >= SESSIONS_PER_WEEK_TARGET).length;
+  // A zero is a gentle empty state, not "0 full weeks" (guide §2: no guilt).
   const scoreLine =
     judged.length === 0
       ? 'The first week is in progress.'
-      : `Hit target <strong>${hits} of ${judged.length}</strong> training ${judged.length === 1 ? 'week' : 'weeks'}.`;
+      : hits === 0
+        ? 'A full week (3 of 3) will count here.'
+        : `<strong>${hits}</strong> full ${hits === 1 ? 'week' : 'weeks'}`;
 
   // v48 · P6 (Sep 24 2026): the current round's weeks open; each older round
   // folds into one closed row — her Aug 30 words: Round 1 is "a closed
   // chapter" (archived, still one tap away).
-  const currentRound = getRoundFor(thisSat).num;
+  const currentRound = currentRoundNum;
   const older = ROUNDS.filter((r) => r.num < currentRound)
     .map((r) => {
       const roundRows = rows.filter((row) => row.round === r.num);
@@ -8324,7 +8466,7 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
   const current = rows.filter((r) => r.round === currentRound);
 
   return `
-    <div class="card progress-card spw-card" aria-label="Sessions per week: hit target ${hits} of ${judged.length} training weeks">
+    <div class="card progress-card spw-card" aria-label="Sessions per week: ${hits} full ${hits === 1 ? 'week' : 'weeks'}">
       <div class="progress-card-label">Sessions per week</div>
       <div class="spw-rows">${current.map(renderPerWeekRow).join('')}</div>
       ${older}
@@ -8674,8 +8816,8 @@ function showDataStatus(msg: string): void {
 
 // ---------- Ship 6: hold-to-confirm panel (slide-out, not window.confirm) ----------
 //
-// Used by Quit during workout (in-app, replaces window.confirm for pointer
-// users) and by destructive settings actions.
+// Used by Quit during workout (v48 · fix r1: on every tap now — the native
+// window.confirm is gone) and by destructive settings actions.
 
 function showQuitConfirmPanel(): void {
   if (document.getElementById('quit-confirm-panel')) return;
@@ -8811,12 +8953,6 @@ function render(): void {
   // Persist live position so reopening the app resumes the workout (cleared on
   // quit/finish via resetState). No-op for non-resumable screens.
   saveActiveSession();
-}
-
-// Group 2G: confirm dialog on Quit during workout.
-function confirmQuit(): boolean {
-  if (typeof window === 'undefined') return true;
-  return window.confirm('Quit this workout? Your progress so far will be lost.');
 }
 
 // Group 2H: hold-to-skip implementation. The button shows a fill that
@@ -9085,6 +9221,9 @@ function attachHandlers(): void {
   bindClick('back-to-stretches', () => {
     backToStretches();
   });
+  bindClick('back-to-workout', () => {
+    backToWorkoutFromStop();
+  });
   // v48 · P5: arm feel on the 1 kg curl / prone row — tap selects, tap clears.
   document.querySelectorAll<HTMLButtonElement>('[data-arm-step]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -9200,44 +9339,15 @@ function attachHandlers(): void {
     togglePause();
   });
 
-  // Ship 6: Quit retains its native window.confirm() flow on regular click
-  // (keyboard users, headless tests, screen readers all still work). NEW:
-  // a long-press (pointerdown ≥ HOLD_TO_QUIT_MS) opens an in-app slide-out
-  // confirm panel instead, suppressing the subsequent click.
-  const quitBtn = document.getElementById('quit');
-  if (quitBtn) {
-    let holdTimer: number | null = null;
-    let suppressClick = false;
-    quitBtn.addEventListener('pointerdown', () => {
-      suppressClick = false;
-      if (holdTimer !== null) window.clearTimeout(holdTimer);
-      holdTimer = window.setTimeout(() => {
-        suppressClick = true;
-        showQuitConfirmPanel();
-      }, HOLD_TO_QUIT_MS);
-    });
-    const cancelHold = (): void => {
-      if (holdTimer !== null) {
-        window.clearTimeout(holdTimer);
-        holdTimer = null;
-      }
-    };
-    quitBtn.addEventListener('pointerup', cancelHold);
-    quitBtn.addEventListener('pointercancel', cancelHold);
-    quitBtn.addEventListener('pointerleave', cancelHold);
-    quitBtn.addEventListener('click', (e) => {
-      if (suppressClick) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        suppressClick = false;
-        return;
-      }
-      if (confirmQuit()) {
-        resetState();
-        render();
-      }
-    });
-  }
+  // v48 · fix r1 (Sep 24 2026): a plain tap on Quit opens the in-app panel
+  // (Cancel / Quit / Log what I did). It used to open a native OK/Cancel
+  // window.confirm on a tap and the panel only on a 500 ms hold nothing on
+  // screen told her about — so the path she'd actually use still threw the
+  // half session away ("a half session vanishing is the quiet quit", ux.md #8).
+  // A click also fires on Enter/Space, so keyboard users get the same panel.
+  bindClick('quit', () => {
+    showQuitConfirmPanel();
+  });
 
   // Hold-to-skip rest (group 2H)
   const skipBtn = document.getElementById('skip-rest');

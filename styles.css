@@ -2832,7 +2832,7 @@ input[type='number']:focus {
  *
  * Motion polish adds:
  *  - Root #app `.screen-enter` animation when navigating to non-workout screens
- *  - Slide-out quit-confirm panel for long-press Quit
+ *  - Slide-out quit-confirm panel for Quit (v48 · fix r1: on every tap)
  *  - Hold-to-confirm fill on destructive buttons (re-uses .hold-fill machinery)
  * ============================================================================ */
 
@@ -3193,8 +3193,9 @@ input[type='number']:focus {
 }
 
 /* ----------------------------------------------------------------------------
- * Slide-out Quit confirm panel — long-press only. Keyboard click still uses
- * window.confirm() so headless tests + accessibility tools work unchanged.
+ * Slide-out Quit confirm panel — v48 · fix r1 (Sep 24 2026): opens on a plain
+ * tap (and on Enter/Space); the native window.confirm is gone, so "Log what I
+ * did" is on the path she actually uses.
  * --------------------------------------------------------------------------- */
 
 .quit-confirm-panel {
@@ -4339,6 +4340,13 @@ input[type='number']:focus {
   font-size: var(--font-small);
   color: var(--text);
   margin-top: 6px;
+}
+
+/* v48 · fix r1 (Sep 24 2026): returning moves — quieter than a first. */
+.home-done-back {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  margin-top: 2px;
 }
 
 /* The week card — one card, one line, the door to Weekly review. */

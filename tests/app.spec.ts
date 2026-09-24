@@ -229,29 +229,47 @@ test('workout C has no upper-back phase in its overview', async ({ page }) => {
   expect(labels).not.toContain('Upper back');
 });
 
+// v48 · fix r1 (Sep 24 2026): a plain tap on Quit opens the in-app panel —
+// Cancel / Quit / Log what I did — never the native OK/Cancel window.confirm
+// (which had no "Log what I did" and threw the half session away).
 test('quit during workout asks for confirmation and returns home', async ({ page }) => {
-  // Group 2G: confirm dialog on Quit
+  const dialogs: string[] = [];
   page.on('dialog', (d) => {
-    void d.accept();
-  });
-  await page.locator('button[data-workout="A"]').click();
-  await page.locator('button:has-text("Start")').click();
-  await page.locator(NEXT).click();
-  await page.locator('.quit-link').click();
-  await expect(page.locator('.home-header h1')).toBeVisible();
-  await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
-});
-
-test('quit dialog cancel keeps user in workout', async ({ page }) => {
-  page.on('dialog', (d) => {
+    dialogs.push(d.message());
     void d.dismiss();
   });
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
   await page.locator(NEXT).click();
   await page.locator('.quit-link').click();
-  // Still in workout
+  const panel = page.locator('#quit-confirm-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('#quit-cancel')).toHaveText('Cancel');
+  await expect(panel.locator('#quit-yes')).toHaveText('Quit');
+  await expect(panel.locator('#quit-log')).toHaveText('Log what I did');
+  await panel.locator('#quit-yes').click();
+  await expect(page.locator('.home-header h1')).toBeVisible();
+  await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
+  expect(dialogs).toEqual([]);
+});
+
+test('quit panel Cancel keeps user in workout', async ({ page }) => {
+  const dialogs: string[] = [];
+  page.on('dialog', (d) => {
+    dialogs.push(d.message());
+    void d.dismiss();
+  });
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await page.locator(NEXT).click();
+  const nameBefore = await page.locator('.exercise-name').textContent();
+  await page.locator('.quit-link').click();
+  await page.locator('#quit-cancel').click();
+  await expect(page.locator('#quit-confirm-panel')).toHaveCount(0);
+  // Still in workout, on the same step
   await expect(page.locator('h2')).toContainText('Workout A');
+  await expect(page.locator('.exercise-name')).toHaveText(nameBefore ?? '');
+  expect(dialogs).toEqual([]);
 });
 
 // Pause (Allison Jul 7 2026): the pill freezes the workout behind a full
@@ -453,13 +471,11 @@ test('resume: reopening the app returns to the in-progress workout', async ({ pa
 
 // Quitting clears the resume snapshot — reopening goes home, not back in.
 test('resume: quitting clears the session so reopening goes home', async ({ page, context }) => {
-  page.on('dialog', (d) => {
-    void d.accept();
-  });
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
   await page.locator(NEXT).click();
   await page.locator('.quit-link').click();
+  await page.locator('#quit-yes').click(); // v48 · fix r1: the in-app panel
   await expect(page.locator('.home-header h1')).toBeVisible();
 
   const reopened = await context.newPage();
@@ -1079,7 +1095,11 @@ test('swing (v46): Saturday morning with last week at 2 says today will count fo
 // v46: only completed program weeks are judged. Break + sick weeks and the week
 // in progress were counted as misses, turning 13 of 13 training weeks into
 // "13 of 21" (UX audit Sep 24).
-test('progress (v46): "Hit target" counts training weeks only — no break, sick or in-progress weeks', async ({
+// v48 · fix r1 (Sep 24 2026): the line is a plain count ("N full weeks") — no
+// "target", no "of N" verdict — and a 0-session week inside the sick/break
+// stretch (her real wk 11, Jul 18-24, between "sick" and "break") is "—" with
+// no track, never "0 / 3". A 0 week in the middle of training still shows.
+test('progress: "N full weeks" counts training weeks only — no break, sick, in-progress or held weeks', async ({
   page,
 }) => {
   const mk = (id: string, date: string, workout: 'A' | 'B' | 'C') => ({
@@ -1097,6 +1117,10 @@ test('progress (v46): "Hit target" counts training weeks only — no break, sick
       window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
     },
     [
+      // R1 Week 10 (Jul 4–10): 3 — full; her last Round 1 session is Jul 8.
+      mk('r1a', '2026-07-05T15:00:00.000Z', 'A'),
+      mk('r1b', '2026-07-07T15:00:00.000Z', 'B'),
+      mk('r1c', '2026-07-08T15:00:00.000Z', 'C'),
       // R2 Week 1 (Aug 29–Sep 4): 3 — hit.
       mk('w1a', '2026-08-30T15:00:00.000Z', 'A'),
       mk('w1b', '2026-09-01T15:00:00.000Z', 'B'),
@@ -1116,12 +1140,29 @@ test('progress (v46): "Hit target" counts training weeks only — no break, sick
   await page.goto('/');
   await page.locator('#open-progress-link').click();
   const card = page.locator('.progress-card').filter({ hasText: 'Sessions per week' });
-  // 21 calendar weeks since May 2 = 11 R1 program weeks + 1 sick + 5 break +
-  // 3 completed R2 weeks + the current one → 14 judged; the two 3/3 weeks hit.
-  await expect(card.locator('.progress-card-meta')).toContainText('2 of 14 training weeks');
+  // R1 wk 10 + the two 3/3 R2 weeks = 3 full weeks. No verdict words.
+  const meta = card.locator('.progress-card-meta');
+  await expect(meta).toHaveText('3 full weeks');
+  await expect(meta).not.toContainText('target');
+  await expect(meta).not.toContainText(' of ');
   // The bars still show every week, breaks included.
   await expect(card).toContainText('break');
   await expect(card).toContainText('now');
+  await card.locator('.spw-older-summary').click();
+  // Round 1's rows live in its fold (R2 has its own "wk 1").
+  const row = (label: string) =>
+    card
+      .locator('details.spw-older .spw-row')
+      .filter({ has: page.locator(`.spw-label:text-is("${label}")`) });
+  // wk 11 sits between "sick" and "break": held, not scored.
+  await expect(row('wk 11')).toHaveClass(/spw-row-skipped/);
+  await expect(row('wk 11')).toContainText('—');
+  await expect(row('wk 11').locator('.spw-track')).toHaveCount(0);
+  await expect(row('wk 11')).not.toContainText('/ 3');
+  // wk 10 is full; wk 1 (0 sessions mid-round, no break beside it) still shows.
+  await expect(row('wk 10')).toContainText('3 / 3');
+  await expect(row('wk 1').locator('.spw-track')).toHaveCount(1);
+  await expect(row('wk 1')).toContainText('0 / 3');
 });
 
 // The overview lists names, not reps — so the wall-sit seconds are checked inside
@@ -3228,7 +3269,7 @@ test('elliptical: the next ride opens on the elliptical and offers the last leve
   await guide.locator('.detail-section-toggle').click();
   await expect(guide.locator('.ell-steps li')).toHaveCount(3);
   await expect(guide).toContainText('MANUAL');
-  await expect(guide).toContainText('may be a little different');
+  await expect(guide).toContainText('your buttons may differ'); // v48 · fix r1: one line
   // The old 6-step ride list became the live line — it is not in the setup.
   await expect(guide).not.toContainText('Not sure of your level?');
   // After the ride: "—" until touched, and "8 again" (the newest ride) is one tap.
@@ -3981,6 +4022,19 @@ test.describe('v48 P2 shell', () => {
     await expect(page.locator('.new-tonight-badge')).toHaveCount(0);
   });
 
+  // v48 · fix r1 (Sep 24 2026): the 1 kg curl sat in Round 1 Week 7 (Jun 13-19)
+  // before the arm pause — it's a return, not a first.
+  test('(d) a move from an earlier week reads "Back tonight", not "New tonight"', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await seedLogs(page, [aLog('last-week-a', '2026-09-17T15:00:00.000Z', 43)]);
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, '1 kg biceps curl');
+    await expect(page.locator('.new-tonight-badge')).toHaveText('Back tonight');
+  });
+
   test('(d) no "New tonight" once an A is logged on/after the week started', async ({ page }) => {
     await mockDate(page, TUE_WEEK4);
     await seedLogs(page, [aLog('this-week-a', '2026-09-20T15:00:00.000Z', 45)]);
@@ -4095,18 +4149,47 @@ test.describe('v48 P2 shell', () => {
     await page.goto('/');
     await startA(page);
     await goToStep(page, 'Supported split squat');
-    const box = (await page.locator('#quit').boundingBox())!;
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.mouse.down();
-    await page.waitForTimeout(700);
-    await page.mouse.up();
+    // v48 · fix r1: a plain tap (it used to take a 500 ms hold nothing mentioned).
+    await page.locator('#quit').click();
     await expect(page.locator('#quit-confirm-panel')).toBeVisible();
     await expect(page.locator('.quit-confirm-sub')).toHaveText('Quit = nothing saved.');
     await page.locator('#quit-log').click();
     await expect(page.locator('text=Quick log')).toBeVisible();
+    // A stopped session is not called "done", and its Back goes to the workout.
+    await expect(page.locator('h2')).toHaveText('Logged what you did · Workout A');
+    await expect(page.locator('#back-to-stretches')).toHaveCount(0);
+    await expect(page.locator('#back-to-workout')).toHaveText('‹ Back to the workout');
     const log = await saveAndRead(page);
     expect(String(log['notes'])).toContain('stopped early at Supported split squat');
     expect(log['liteDay']).toBe(true); // round 2 never started
+  });
+
+  test('(h) "‹ Back to the workout" after a stop returns to the step she stopped on and undoes the stop', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, 'Supported split squat');
+    const indicator = (await page.locator('.round-indicator').textContent()) ?? '';
+    await page.locator('#quit').click();
+    await page.locator('#quit-log').click();
+    await expect(page.locator('h2')).toHaveText('Logged what you did · Workout A');
+    await page.locator('#back-to-workout').click();
+    await expect(page.locator('.exercise-name')).toHaveText('Supported split squat');
+    await expect(page.locator('.round-indicator')).toHaveText(indicator);
+    // Finish normally from here: the marker is gone, Lite is back to off.
+    await toRoundBreak(page);
+    await page.locator('#start-round-2').click();
+    for (let i = 0; i < 80; i++) {
+      if (await page.locator('text=Quick log').isVisible()) break;
+      if (!(await tapForward(page))) break;
+    }
+    await expect(page.locator('h2')).toHaveText('Nice. Workout A done.');
+    await expect(page.locator('#back-to-stretches')).toBeVisible();
+    const log = await saveAndRead(page);
+    expect(String(log['notes'] ?? '')).not.toContain('stopped early');
+    expect(log['liteDay'] ?? false).toBe(false);
   });
 
   test('(i) round 2: the split squat shows the compact "Watch how it looks" row, never the poster', async ({
@@ -4277,7 +4360,13 @@ test.describe('v48 P3 cardio', () => {
       );
       expect(await page.evaluate(() => window.scrollY)).toBe(0);
       const start = (await page.locator('#start-timed').boundingBox())!;
-      expect(start.y + start.height).toBeLessThanOrEqual(915);
+      // v48 · fix r1: Start clears the pinned Done · Next bar, not just the screen.
+      const bar = (await page.locator('.action-bar').boundingBox())!;
+      expect(start.y + start.height).toBeLessThanOrEqual(bar.y);
+      // v48 · fix r1: on the first ride the setup comes BEFORE Start — she sets
+      // the machine up, then starts the timer.
+      const steps = (await page.locator('.ell-guide .ell-steps').boundingBox())!;
+      expect(steps.y + steps.height).toBeLessThan(start.y);
       await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
       await expect(page.locator('#next')).not.toHaveClass(/btn-primary/);
       // The back-out sits right under Start.
@@ -4293,6 +4382,14 @@ test.describe('v48 P3 cardio', () => {
       await expect(page.locator('#ell-pulse')).toHaveCount(0);
       await expect(page.locator('.how-to-card, .detail-card')).toHaveCount(0);
       await expect(page.locator('#app')).not.toContainText('How to do it');
+      // v48 · fix r1: scrolled to the end, nothing sits under the pinned bar.
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const lastCard = (await page.locator('#app > .card').last().boundingBox())!;
+      const barEnd = (await page.locator('.action-bar').boundingBox())!;
+      expect(lastCard.y + lastCard.height).toBeLessThanOrEqual(barEnd.y);
+      // Tapping Start closes the setup card (not drawn while the ride runs).
+      await page.locator('#start-timed').click();
+      await expect(page.locator('.ell-guide')).toHaveCount(0);
     });
   });
 
@@ -4573,7 +4670,11 @@ test.describe('v48 P4 home', () => {
       await expect(hero).toContainText('Up next');
       await expect(hero.locator('.hero-title')).toHaveText('Workout A');
       await expect(hero).toContainText('Lower Body + Core · 2 rounds · ~30 min');
-      await expect(hero).toContainText('New tonight: supported split squat');
+      // v48 · fix r1: only the true first is "New"; Round 1's arm moves are "Back".
+      await expect(hero.locator('.hero-new')).toHaveText('New tonight: supported split squat');
+      await expect(hero.locator('.hero-back')).toHaveText(
+        'Back tonight: prone row · 1 kg biceps curl'
+      );
       await expect(hero).toContainText('Cardio: 10 min, your pick'); // no lane on the seeds
       await expect(hero.locator('.hero-start')).toHaveText('Start');
       const fills = await sageFills(page);
@@ -4724,6 +4825,11 @@ test.describe('v48 P4 home', () => {
     await expect(firsts).toContainText('first elliptical ride');
     await expect(firsts).toContainText('1.4 km');
     await expect(firsts).toContainText('supported split squat');
+    // v48 · fix r1: the 1 kg curl and the prone row were in Round 1 Week 7 —
+    // returns, not firsts. They get their own "Back:" line.
+    await expect(firsts).not.toContainText('biceps curl');
+    await expect(firsts).not.toContainText('prone row');
+    await expect(done.locator('.home-done-back')).toHaveText('Back: prone row · 1 kg biceps curl');
     await expect(page.locator('.home-hero')).toHaveCount(0);
     expect(await sageFills(page)).toHaveLength(0);
     // The chips stay — the other two workouts, one tap each.
@@ -5556,7 +5662,9 @@ test.describe('v48 P6 mirror', () => {
     // The open rows are this round's only (R2: 4 weeks, the last "now").
     await expect(spw.locator(':scope > .spw-rows .spw-row')).toHaveCount(4);
     await expect(spw.locator(':scope > .spw-rows .spw-row').last()).toContainText('now');
-    await expect(spw.locator('.progress-card-meta')).toContainText('Hit target');
+    // v48 · fix r1: a plain count, no "target" verdict.
+    await expect(spw.locator('.progress-card-meta')).toContainText('full week');
+    await expect(spw.locator('.progress-card-meta')).not.toContainText('target');
     // No sage chart ink anywhere on Progress.
     const sage = await page.evaluate(
       () =>
