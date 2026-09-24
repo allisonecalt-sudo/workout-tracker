@@ -42,8 +42,14 @@ export interface ExerciseHowTo {
 
 // ---------- SVG primitives ----------
 // Keep all SVGs at viewBox 0 0 240 180 so they share a uniform aspect
-// (~4:3) and render at consistent size. Color tokens use currentColor
-// and var(--accent) so they pick up the dark-mode theme automatically.
+// (~4:3) and render at consistent size.
+// v49 · look fix (Sep 25 2026): the figure and angle/direction marks were
+// hard-coded sage (--sage #8fbc8f) and warn-amber (--warn #e6b450) — a SECOND
+// and THIRD sage/accent on screen next to the one real sage action (spec §4
+// "never more than one sage per screen", Opus check). Figure = var(--ink-2),
+// angle marks/arrows/labels = var(--ink) — one muted tone, one bright tone,
+// both neutral. Uses var(--x) directly in the attribute (not currentColor)
+// so each element can still mix in its own opacity.
 
 const SVG_OPEN = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" class="howto-svg" role="img" aria-hidden="true">`;
 const SVG_CLOSE = `</svg>`;
@@ -68,25 +74,25 @@ function sNoMat(inner: string): string {
 // Belly breathing — lying on back, belly rising
 const SVG_BELLY_BREATH_INHALE = s(`
   <!-- supine figure, knees bent, belly rounded up = inhale -->
-  <line x1="40" y1="150" x2="180" y2="150" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
+  <line x1="40" y1="150" x2="180" y2="150" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
   <!-- head -->
-  <circle cx="46" cy="140" r="10" fill="#8fbc8f" />
+  <circle cx="46" cy="140" r="10" fill="var(--ink-2)" />
   <!-- torso + belly bulge -->
-  <path d="M55 148 Q90 110 130 148" fill="#a3cfa3" opacity="0.7" stroke="#8fbc8f" stroke-width="2.5" />
+  <path d="M55 148 Q90 110 130 148" fill="var(--ink-2)" opacity="0.7" stroke="var(--ink-2)" stroke-width="2.5" />
   <!-- bent legs (knees up) -->
-  <path d="M130 148 L150 110 L180 150" fill="none" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M130 148 L150 110 L180 150" fill="none" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
   <!-- arrow up over belly -->
-  <line x1="92" y1="80" x2="92" y2="120" stroke="#e6b450" stroke-width="2.5" stroke-linecap="round" />
-  <polygon points="92,75 87,85 97,85" fill="#e6b450" />
-  <text x="105" y="92" fill="#e6b450" font-size="13" font-family="sans-serif" font-weight="600">belly rises</text>
+  <line x1="92" y1="80" x2="92" y2="120" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round" />
+  <polygon points="92,75 87,85 97,85" fill="var(--ink)" />
+  <text x="105" y="92" fill="var(--ink)" font-size="13" font-family="sans-serif" font-weight="600">belly rises</text>
 `);
 
 const SVG_BELLY_BREATH_EXHALE = s(`
   <!-- supine, knees up, belly flat = exhale -->
-  <line x1="40" y1="150" x2="180" y2="150" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
-  <circle cx="46" cy="140" r="10" fill="#8fbc8f" />
-  <path d="M55 148 Q90 130 130 148" fill="#a3cfa3" opacity="0.5" stroke="#8fbc8f" stroke-width="2.5" />
-  <path d="M130 148 L150 110 L180 150" fill="none" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <line x1="40" y1="150" x2="180" y2="150" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
+  <circle cx="46" cy="140" r="10" fill="var(--ink-2)" />
+  <path d="M55 148 Q90 130 130 148" fill="var(--ink-2)" opacity="0.5" stroke="var(--ink-2)" stroke-width="2.5" />
+  <path d="M130 148 L150 110 L180 150" fill="none" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
   <line x1="92" y1="120" x2="92" y2="80" stroke="#d97757" stroke-width="2.5" stroke-linecap="round" />
   <polygon points="92,125 87,115 97,115" fill="#d97757" />
   <text x="105" y="92" fill="#d97757" font-size="13" font-family="sans-serif" font-weight="600">slow exhale</text>
@@ -108,20 +114,20 @@ const SVG_BELLY_BREATH_WRONG = s(`
 // Slow breathing (cooldown — same template but seated)
 const SVG_SLOW_BREATH_IN = sNoMat(`
   <!-- seated figure in profile, breath inhale -->
-  <circle cx="80" cy="55" r="14" fill="#8fbc8f" />
-  <path d="M80 70 Q85 95 90 130 L110 130 Q105 95 100 70 Z" fill="#a3cfa3" stroke="#8fbc8f" stroke-width="2.5" opacity="0.85" />
+  <circle cx="80" cy="55" r="14" fill="var(--ink-2)" />
+  <path d="M80 70 Q85 95 90 130 L110 130 Q105 95 100 70 Z" fill="var(--ink-2)" stroke="var(--ink-2)" stroke-width="2.5" opacity="0.85" />
   <!-- crossed legs hint -->
-  <path d="M90 130 L130 150 M110 130 L75 150" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" fill="none" />
+  <path d="M90 130 L130 150 M110 130 L75 150" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" fill="none" />
   <!-- inhale arrow into nose -->
-  <line x1="130" y1="55" x2="100" y2="55" stroke="#e6b450" stroke-width="2.5" stroke-linecap="round" />
-  <polygon points="98,55 108,50 108,60" fill="#e6b450" />
-  <text x="138" y="58" fill="#e6b450" font-size="13" font-family="sans-serif" font-weight="600">inhale 4</text>
+  <line x1="130" y1="55" x2="100" y2="55" stroke="var(--ink)" stroke-width="2.5" stroke-linecap="round" />
+  <polygon points="98,55 108,50 108,60" fill="var(--ink)" />
+  <text x="138" y="58" fill="var(--ink)" font-size="13" font-family="sans-serif" font-weight="600">inhale 4</text>
 `);
 
 const SVG_SLOW_BREATH_OUT = sNoMat(`
-  <circle cx="80" cy="55" r="14" fill="#8fbc8f" />
-  <path d="M80 70 Q85 95 90 130 L110 130 Q105 95 100 70 Z" fill="#a3cfa3" stroke="#8fbc8f" stroke-width="2.5" opacity="0.85" />
-  <path d="M90 130 L130 150 M110 130 L75 150" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" fill="none" />
+  <circle cx="80" cy="55" r="14" fill="var(--ink-2)" />
+  <path d="M80 70 Q85 95 90 130 L110 130 Q105 95 100 70 Z" fill="var(--ink-2)" stroke="var(--ink-2)" stroke-width="2.5" opacity="0.85" />
+  <path d="M90 130 L130 150 M110 130 L75 150" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" fill="none" />
   <!-- exhale arrow out of mouth -->
   <line x1="98" y1="60" x2="170" y2="60" stroke="#d97757" stroke-width="2.5" stroke-linecap="round" />
   <polygon points="170,60 160,55 160,65" fill="#d97757" />
@@ -130,21 +136,21 @@ const SVG_SLOW_BREATH_OUT = sNoMat(`
 
 // Glute squeezes — lying down, glutes engaged
 const SVG_GLUTE_SQUEEZE = s(`
-  <line x1="40" y1="150" x2="200" y2="150" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
-  <circle cx="46" cy="140" r="10" fill="#8fbc8f" />
+  <line x1="40" y1="150" x2="200" y2="150" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
+  <circle cx="46" cy="140" r="10" fill="var(--ink-2)" />
   <!-- supine torso with knees up -->
-  <path d="M55 148 L130 148 L150 115 L180 150" fill="none" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M55 148 L130 148 L150 115 L180 150" fill="none" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
   <!-- glutes highlight -->
-  <ellipse cx="128" cy="146" rx="14" ry="7" fill="#e6b450" opacity="0.75" />
-  <text x="118" y="172" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">squeeze + hold 3s</text>
+  <ellipse cx="128" cy="146" rx="14" ry="7" fill="var(--ink)" opacity="0.75" />
+  <text x="118" y="172" fill="var(--ink)" font-size="12" font-family="sans-serif" font-weight="600">squeeze + hold 3s</text>
 `);
 
 const SVG_GLUTE_SQUEEZE_RELEASE = s(`
-  <line x1="40" y1="150" x2="200" y2="150" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
-  <circle cx="46" cy="140" r="10" fill="#8fbc8f" />
-  <path d="M55 148 L130 148 L150 115 L180 150" fill="none" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-  <ellipse cx="128" cy="146" rx="14" ry="7" fill="#8fbc8f" opacity="0.3" />
-  <text x="118" y="172" fill="#8fbc8f" font-size="12" font-family="sans-serif" font-weight="600">relax 2s</text>
+  <line x1="40" y1="150" x2="200" y2="150" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
+  <circle cx="46" cy="140" r="10" fill="var(--ink-2)" />
+  <path d="M55 148 L130 148 L150 115 L180 150" fill="none" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <ellipse cx="128" cy="146" rx="14" ry="7" fill="var(--ink-2)" opacity="0.3" />
+  <text x="118" y="172" fill="var(--ink-2)" font-size="12" font-family="sans-serif" font-weight="600">relax 2s</text>
 `);
 
 // Wall sit — figure with back flat against wall
@@ -154,30 +160,30 @@ const SVG_WALL_SIT = sNoMat(`
   <!-- floor -->
   <line x1="30" y1="160" x2="220" y2="160" stroke="#4a544c" stroke-width="4" stroke-linecap="round" />
   <!-- head -->
-  <circle cx="48" cy="40" r="12" fill="#8fbc8f" />
+  <circle cx="48" cy="40" r="12" fill="var(--ink-2)" />
   <!-- torso pressed to wall -->
-  <line x1="48" y1="52" x2="48" y2="100" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="48" y1="52" x2="48" y2="100" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- thigh (horizontal, knee at 90) -->
-  <line x1="48" y1="100" x2="125" y2="100" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="48" y1="100" x2="125" y2="100" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- shin (vertical) -->
-  <line x1="125" y1="100" x2="125" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="125" y1="100" x2="125" y2="160" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- 90 degree marker -->
-  <path d="M115 100 L115 110 L125 110" fill="none" stroke="#e6b450" stroke-width="1.5" />
-  <text x="135" y="106" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">90°</text>
+  <path d="M115 100 L115 110 L125 110" fill="none" stroke="var(--ink)" stroke-width="1.5" />
+  <text x="135" y="106" fill="var(--ink)" font-size="12" font-family="sans-serif" font-weight="600">90°</text>
   <!-- arms hanging -->
-  <line x1="48" y1="65" x2="42" y2="95" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
+  <line x1="48" y1="65" x2="42" y2="95" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
 `);
 
 const SVG_WALL_SIT_DEEPER = sNoMat(`
   <line x1="30" y1="20" x2="30" y2="160" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
   <line x1="30" y1="160" x2="220" y2="160" stroke="#4a544c" stroke-width="4" stroke-linecap="round" />
-  <circle cx="48" cy="55" r="12" fill="#8fbc8f" />
-  <line x1="48" y1="67" x2="48" y2="115" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="48" cy="55" r="12" fill="var(--ink-2)" />
+  <line x1="48" y1="67" x2="48" y2="115" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- thigh slightly steeper -->
-  <line x1="48" y1="115" x2="115" y2="120" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="115" y1="120" x2="115" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="48" y1="80" x2="42" y2="110" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
-  <text x="130" y="100" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">shallower = easier today</text>
+  <line x1="48" y1="115" x2="115" y2="120" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="115" y1="120" x2="115" y2="160" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="48" y1="80" x2="42" y2="110" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
+  <text x="130" y="100" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">shallower = easier today</text>
 `);
 
 const SVG_WALL_SIT_WRONG = sNoMat(`
@@ -198,30 +204,30 @@ const SVG_WALL_SIT_WRONG = sNoMat(`
 // Side-lying clamshells
 const SVG_CLAMSHELL_CLOSED = s(`
   <!-- side view, hips stacked, knees bent, closed -->
-  <circle cx="50" cy="120" r="10" fill="#8fbc8f" />
+  <circle cx="50" cy="120" r="10" fill="var(--ink-2)" />
   <!-- bottom arm extended along floor -->
-  <line x1="58" y1="120" x2="40" y2="150" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
+  <line x1="58" y1="120" x2="40" y2="150" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
   <!-- torso lying on side -->
-  <line x1="58" y1="125" x2="125" y2="135" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="58" y1="125" x2="125" y2="135" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- bent legs (both together) -->
-  <line x1="125" y1="135" x2="170" y2="118" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="170" y1="118" x2="200" y2="148" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="125" y1="135" x2="170" y2="118" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="170" y1="118" x2="200" y2="148" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <text x="100" y="95" fill="#a8a59c" font-size="11" font-family="sans-serif" font-weight="600">start: knees together</text>
 `);
 
 const SVG_CLAMSHELL_OPEN = s(`
   <!-- knee opens upward -->
-  <circle cx="50" cy="120" r="10" fill="#8fbc8f" />
-  <line x1="58" y1="120" x2="40" y2="150" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
-  <line x1="58" y1="125" x2="125" y2="135" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="50" cy="120" r="10" fill="var(--ink-2)" />
+  <line x1="58" y1="120" x2="40" y2="150" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
+  <line x1="58" y1="125" x2="125" y2="135" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- bottom leg stays low -->
-  <line x1="125" y1="135" x2="170" y2="118" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
-  <line x1="170" y1="118" x2="200" y2="148" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
+  <line x1="125" y1="135" x2="170" y2="118" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
+  <line x1="170" y1="118" x2="200" y2="148" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
   <!-- top knee lifts open -->
-  <line x1="125" y1="132" x2="165" y2="80" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <line x1="165" y1="80" x2="200" y2="145" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <path d="M155 110 A 25 25 0 0 1 170 90" fill="none" stroke="#e6b450" stroke-width="2" stroke-dasharray="3 3" />
-  <text x="100" y="55" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">open top knee</text>
+  <line x1="125" y1="132" x2="165" y2="80" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <line x1="165" y1="80" x2="200" y2="145" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <path d="M155 110 A 25 25 0 0 1 170 90" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 3" />
+  <text x="100" y="55" fill="var(--ink)" font-size="12" font-family="sans-serif" font-weight="600">open top knee</text>
 `);
 
 const SVG_CLAMSHELL_WRONG = s(`
@@ -242,27 +248,27 @@ const SVG_FOREARM_PLANK = sNoMat(`
   <!-- floor -->
   <line x1="20" y1="135" x2="220" y2="135" stroke="#4a544c" stroke-width="4" stroke-linecap="round" />
   <!-- head -->
-  <circle cx="40" cy="80" r="11" fill="#8fbc8f" />
+  <circle cx="40" cy="80" r="11" fill="var(--ink-2)" />
   <!-- body line: straight from shoulder to ankles -->
-  <line x1="50" y1="85" x2="200" y2="120" stroke="#8fbc8f" stroke-width="7" stroke-linecap="round" />
+  <line x1="50" y1="85" x2="200" y2="120" stroke="var(--ink-2)" stroke-width="7" stroke-linecap="round" />
   <!-- forearms on ground (NOT hands) -->
-  <line x1="48" y1="88" x2="48" y2="135" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <line x1="48" y1="135" x2="78" y2="135" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <line x1="48" y1="88" x2="48" y2="135" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <line x1="48" y1="135" x2="78" y2="135" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
   <!-- toes -->
-  <line x1="200" y1="120" x2="210" y2="135" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <text x="58" y="155" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">forearms only</text>
+  <line x1="200" y1="120" x2="210" y2="135" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <text x="58" y="155" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">forearms only</text>
 `);
 
 const SVG_FOREARM_PLANK_BACK_FLAT = sNoMat(`
   <line x1="20" y1="135" x2="220" y2="135" stroke="#4a544c" stroke-width="4" stroke-linecap="round" />
-  <circle cx="40" cy="80" r="11" fill="#8fbc8f" />
-  <line x1="50" y1="85" x2="200" y2="120" stroke="#8fbc8f" stroke-width="7" stroke-linecap="round" />
-  <line x1="48" y1="88" x2="48" y2="135" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="48" y1="135" x2="78" y2="135" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="200" y1="120" x2="210" y2="135" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="40" cy="80" r="11" fill="var(--ink-2)" />
+  <line x1="50" y1="85" x2="200" y2="120" stroke="var(--ink-2)" stroke-width="7" stroke-linecap="round" />
+  <line x1="48" y1="88" x2="48" y2="135" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="48" y1="135" x2="78" y2="135" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="200" y1="120" x2="210" y2="135" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- dashed straight line showing alignment -->
-  <line x1="40" y1="80" x2="210" y2="130" stroke="#e6b450" stroke-width="2" stroke-dasharray="5 5" />
-  <text x="80" y="70" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">straight line head→heel</text>
+  <line x1="40" y1="80" x2="210" y2="130" stroke="var(--ink)" stroke-width="2" stroke-dasharray="5 5" />
+  <text x="80" y="70" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">straight line head→heel</text>
 `);
 
 const SVG_FOREARM_PLANK_WRONG = sNoMat(`
@@ -285,96 +291,96 @@ const SVG_CALF_DOWN = sNoMat(`
   <line x1="30" y1="160" x2="220" y2="160" stroke="#4a544c" stroke-width="4" stroke-linecap="round" />
   <!-- wall hint -->
   <line x1="30" y1="40" x2="30" y2="160" stroke="#4a544c" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 4" />
-  <circle cx="100" cy="50" r="12" fill="#8fbc8f" />
+  <circle cx="100" cy="50" r="12" fill="var(--ink-2)" />
   <!-- body -->
-  <line x1="100" y1="62" x2="100" y2="135" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="100" y1="62" x2="100" y2="135" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- legs flat -->
-  <line x1="100" y1="135" x2="100" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="100" y1="135" x2="100" y2="160" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- fingertip touching wall -->
-  <line x1="100" y1="75" x2="40" y2="80" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
-  <circle cx="40" cy="80" r="3" fill="#e6b450" />
+  <line x1="100" y1="75" x2="40" y2="80" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
+  <circle cx="40" cy="80" r="3" fill="var(--ink)" />
   <text x="115" y="58" fill="#a8a59c" font-size="11" font-family="sans-serif" font-weight="600">heels down · 1s reset</text>
 `);
 
 const SVG_CALF_UP = sNoMat(`
   <line x1="30" y1="160" x2="220" y2="160" stroke="#4a544c" stroke-width="4" stroke-linecap="round" />
   <line x1="30" y1="40" x2="30" y2="160" stroke="#4a544c" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 4" />
-  <circle cx="100" cy="35" r="12" fill="#8fbc8f" />
-  <line x1="100" y1="47" x2="100" y2="120" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="100" y1="120" x2="100" y2="145" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="100" cy="35" r="12" fill="var(--ink-2)" />
+  <line x1="100" y1="47" x2="100" y2="120" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="100" y1="120" x2="100" y2="145" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- heels lifted -->
-  <line x1="95" y1="145" x2="110" y2="160" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <line x1="100" y1="60" x2="40" y2="80" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
-  <circle cx="40" cy="80" r="3" fill="#e6b450" />
-  <text x="115" y="50" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">heels lifted · hold 1s</text>
+  <line x1="95" y1="145" x2="110" y2="160" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <line x1="100" y1="60" x2="40" y2="80" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
+  <circle cx="40" cy="80" r="3" fill="var(--ink)" />
+  <text x="115" y="50" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">heels lifted · hold 1s</text>
 `);
 
 // Slow supine bicycle
 const SVG_BICYCLE = s(`
   <line x1="20" y1="155" x2="220" y2="155" stroke="#4a544c" stroke-width="3" />
-  <circle cx="38" cy="142" r="10" fill="#8fbc8f" />
+  <circle cx="38" cy="142" r="10" fill="var(--ink-2)" />
   <!-- torso -->
-  <line x1="46" y1="145" x2="125" y2="145" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="46" y1="145" x2="125" y2="145" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- arms by sides palms up -->
-  <line x1="60" y1="148" x2="75" y2="155" stroke="#8fbc8f" stroke-width="3" stroke-linecap="round" />
+  <line x1="60" y1="148" x2="75" y2="155" stroke="var(--ink-2)" stroke-width="3" stroke-linecap="round" />
   <!-- left leg knee up -->
-  <line x1="125" y1="145" x2="135" y2="85" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <line x1="135" y1="85" x2="160" y2="115" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <line x1="125" y1="145" x2="135" y2="85" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <line x1="135" y1="85" x2="160" y2="115" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
   <!-- right leg extended -->
-  <line x1="125" y1="148" x2="180" y2="138" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="180" y1="138" x2="210" y2="148" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.7" />
-  <text x="60" y="40" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">slow alternate pedal</text>
+  <line x1="125" y1="148" x2="180" y2="138" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="180" y1="138" x2="210" y2="148" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" stroke-opacity="0.7" />
+  <text x="60" y="40" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">slow alternate pedal</text>
 `);
 
 // Heel taps
 const SVG_HEEL_TAPS_UP = s(`
   <line x1="20" y1="155" x2="220" y2="155" stroke="#4a544c" stroke-width="3" />
-  <circle cx="38" cy="142" r="10" fill="#8fbc8f" />
-  <line x1="46" y1="145" x2="125" y2="145" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="38" cy="142" r="10" fill="var(--ink-2)" />
+  <line x1="46" y1="145" x2="125" y2="145" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- both knees up to start -->
-  <line x1="125" y1="145" x2="150" y2="95" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="150" y1="95" x2="175" y2="125" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="125" y1="145" x2="155" y2="100" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
+  <line x1="125" y1="145" x2="150" y2="95" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="150" y1="95" x2="175" y2="125" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="125" y1="145" x2="155" y2="100" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
   <text x="60" y="40" fill="#a8a59c" font-size="11" font-family="sans-serif" font-weight="600">start: knees up</text>
 `);
 
 const SVG_HEEL_TAPS_DOWN = s(`
   <line x1="20" y1="155" x2="220" y2="155" stroke="#4a544c" stroke-width="3" />
-  <circle cx="38" cy="142" r="10" fill="#8fbc8f" />
-  <line x1="46" y1="145" x2="125" y2="145" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="38" cy="142" r="10" fill="var(--ink-2)" />
+  <line x1="46" y1="145" x2="125" y2="145" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- one knee bent up, one leg extending heel toward floor -->
-  <line x1="125" y1="145" x2="150" y2="95" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
-  <line x1="150" y1="95" x2="175" y2="125" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
-  <line x1="125" y1="148" x2="190" y2="148" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <line x1="125" y1="145" x2="150" y2="95" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
+  <line x1="150" y1="95" x2="175" y2="125" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
+  <line x1="125" y1="148" x2="190" y2="148" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
   <!-- heel hovering above floor -->
-  <line x1="195" y1="148" x2="200" y2="153" stroke="#e6b450" stroke-width="4" stroke-linecap="round" />
-  <text x="55" y="40" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">tap heel toward floor</text>
+  <line x1="195" y1="148" x2="200" y2="153" stroke="var(--ink)" stroke-width="4" stroke-linecap="round" />
+  <text x="55" y="40" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">tap heel toward floor</text>
 `);
 
 // Wrist PT — Lisa Cohen tuna can protocol
 // Stretch (palm out)
 const SVG_WRIST_STRETCH_PALM_BACK = sNoMat(`
   <!-- forearm extended forward, palm facing forward, fingers pulled back -->
-  <rect x="60" y="80" width="100" height="20" rx="10" fill="#8fbc8f" />
+  <rect x="60" y="80" width="100" height="20" rx="10" fill="var(--ink-2)" />
   <!-- hand palm out -->
-  <path d="M160 80 L185 65 L185 115 L160 100 Z" fill="#8fbc8f" />
+  <path d="M160 80 L185 65 L185 115 L160 100 Z" fill="var(--ink-2)" />
   <!-- fingers bent back -->
-  <line x1="185" y1="65" x2="195" y2="50" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <line x1="185" y1="75" x2="200" y2="65" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
+  <line x1="185" y1="65" x2="195" y2="50" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <line x1="185" y1="75" x2="200" y2="65" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
   <!-- helper hand arrow -->
-  <line x1="220" y1="80" x2="200" y2="60" stroke="#e6b450" stroke-width="2" stroke-dasharray="3 3" />
-  <text x="55" y="135" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">palm out · pull fingers back</text>
+  <line x1="220" y1="80" x2="200" y2="60" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 3" />
+  <text x="55" y="135" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">palm out · pull fingers back</text>
 `);
 
 // Stretch (palm in / push down)
 const SVG_WRIST_STRETCH_PALM_DOWN = sNoMat(`
   <!-- forearm extended, palm facing self, hand pushed down -->
-  <rect x="60" y="80" width="100" height="20" rx="10" fill="#8fbc8f" />
+  <rect x="60" y="80" width="100" height="20" rx="10" fill="var(--ink-2)" />
   <!-- hand flexed downward -->
-  <path d="M160 80 L175 90 L165 130 L150 120 Z" fill="#8fbc8f" />
-  <line x1="175" y1="90" x2="190" y2="120" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <line x1="170" y1="110" x2="185" y2="135" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <text x="55" y="155" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">flip · push hand down</text>
+  <path d="M160 80 L175 90 L165 130 L150 120 Z" fill="var(--ink-2)" />
+  <line x1="175" y1="90" x2="190" y2="120" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <line x1="170" y1="110" x2="185" y2="135" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <text x="55" y="155" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">flip · push hand down</text>
 `);
 
 // Tuna can flexion/extension — palm down, lifting hand up
@@ -382,41 +388,41 @@ const SVG_TUNA_PALM_DOWN_UP = sNoMat(`
   <!-- table edge -->
   <line x1="20" y1="115" x2="120" y2="115" stroke="#4a544c" stroke-width="4" />
   <!-- forearm on table -->
-  <rect x="30" y="95" width="90" height="20" rx="6" fill="#8fbc8f" />
+  <rect x="30" y="95" width="90" height="20" rx="6" fill="var(--ink-2)" />
   <!-- hand off edge, can lifted UP (extension, palm down) -->
-  <path d="M120 95 L150 65 L160 75 L130 115 Z" fill="#8fbc8f" />
+  <path d="M120 95 L150 65 L160 75 L130 115 Z" fill="var(--ink-2)" />
   <!-- tuna can -->
-  <rect x="140" y="55" width="22" height="16" rx="3" fill="#e6b450" stroke="#1a1f1c" stroke-width="2" />
-  <text x="125" y="40" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">palm down · lift wrist UP</text>
+  <rect x="140" y="55" width="22" height="16" rx="3" fill="var(--ink)" stroke="#1a1f1c" stroke-width="2" />
+  <text x="125" y="40" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">palm down · lift wrist UP</text>
   <!-- arrow up -->
-  <line x1="180" y1="100" x2="180" y2="70" stroke="#e6b450" stroke-width="2" stroke-linecap="round" />
-  <polygon points="180,65 175,75 185,75" fill="#e6b450" />
+  <line x1="180" y1="100" x2="180" y2="70" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" />
+  <polygon points="180,65 175,75 185,75" fill="var(--ink)" />
 `);
 
 // Tuna can flexion — palm up, curl wrist up
 const SVG_TUNA_PALM_UP_CURL = sNoMat(`
   <line x1="20" y1="115" x2="120" y2="115" stroke="#4a544c" stroke-width="4" />
-  <rect x="30" y="95" width="90" height="20" rx="6" fill="#8fbc8f" />
+  <rect x="30" y="95" width="90" height="20" rx="6" fill="var(--ink-2)" />
   <!-- palm up, curling weight up -->
-  <path d="M120 115 L150 145 L160 135 L130 95 Z" fill="#8fbc8f" />
-  <rect x="140" y="140" width="22" height="16" rx="3" fill="#e6b450" stroke="#1a1f1c" stroke-width="2" />
-  <line x1="180" y1="145" x2="180" y2="65" stroke="#e6b450" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3" />
-  <polygon points="180,65 175,75 185,75" fill="#e6b450" />
-  <text x="120" y="40" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">flip · palm up · curl UP</text>
+  <path d="M120 115 L150 145 L160 135 L130 95 Z" fill="var(--ink-2)" />
+  <rect x="140" y="140" width="22" height="16" rx="3" fill="var(--ink)" stroke="#1a1f1c" stroke-width="2" />
+  <line x1="180" y1="145" x2="180" y2="65" stroke="var(--ink)" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 3" />
+  <polygon points="180,65 175,75 185,75" fill="var(--ink)" />
+  <text x="120" y="40" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">flip · palm up · curl UP</text>
 `);
 
 // Radial deviation — pinky side on table, lift toward thumb
 const SVG_TUNA_RADIAL = sNoMat(`
   <line x1="20" y1="115" x2="160" y2="115" stroke="#4a544c" stroke-width="4" />
   <!-- forearm resting on pinky side, thumb up -->
-  <rect x="30" y="85" width="100" height="30" rx="8" fill="#8fbc8f" />
+  <rect x="30" y="85" width="100" height="30" rx="8" fill="var(--ink-2)" />
   <!-- hand with thumb pointing up -->
-  <path d="M130 85 L160 70 L170 80 L140 115 Z" fill="#8fbc8f" />
+  <path d="M130 85 L160 70 L170 80 L140 115 Z" fill="var(--ink-2)" />
   <!-- tuna can held -->
-  <rect x="148" y="60" width="20" height="20" rx="3" fill="#e6b450" stroke="#1a1f1c" stroke-width="2" />
+  <rect x="148" y="60" width="20" height="20" rx="3" fill="var(--ink)" stroke="#1a1f1c" stroke-width="2" />
   <!-- arc showing lift toward thumb -->
-  <path d="M160 65 A 30 30 0 0 0 175 100" fill="none" stroke="#e6b450" stroke-width="2" stroke-dasharray="3 3" />
-  <text x="50" y="155" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">thumb UP · only wrist moves</text>
+  <path d="M160 65 A 30 30 0 0 0 175 100" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 3" />
+  <text x="50" y="155" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">thumb UP · only wrist moves</text>
 `);
 
 // ---------- Picture-based frames (free-exercise-db jpgs) ----------
@@ -433,168 +439,168 @@ const EX_DIR = 'assets/exercises';
 // Reusable "hold for N" cue card (mirrors the existing 45s/60s text frames).
 function holdCard(title: string, sub: string, secs = '45s'): string {
   return sNoMat(`
-    <text x="26" y="58" fill="#8fbc8f" font-size="14" font-family="sans-serif" font-weight="700">${title}</text>
+    <text x="26" y="58" fill="var(--ink-2)" font-size="14" font-family="sans-serif" font-weight="700">${title}</text>
     <text x="26" y="86" fill="#a8a59c" font-size="12.5" font-family="sans-serif">${sub}</text>
-    <circle cx="120" cy="132" r="24" fill="none" stroke="#e6b450" stroke-width="3" />
-    <text x="120" y="139" text-anchor="middle" fill="#e6b450" font-size="16" font-family="sans-serif" font-weight="700">${secs}</text>
+    <circle cx="120" cy="132" r="24" fill="none" stroke="var(--ink)" stroke-width="3" />
+    <text x="120" y="139" text-anchor="middle" fill="var(--ink)" font-size="16" font-family="sans-serif" font-weight="700">${secs}</text>
   `);
 }
 
 // Wrist extension — forearm palm-down, fingers lifted UP toward you
 const SVG_WRIST_EXTENSION = sNoMat(`
-  <rect x="40" y="92" width="108" height="18" rx="9" fill="#8fbc8f" />
-  <path d="M148 92 L150 60 L168 62 L166 110 Z" fill="#8fbc8f" />
-  <line x1="159" y1="62" x2="162" y2="44" stroke="#8fbc8f" stroke-width="5" stroke-linecap="round" />
-  <line x1="195" y1="95" x2="172" y2="55" stroke="#e6b450" stroke-width="2.5" stroke-dasharray="4 3" />
-  <polygon points="170,50 170,64 180,58" fill="#e6b450" />
-  <text x="26" y="142" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">palm down · pull fingers UP</text>
+  <rect x="40" y="92" width="108" height="18" rx="9" fill="var(--ink-2)" />
+  <path d="M148 92 L150 60 L168 62 L166 110 Z" fill="var(--ink-2)" />
+  <line x1="159" y1="62" x2="162" y2="44" stroke="var(--ink-2)" stroke-width="5" stroke-linecap="round" />
+  <line x1="195" y1="95" x2="172" y2="55" stroke="var(--ink)" stroke-width="2.5" stroke-dasharray="4 3" />
+  <polygon points="170,50 170,64 180,58" fill="var(--ink)" />
+  <text x="26" y="142" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">palm down · pull fingers UP</text>
 `);
 
 // Wrist flexion — forearm palm-down, fingers pressed DOWN
 const SVG_WRIST_FLEXION = sNoMat(`
-  <rect x="40" y="82" width="108" height="18" rx="9" fill="#8fbc8f" />
-  <path d="M148 82 L168 108 L154 118 L138 96 Z" fill="#8fbc8f" />
-  <line x1="161" y1="108" x2="170" y2="126" stroke="#8fbc8f" stroke-width="5" stroke-linecap="round" />
-  <line x1="190" y1="80" x2="168" y2="118" stroke="#e6b450" stroke-width="2.5" stroke-dasharray="4 3" />
-  <polygon points="166,123 178,116 168,108" fill="#e6b450" />
-  <text x="26" y="150" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">palm down · press fingers DOWN</text>
+  <rect x="40" y="82" width="108" height="18" rx="9" fill="var(--ink-2)" />
+  <path d="M148 82 L168 108 L154 118 L138 96 Z" fill="var(--ink-2)" />
+  <line x1="161" y1="108" x2="170" y2="126" stroke="var(--ink-2)" stroke-width="5" stroke-linecap="round" />
+  <line x1="190" y1="80" x2="168" y2="118" stroke="var(--ink)" stroke-width="2.5" stroke-dasharray="4 3" />
+  <polygon points="166,123 178,116 168,108" fill="var(--ink)" />
+  <text x="26" y="150" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">palm down · press fingers DOWN</text>
 `);
 
 // Neck stretch — head tilted toward a shoulder, light hand over the head
 const SVG_NECK_STRETCH = sNoMat(`
-  <line x1="70" y1="150" x2="170" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="120" y1="150" x2="135" y2="95" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <circle cx="140" cy="80" r="16" fill="#8fbc8f" />
-  <path d="M150 66 q14 -2 18 8" fill="none" stroke="#e6b450" stroke-width="4" stroke-linecap="round" />
-  <path d="M118 110 q-10 -18 6 -34" fill="none" stroke="#e6b450" stroke-width="2.5" stroke-dasharray="3 3" />
-  <text x="22" y="38" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">ear toward shoulder · light hand</text>
+  <line x1="70" y1="150" x2="170" y2="150" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="150" x2="135" y2="95" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <circle cx="140" cy="80" r="16" fill="var(--ink-2)" />
+  <path d="M150 66 q14 -2 18 8" fill="none" stroke="var(--ink)" stroke-width="4" stroke-linecap="round" />
+  <path d="M118 110 q-10 -18 6 -34" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-dasharray="3 3" />
+  <text x="22" y="38" fill="var(--ink)" font-size="12" font-family="sans-serif" font-weight="600">ear toward shoulder · light hand</text>
   <text x="22" y="172" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">don't pull hard · no shoulder shrug</text>
 `);
 
 // Shoulder stretch — cross-body, opposite forearm cradles above the elbow
 const SVG_SHOULDER_STRETCH = sNoMat(`
-  <circle cx="120" cy="45" r="15" fill="#8fbc8f" />
-  <line x1="120" y1="60" x2="120" y2="120" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="120" y1="78" x2="70" y2="92" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <line x1="120" y1="95" x2="78" y2="100" stroke="#8fbc8f" stroke-width="5" stroke-linecap="round" />
-  <line x1="78" y1="100" x2="74" y2="88" stroke="#8fbc8f" stroke-width="5" stroke-linecap="round" />
-  <line x1="92" y1="86" x2="74" y2="90" stroke="#e6b450" stroke-width="2" />
-  <polygon points="70,91 80,86 80,95" fill="#e6b450" />
-  <text x="22" y="150" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">arm across · cradle above the elbow</text>
+  <circle cx="120" cy="45" r="15" fill="var(--ink-2)" />
+  <line x1="120" y1="60" x2="120" y2="120" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="78" x2="70" y2="92" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="95" x2="78" y2="100" stroke="var(--ink-2)" stroke-width="5" stroke-linecap="round" />
+  <line x1="78" y1="100" x2="74" y2="88" stroke="var(--ink-2)" stroke-width="5" stroke-linecap="round" />
+  <line x1="92" y1="86" x2="74" y2="90" stroke="var(--ink)" stroke-width="2" />
+  <polygon points="70,91 80,86 80,95" fill="var(--ink)" />
+  <text x="22" y="150" fill="var(--ink)" font-size="12" font-family="sans-serif" font-weight="600">arm across · cradle above the elbow</text>
   <text x="22" y="170" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">don't pull on the elbow joint</text>
 `);
 
 // Figure-4 supine (Leg cross) — lying, ankle over the opposite bent knee
 const SVG_FIGURE4_SUPINE = s(`
-  <circle cx="36" cy="140" r="10" fill="#8fbc8f" />
-  <line x1="44" y1="146" x2="120" y2="146" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="120" y1="146" x2="150" y2="100" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="150" y1="100" x2="158" y2="70" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="128" y1="120" x2="174" y2="106" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <line x1="174" y1="106" x2="170" y2="78" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <text x="40" y="48" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">ankle over opposite knee · draw in</text>
+  <circle cx="36" cy="140" r="10" fill="var(--ink-2)" />
+  <line x1="44" y1="146" x2="120" y2="146" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="146" x2="150" y2="100" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="150" y1="100" x2="158" y2="70" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="128" y1="120" x2="174" y2="106" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <line x1="174" y1="106" x2="170" y2="78" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <text x="40" y="48" fill="var(--ink)" font-size="12" font-family="sans-serif" font-weight="600">ankle over opposite knee · draw in</text>
 `);
 
 // Leg up in air (supine hamstring) — one leg straight to the ceiling
 const SVG_LEG_UP = s(`
-  <circle cx="36" cy="146" r="10" fill="#8fbc8f" />
-  <line x1="44" y1="150" x2="120" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="120" y1="150" x2="200" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.5" />
-  <line x1="120" y1="150" x2="128" y2="58" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <line x1="112" y1="100" x2="128" y2="96" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
-  <text x="40" y="44" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">leg to ceiling · soft knee ok</text>
+  <circle cx="36" cy="146" r="10" fill="var(--ink-2)" />
+  <line x1="44" y1="150" x2="120" y2="150" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="150" x2="200" y2="150" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" stroke-opacity="0.5" />
+  <line x1="120" y1="150" x2="128" y2="58" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <line x1="112" y1="100" x2="128" y2="96" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
+  <text x="40" y="44" fill="var(--ink)" font-size="12" font-family="sans-serif" font-weight="600">leg to ceiling · soft knee ok</text>
   <text x="40" y="172" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">hands behind THIGH — not the knee</text>
 `);
 
 // Both knees to chest — supine double-knee hug, low back rounds
 const SVG_DOUBLE_KNEE = s(`
-  <circle cx="44" cy="142" r="10" fill="#8fbc8f" />
-  <line x1="52" y1="146" x2="120" y2="146" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="120" y1="146" x2="106" y2="100" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <line x1="106" y1="100" x2="150" y2="116" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <line x1="122" y1="148" x2="110" y2="104" stroke="#e6b450" stroke-width="6" stroke-linecap="round" stroke-opacity="0.7" />
-  <line x1="74" y1="146" x2="118" y2="118" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
-  <text x="40" y="48" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">hug both shins · let low back round</text>
+  <circle cx="44" cy="142" r="10" fill="var(--ink-2)" />
+  <line x1="52" y1="146" x2="120" y2="146" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="146" x2="106" y2="100" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <line x1="106" y1="100" x2="150" y2="116" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <line x1="122" y1="148" x2="110" y2="104" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" stroke-opacity="0.7" />
+  <line x1="74" y1="146" x2="118" y2="118" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
+  <text x="40" y="48" fill="var(--ink)" font-size="12" font-family="sans-serif" font-weight="600">hug both shins · let low back round</text>
 `);
 
 // Calf stretch on wall — back leg straight, heel pressed down, lean in
 const SVG_CALF_WALL = sNoMat(`
   <line x1="200" y1="20" x2="200" y2="160" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
   <line x1="20" y1="160" x2="200" y2="160" stroke="#4a544c" stroke-width="4" stroke-linecap="round" />
-  <circle cx="120" cy="50" r="12" fill="#8fbc8f" />
-  <line x1="120" y1="62" x2="150" y2="105" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="135" y1="82" x2="195" y2="70" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
-  <line x1="150" y1="105" x2="160" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="150" y1="105" x2="80" y2="158" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <circle cx="80" cy="158" r="4" fill="#e6b450" />
-  <text x="18" y="38" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">back leg straight · heel pressed down</text>
+  <circle cx="120" cy="50" r="12" fill="var(--ink-2)" />
+  <line x1="120" y1="62" x2="150" y2="105" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="135" y1="82" x2="195" y2="70" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
+  <line x1="150" y1="105" x2="160" y2="160" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="150" y1="105" x2="80" y2="158" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <circle cx="80" cy="158" r="4" fill="var(--ink)" />
+  <text x="18" y="38" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">back leg straight · heel pressed down</text>
 `);
 
 // Hip flexor — on a couch edge, near knee hugged in, far leg dangles = stretch
 const SVG_HIP_FLEXOR = sNoMat(`
   <rect x="20" y="92" width="150" height="14" rx="3" fill="#4a544c" />
-  <circle cx="40" cy="80" r="11" fill="#8fbc8f" />
-  <line x1="50" y1="92" x2="120" y2="92" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="120" y1="92" x2="100" y2="58" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="100" y1="58" x2="74" y2="78" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="70" y1="90" x2="98" y2="62" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
-  <line x1="158" y1="100" x2="158" y2="158" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <text x="16" y="38" fill="#e6b450" font-size="10.5" font-family="sans-serif" font-weight="600">knee hugged in · other leg hangs = stretch</text>
+  <circle cx="40" cy="80" r="11" fill="var(--ink-2)" />
+  <line x1="50" y1="92" x2="120" y2="92" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="92" x2="100" y2="58" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="100" y1="58" x2="74" y2="78" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="70" y1="90" x2="98" y2="62" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
+  <line x1="158" y1="100" x2="158" y2="158" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <text x="16" y="38" fill="var(--ink)" font-size="10.5" font-family="sans-serif" font-weight="600">knee hugged in · other leg hangs = stretch</text>
 `);
 
 // Wall angels — back to wall, arms slide up in a Y, wrists stay on the wall
 const SVG_WALL_ANGEL = sNoMat(`
   <line x1="60" y1="14" x2="60" y2="168" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
-  <circle cx="74" cy="40" r="13" fill="#8fbc8f" />
-  <line x1="74" y1="53" x2="74" y2="120" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="74" y1="120" x2="70" y2="160" stroke="#8fbc8f" stroke-width="5" stroke-linecap="round" />
-  <line x1="74" y1="66" x2="96" y2="46" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <line x1="96" y1="46" x2="104" y2="22" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <line x1="120" y1="70" x2="120" y2="40" stroke="#e6b450" stroke-width="2" stroke-dasharray="3 3" />
-  <polygon points="120,34 115,46 125,46" fill="#e6b450" />
+  <circle cx="74" cy="40" r="13" fill="var(--ink-2)" />
+  <line x1="74" y1="53" x2="74" y2="120" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="74" y1="120" x2="70" y2="160" stroke="var(--ink-2)" stroke-width="5" stroke-linecap="round" />
+  <line x1="74" y1="66" x2="96" y2="46" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <line x1="96" y1="46" x2="104" y2="22" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <line x1="120" y1="70" x2="120" y2="40" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 3" />
+  <polygon points="120,34 115,46 125,46" fill="var(--ink)" />
   <text x="16" y="172" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">wrists stay on wall · no low-back arch</text>
 `);
 
 // Scapular squeezes — back view, blades drawing toward the spine
 const SVG_SCAP_SQUEEZE = sNoMat(`
-  <rect x="92" y="50" width="56" height="86" rx="14" fill="#8fbc8f" opacity="0.5" />
+  <rect x="92" y="50" width="56" height="86" rx="14" fill="var(--ink-2)" opacity="0.5" />
   <line x1="120" y1="52" x2="120" y2="134" stroke="#4a544c" stroke-width="2" stroke-dasharray="3 3" />
-  <path d="M112 70 L96 64 L100 96 Z" fill="#e6b450" />
-  <path d="M128 70 L144 64 L140 96 Z" fill="#e6b450" />
-  <line x1="86" y1="80" x2="104" y2="80" stroke="#e6b450" stroke-width="2" />
-  <polygon points="107,80 97,75 97,85" fill="#e6b450" />
-  <line x1="154" y1="80" x2="136" y2="80" stroke="#e6b450" stroke-width="2" />
-  <polygon points="133,80 143,75 143,85" fill="#e6b450" />
-  <text x="22" y="36" fill="#e6b450" font-size="12" font-family="sans-serif" font-weight="600">squeeze blades together · hold 5s</text>
+  <path d="M112 70 L96 64 L100 96 Z" fill="var(--ink)" />
+  <path d="M128 70 L144 64 L140 96 Z" fill="var(--ink)" />
+  <line x1="86" y1="80" x2="104" y2="80" stroke="var(--ink)" stroke-width="2" />
+  <polygon points="107,80 97,75 97,85" fill="var(--ink)" />
+  <line x1="154" y1="80" x2="136" y2="80" stroke="var(--ink)" stroke-width="2" />
+  <polygon points="133,80 143,75 143,85" fill="var(--ink)" />
+  <text x="22" y="36" fill="var(--ink)" font-size="12" font-family="sans-serif" font-weight="600">squeeze blades together · hold 5s</text>
   <text x="22" y="160" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">feel it between blades, not the neck</text>
 `);
 
 // Doorway pec stretch — forearm up the frame (T-shape), step through
 const SVG_DOORWAY_PEC = sNoMat(`
   <line x1="150" y1="14" x2="150" y2="168" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
-  <circle cx="96" cy="48" r="13" fill="#8fbc8f" />
-  <line x1="96" y1="61" x2="96" y2="122" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="96" y1="74" x2="148" y2="74" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <line x1="148" y1="74" x2="148" y2="44" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <line x1="96" y1="122" x2="132" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="96" y1="122" x2="84" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
-  <line x1="108" y1="138" x2="128" y2="138" stroke="#e6b450" stroke-width="2" />
-  <polygon points="131,138 121,133 121,143" fill="#e6b450" />
-  <text x="16" y="36" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">elbow at shoulder height · step through</text>
+  <circle cx="96" cy="48" r="13" fill="var(--ink-2)" />
+  <line x1="96" y1="61" x2="96" y2="122" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="96" y1="74" x2="148" y2="74" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <line x1="148" y1="74" x2="148" y2="44" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <line x1="96" y1="122" x2="132" y2="160" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="96" y1="122" x2="84" y2="160" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
+  <line x1="108" y1="138" x2="128" y2="138" stroke="var(--ink)" stroke-width="2" />
+  <polygon points="131,138 121,133 121,143" fill="var(--ink)" />
+  <text x="16" y="36" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">elbow at shoulder height · step through</text>
 `);
 
 // Biceps stretch — side to wall, palm flat, turn body AWAY from the wall
 const SVG_BICEPS_WALL = sNoMat(`
   <line x1="40" y1="14" x2="40" y2="168" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
-  <circle cx="96" cy="48" r="13" fill="#8fbc8f" />
-  <line x1="96" y1="61" x2="96" y2="122" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="96" y1="74" x2="46" y2="74" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <line x1="46" y1="66" x2="46" y2="82" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <line x1="96" y1="122" x2="110" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="96" y1="122" x2="92" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
-  <path d="M120 100 a 26 26 0 0 1 18 22" fill="none" stroke="#e6b450" stroke-width="2" stroke-dasharray="3 3" />
-  <polygon points="138,124 134,112 144,116" fill="#e6b450" />
-  <text x="22" y="150" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">palm on wall · turn body AWAY</text>
+  <circle cx="96" cy="48" r="13" fill="var(--ink-2)" />
+  <line x1="96" y1="61" x2="96" y2="122" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="96" y1="74" x2="46" y2="74" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <line x1="46" y1="66" x2="46" y2="82" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <line x1="96" y1="122" x2="110" y2="160" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="96" y1="122" x2="92" y2="160" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" stroke-opacity="0.6" />
+  <path d="M120 100 a 26 26 0 0 1 18 22" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 3" />
+  <polygon points="138,124 134,112 144,116" fill="var(--ink)" />
+  <text x="22" y="150" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">palm on wall · turn body AWAY</text>
   <text x="22" y="168" fill="#d97757" font-size="10.5" font-family="sans-serif" font-weight="600">not a wrist stretch — wrist stays comfy</text>
 `);
 
@@ -605,12 +611,12 @@ const SVG_BICEPS_WALL = sNoMat(`
 
 // Hip-hinge START — standing tall, soft knees, neutral spine
 const SVG_HIP_HINGE_START = s(`
-  <circle cx="120" cy="40" r="13" fill="#8fbc8f" />
-  <line x1="120" y1="53" x2="120" y2="108" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="120" cy="40" r="13" fill="var(--ink-2)" />
+  <line x1="120" y1="53" x2="120" y2="108" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- arms resting on thighs -->
-  <line x1="120" y1="66" x2="108" y2="104" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <line x1="120" y1="66" x2="108" y2="104" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
   <!-- legs, slight knee bend -->
-  <line x1="120" y1="108" x2="116" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="120" y1="108" x2="116" y2="150" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- Sep 24 2026, v48 P8: was y=34, across the head (cy 40, r 13) — lifted
        above it so the words read. -->
   <text x="40" y="18" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">stand tall · soft knees</text>
@@ -619,17 +625,17 @@ const SVG_HIP_HINGE_START = s(`
 // Hip-hinge HINGED — hips travel back, flat spine, hands slide down thighs
 const SVG_HIP_HINGE_HINGED = s(`
   <!-- head out front, hips back -->
-  <circle cx="78" cy="70" r="13" fill="#8fbc8f" />
+  <circle cx="78" cy="70" r="13" fill="var(--ink-2)" />
   <!-- flat back angled forward -->
-  <line x1="88" y1="76" x2="150" y2="108" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
+  <line x1="88" y1="76" x2="150" y2="108" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
   <!-- hands sliding down the thigh -->
-  <line x1="120" y1="92" x2="138" y2="132" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+  <line x1="120" y1="92" x2="138" y2="132" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
   <!-- thigh + shin, hips pushed back -->
-  <line x1="150" y1="108" x2="138" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="150" y1="108" x2="138" y2="150" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- arrow showing hips travelling back -->
-  <line x1="178" y1="108" x2="158" y2="108" stroke="#e6b450" stroke-width="2" />
-  <polygon points="155,108 165,103 165,113" fill="#e6b450" />
-  <text x="36" y="36" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">hips back · flat spine · slide hands down</text>
+  <line x1="178" y1="108" x2="158" y2="108" stroke="var(--ink)" stroke-width="2" />
+  <polygon points="155,108 165,103 165,113" fill="var(--ink)" />
+  <text x="36" y="36" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">hips back · flat spine · slide hands down</text>
 `);
 
 // Hip-hinge WRONG — rounded low back (the danger)
@@ -645,38 +651,38 @@ const SVG_HIP_HINGE_WRONG = s(`
 // 1 kg prone row — face-down, elbow drives up, weight hangs, neutral wrist
 const SVG_PRONE_ROW_DOWN = s(`
   <!-- bench/mat figure lying face down, side view -->
-  <circle cx="56" cy="120" r="10" fill="#8fbc8f" />
-  <line x1="64" y1="124" x2="160" y2="128" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="56" cy="120" r="10" fill="var(--ink-2)" />
+  <line x1="64" y1="124" x2="160" y2="128" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- legs -->
-  <line x1="160" y1="128" x2="200" y2="132" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <line x1="160" y1="128" x2="200" y2="132" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- arm hanging straight down, weight at bottom -->
-  <line x1="82" y1="126" x2="82" y2="150" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
-  <rect x="75" y="148" width="14" height="9" rx="2" fill="#e6b450" stroke="#1a1f1c" stroke-width="1.5" />
+  <line x1="82" y1="126" x2="82" y2="150" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
+  <rect x="75" y="148" width="14" height="9" rx="2" fill="var(--ink)" stroke="#1a1f1c" stroke-width="1.5" />
   <text x="40" y="44" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">start: arm hangs · 1 kg</text>
 `);
 
 const SVG_PRONE_ROW_UP = s(`
-  <circle cx="56" cy="120" r="10" fill="#8fbc8f" />
-  <line x1="64" y1="124" x2="160" y2="128" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="160" y1="128" x2="200" y2="132" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="56" cy="120" r="10" fill="var(--ink-2)" />
+  <line x1="64" y1="124" x2="160" y2="128" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="160" y1="128" x2="200" y2="132" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- elbow drives UP toward ceiling, forearm vertical, weight raised -->
-  <line x1="82" y1="126" x2="82" y2="100" stroke="#e6b450" stroke-width="4" stroke-linecap="round" />
-  <line x1="82" y1="100" x2="84" y2="126" stroke="#e6b450" stroke-width="4" stroke-linecap="round" />
-  <rect x="77" y="120" width="14" height="9" rx="2" fill="#e6b450" stroke="#1a1f1c" stroke-width="1.5" />
-  <line x1="100" y1="104" x2="100" y2="86" stroke="#e6b450" stroke-width="2" />
-  <polygon points="100,82 95,92 105,92" fill="#e6b450" />
-  <text x="36" y="44" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">elbow drives UP · squeeze the blade</text>
+  <line x1="82" y1="126" x2="82" y2="100" stroke="var(--ink)" stroke-width="4" stroke-linecap="round" />
+  <line x1="82" y1="100" x2="84" y2="126" stroke="var(--ink)" stroke-width="4" stroke-linecap="round" />
+  <rect x="77" y="120" width="14" height="9" rx="2" fill="var(--ink)" stroke="#1a1f1c" stroke-width="1.5" />
+  <line x1="100" y1="104" x2="100" y2="86" stroke="var(--ink)" stroke-width="2" />
+  <polygon points="100,82 95,92 105,92" fill="var(--ink)" />
+  <text x="36" y="44" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">elbow drives UP · squeeze the blade</text>
   <text x="36" y="172" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">wrist stays straight — no palm load</text>
 `);
 
 // 1 kg biceps curl — neutral wrist, elbow tucked, curl the forearm up
 const SVG_BICEPS_CURL_DOWN = sNoMat(`
-  <circle cx="100" cy="40" r="13" fill="#8fbc8f" />
-  <line x1="100" y1="53" x2="100" y2="120" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="100" cy="40" r="13" fill="var(--ink-2)" />
+  <line x1="100" y1="53" x2="100" y2="120" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- upper arm tucked at side, forearm hanging down -->
-  <line x1="100" y1="70" x2="100" y2="100" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
-  <line x1="100" y1="100" x2="100" y2="135" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
-  <rect x="93" y="134" width="15" height="10" rx="2" fill="#e6b450" stroke="#1a1f1c" stroke-width="1.5" />
+  <line x1="100" y1="70" x2="100" y2="100" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
+  <line x1="100" y1="100" x2="100" y2="135" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
+  <rect x="93" y="134" width="15" height="10" rx="2" fill="var(--ink)" stroke="#1a1f1c" stroke-width="1.5" />
   <!-- Sep 24 2026, v48 P8: the caption sat at y=36, across the head (cy 40,
        r 13), unreadable in the final walk — it moves under the figure, where
        the UP frame keeps its own captions. -->
@@ -684,15 +690,15 @@ const SVG_BICEPS_CURL_DOWN = sNoMat(`
 `);
 
 const SVG_BICEPS_CURL_UP = sNoMat(`
-  <circle cx="100" cy="40" r="13" fill="#8fbc8f" />
-  <line x1="100" y1="53" x2="100" y2="120" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
+  <circle cx="100" cy="40" r="13" fill="var(--ink-2)" />
+  <line x1="100" y1="53" x2="100" y2="120" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
   <!-- upper arm stays vertical, forearm curls up -->
-  <line x1="100" y1="70" x2="100" y2="100" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
-  <line x1="100" y1="100" x2="118" y2="74" stroke="#e6b450" stroke-width="4" stroke-linecap="round" />
-  <rect x="113" y="66" width="15" height="10" rx="2" fill="#e6b450" stroke="#1a1f1c" stroke-width="1.5" />
-  <path d="M104 118 a 30 30 0 0 1 18 -40" fill="none" stroke="#e6b450" stroke-width="2" stroke-dasharray="3 3" />
-  <polygon points="122,80 112,76 116,88" fill="#e6b450" />
-  <text x="30" y="160" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">curl up · keep the wrist straight</text>
+  <line x1="100" y1="70" x2="100" y2="100" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
+  <line x1="100" y1="100" x2="118" y2="74" stroke="var(--ink)" stroke-width="4" stroke-linecap="round" />
+  <rect x="113" y="66" width="15" height="10" rx="2" fill="var(--ink)" stroke="#1a1f1c" stroke-width="1.5" />
+  <path d="M104 118 a 30 30 0 0 1 18 -40" fill="none" stroke="var(--ink)" stroke-width="2" stroke-dasharray="3 3" />
+  <polygon points="122,80 112,76 116,88" fill="var(--ink)" />
+  <text x="30" y="160" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">curl up · keep the wrist straight</text>
   <text x="30" y="176" fill="#d97757" font-size="11" font-family="sans-serif" font-weight="600">don't swing the body for momentum</text>
 `);
 
@@ -703,27 +709,27 @@ const SVG_BICEPS_CURL_UP = sNoMat(`
 
 // IWYT raises — TOP-DOWN prone figure, arms in the T shape, thumbs up, small lift.
 const SVG_IWYT = sNoMat(`
-  <circle cx="120" cy="42" r="12" fill="#8fbc8f" />
-  <line x1="120" y1="54" x2="120" y2="128" stroke="#8fbc8f" stroke-width="9" stroke-linecap="round" />
-  <line x1="120" y1="74" x2="58" y2="74" stroke="#e6b450" stroke-width="7" stroke-linecap="round" />
-  <line x1="120" y1="74" x2="182" y2="74" stroke="#e6b450" stroke-width="7" stroke-linecap="round" />
-  <circle cx="58" cy="74" r="4.5" fill="#e6b450" />
-  <circle cx="182" cy="74" r="4.5" fill="#e6b450" />
-  <line x1="90" y1="92" x2="90" y2="80" stroke="#e6b450" stroke-width="2" />
-  <polygon points="90,76 86,84 94,84" fill="#e6b450" />
-  <text x="34" y="160" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">thumbs UP · lift from the upper back</text>
+  <circle cx="120" cy="42" r="12" fill="var(--ink-2)" />
+  <line x1="120" y1="54" x2="120" y2="128" stroke="var(--ink-2)" stroke-width="9" stroke-linecap="round" />
+  <line x1="120" y1="74" x2="58" y2="74" stroke="var(--ink)" stroke-width="7" stroke-linecap="round" />
+  <line x1="120" y1="74" x2="182" y2="74" stroke="var(--ink)" stroke-width="7" stroke-linecap="round" />
+  <circle cx="58" cy="74" r="4.5" fill="var(--ink)" />
+  <circle cx="182" cy="74" r="4.5" fill="var(--ink)" />
+  <line x1="90" y1="92" x2="90" y2="80" stroke="var(--ink)" stroke-width="2" />
+  <polygon points="90,76 86,84 94,84" fill="var(--ink)" />
+  <text x="34" y="160" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">thumbs UP · lift from the upper back</text>
 `);
 
 // Wall lean — SIDE view, standing lean toward a wall on the right, palms flat.
 const SVG_WALL_LEAN = sNoMat(`
   <line x1="204" y1="16" x2="204" y2="164" stroke="#4a544c" stroke-width="6" stroke-linecap="round" />
-  <circle cx="70" cy="52" r="12" fill="#8fbc8f" />
-  <line x1="74" y1="63" x2="104" y2="146" stroke="#8fbc8f" stroke-width="8" stroke-linecap="round" />
-  <line x1="80" y1="78" x2="198" y2="70" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-  <line x1="196" y1="62" x2="196" y2="78" stroke="#e6b450" stroke-width="5" stroke-linecap="round" />
-  <line x1="104" y1="146" x2="88" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <line x1="104" y1="146" x2="120" y2="160" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <text x="20" y="176" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">palms flat · light weight only</text>
+  <circle cx="70" cy="52" r="12" fill="var(--ink-2)" />
+  <line x1="74" y1="63" x2="104" y2="146" stroke="var(--ink-2)" stroke-width="8" stroke-linecap="round" />
+  <line x1="80" y1="78" x2="198" y2="70" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+  <line x1="196" y1="62" x2="196" y2="78" stroke="var(--ink)" stroke-width="5" stroke-linecap="round" />
+  <line x1="104" y1="146" x2="88" y2="160" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <line x1="104" y1="146" x2="120" y2="160" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+  <text x="20" y="176" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">palms flat · light weight only</text>
 `);
 
 // ---------- THE DATA ----------
@@ -738,14 +744,14 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
     frames: [
       {
         svg: sNoMat(`
-          <circle cx="60" cy="55" r="13" fill="#8fbc8f" />
-          <line x1="60" y1="68" x2="60" y2="115" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-          <line x1="60" y1="115" x2="40" y2="155" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-          <line x1="60" y1="115" x2="85" y2="155" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-          <line x1="60" y1="80" x2="40" y2="105" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
-          <line x1="60" y1="80" x2="85" y2="100" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
+          <circle cx="60" cy="55" r="13" fill="var(--ink-2)" />
+          <line x1="60" y1="68" x2="60" y2="115" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+          <line x1="60" y1="115" x2="40" y2="155" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+          <line x1="60" y1="115" x2="85" y2="155" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+          <line x1="60" y1="80" x2="40" y2="105" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
+          <line x1="60" y1="80" x2="85" y2="100" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
           <!-- sun -->
-          <circle cx="190" cy="40" r="14" fill="#e6b450" />
+          <circle cx="190" cy="40" r="14" fill="var(--ink)" />
           <text x="100" y="60" fill="#a8a59c" font-size="13" font-family="sans-serif" font-weight="600">outside · sunlight matters</text>
         `),
         do: 'Conversational pace — talk full sentences without panting.',
@@ -1074,11 +1080,11 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
       },
       {
         svg: sNoMat(`
-          <text x="30" y="60" fill="#8fbc8f" font-size="14" font-family="sans-serif" font-weight="700">45 sec · each side</text>
+          <text x="30" y="60" fill="var(--ink-2)" font-size="14" font-family="sans-serif" font-weight="700">45 sec · each side</text>
           <text x="30" y="90" fill="#a8a59c" font-size="13" font-family="sans-serif">breathe slow</text>
           <text x="30" y="120" fill="#a8a59c" font-size="13" font-family="sans-serif">switch ankle, repeat</text>
-          <circle cx="195" cy="100" r="22" fill="none" stroke="#e6b450" stroke-width="3" />
-          <text x="185" y="106" fill="#e6b450" font-size="16" font-family="sans-serif" font-weight="700">45s</text>
+          <circle cx="195" cy="100" r="22" fill="none" stroke="var(--ink)" stroke-width="3" />
+          <text x="185" y="106" fill="var(--ink)" font-size="16" font-family="sans-serif" font-weight="700">45s</text>
         `),
         do: '45 sec hold · breathe slow · switch sides.',
         avoid: "Don't push for depth — opening, not deepening.",
@@ -1102,11 +1108,11 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
       },
       {
         svg: sNoMat(`
-          <text x="30" y="60" fill="#8fbc8f" font-size="14" font-family="sans-serif" font-weight="700">stop at 2/10 stretch</text>
+          <text x="30" y="60" fill="var(--ink-2)" font-size="14" font-family="sans-serif" font-weight="700">stop at 2/10 stretch</text>
           <text x="30" y="90" fill="#a8a59c" font-size="13" font-family="sans-serif">tall + shallow beats</text>
           <text x="30" y="110" fill="#a8a59c" font-size="13" font-family="sans-serif">collapsed + deep</text>
-          <circle cx="195" cy="100" r="22" fill="none" stroke="#e6b450" stroke-width="3" />
-          <text x="187" y="106" fill="#e6b450" font-size="16" font-family="sans-serif" font-weight="700">60s</text>
+          <circle cx="195" cy="100" r="22" fill="none" stroke="var(--ink)" stroke-width="3" />
+          <text x="187" y="106" fill="var(--ink)" font-size="16" font-family="sans-serif" font-weight="700">60s</text>
         `),
         do: "Stop at 2/10 stretch — this isn't a depth competition.",
         avoid: "Don't reach with your hands — arms in lap.",
@@ -1149,7 +1155,7 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
       },
       {
         svg: sNoMat(`
-          <text x="30" y="50" fill="#8fbc8f" font-size="14" font-family="sans-serif" font-weight="700">3 sec down · slow</text>
+          <text x="30" y="50" fill="var(--ink-2)" font-size="14" font-family="sans-serif" font-weight="700">3 sec down · slow</text>
           <text x="30" y="80" fill="#a8a59c" font-size="13" font-family="sans-serif">height isn't the point</text>
           <text x="30" y="100" fill="#a8a59c" font-size="13" font-family="sans-serif">glute medius is</text>
           <text x="30" y="130" fill="#a8a59c" font-size="13" font-family="sans-serif">12 reps each side</text>
@@ -1176,8 +1182,8 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
       },
       {
         svg: sNoMat(`
-          <text x="30" y="50" fill="#8fbc8f" font-size="14" font-family="sans-serif" font-weight="700">balance a glass of</text>
-          <text x="30" y="70" fill="#8fbc8f" font-size="14" font-family="sans-serif" font-weight="700">water on your pelvis</text>
+          <text x="30" y="50" fill="var(--ink-2)" font-size="14" font-family="sans-serif" font-weight="700">balance a glass of</text>
+          <text x="30" y="70" fill="var(--ink-2)" font-size="14" font-family="sans-serif" font-weight="700">water on your pelvis</text>
           <text x="30" y="105" fill="#a8a59c" font-size="13" font-family="sans-serif">hips stay LEVEL</text>
           <text x="30" y="130" fill="#a8a59c" font-size="13" font-family="sans-serif">8 reps each side</text>
         `),
@@ -1199,13 +1205,13 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
       {
         svg: sNoMat(`
           <line x1="20" y1="155" x2="220" y2="155" stroke="#4a544c" stroke-width="3" />
-          <circle cx="38" cy="142" r="10" fill="#8fbc8f" />
-          <line x1="46" y1="145" x2="125" y2="145" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-          <line x1="125" y1="145" x2="175" y2="140" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-          <line x1="175" y1="140" x2="210" y2="148" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-          <line x1="125" y1="145" x2="170" y2="90" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-          <line x1="170" y1="90" x2="200" y2="115" stroke="#e6b450" stroke-width="6" stroke-linecap="round" />
-          <text x="55" y="40" fill="#e6b450" font-size="11" font-family="sans-serif" font-weight="600">slow pedal · alternate</text>
+          <circle cx="38" cy="142" r="10" fill="var(--ink-2)" />
+          <line x1="46" y1="145" x2="125" y2="145" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+          <line x1="125" y1="145" x2="175" y2="140" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+          <line x1="175" y1="140" x2="210" y2="148" stroke="var(--ink-2)" stroke-width="6" stroke-linecap="round" />
+          <line x1="125" y1="145" x2="170" y2="90" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+          <line x1="170" y1="90" x2="200" y2="115" stroke="var(--ink)" stroke-width="6" stroke-linecap="round" />
+          <text x="55" y="40" fill="var(--ink)" font-size="11" font-family="sans-serif" font-weight="600">slow pedal · alternate</text>
         `),
         do: 'Slow alternation — like pedaling underwater.',
         avoid: "Don't speed up — this is a control exercise, not cardio.",
