@@ -296,9 +296,8 @@ function getHowToFirstExpand(): boolean {
   return getSetting<boolean>(SETTING_KEYS.howToFirstExpand, true);
 }
 
-function getAutoSuggestEnabled(): boolean {
-  return getSetting<boolean>(SETTING_KEYS.autoSuggest, true);
-}
+// v48 · P4 (Sep 24 2026): getAutoSuggestEnabled() retired with its toggle; the
+// key stays listed so an old phone's stored value is simply ignored.
 
 const SUPABASE_URL = 'https://hpiyvnfhoqnnnotrmwaz.supabase.co';
 const SUPABASE_ANON_KEY =
@@ -3729,6 +3728,31 @@ async function fetchFitSteps(startMs: number, endMs: number): Promise<number | n
   }
 }
 
+// v48 · P4 (Sep 24 2026) — today's steps from Google Fit, zero taps (DECISIONS
+// §2 #8): one quiet "· 4,210 steps today" on home's walk row. Asked once after
+// boot; shown only when Fit answers — when it doesn't, nothing is invented
+// (fail-loud: a missing number stays missing, never a 0).
+let stepsToday: number | null = null;
+
+async function fetchStepsToday(): Promise<void> {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const n = await fetchFitSteps(midnight.getTime(), Date.now());
+  if (n === null) return;
+  stepsToday = n;
+  if (state.screen === 'home') render();
+}
+
+// Test hook (automation only — Fit is off under navigator.webdriver).
+if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
+  (window as unknown as { __wtSetStepsToday?: (n: number | null) => void }).__wtSetStepsToday = (
+    n
+  ) => {
+    stepsToday = n;
+    if (state.screen === 'home') render();
+  };
+}
+
 // ---------- state machine ----------
 
 function getCurrentWorkout(): Workout | null {
@@ -4203,6 +4227,71 @@ function startTimedExercise(): void {
   else startPreCountdown(go);
 }
 
+// ---------- v48 · P4 (Sep 24 2026): the "Done ✓" card's firsts ----------
+// Her words today: "look at home ux ui and make it better i feel like its a bit
+// all over the place". After Save, home used to light the NEXT workout as
+// "Today's pick" minutes later; now a Done card witnesses tonight, with any
+// firsts ("split squat · first elliptical ride"). Per-phone display memory
+// only — the session row itself is the record; without this key the card still
+// reads "Done ✓ · Workout A · 1 of 3 this week".
+const LAST_DONE_KEY = 'workout-tracker:last-done';
+
+type LastDone = { id: string; firsts: string[] };
+
+// Names that were "New tonight" in the session being saved, plus "first
+// elliptical ride" when no earlier session was on the elliptical. A session
+// stopped early names no move firsts (she may not have reached them); finish-
+// here at round 1 skipped the upper-back block, so its moves don't count.
+function sessionFirsts(onElliptical: boolean): string[] {
+  const out: string[] = [];
+  const id = state.selectedWorkout;
+  const w = getCurrentWorkout();
+  if (id && w && !state.stoppedEarlyAt) {
+    const phases: Phase[] =
+      state.finishHereLitePrev !== null
+        ? ['warmup', 'main', 'cooldown']
+        : ['warmup', 'main', 'upperBack', 'cooldown'];
+    for (const p of phases) {
+      for (const ex of w[p] ?? []) {
+        const name = displayName(ex.name).toLowerCase();
+        if (isNewTonight(ex, id) && !out.includes(name)) out.push(name);
+      }
+    }
+  }
+  if (onElliptical) {
+    const rodeBefore = loadLogs().some(
+      (l) =>
+        l.cardioLane === 'elliptical' ||
+        (typeof l.ellipticalLevel === 'number' && l.ellipticalLevel > 0) ||
+        /cardio: elliptical\b/.test(l.notes ?? '')
+    );
+    if (!rodeBefore) out.push('first elliptical ride');
+  }
+  return out;
+}
+
+function saveLastDone(d: LastDone): void {
+  try {
+    localStorage.setItem(LAST_DONE_KEY, JSON.stringify(d));
+  } catch {
+    // storage full or blocked — the Done card still shows without firsts
+  }
+}
+
+function loadLastDone(): LastDone | null {
+  try {
+    const raw = localStorage.getItem(LAST_DONE_KEY);
+    if (!raw) return null;
+    const v: unknown = JSON.parse(raw);
+    if (!v || typeof v !== 'object') return null;
+    const o = v as { id?: unknown; firsts?: unknown };
+    if (typeof o.id !== 'string' || !Array.isArray(o.firsts)) return null;
+    return { id: o.id, firsts: o.firsts.filter((f): f is string => typeof f === 'string') };
+  } catch {
+    return null;
+  }
+}
+
 // v45: one save at a time. The walk lane awaits Google Fit (up to 5 s) before
 // saving, and a second tap on "Save & finish" in that window wrote a 2nd row.
 let savingLog = false;
@@ -4286,6 +4375,10 @@ async function saveCompletedSession(): Promise<void> {
     ]
       .filter((s): s is string => s !== null)
       .join(' · ') || null;
+  // v48 · P4 (Sep 24 2026): the firsts of THIS session, worked out before the
+  // save (after it, "New tonight" is already false). Home's "Done ✓" card
+  // shows them until midnight — uxui post-log 4/5: "the win went unwitnessed".
+  const firsts = sessionFirsts(onElliptical);
   const stored = saveLog({
     date: completedAt,
     workout: state.selectedWorkout,
@@ -4312,6 +4405,7 @@ async function saveCompletedSession(): Promise<void> {
     armFeel: null, // v48: P5 fills the one-tap Easy/Right/Hard
     voicePlays: state.voicePlays,
   });
+  if (stored.id) saveLastDone({ id: stored.id, firsts });
   resetState();
   render();
   state.syncStatus = 'syncing';
@@ -4778,7 +4872,14 @@ async function pullFromSupabase(): Promise<void> {
 }
 
 async function flushPendingSyncs(): Promise<void> {
-  if (syncDisabled()) return;
+  if (syncDisabled()) {
+    // v48 · P4 (Sep 24 2026): under automation nothing syncs, so say so rather
+    // than sit on "syncing…" forever (walk-in-her-shoes: the pill never settled
+    // in the test setup). Nothing pending → the indicator is empty.
+    state.syncStatus = 'offline';
+    updateSyncIndicator();
+    return;
+  }
   const pendingLogs = loadLogs().filter((l) => !l.synced && l.id);
   if (pendingLogs.length === 0) {
     state.syncStatus = 'synced';
@@ -4807,8 +4908,10 @@ function syncIndicatorText(): string {
   const pending = loadLogs().filter((l) => !l.synced).length;
   if (state.syncStatus === 'syncing') return 'syncing…';
   if (pending > 0) return `offline · ${pending} pending`;
-  if (loadLogs().length === 0) return '';
-  return 'synced ✓';
+  // v48 · P4 (Sep 24 2026): "synced ✓" hides — it was a third status line above
+  // the first action (assumptions, Kill). The word shows only when something
+  // is syncing or waiting, which is exactly when it matters.
+  return '';
 }
 
 // ---------- formatting ----------
@@ -5613,7 +5716,11 @@ function buildWeeklyTargetRows(logs: LogEntry[]): WeeklyTargetRow[] {
 // Full extracted code at archive/year-grid-2026-05-15/year-grid.archived.ts.
 
 // 3-per-week target view. One row per program week × 3 slot pills.
-function renderWeeklyTargetGrid(): string {
+// v48 · P4 (Sep 24 2026): lives at the bottom of Weekly review now, collapsed
+// as "Week by week ▸" (DECISIONS Q3 — her Aug 30 "consistency should be
+// collapsible"; Weekly review is where looking back lives). One <details>, so
+// it's still one tap open.
+function renderWeeklyTargetGrid(summaryLabel = 'Consistency'): string {
   const logs = loadLogs();
   const rows = buildWeeklyTargetRows(logs);
   const currentWeekCount = getWeekCount(0);
@@ -5660,7 +5767,7 @@ function renderWeeklyTargetGrid(): string {
   return `
     <details class="consistency-wrap">
       <summary class="next-week-summary">
-        <span class="next-week-summary-label">Consistency</span>
+        <span class="next-week-summary-label">${summaryLabel}</span>
         <span class="next-week-summary-meta">${currentWeekCount} of 3 this week${swingNote}</span>
         <span class="next-week-chev">▸</span>
       </summary>
@@ -5879,47 +5986,168 @@ function renderGearCard(): string {
   `;
 }
 
+// ---------------------------------------------------------------------------
+// HOME (v48 · P4, Sep 24 2026). Her words today: "look at home ux ui and make
+// it better i feel like its a bit all over the place". DECISIONS-v48 §1 Q1-Q3,
+// §2 #1-2 #8, §5 Home rows. One next action (the "Up next" hero — the only
+// sage on the screen), B/C one chip away, ONE honest week line, a one-row walk,
+// two quiet doors. Home used to be 14,025 px expanded with five doors to the
+// same 39 rows (uxui home 4/5); everything that left is one tap from where it
+// now lives (Weekly review › Week by week, Settings › Gear, Progress › Program).
+// ---------------------------------------------------------------------------
+
+// The header's one line: the week she's in. When the loaded plan is a
+// different week (no Week 5 encoded yet on Sat Sep 26), say so — fail-loud
+// (ux.md #10: the banner said Week 5 while pre-log said Week 4). Returns HTML:
+// the plan note is a smaller span so the title stays on one line.
+function homeWeekTitle(): string {
+  const week = getProgramWeek();
+  if (week.skippedLabel) return `${week.skippedLabel} week`;
+  const title = `${week.round > 1 ? `Round ${week.round} · ` : ''}Week ${week.num}`;
+  const plan = getWeekPlan();
+  const planRound = plan.round ?? 1;
+  if (plan.weekNum === week.num && planRound === week.round) return title;
+  const planName = `${planRound !== week.round && planRound > 1 ? `R${planRound} · ` : ''}Week ${plan.weekNum}`;
+  return `${title}<span class="h1-plan"> · ${planName}'s plan</span>`;
+}
+
+// "v48 · Sep 24 · 21:40" — the year stays in Settings › About (DECISIONS Q1:
+// her Jul 1 rule "put time stamp too … across all apps", on one line).
+function homeVersionTag(): string {
+  return `${APP_VERSION} · ${BUILD_DATE.replace(/,\s*\d{4}/, '')}`;
+}
+
+// Minutes from the workout's own description ("… · ~40 min"); 30 if it has none.
+function workoutMinutesLabel(w: Workout): string {
+  const m = /~(\d+)\s*min/.exec(w.description);
+  return `~${m?.[1] ?? '30'} min`;
+}
+
+// The hero's cardio line: the lane she used last time + this workout's minutes
+// (walk-in-her-shoes: "A says 'cardio optional' → 'Today: elliptical 10 min'").
+function heroCardioLine(w: Workout): string {
+  const step = w.warmup.find((e) => e.name === 'Outdoor walk');
+  if (!step) return '';
+  const minutes = walkStepMinutes(step);
+  const lane = lastCardioLane();
+  return lane ? `Cardio: ${lane} ${minutes} min` : `Cardio: ${minutes} min, your pick`;
+}
+
+// Moves new in this workout tonight (P2's isNewTonight), lower-cased, once each.
+function newTonightNames(w: Workout, id: WorkoutId): string[] {
+  const out: string[] = [];
+  const phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
+  for (const p of phases) {
+    for (const ex of w[p] ?? []) {
+      const name = displayName(ex.name).toLowerCase();
+      if (isNewTonight(ex, id) && !out.includes(name)) out.push(name);
+    }
+  }
+  return out;
+}
+
+// "B · Glutes" — the letter and the first word of the workout's name.
+function workoutChipLabel(w: Workout): string {
+  return `${w.id} · ${w.name.split(/[\s+]+/)[0] ?? ''}`;
+}
+
+function renderWorkoutChips(exclude: WorkoutId): string {
+  const chips = (['A', 'B', 'C'] as WorkoutId[])
+    .filter((id) => id !== exclude)
+    .map((id) => {
+      const w = getWorkoutById(id);
+      return `<button class="btn-chip home-chip" data-workout="${id}" type="button" aria-label="Start Workout ${id} · ${escapeHtml(w.name)}">${escapeHtml(workoutChipLabel(w))}</button>`;
+    })
+    .join('');
+  return `<div class="home-chips"><span class="home-chips-lead">or do</span>${chips}</div>`;
+}
+
+// The "Up next" hero — the ONE sage thing on home. The whole card is the tap
+// target (→ pre-log), so Home → working out stays 2 taps (guide §1).
+function renderUpNextHero(id: WorkoutId): string {
+  const w = getWorkoutById(id);
+  const fresh = newTonightNames(w, id);
+  const cardio = heroCardioLine(w);
+  const rounds = `${w.rounds} round${w.rounds === 1 ? '' : 's'}`;
+  return `
+    <button class="workout-card workout-card-pick home-hero" data-workout="${id}" type="button">
+      <span class="hero-label">Up next</span>
+      <span class="hero-title">Workout ${id}</span>
+      <span class="hero-line">${escapeHtml(`${w.name} · ${rounds} · ${workoutMinutesLabel(w)}`)}</span>
+      ${fresh.length ? `<span class="hero-line hero-new">New tonight: ${escapeHtml(fresh.join(' · '))}</span>` : ''}
+      ${cardio ? `<span class="hero-line">${escapeHtml(cardio)}</span>` : ''}
+      <span class="hero-start" aria-hidden="true">Start</span>
+    </button>`;
+}
+
+// After Save, until midnight: the win is witnessed instead of the next workout
+// lighting up minutes later (uxui post-log 4/5). Not sage — nothing to do here.
+function renderDoneTodayCard(log: LogEntry, weekCount: number): string {
+  const lastDone = loadLastDone();
+  const firsts = lastDone && lastDone.id === log.id ? lastDone.firsts : [];
+  const km =
+    typeof log.ellipticalKm === 'number' && log.ellipticalKm > 0 ? `${log.ellipticalKm} km` : '';
+  const firstsLine = firsts.length
+    ? `Firsts: ${[...firsts, ...(km ? [km] : [])].join(' · ')}`
+    : km
+      ? `Elliptical · ${km}`
+      : '';
+  return `
+    <div class="card home-done-card" id="home-done-card">
+      <div class="home-done-title">Done ✓ · Workout ${log.workout}</div>
+      <div class="home-done-line">${weekCount} of 3 this week</div>
+      ${firstsLine ? `<div class="home-done-firsts" dir="auto">${escapeHtml(firstsLine)}</div>` : ''}
+    </div>`;
+}
+
 function renderHome(): string {
   const logs = loadLogs();
   const week = getProgramWeek();
   const weekRange = formatWeekRange(week.start, week.end);
-  // Progress card + dot strip follow viewedWeekOffset so the user can step
-  // back through past weeks. Default offset 0 = current Sat-Fri week.
-  const viewedWeek = getViewedProgramWeek(viewedWeekOffset);
-  const viewedWeekRange = formatWeekRange(viewedWeek.start, viewedWeek.end);
-  const viewedWeekCount = getWeekCount(viewedWeekOffset);
-  // Ship 6: respect "Auto-suggest today's workout" setting. When off, no card
-  // is marked as the pick — all three render with the quieter treatment.
-  const todaysPick: WorkoutId | null = getAutoSuggestEnabled() ? getTodaysPick() : null;
-  const lastLog = logs[0];
+  // v48 · P4: home always shows THIS week (the ‹ › arrows move to Weekly review
+  // in P6; viewedWeekOffset stays for that screen).
+  const weekCount = getWeekCount(0);
+  // Newest by DATE (writeLogs keeps unsynced rows first, not newest first).
+  const lastLog = [...logs].sort((a, b) => b.date.localeCompare(a.date))[0];
+  const doneToday =
+    lastLog && localIsoDate(new Date(lastLog.date)) === localIsoDate(new Date()) ? lastLog : null;
+  // The auto-suggest setting no longer switches the hero off (DECISIONS §5:
+  // the hero is always today's rotation; B/C are one chip away).
+  const pick = getTodaysPick();
   const weekWalks = walksThisWeek();
   const walkStartedAt = activeWalkStart();
-  const weekDots = getWeekDots(viewedWeekOffset);
-  const canGoBack = logs.some((l) => {
-    const t = new Date(l.date).getTime();
-    return t < saturdayForOffset(viewedWeekOffset).getTime();
-  });
-  const isCurrentWeek = viewedWeekOffset === 0;
-  // v46: Saturday is the swing day (v42), and the card must say so where the
-  // big number is. The night she closed Week 3 with a Saturday session, home
-  // read "0 OF 3 THIS WEEK" next to a lit Saturday dot — the win invisible at
-  // the exact moment she earned it (UX audit Sep 24). On a Saturday whose
-  // session swung back, the card carries the week it closed; on a Saturday
-  // morning with last week at 1-2, one quiet line says today will count for it.
-  const todayIsSaturday = new Date().getDay() === 6;
-  const swungToday =
-    isCurrentWeek && todayIsSaturday ? swungOutOfWeek(logs, saturdayForOffset(0)) : 0;
+  const weekDots = getWeekDots(0);
+
+  // DECISIONS Q2 — the Saturday swing in WORDS, every day (not only on
+  // Saturdays): "0 of 3 this week · Sat's C went to Week 3 · 39 total".
+  const thisSaturday = saturdayForOffset(0);
+  const attribution = attributeSessionsToWeeks(logs);
+  const swungLogs = logs
+    .filter(
+      (l) =>
+        calendarSaturdayMs(l.date) === thisSaturday.getTime() &&
+        attribution.get(l) !== thisSaturday.getTime()
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
   const lastWeek = getViewedProgramWeek(1);
   const lastWeekCount = getWeekCount(1);
-  const lastWeekTitle = `${lastWeek.round > 1 ? `R${lastWeek.round} · ` : ''}Week ${lastWeek.num}`;
+  const lastWeekTitle = lastWeek.skippedLabel
+    ? `the ${lastWeek.skippedLabel.toLowerCase()} week`
+    : `Week ${lastWeek.num}`;
+  const swingWords =
+    swungLogs.length > 0
+      ? ` · Sat's ${swungLogs.map((l) => l.workout).join(' + ')} went to ${lastWeekTitle}`
+      : '';
+  const weekLine = `${weekCount} of 3 this week${swingWords} · ${logs.length} total`;
+  // Saturday morning, last week still at 1-2: one quiet line says today will
+  // count for it (v46, kept).
   const saturdayNote =
-    isCurrentWeek &&
-    todayIsSaturday &&
-    swungToday === 0 &&
-    viewedWeekCount === 0 &&
+    new Date().getDay() === 6 &&
+    swungLogs.length === 0 &&
+    weekCount === 0 &&
     lastWeekCount > 0 &&
     lastWeekCount < SESSIONS_PER_WEEK_TARGET
-      ? `<p class="gear-note swing-note">Last week's at ${lastWeekCount} — today's session will count for it.</p>`
+      ? `<p class="swing-note">Last week's at ${lastWeekCount} — today's session will count for it.</p>`
       : '';
 
   const dotsHtml = weekDots
@@ -5927,7 +6155,7 @@ function renderHome(): string {
       const cls = d.workout ? `dot dot-${d.workout}` : 'dot dot-empty';
       const clickAttr = d.logId ? `data-detail="${escapeHtml(d.logId)}"` : '';
       return `
-        <button class="week-dot ${cls}" ${clickAttr} type="button" aria-label="${d.letter} ${formatDate(d.date.toISOString())}${d.workout ? ` workout ${d.workout}` : ' no workout'}">
+        <button class="week-dot ${cls}" ${clickAttr} type="button" ${d.logId ? '' : 'tabindex="-1"'} aria-label="${d.letter} ${formatDate(d.date.toISOString())}${d.workout ? ` workout ${d.workout}` : ' no workout'}">
           <span class="week-dot-label">${d.letter}</span>
           <span class="week-dot-bubble">${d.workout ?? ''}</span>
         </button>
@@ -5935,152 +6163,62 @@ function renderHome(): string {
     })
     .join('');
 
-  const recentHtml = logs
-    .slice(0, 5)
-    .map((l) => {
-      const idAttr = l.id ? `data-detail="${escapeHtml(l.id)}"` : '';
-      const duration = l.durationSec ? formatDuration(l.durationSec) : '—';
-      const trend = l.wallSitSec > 0 ? getWallSitTrend(logs, l.id ?? null) : [];
-      const spark = renderSparkline(trend);
-      return `
-      <button class="history-row history-row-btn" ${idAttr} type="button">
-        <span class="history-workout-badge">${l.workout}</span>
-        <div>
-          <div class="history-date">${formatDate(l.date)} · ${duration}${spark ? ` <span class="history-sparkline-wrap" aria-hidden="false">${spark}</span>` : ''}</div>
-          ${l.word ? `<div class="history-word">"${escapeHtml(l.word)}"</div>` : ''}
-        </div>
-        <div class="history-meta">›</div>
-      </button>
-    `;
-    })
-    .join('');
-
-  const lastLine = lastLog
-    ? `Last: ${lastLog.workout} · ${formatDate(lastLog.date)} · capacity ${lastLog.capacityBefore ?? '—'}→${lastLog.capacityAfter ?? '—'}`
-    : 'No sessions yet — pick A to start.';
+  // The walk row (DECISIONS §4, slow walking): one row, no paragraph.
+  const walkTrail = [
+    weekWalks > 0 ? `${weekWalks} this week` : '',
+    stepsToday !== null ? `${stepsToday.toLocaleString('en-US')} steps today` : '',
+  ]
+    .filter((s) => s !== '')
+    .join(' · ');
+  const walkRow = walkStartedAt
+    ? `<div class="walk-row">
+         <span class="walk-text"><span id="walk-live">${walkLiveText(walkStartedAt)}</span></span>
+         <div class="walk-btn-group">
+           <button class="walk-log-btn walk-log-btn-active" id="finish-walk" type="button">■ Done</button>
+           <button class="walk-cancel-btn" id="cancel-walk" type="button">Cancel</button>
+         </div>
+       </div>`
+    : `<div class="walk-row">
+         <button class="walk-log-btn" id="log-walk-start" type="button">🚶 Start a walk</button>
+         <span class="walk-text">${walkTrail}</span>
+       </div>`;
 
   return `
     <div class="home-header">
       <div class="home-header-title">
-        <h1>Workout Tracker</h1>
-        <span class="app-version" aria-label="Build version">${APP_VERSION} · ${BUILD_DATE}</span>
+        <h1>${homeWeekTitle()}</h1>
+        <span class="app-version" aria-label="Build version">${homeVersionTag()}</span>
       </div>
       <button class="settings-icon-btn" id="open-settings" type="button" aria-label="Open settings" title="Settings">
         <span class="settings-icon-glyph" aria-hidden="true">⚙</span>
       </button>
     </div>
-    <p class="subtitle">Three rotating sessions. Show up 3x/week.</p>
-    <div class="week-banner">${week.skippedLabel ? `${week.skippedLabel} week` : `${week.round > 1 ? `Round ${week.round} · ` : ''}Week ${week.num}`} · ${weekRange}</div>
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
     ${staleSnapshot ? renderStaleSessionCard(staleSnapshot) : ''}
 
-    <h3>Pick today's workout</h3>
-    <div class="workout-picker">
-      ${(['A', 'B', 'C'] as WorkoutId[])
-        .map((id) => {
-          const w = getWorkoutById(id);
-          const isPick = id === todaysPick;
-          return `
-        <button class="workout-card ${isPick ? 'workout-card-pick' : ''}" data-workout="${id}">
-          <span class="workout-card-monogram" aria-hidden="true">${w.id}</span>
-          ${isPick ? '<span class="workout-card-pick-badge">Today\'s pick</span>' : ''}
-          <div class="workout-card-header">
-            <span class="workout-card-title">${w.id} · ${w.name}</span>
-            <span class="workout-card-badge">${w.rounds === 1 ? 'easy' : `${w.rounds} rounds`}</span>
-          </div>
-          <div class="workout-card-desc">${w.description}</div>
-        </button>
-      `;
-        })
-        .join('')}
-    </div>
-    <div class="last-line">${lastLine}</div>
+    ${doneToday ? renderDoneTodayCard(doneToday, weekCount) : renderUpNextHero(pick)}
+    ${renderWorkoutChips(doneToday ? doneToday.workout : pick)}
 
-    <div class="card">
-      <div class="week-nav">
-        <button class="week-nav-btn" id="prev-week" type="button" ${canGoBack ? '' : 'disabled'} aria-label="Previous week">‹</button>
-        <button class="week-nav-label week-nav-label-btn" id="open-weekly-review" type="button" aria-label="Open weekly review for ${isCurrentWeek ? 'this week' : viewedWeek.skippedLabel ? `the ${viewedWeek.skippedLabel.toLowerCase()} week` : `week ${viewedWeek.num}${viewedWeek.round > 1 ? ` of round ${viewedWeek.round}` : ''}`}">
-          <div class="week-nav-title">${isCurrentWeek ? 'This week' : viewedWeek.skippedLabel ? `${viewedWeek.skippedLabel} week` : `${viewedWeek.round > 1 ? `R${viewedWeek.round} · ` : ''}Week ${viewedWeek.num}`}</div>
-          <div class="week-nav-range">${viewedWeekRange}</div>
-        </button>
-        <button class="week-nav-btn" id="next-week" type="button" ${isCurrentWeek ? 'disabled' : ''} aria-label="${isCurrentWeek ? 'Already at current week' : 'Next week'}">›</button>
-      </div>
-      <div class="streak-stat">
-        <div class="stat-block">
-          <div class="stat-number">${swungToday > 0 ? lastWeekCount : viewedWeekCount}</div>
-          <div class="stat-label">${
-            swungToday > 0
-              ? lastWeekCount >= SESSIONS_PER_WEEK_TARGET
-                ? `of 3 · ${lastWeekTitle} closed ✓`
-                : `of 3 · counted for ${lastWeekTitle}`
-              : isCurrentWeek
-                ? 'of 3 this week'
-                : 'sessions that week'
-          }</div>
-        </div>
-        <div class="stat-block">
-          <div class="stat-number">${logs.length}</div>
-          <div class="stat-label">total sessions</div>
-        </div>
+    <div class="card week-card" id="open-weekly-review" role="button" tabindex="0" aria-label="Open weekly review for this week">
+      <div class="week-card-head">
+        <span class="week-card-range">This week · ${weekRange}</span>
+        <span class="week-card-chev" aria-hidden="true">›</span>
       </div>
       <div class="week-dots">${dotsHtml}</div>
-    </div>
-    ${saturdayNote}
-
-    ${renderWeeklyTargetGrid()}
-
-    <div class="card walk-card">
-      <div class="walk-row">
-        <span class="walk-text">🚶 ${
-          // v48 · P3 (Sep 24 2026): minutes only — "Walking · 12 min".
-          walkStartedAt
-            ? `<span id="walk-live">${walkLiveText(walkStartedAt)}</span>`
-            : `Slow walks count too${weekWalks > 0 ? ` — <strong>${weekWalks}</strong> this week` : ''}`
-        }</span>
-        ${
-          walkStartedAt
-            ? `<div class="walk-btn-group">
-                 <button class="walk-log-btn walk-log-btn-active" id="finish-walk" type="button">■ Done walking</button>
-                 <button class="walk-cancel-btn" id="cancel-walk" type="button">Cancel</button>
-               </div>`
-            : `<button class="walk-log-btn" id="log-walk-start" type="button">▶ Start a walk</button>`
-        }
-      </div>
-      <p class="gear-note walk-note">${
-        walkStartedAt
-          ? 'Minutes only. The screen stays awake by itself — tap Done when you finish, or Cancel if you were just checking (nothing logs).'
-          : 'Tap start, walk any pace — apartment laps count too. Tap done when finished. Extra credit on top of your 3/week; never part of your 3.'
-      }</p>
+      <div class="week-line">${weekLine}</div>
+      ${saturdayNote}
     </div>
 
-    <button class="weekly-review-link" id="open-weekly-review-link" type="button">
-      <span>📊 Weekly review</span>
-      <span class="weekly-review-link-chev">→</span>
-    </button>
+    <div class="card walk-card">${walkRow}</div>
 
-    <button class="weekly-review-link progress-link" id="open-progress-link" type="button">
-      <span>📈 Progress</span>
-      <span class="weekly-review-link-chev">→</span>
-    </button>
-
-    ${renderGearCard()}
-
-    ${renderComingNextWeek()}
-
-    ${renderPastWeeks()}
-
-    ${
-      logs.length > 0
-        ? `
-      <div class="divider"></div>
-      <div class="history-header-row">
-        <h3>Recent workouts</h3>
-        <button class="btn-chip" id="view-history" type="button">📊 All workouts</button>
-      </div>
-      ${recentHtml}
-    `
-        : ''
-    }
+    <div class="home-doors">
+      <button class="door-row" id="open-progress-link" type="button">
+        <span>📈 Progress</span><span class="door-chev" aria-hidden="true">›</span>
+      </button>
+      <button class="door-row" id="view-history" type="button">
+        <span>🗂 Sessions</span><span class="door-chev" aria-hidden="true">›</span>
+      </button>
+    </div>
   `;
 }
 
@@ -7142,6 +7280,7 @@ function renderWeeklyReview(): string {
         Sessions: <span class="${sessionCountClass}"><strong>0</strong> of 3</span>
       </div>
       <p class="weekly-review-empty">No sessions this week.</p>
+      ${renderWeeklyTargetGrid('Week by week')}
     `;
   }
 
@@ -7235,6 +7374,10 @@ function renderWeeklyReview(): string {
     </div>
     ${totalsCard}
     ${deltaCard}
+    ${
+      // v48 · P4 (Sep 24 2026): re-homed from home, as-is (P6 restyles).
+      renderWeeklyTargetGrid('Week by week')
+    }
   `;
 }
 
@@ -7743,6 +7886,7 @@ function renderProgress(): string {
       </div>
       <div class="progress-subtitle">${subtitle}</div>
       <p class="progress-empty">Progress shows once you have 2+ sessions logged.</p>
+      ${renderProgramArchive()}
     `;
   }
 
@@ -7759,7 +7903,22 @@ function renderProgress(): string {
       ${renderSessionsPerWeekCard(logs)}
       ${renderExerciseBreakdownCard(logs)}
     </div>
+    ${renderProgramArchive()}
   `;
+}
+
+// v48 · P4 (Sep 24 2026): "Coming next week" + "Past weeks" moved here from
+// home, as-is (P6 restyles) — the program's past and next stay one tap from
+// Progress (her archive rule: "just be archived nicely so i can pull when
+// needed"), off the front door.
+function renderProgramArchive(): string {
+  const inner = `${renderComingNextWeek()}${renderPastWeeks()}`;
+  if (!inner.trim()) return '';
+  return `
+    <div class="program-archive">
+      <h3 class="program-archive-label">Program</h3>
+      ${inner}
+    </div>`;
 }
 
 // ---------- Ship 6: Settings screen ----------
@@ -7781,7 +7940,6 @@ function renderSettings(): string {
   const restSec = getRestSec();
   const preCount = getPreCountSec();
   const howToOn = getHowToFirstExpand();
-  const autoSuggestOn = getAutoSuggestEnabled();
   const logCount = loadLogs().length;
 
   return `
@@ -7832,6 +7990,12 @@ function renderSettings(): string {
         </div>
       </div>
 
+      ${
+        // v48 · P4 (Sep 24 2026): Gear & recovery moved here from home, as-is
+        // (P6 restyles it into chips + a Neck release card).
+        renderGearCard()
+      }
+
       <div class="card settings-card">
         <div class="settings-section-label">Display</div>
         <label class="settings-row">
@@ -7841,16 +8005,6 @@ function renderSettings(): string {
           </div>
           <span class="settings-toggle ${howToOn ? 'on' : 'off'}">
             <input type="checkbox" id="setting-howto" ${howToOn ? 'checked' : ''} />
-            <span class="settings-toggle-track"><span class="settings-toggle-thumb"></span></span>
-          </span>
-        </label>
-        <label class="settings-row">
-          <div class="settings-row-text">
-            <div class="settings-row-title">Auto-suggest today's workout</div>
-            <div class="settings-row-caption">Off: all three cards shown alike.</div>
-          </div>
-          <span class="settings-toggle ${autoSuggestOn ? 'on' : 'off'}">
-            <input type="checkbox" id="setting-suggest" ${autoSuggestOn ? 'checked' : ''} />
             <span class="settings-toggle-track"><span class="settings-toggle-thumb"></span></span>
           </span>
         </label>
@@ -8222,7 +8376,8 @@ function wireHoldToSkip(btn: HTMLElement, onSkip: () => void): void {
 }
 
 function attachHandlers(): void {
-  document.querySelectorAll<HTMLButtonElement>('.workout-card[data-workout]').forEach((btn) => {
+  // v48 · P4: the "Up next" hero AND the B/C chips carry data-workout.
+  document.querySelectorAll<HTMLButtonElement>('button[data-workout]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const id = btn.dataset['workout'] as WorkoutId | undefined;
       if (id) {
@@ -8242,17 +8397,8 @@ function attachHandlers(): void {
   bindClick('stale-discard', discardStaleSession);
   bindClick('stale-continue', continueStaleSession);
 
-  // Week navigation on home — prev/next step through past weeks of the dot strip.
-  bindClick('prev-week', () => {
-    viewedWeekOffset += 1;
-    render();
-  });
-  bindClick('next-week', () => {
-    if (viewedWeekOffset > 0) {
-      viewedWeekOffset -= 1;
-      render();
-    }
-  });
+  // v48 · P4 (Sep 24 2026): the home ‹ › week arrows are gone — home always
+  // shows this week; stepping back through weeks moves to Weekly review (P6).
 
   bindClick('back-home', () => {
     resetState();
@@ -8268,15 +8414,22 @@ function attachHandlers(): void {
   // Ship 6: Settings interactions — toggles, steppers, data buttons.
   attachSettingsHandlers();
 
-  // Ship 4: open weekly-review screen — preserves viewedWeekOffset so tapping
-  // the label on a past week opens that week's review (not always current).
-  bindClick('open-weekly-review', () => {
+  // Ship 4: open weekly-review screen. v48 · P4 (Sep 24 2026): home only ever
+  // shows THIS week now, so it opens this week (offset 0). The whole week card is the one door to Weekly review (the
+  // separate "📊 Weekly review" row is gone). It's a div (the day dots inside
+  // are buttons), so Enter/Space open it too.
+  const openWeeklyReview = (): void => {
+    viewedWeekOffset = 0;
     state.screen = 'weekly-review';
     render();
-  });
-  bindClick('open-weekly-review-link', () => {
-    state.screen = 'weekly-review';
-    render();
+  };
+  bindClick('open-weekly-review', openWeeklyReview);
+  document.getElementById('open-weekly-review')?.addEventListener('keydown', (e) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openWeeklyReview();
+    }
   });
 
   // Ship 5: Progress screen — full-history longitudinal view. Reached from
@@ -8324,9 +8477,11 @@ function attachHandlers(): void {
   // Ship 3 year-grid heatmap also pick up the handler. SVGElement.dataset
   // exists on all modern browsers.
   document.querySelectorAll<Element>('[data-detail]').forEach((el) => {
-    el.addEventListener('click', () => {
+    el.addEventListener('click', (e) => {
       const id = (el as HTMLElement | SVGElement).dataset?.['detail'];
       if (!id) return;
+      // v48 · P4: a day dot inside the week card opens its session, not the card.
+      e.stopPropagation();
       state.historyDetailId = id;
       state.screen = 'history-detail';
       render();
@@ -8610,7 +8765,9 @@ function attachSettingsHandlers(): void {
   };
   wireToggle('setting-beeps', SETTING_KEYS.beeps);
   wireToggle('setting-howto', SETTING_KEYS.howToFirstExpand);
-  wireToggle('setting-suggest', SETTING_KEYS.autoSuggest);
+  // v48 · P4 (Sep 24 2026): the auto-suggest toggle is gone (DECISIONS §5) —
+  // the hero is always today's rotation and B/C are one chip away; a switch
+  // that turned off the one thing carrying the app, never used.
 
   // Rest stepper (step = 5s, range 5-180).
   const restVal = document.getElementById('rest-val');
@@ -8686,7 +8843,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Resume an in-progress workout if one was left open (Allison 2026-06-06).
   restoreActiveSession();
   render();
-  void pullFromSupabase().then(() => flushPendingSyncs());
+  void pullFromSupabase().then(() => {
+    void flushPendingSyncs();
+    void fetchStepsToday(); // v48 · P4: once, after the pull
+  });
   void flushPendingWalks();
   // v45: a session saved offline (gym basement, airplane mode) now syncs the
   // moment the signal comes back — before, only on the next app open.

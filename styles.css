@@ -4243,3 +4243,292 @@ input[type='number']:focus {
 #walk-live {
   white-space: nowrap;
 }
+
+/* ==========================================================================
+ * v48 · P4 (Sep 24 2026) — Home: one next action, one honest week line, three
+ * quiet doors. Her words: "look at home ux ui and make it better i feel like
+ * its a bit all over the place". Sage = the ONE primary action (the hero's
+ * Start); everything else on home is quiet.
+ * ========================================================================== */
+
+/* Header: the week title + the version tag on one line, ⚙ at the right. The
+ * tag never wraps (DECISIONS Q1: it used to push the h1 onto 2 lines); if the
+ * row is too narrow (the "· Week 4's plan" case) the tag drops under the title
+ * whole, rather than breaking. */
+.home-header {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.home-header-title {
+  flex-wrap: wrap;
+  column-gap: 10px;
+  row-gap: 2px;
+  min-width: 0;
+}
+
+.home-header h1 {
+  font-size: var(--font-subheading);
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.app-version {
+  white-space: nowrap;
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+}
+
+/* "· Week 4's plan" — the fail-loud note when no plan for this week is encoded
+ * yet; smaller, so "Round 2 · Week 5 · Week 4's plan" still fits one line. */
+.h1-plan {
+  font-size: var(--font-small);
+  font-weight: 500;
+  color: var(--text-dim);
+  letter-spacing: 0;
+}
+
+.home-header .settings-icon-btn {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+/* Sync: an 11px word only while something is syncing or waiting — no pill. */
+.sync-indicator {
+  margin: 0;
+  min-height: 0;
+}
+
+.sync-indicator:not(:empty) {
+  display: block;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin: -8px 0 10px;
+  font-size: var(--font-micro);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/* The "Up next" hero — the whole card is the button. */
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 18px 20px 18px;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+
+.hero-label {
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+}
+
+.hero-title {
+  font-size: var(--font-heading);
+  font-weight: 650;
+  letter-spacing: var(--track-heading);
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+
+.hero-line {
+  font-size: var(--font-small);
+  font-weight: 500;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.hero-new {
+  color: var(--text);
+}
+
+/* Looks like the primary button; the card is what's tapped. */
+.hero-start {
+  display: block;
+  margin-top: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  background: var(--grad-primary);
+  color: var(--bg);
+  text-align: center;
+  font-size: var(--font-body);
+  font-weight: 600;
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.12) inset;
+}
+
+/* "or do  B · Glutes  C · Cardio" — two quiet chips, one row. */
+.home-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.home-chips-lead {
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  margin-right: 2px;
+}
+
+.home-chip {
+  min-height: 44px;
+  padding: 8px 16px;
+  white-space: nowrap;
+}
+
+/* After Save, until midnight — witnessed, not sage. */
+.home-done-card {
+  margin-bottom: 10px;
+  padding: 18px 20px;
+}
+
+.home-done-title {
+  font-size: var(--font-subheading);
+  font-weight: 650;
+  letter-spacing: var(--track-tight);
+}
+
+.home-done-line {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.home-done-firsts {
+  font-size: var(--font-small);
+  color: var(--text);
+  margin-top: 6px;
+}
+
+/* The week card — one card, one line, the door to Weekly review. */
+.week-card {
+  cursor: pointer;
+  padding: 14px 16px;
+}
+
+.week-card:hover {
+  border-color: var(--border-strong);
+}
+
+.week-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.week-card-range {
+  font-size: var(--font-meta);
+  font-weight: 500;
+  color: var(--text-dim);
+}
+
+.week-card-chev,
+.door-chev {
+  color: var(--text-dim);
+  font-size: var(--font-subheading);
+  line-height: 1;
+}
+
+.week-card .week-dots {
+  margin-top: 10px;
+}
+
+.week-line {
+  margin-top: 10px;
+  font-size: var(--font-small);
+  color: var(--text);
+  text-align: center;
+}
+
+.week-card .swing-note {
+  margin: 6px 0 0;
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+}
+
+/* The walk row: one quiet button + the trailing count. No paragraph. */
+.walk-card {
+  padding: 10px 12px;
+}
+
+.walk-row {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+}
+
+.walk-row .walk-log-btn {
+  min-height: 44px;
+}
+
+.walk-row > .walk-text {
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.walk-row > .walk-text:has(#walk-live) {
+  flex: 1;
+  font-size: var(--font-small);
+  color: var(--text);
+}
+
+/* The doors: one component, two stacked rows, same height/chevron/weight. */
+.home-doors {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--grad-surface);
+}
+
+.door-row {
+  width: 100%;
+  min-height: 52px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--text);
+  font-size: var(--font-small);
+  font-weight: 500;
+  text-align: left;
+}
+
+.door-row + .door-row {
+  border-top: 1px solid var(--border-divider, var(--border));
+}
+
+.door-row:active {
+  transform: none;
+  background: var(--bg-elev-2);
+}
+
+/* Weekly review › "Week by week" (re-homed from home): the label stays on one
+ * line; the count beside it wraps instead. */
+.consistency-wrap .next-week-summary-label {
+  white-space: nowrap;
+}
+
+/* Progress › Program (re-homed from home). */
+.program-archive {
+  margin-top: 22px;
+}
+
+.program-archive-label {
+  margin-bottom: 10px;
+}

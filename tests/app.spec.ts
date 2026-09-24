@@ -18,18 +18,22 @@ async function openCue(page: Page): Promise<void> {
   if (await toggle.count()) await toggle.first().click();
 }
 
+// v48 · P4 (Sep 24 2026): home = the "Up next" hero + B/C chips — still three
+// ways in (all data-workout), and the one week line carries the count.
 test('home screen shows three workout options and zero sessions', async ({ page }) => {
-  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+  await expect(page.locator('.home-header h1')).toBeVisible();
   await expect(page.locator('button[data-workout]')).toHaveCount(3);
-  await expect(page.locator('text=A · Lower Body + Core')).toBeVisible();
-  await expect(page.locator('text=B · Glutes + Mobility + Core')).toBeVisible();
-  await expect(page.locator('text=C · Cardio + Lower Body + Core')).toBeVisible();
-  await expect(page.locator('.stat-number').first()).toHaveText('0');
+  await expect(page.locator('.home-hero')).toContainText('Workout A');
+  await expect(page.locator('.home-hero')).toContainText('Lower Body + Core');
+  await expect(page.locator('button.btn-chip[data-workout="B"]')).toHaveText('B · Glutes');
+  await expect(page.locator('button.btn-chip[data-workout="C"]')).toHaveText('C · Cardio');
+  await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
+  await expect(page.locator('.week-line')).toContainText('0 total');
 });
 
 test("today's pick highlights A when no history exists", async ({ page }) => {
-  // Group 2I: empty history → A is the pick
-  await expect(page.locator('button[data-workout="A"] .workout-card-pick-badge')).toBeVisible();
+  // Group 2I: empty history → A is the pick (v48 · P4: the "Up next" hero).
+  await expect(page.locator('button.workout-card-pick[data-workout="A"]')).toContainText('Up next');
 });
 
 test('week-dots row is rendered with 7 day labels', async ({ page }) => {
@@ -119,8 +123,10 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
 
   await page.locator('button:has-text("Save & finish")').click();
 
-  await expect(page.locator('h1')).toHaveText('Workout Tracker');
-  await expect(page.locator('.stat-number').first()).toHaveText('1');
+  await expect(page.locator('.home-header h1')).toBeVisible();
+  // v48 · P4: counted in the one week line; the row itself lives in Sessions.
+  await expect(page.locator('.week-line')).toContainText('1 total');
+  await page.locator('#view-history').click();
   await expect(page.locator('.history-word').first()).toContainText('proud');
 });
 
@@ -228,8 +234,8 @@ test('quit during workout asks for confirmation and returns home', async ({ page
   await page.locator('button:has-text("Start")').click();
   await page.locator(NEXT).click();
   await page.locator('.quit-link').click();
-  await expect(page.locator('h1')).toHaveText('Workout Tracker');
-  await expect(page.locator('.stat-number').first()).toHaveText('0');
+  await expect(page.locator('.home-header h1')).toBeVisible();
+  await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
 });
 
 test('quit dialog cancel keeps user in workout', async ({ page }) => {
@@ -341,7 +347,7 @@ test('untouched sliders (v46): a workout with no slider moved saves null, not 5/
   await expect(page.locator('#cap-after-val')).toHaveText('5');
   await expect(page.locator('#back-val')).toHaveText('0');
   await page.locator('button:has-text("Save & finish")').click();
-  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+  await expect(page.locator('.home-header h1')).toBeVisible();
 
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
   const logs = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>;
@@ -349,8 +355,10 @@ test('untouched sliders (v46): a workout with no slider moved saves null, not 5/
   expect(logs[0]?.['capacityBefore']).toBeNull();
   expect(logs[0]?.['capacityAfter']).toBeNull();
   expect(logs[0]?.['backPain']).toBeNull();
-  // And the row reads "—", never an invented number.
-  await expect(page.locator('.last-line')).toContainText('capacity —→—');
+  // And the row reads "—", never an invented number. (v48 · P4: the "Last: …
+  // capacity" line left home; the same row reads it in Sessions.)
+  await page.locator('#view-history').click();
+  await expect(page.locator('.history-row .history-meta').first()).toContainText('cap —→—');
 });
 
 test('untouched sliders (v46): a slider she DID move saves her number; the others stay null', async ({
@@ -362,7 +370,7 @@ test('untouched sliders (v46): a slider she DID move saves her number; the other
   await walkToPostLog(page);
   await page.locator('#back').fill('2');
   await page.locator('button:has-text("Save & finish")').click();
-  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+  await expect(page.locator('.home-header h1')).toBeVisible();
 
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
   const logs = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>;
@@ -443,11 +451,11 @@ test('resume: quitting clears the session so reopening goes home', async ({ page
   await page.locator('button:has-text("Start")').click();
   await page.locator(NEXT).click();
   await page.locator('.quit-link').click();
-  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+  await expect(page.locator('.home-header h1')).toBeVisible();
 
   const reopened = await context.newPage();
   await reopened.goto('/');
-  await expect(reopened.locator('h1')).toHaveText('Workout Tracker');
+  await expect(reopened.locator('.home-header h1')).toBeVisible();
   await reopened.close();
 });
 
@@ -494,7 +502,7 @@ test('left-open gate: a 4-day-old workout is a question on home, not a silent re
   ] as const);
   const reopened = await context.newPage();
   await reopened.goto('/');
-  await expect(reopened.locator('h1')).toHaveText('Workout Tracker');
+  await expect(reopened.locator('.home-header h1')).toBeVisible();
   await expect(reopened.locator('#stale-session-card')).toBeVisible();
   await expect(reopened.locator('#stale-session-card')).toContainText('Workout A was left open');
   await expect(reopened.locator('#stale-session-card')).toContainText('never tapped Done');
@@ -521,9 +529,11 @@ test('left-open gate: "Yes, I did it" logs it for the day it was STARTED with no
   // Sat-Fri week rolled over: a snapshot four days old is deliberately in the
   // PAST, so it can fall outside the current week and the week stat stays 0.
   // The row's own presence is the thing under test; "recent" is not week-scoped.
+  // v48 · P4: Recent left home — the row is read in Sessions (one tap).
+  await reopened.locator('#view-history').click();
   await expect(reopened.locator('.history-row')).toHaveCount(1);
-  // Duration is unknown → "—", never a multi-day number.
-  await expect(reopened.locator('.history-date').first()).toContainText('—');
+  // Duration is unknown → no duration at all, never a multi-day number.
+  await expect(reopened.locator('.history-date').first()).not.toContainText(/\d+\s*(h|min|m)\b/);
 
   const saved = await reopened.evaluate(
     ([logsKey, activeKey]) => ({
@@ -558,7 +568,7 @@ test('left-open gate: "No, throw it away" discards it and clears the snapshot', 
   await reopened.goto('/');
   await reopened.locator('#stale-discard').click();
   await expect(reopened.locator('#stale-session-card')).toHaveCount(0);
-  await expect(reopened.locator('.stat-number').first()).toHaveText('0');
+  await expect(reopened.locator('.week-line')).toContainText('0 of 3 this week');
   const active = await reopened.evaluate((key) => localStorage.getItem(key), ACTIVE_SESSION_KEY);
   expect(active).toBeNull();
   await reopened.close();
@@ -699,7 +709,7 @@ test('R2 W3: a date inside Sep 12-18 2026 resolves to Round 2 · Week 3', async 
       MockDate as unknown as DateConstructor;
   });
   await page.goto('/');
-  await expect(page.locator('.week-banner')).toContainText('Round 2 · Week 3');
+  await expect(page.locator('.home-header h1')).toContainText('Round 2 · Week 3');
 });
 
 test('R2 W3: workout B carries the yellow band on the clamshells, reps back to 10', async ({
@@ -807,7 +817,7 @@ test('R2 W3: the tying setup does NOT leak onto Week 2, whose clamshell is bodyw
 }) => {
   await mockDate(page, '2026-09-08T10:00:00.000Z'); // inside Round 2 Week 2
   await page.goto('/');
-  await expect(page.locator('.week-banner')).toContainText('Week 2');
+  await expect(page.locator('.home-header h1')).toContainText('Week 2');
   await page.locator('button[data-workout="B"]').click();
   await page.locator('button:has-text("Start")').click();
   for (let i = 0; i < 40; i++) {
@@ -866,7 +876,7 @@ test('R2 W4: split squat replaces the squat in A only, wall sit reads 45, the 1 
 }) => {
   await mockDate(page, '2026-09-22T10:00:00.000Z'); // Tue inside Round 2 Week 4
   await page.goto('/');
-  await expect(page.locator('.week-banner')).toContainText('Week 4');
+  await expect(page.locator('.home-header h1')).toContainText('Week 4');
 
   // A: split squat in, bodyweight squat out, wall sit 45, 1 kg pair present.
   await page.locator('button[data-workout="A"]').click();
@@ -937,6 +947,13 @@ const SWING_SAT_C = {
   durationSec: 720,
 };
 
+// v48 · P4 (Sep 24 2026): the week-by-week list moved off home into Weekly
+// review, collapsed as "Week by week" (DECISIONS Q3); the week card is its door.
+async function openWeekByWeek(page: Page): Promise<void> {
+  await page.locator('#open-weekly-review').click();
+  await page.locator('.consistency-wrap > summary').click();
+}
+
 test('swing: a Saturday session completes a 2-session week — last week shows 3 of 3, this week 0', async ({
   page,
 }) => {
@@ -948,13 +965,14 @@ test('swing: a Saturday session completes a 2-session week — last week shows 3
   );
   await mockDate(page, '2026-09-20T10:00:00.000Z'); // Sun Sep 20 — Week 4
   await page.goto('/');
-  await expect(page.locator('.week-banner')).toContainText('Week 4');
+  await expect(page.locator('.home-header h1')).toContainText('Week 4');
 
-  const meta = page.locator('.consistency-wrap .next-week-summary-meta');
-  await expect(meta).toContainText('0 of 3 this week');
-  await expect(meta).toContainText('Sat counted for last week');
+  // v48 · P4: home's one week line says where Saturday's C went, in words.
+  const line = page.locator('.week-line');
+  await expect(line).toContainText('0 of 3 this week');
+  await expect(line).toContainText("Sat's C went to Week 3");
 
-  await page.locator('.consistency-wrap > summary').click();
+  await openWeekByWeek(page);
   // This week: three open slots.
   await expect(page.locator('.weekly-row-current .weekly-slot-empty')).toHaveCount(3);
   // Last week (R2 · Wk 3): A, B, C — the Saturday C is its third pill.
@@ -977,10 +995,10 @@ test('swing: a Saturday session does NOT swing when last week already has 3 — 
   }, full);
   await mockDate(page, '2026-09-20T10:00:00.000Z');
   await page.goto('/');
-  const meta = page.locator('.consistency-wrap .next-week-summary-meta');
-  await expect(meta).toContainText('1 of 3 this week');
-  await expect(meta).not.toContainText('Sat counted');
-  await page.locator('.consistency-wrap > summary').click();
+  const line = page.locator('.week-line');
+  await expect(line).toContainText('1 of 3 this week');
+  await expect(line).not.toContainText("Sat's");
+  await openWeekByWeek(page);
   await expect(page.locator('.weekly-row-current button.weekly-slot')).toHaveCount(1);
   const wk3 = page.locator('.weekly-row').filter({ hasText: 'R2 · Wk 3' }).first();
   await expect(wk3.locator('button.weekly-slot')).toHaveCount(3);
@@ -996,10 +1014,10 @@ test('swing: a SUNDAY session never swings, even when last week is short', async
   );
   await mockDate(page, '2026-09-21T10:00:00.000Z'); // Mon Sep 21
   await page.goto('/');
-  const meta = page.locator('.consistency-wrap .next-week-summary-meta');
-  await expect(meta).toContainText('1 of 3 this week');
-  await expect(meta).not.toContainText('Sat counted');
-  await page.locator('.consistency-wrap > summary').click();
+  const line = page.locator('.week-line');
+  await expect(line).toContainText('1 of 3 this week');
+  await expect(line).not.toContainText("Sat's");
+  await openWeekByWeek(page);
   const wk3 = page.locator('.weekly-row').filter({ hasText: 'R2 · Wk 3' }).first();
   await expect(wk3.locator('button.weekly-slot')).toHaveCount(2);
 });
@@ -1007,6 +1025,8 @@ test('swing: a SUNDAY session never swings, even when last week is short', async
 // v46: the swing must show where the big number is. On the Saturday night she
 // closed Week 3, home read "0 OF 3 THIS WEEK" next to a lit Saturday dot — the
 // win invisible at the moment she earned it (UX audit Sep 24).
+// v48 · P4 (DECISIONS Q2): in WORDS, every day — not a Saturday-only swap of
+// the big number: "0 of 3 this week · Sat's C went to Week 3 · N total".
 test('swing (v46): on the Saturday itself the week card carries the week it closed', async ({
   page,
 }) => {
@@ -1018,15 +1038,16 @@ test('swing (v46): on the Saturday itself the week card carries the week it clos
   );
   await mockDate(page, '2026-09-19T19:30:00.000Z'); // Sat Sep 19, 22:30 Jerusalem — right after the C
   await page.goto('/');
-  const card = page.locator('.streak-stat .stat-block').first();
-  await expect(card.locator('.stat-number')).toHaveText('3');
-  await expect(card.locator('.stat-label')).toContainText('R2 · Week 3 closed ✓');
+  await expect(page.locator('.week-line')).toHaveText(
+    "0 of 3 this week · Sat's C went to Week 3 · 3 total"
+  );
   await expect(page.locator('.swing-note')).toHaveCount(0);
-  // The next morning (Sunday) it is a new week again — the v42 wording holds.
+  // The next morning (Sunday) the words stay — the swing is worked out every day.
   await mockDate(page, '2026-09-20T10:00:00.000Z');
   await page.goto('/');
-  await expect(page.locator('.streak-stat .stat-number').first()).toHaveText('0');
-  await expect(page.locator('.streak-stat .stat-label').first()).toHaveText('of 3 this week');
+  await expect(page.locator('.week-line')).toHaveText(
+    "0 of 3 this week · Sat's C went to Week 3 · 3 total"
+  );
 });
 
 test('swing (v46): Saturday morning with last week at 2 says today will count for it', async ({
@@ -1040,7 +1061,7 @@ test('swing (v46): Saturday morning with last week at 2 says today will count fo
   );
   await mockDate(page, '2026-09-19T06:00:00.000Z'); // Sat Sep 19, 09:00 Jerusalem — nothing done yet
   await page.goto('/');
-  await expect(page.locator('.streak-stat .stat-number').first()).toHaveText('0');
+  await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
   await expect(page.locator('.swing-note')).toHaveText(
     "Last week's at 2 — today's session will count for it."
   );
@@ -1134,7 +1155,7 @@ test('R2 W4: the wall sit step itself reads 45 sec (the earned nudge from 40)', 
 test('R2 W4: the split squat does NOT leak onto Week 3', async ({ page }) => {
   await mockDate(page, '2026-09-15T10:00:00.000Z'); // Tue inside Round 2 Week 3
   await page.goto('/');
-  await expect(page.locator('.week-banner')).toContainText('Week 3');
+  await expect(page.locator('.home-header h1')).toContainText('Week 3');
   await page.locator('button[data-workout="A"]').click();
   await expect(page.locator('body')).toContainText('Bodyweight squats');
   await expect(page.locator('body')).not.toContainText('Supported split squat');
@@ -1142,6 +1163,8 @@ test('R2 W4: the split squat does NOT leak onto Week 3', async ({ page }) => {
 });
 
 test('R2 W3: gear card no longer says the band is waiting for a future week', async ({ page }) => {
+  // v48 · P4: Gear & recovery lives in Settings now.
+  await page.locator('#open-settings').click();
   const gear = page.locator('.gear-card');
   await gear.locator('.gear-summary').click();
   await expect(gear).toContainText('IN your workout as of Week 3');
@@ -1540,7 +1563,7 @@ test('Done safety net: a session that comes out longer than 3h logs no duration,
   }
   await expect(reopened.locator('text=Quick log')).toBeVisible();
   await reopened.locator('button:has-text("Save & finish")').click();
-  await expect(reopened.locator('h1')).toHaveText('Workout Tracker');
+  await expect(reopened.locator('.home-header h1')).toBeVisible();
 
   const row = await reopened.evaluate(
     (logsKey) =>
@@ -1550,7 +1573,9 @@ test('Done safety net: a session that comes out longer than 3h logs no duration,
   expect(row).toBeDefined();
   expect(row!['durationSec']).toBeUndefined();
   expect(String(row!['notes'])).toContain('left open');
-  await expect(reopened.locator('.history-date').first()).toContainText('—');
+  // v48 · P4: the row is read in Sessions — no duration shown, never 5h+.
+  await reopened.locator('#view-history').click();
+  await expect(reopened.locator('.history-date').first()).not.toContainText(/\d+\s*(h|min|m)\b/);
   await reopened.close();
 });
 
@@ -1615,16 +1640,18 @@ test('walk step: shows no form card — Start walk is the whole interface', asyn
 // If a future change reintroduces drop shadows or collapses the role tokens
 // back to a single --accent, one of these tests will fail loudly.
 
-test('redesign: stat numbers use the new display type scale (>=36px)', async ({ page }) => {
-  // Pre-redesign: .stat-number was 28px. D-1 ramp puts it at 40px (phone) / 56px (tablet).
-  // The exact pixel is viewport-dependent, so we assert "noticeably larger than the
-  // old 28px ceiling."
-  const statNumber = page.locator('.stat-number').first();
-  await expect(statNumber).toBeVisible();
-  const fontSize = await statNumber.evaluate(
+// v48 · P4 (Sep 24 2026): the 44px stat numbers left home (DECISIONS §2 #2:
+// one quiet count, not 3-5). The one large thing on home is now the hero's
+// "Workout A" — it keeps the D-1 ramp's heading size (32px), still well above
+// the old 28px ceiling this test was written against.
+test('redesign: the home hero title uses the heading type scale (>=30px)', async ({ page }) => {
+  const title = page.locator('.home-hero .hero-title');
+  await expect(title).toBeVisible();
+  const fontSize = await title.evaluate(
     (el) => parseFloat(window.getComputedStyle(el).fontSize) || 0
   );
-  expect(fontSize).toBeGreaterThanOrEqual(36);
+  expect(fontSize).toBeGreaterThanOrEqual(30);
+  await expect(page.locator('.stat-number')).toHaveCount(0);
 });
 
 test('redesign: role-named accent tokens are defined on :root', async ({ page }) => {
@@ -1680,6 +1707,11 @@ test('ship 3 (replaced): weekly-target grid renders with 3 slots per row', async
   // The year-grid was replaced 2026-05-15 with a 3-per-week target view
   // per Allison's "its 3 a week" call. Each row now shows 3 slot pills.
   // With empty history, the current week renders one row with 3 empty slots.
+  // v48 · P4: the grid lives in Weekly review › "Week by week".
+  await openWeekByWeek(page);
+  await expect(page.locator('.consistency-wrap .next-week-summary-label')).toHaveText(
+    'Week by week'
+  );
   const slots = page.locator('.weekly-row').first().locator('.weekly-slot');
   await expect(slots).toHaveCount(3);
   // The card heading still calls out Consistency, now with "3 per week".
@@ -1720,8 +1752,10 @@ test('ship 3: sparkline renders for history row with >=2 wall-sit values', async
     window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
   });
   await page.goto('/');
-  // Recent-workouts list on home should now have a sparkline on the newest row
-  // (the one whose trend includes itself + the older value = 2 points).
+  // The Sessions list should have a sparkline on the newest row (the one whose
+  // trend includes itself + the older value = 2 points). v48 · P4: Recent
+  // workouts left home — the same rows live one tap away in Sessions.
+  await page.locator('#view-history').click();
   const sparks = page.locator('.history-row .sparkline');
   expect(await sparks.count()).toBeGreaterThanOrEqual(1);
   // Aria label encodes the trend direction.
@@ -1748,6 +1782,7 @@ test('ship 3: sparkline NOT rendered for row with 0 or 1 wall-sit value', async 
     window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
   });
   await page.goto('/');
+  await page.locator('#view-history').click(); // v48 · P4: rows live in Sessions
   // Row exists, but no sparkline (flat-line render would read as broken).
   await expect(page.locator('.history-row').first()).toBeVisible();
   await expect(page.locator('.history-row .sparkline')).toHaveCount(0);
@@ -1767,8 +1802,10 @@ test('ship 3: sparkline NOT rendered for row with 0 or 1 wall-sit value', async 
 //    typos preserved, never paraphrased)
 
 test('ship 4: weekly review reachable from home button', async ({ page }) => {
-  // The "Weekly review →" link sits below the consistency card.
-  const reviewBtn = page.locator('#open-weekly-review-link');
+  // v48 · P4: the whole week card is the one door (the separate "📊 Weekly
+  // review" row is gone).
+  await expect(page.locator('#open-weekly-review-link')).toHaveCount(0);
+  const reviewBtn = page.locator('#open-weekly-review');
   await expect(reviewBtn).toBeVisible();
   await reviewBtn.click();
   // Header should now be the weekly-review screen header.
@@ -1820,7 +1857,7 @@ test('ship 4: weekly review header shows session count for current week', async 
     window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
   });
   await page.goto('/');
-  await page.locator('#open-weekly-review-link').click();
+  await page.locator('#open-weekly-review').click();
   // 2 of 3 — the count number in the subtitle.
   const subtitle = page.locator('.weekly-review-subtitle');
   await expect(subtitle).toContainText('Sessions:');
@@ -1856,7 +1893,7 @@ test('ship 4: weekly review shows one-word verbatim including typos', async ({ p
     window.localStorage.setItem('workout-tracker:logs', JSON.stringify(logs));
   });
   await page.goto('/');
-  await page.locator('#open-weekly-review-link').click();
+  await page.locator('#open-weekly-review').click();
   const wordEl = page.locator('.weekly-review-session-word').first();
   await expect(wordEl).toBeVisible();
   await expect(wordEl).toContainText('gooood start');
@@ -1865,7 +1902,7 @@ test('ship 4: weekly review shows one-word verbatim including typos', async ({ p
 test('ship 4: weekly review empty state for week with no sessions', async ({ page }) => {
   // No logs → empty state. Subtle line, no nudge, no motivational language.
   await page.goto('/');
-  await page.locator('#open-weekly-review-link').click();
+  await page.locator('#open-weekly-review').click();
   await expect(page.locator('.weekly-review-empty')).toBeVisible();
   await expect(page.locator('.weekly-review-empty')).toContainText('No sessions this week');
   // No motivational language — the empty state should NOT contain "great",
@@ -1908,19 +1945,14 @@ test('cooler-look: motion + glass design tokens are defined on :root', async ({ 
   expect(tokens.gradHero).not.toBe(tokens.gradSurface);
 });
 
-test('cooler-look: workout-picker tiles render an aria-hidden monogram letter', async ({
-  page,
-}) => {
-  // Each workout-card has a .workout-card-monogram with the workout letter
-  // (A / B / C), positioned behind the text at low opacity. aria-hidden so
-  // screen readers don't double-announce.
-  const monograms = page.locator('.workout-card .workout-card-monogram');
-  await expect(monograms).toHaveCount(3);
-  await expect(monograms.nth(0)).toHaveText('A');
-  await expect(monograms.nth(1)).toHaveText('B');
-  await expect(monograms.nth(2)).toHaveText('C');
-  // aria-hidden so the row's accessible name stays clean.
-  await expect(monograms.first()).toHaveAttribute('aria-hidden', 'true');
+// v48 · P4 (Sep 24 2026): the three tiles became one "Up next" hero + two
+// chips. The faint letter sat under the hero's Start, so it went; the letter
+// is the hero's own title now, and each chip leads with its letter.
+test('cooler-look: the hero names its letter; the chips lead with theirs', async ({ page }) => {
+  await expect(page.locator('.workout-card-monogram')).toHaveCount(0);
+  await expect(page.locator('.home-hero .hero-title')).toHaveText('Workout A');
+  await expect(page.locator('.home-chip').nth(0)).toHaveText(/^B · /);
+  await expect(page.locator('.home-chip').nth(1)).toHaveText(/^C · /);
 });
 
 test("cooler-look: today's-pick card uses gradient + glow, not flat fill", async ({ page }) => {
@@ -2116,7 +2148,7 @@ test('ship 6: settings reachable from gear icon in home header', async ({ page }
   await expect(page.locator('.settings-section-label')).toHaveCount(5);
   // Back returns to home.
   await page.locator('#back-home').click();
-  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+  await expect(page.locator('.home-header h1')).toBeVisible();
 });
 
 test('ship 6: beep toggle persists to localStorage', async ({ page }) => {
@@ -2293,9 +2325,12 @@ test('multi-week: Week 4 content active for May 25 (Session A holds — squats 1
   await expect(page.locator('.exercise-reps')).toContainText('12');
 });
 
-test('multi-week: "Coming next week" preview renders on home with diff', async ({ page }) => {
+// v48 · P4 (Sep 24 2026): the preview moved from home to Progress › Program.
+test('multi-week: "Coming next week" preview renders in Progress with diff', async ({ page }) => {
   await mockDate(page, '2026-05-18T10:00:00.000Z'); // Week 3 — next is Week 4
   await page.goto('/');
+  await page.locator('#open-progress-link').click();
+  await expect(page.locator('.program-archive-label')).toHaveText('Program');
   // First preview is the immediate-next week. Multiple may render for future weeks.
   const preview = page.locator('.next-week-preview').first();
   await expect(preview).toBeVisible();
@@ -2329,7 +2364,7 @@ test('multi-week: Settings About shows Program weeks count (15)', async ({ page 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {
   await mockDate(page, '2026-05-20T10:00:00.000Z'); // Wed in Week 3
   await page.goto('/');
-  await expect(page.locator('.week-banner')).toContainText('Week 3');
+  await expect(page.locator('.home-header h1')).toContainText('Week 3');
 });
 
 test('sick week Jul 11-17 holds a blank slot and Jul 18-24 is Week 11', async ({ page }) => {
@@ -2338,28 +2373,31 @@ test('sick week Jul 11-17 holds a blank slot and Jul 18-24 is Week 11', async ({
   await mockDate(page, '2026-07-19T10:00:00.000Z'); // Sun in the resume week
   await page.goto('/');
   // Banner: the skipped week doesn't advance the count — Week 11, not 12.
-  await expect(page.locator('.week-banner')).toContainText('Week 11');
+  await expect(page.locator('.home-header h1')).toContainText('Week 11');
   // The weekly grid keeps a visible row for the missed week, labeled Sick,
-  // with all 3 slots empty.
+  // with all 3 slots empty. (v48 · P4: Weekly review › Week by week.)
+  await openWeekByWeek(page);
   const sickRow = page.locator('.weekly-row').filter({ hasText: 'Sick' });
   await expect(sickRow).toHaveCount(1);
   await expect(sickRow.locator('.weekly-slot-empty')).toHaveCount(3);
 });
 
-test('home order: workout picker sits first, Consistency is collapsed by default', async ({
+test('home order: the workout sits first; the week-by-week list is collapsed in Weekly review', async ({
   page,
 }) => {
   // Her call Aug 30 2026: "consistency should be collapsible and the
-  // workouts should be first."
+  // workouts should be first." v48 · P4 (DECISIONS Q3): the list moved off
+  // home into Weekly review, still collapsed; home keeps the one week line.
   await page.goto('/');
+  await expect(page.locator('.consistency-wrap')).toHaveCount(0);
+  const heroBox = await page.locator('.home-hero').boundingBox();
+  const weekBox = await page.locator('.week-card').boundingBox();
+  expect(heroBox!.y).toBeLessThan(weekBox!.y);
+  await expect(page.locator('.week-line')).toContainText('of 3 this week');
+  await page.locator('#open-weekly-review').click();
   const wrap = page.locator('.consistency-wrap');
   await expect(wrap).toHaveJSProperty('open', false);
-  // Summary still shows the streak number while collapsed.
-  await expect(wrap.locator('.next-week-summary-meta')).toContainText('of 3 this week');
-  // The picker renders above the consistency section.
-  const pickerBox = await page.locator('.workout-picker').boundingBox();
-  const consistencyBox = await wrap.boundingBox();
-  expect(pickerBox!.y).toBeLessThan(consistencyBox!.y);
+  await expect(wrap.locator('.next-week-summary-label')).toHaveText('Week by week');
 });
 
 test('deploy hygiene: sw.js cache VERSION stays in sync with APP_VERSION', () => {
@@ -2384,7 +2422,7 @@ test('round 2: banner reads Round 2 · Week 1 from Aug 29 2026 and restart numbe
   // compact 2-round version with pulled-back numbers.
   await mockDate(page, '2026-08-30T15:00:00.000Z'); // Sun in R2 Week 1
   await page.goto('/');
-  await expect(page.locator('.week-banner')).toContainText('Round 2 · Week 1');
+  await expect(page.locator('.home-header h1')).toContainText('Round 2 · Week 1');
   // Pre-log overview badge carries the round too.
   await page.locator('button[data-workout="A"]').click();
   await expect(page.locator('.overview-week-badge')).toHaveText(/R2 · Week 1/);
@@ -2396,7 +2434,8 @@ test('round 2: break weeks Jul 25–Aug 28 hold blank labeled rows, round-1 week
   await mockDate(page, '2026-08-30T15:00:00.000Z');
   await page.goto('/');
   // Consistency is collapsed by default (v26) — expand it to see the rows.
-  await page.locator('.consistency-wrap > summary').click();
+  // (v48 · P4: in Weekly review.)
+  await openWeekByWeek(page);
   // Five Break rows, each with 3 empty slots (nothing logged over the summer).
   const breakRows = page.locator('.weekly-row').filter({ hasText: 'Break' });
   await expect(breakRows).toHaveCount(5);
@@ -2412,7 +2451,8 @@ test('walk credit: start/stop timer logs a walk, bumps week count, streak untouc
   // ("click walking and you automatically start tracking until I tell you
   // I'm done"). Walks are extra credit: the "of 3 this week" streak number
   // must NOT move when a walk is logged.
-  const streakBefore = await page.locator('.streak-stat .stat-number').first().textContent();
+  // v48 · P4: the count is in home's one week line now.
+  const streakBefore = await page.locator('.week-line').textContent();
   await expect(page.locator('.walk-text')).not.toContainText('this week');
   await page.locator('#log-walk-start').click();
   // v48 · P3: minutes only — "Walking · 0 min" (was "Walking since 18:02 · …").
@@ -2420,7 +2460,7 @@ test('walk credit: start/stop timer logs a walk, bumps week count, streak untouc
   await expect(page.locator('#finish-walk')).toBeVisible();
   await page.locator('#finish-walk').click();
   await expect(page.locator('.walk-text')).toContainText('1 this week');
-  await expect(page.locator('.streak-stat .stat-number').first()).toHaveText(streakBefore ?? '0');
+  await expect(page.locator('.week-line')).toHaveText(streakBefore ?? '');
   // A second walk works the same way — repeat laps are legitimate.
   await page.locator('#log-walk-start').click();
   await page.locator('#finish-walk').click();
@@ -2521,7 +2561,7 @@ test.describe('walk distance (GPS granted)', () => {
 test('R2 W2: a date inside Sep 5-11 2026 resolves to Round 2 · Week 2', async ({ page }) => {
   await mockDate(page, '2026-09-08T10:00:00.000Z'); // Tue inside Sep 5-11
   await page.goto('/');
-  await expect(page.locator('.week-banner')).toContainText('Round 2 · Week 2');
+  await expect(page.locator('.home-header h1')).toContainText('Round 2 · Week 2');
   await page.locator('button[data-workout="A"]').click();
   await expect(page.locator('.overview-week-badge')).toHaveText(/Week 2/);
 });
@@ -2782,7 +2822,7 @@ test('cardio either/or: finishing after the apartment option saves the lane + it
   await expect(page.locator('text=Quick log')).toBeVisible();
   await page.locator('#word').fill('inside');
   await page.locator('button:has-text("Save & finish")').click();
-  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+  await expect(page.locator('.home-header h1')).toBeVisible();
 
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
   const logs = JSON.parse(raw ?? '[]') as {
@@ -3075,7 +3115,7 @@ test('elliptical: finishing saves the minutes + level + readings, never POSTs, a
   await page.locator('#word').fill('smooth');
   await page.locator('#session-note').fill('Knee fine, legs heavy on the elliptical');
   await page.locator('button:has-text("Save & finish")').click();
-  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+  await expect(page.locator('.home-header h1')).toBeVisible();
 
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
   const logs = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>;
@@ -3233,7 +3273,7 @@ test('post-log: the free-text note saves verbatim on a session with no cardio la
   await expect(page.locator('#session-note')).toBeVisible();
   await page.locator('#session-note').fill('skipped the bird dog, wrist tired');
   await page.locator('button:has-text("Save & finish")').click();
-  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+  await expect(page.locator('.home-header h1')).toBeVisible();
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
   const logs = JSON.parse(raw ?? '[]') as { notes?: string | null; sessionNote?: string | null }[];
   // v48: her words land in their own field, verbatim; `notes` stays system-only.
@@ -3311,7 +3351,7 @@ test.describe('v48 P1 data', () => {
 
   async function saveAndReadLog(page: import('@playwright/test').Page): Promise<Row> {
     await page.locator('button:has-text("Save & finish")').click();
-    await expect(page.locator('h1')).toHaveText('Workout Tracker');
+    await expect(page.locator('.home-header h1')).toBeVisible();
     const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
     const logs = JSON.parse(raw ?? '[]') as Row[];
     expect(logs.length).toBe(1);
@@ -3786,7 +3826,7 @@ test.describe('v48 P2 shell', () => {
 
   const saveAndRead = async (page: Page): Promise<Row> => {
     await page.locator('button:has-text("Save & finish")').click();
-    await expect(page.locator('h1')).toHaveText('Workout Tracker');
+    await expect(page.locator('.home-header h1')).toBeVisible();
     const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
     const logs = JSON.parse(raw ?? '[]') as Row[];
     return logs[0]!;
@@ -4135,7 +4175,7 @@ test.describe('v48 P3 cardio', () => {
     }
     await expect(page.locator('text=Quick log')).toBeVisible();
     await page.locator('button:has-text("Save & finish")').click();
-    await expect(page.locator('h1')).toHaveText('Workout Tracker');
+    await expect(page.locator('.home-header h1')).toBeVisible();
     const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
     const logs = JSON.parse(raw ?? '[]') as Row[];
     return [...logs].sort((a, b) => String(b['date']).localeCompare(String(a['date'])))[0]!;
@@ -4406,5 +4446,318 @@ test.describe('v48 P3 cardio', () => {
     await page.locator('.overview-phase-summary').first().click();
     await expect(page.locator('.overview-phase-items').first()).toContainText('Cardio');
     await expect(page.locator('#app')).not.toContainText('Outdoor walk');
+  });
+});
+
+// --- v48 P4 · home (Sep 24 2026) ---------------------------------------------
+// DECISIONS-v48 §1 Q1-Q3, §2 #1-2 #8, §5 Home rows. Her words: "look at home ux
+// ui and make it better i feel like its a bit all over the place". One next
+// action (the "Up next" hero — the only sage on home), B/C one chip away, ONE
+// honest week line, a one-row walk, two quiet doors; everything else re-homed
+// one tap away.
+test.describe('v48 P4 home', () => {
+  type Row = Record<string, unknown>;
+  const THU_WEEK4 = '2026-09-24T15:00:00.000Z'; // Thu Sep 24, 18:00 Jerusalem
+  const TUE_WEEK4 = '2026-09-22T14:00:00.000Z';
+
+  const seedLogs = async (page: Page, logs: Row[]): Promise<void> => {
+    await page.addInitScript((rows) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    }, logs);
+  };
+
+  // 39 sessions, A→B→C, the newest a C on Sat Sep 19 — her real shape.
+  const thirtyNine = (): Row[] => {
+    const rows: Row[] = [];
+    let t = new Date('2026-09-19T16:30:00.000Z').getTime();
+    for (let i = 0; i < 39; i++) {
+      const workout = ['C', 'B', 'A'][i % 3];
+      rows.push({
+        id: `seed-${i}`,
+        date: new Date(t).toISOString(),
+        workout,
+        capacityBefore: 7,
+        capacityAfter: 7,
+        wallSitSec: workout === 'A' ? 43 : 0,
+        backPain: 0,
+        word: '',
+        synced: true,
+        durationSec: 2400,
+      });
+      t -= (i % 3 === 0 ? 3 : 2) * 86_400_000;
+    }
+    return rows;
+  };
+
+  // Every visible element with a SAGE fill (the --accent / --accent-hover
+  // primary surface), and whether it sits inside the A hero.
+  const sageFills = (page: Page): Promise<{ cls: string; inHero: boolean }[]> =>
+    page.evaluate(() => {
+      const SAGE = ['rgb(143, 188, 143)', 'rgb(163, 207, 163)'];
+      return [...document.querySelectorAll<HTMLElement>('#app *')]
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return false;
+          const cs = getComputedStyle(el);
+          return (
+            SAGE.includes(cs.backgroundColor) || SAGE.some((c) => cs.backgroundImage.includes(c))
+          );
+        })
+        .map((el) => ({
+          cls: String(el.className),
+          inHero: el.closest('button.home-hero[data-workout="A"]') !== null,
+        }));
+    });
+
+  const tapForward = async (page: Page): Promise<boolean> => {
+    const next = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    if (await next.isVisible()) {
+      await next.click();
+      return true;
+    }
+    return false;
+  };
+
+  test.describe('at phone size', () => {
+    test.use({ viewport: { width: 412, height: 915 } });
+
+    test('(a) 39 sessions, last = C: one sage thing (the A hero), the whole hero in the fold, home < 1300 px', async ({
+      page,
+    }) => {
+      await mockDate(page, THU_WEEK4);
+      await seedLogs(page, thirtyNine());
+      await page.goto('/');
+      const hero = page.locator('button.workout-card.workout-card-pick[data-workout="A"]');
+      await expect(hero).toContainText('Up next');
+      await expect(hero.locator('.hero-title')).toHaveText('Workout A');
+      await expect(hero).toContainText('Lower Body + Core · 2 rounds · ~30 min');
+      await expect(hero).toContainText('New tonight: supported split squat');
+      await expect(hero).toContainText('Cardio: 10 min, your pick'); // no lane on the seeds
+      await expect(hero.locator('.hero-start')).toHaveText('Start');
+      const fills = await sageFills(page);
+      expect(fills, JSON.stringify(fills)).toHaveLength(1);
+      expect(fills[0]!.inHero).toBe(true);
+      const box = (await hero.boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(915);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(1300);
+      // The one week line.
+      await expect(page.locator('.week-line')).toContainText('of 3 this week');
+      await expect(page.locator('.week-line')).toContainText('39 total');
+    });
+
+    test('(g) Sat Sep 26 (no Week 5 encoded): the header says which plan is loaded, still one line', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-09-26T09:00:00.000Z');
+      await page.goto('/');
+      const h1 = page.locator('.home-header h1');
+      await expect(h1).toHaveText("Round 2 · Week 5 · Week 4's plan");
+      expect((await h1.boundingBox())!.height).toBeLessThan(40);
+      const h1Box = (await h1.boundingBox())!;
+      const gear = (await page.locator('#open-settings').boundingBox())!;
+      expect(h1Box.x + h1Box.width).toBeLessThanOrEqual(gear.x);
+      expect((await page.locator('.home-header .app-version').boundingBox())!.height).toBeLessThan(
+        24
+      );
+    });
+
+    test('(g) the version tag is one line and carries the version + a time', async ({ page }) => {
+      const tag = page.locator('.home-header .app-version');
+      await expect(tag).toContainText('v4');
+      await expect(tag).toHaveText(/\d{2}:\d{2}$/);
+      await expect(tag).not.toContainText(/20\d\d/); // the year lives in Settings › About
+      expect((await tag.boundingBox())!.height).toBeLessThan(24);
+      const h1 = (await page.locator('.home-header h1').boundingBox())!;
+      expect(h1.height).toBeLessThan(40); // the title stays on one line too
+      const gear = (await page.locator('#open-settings').boundingBox())!;
+      expect(gear.width).toBeGreaterThanOrEqual(44);
+      expect(gear.height).toBeGreaterThanOrEqual(44);
+    });
+  });
+
+  test('(b) the B and C chips start their own workout: chip → pre-log → Start (2 taps)', async ({
+    page,
+  }) => {
+    await mockDate(page, THU_WEEK4);
+    await page.goto('/');
+    await expect(page.locator('.home-chips')).toContainText('or do');
+    for (const id of ['B', 'C'] as const) {
+      const chip = page.locator(`button.btn-chip[data-workout="${id}"]`);
+      await expect(chip).toHaveText(id === 'B' ? 'B · Glutes' : 'C · Cardio');
+      await chip.click();
+      await expect(page.locator('.screen-header h2')).toContainText(`Workout ${id}`);
+      await page.locator('#begin').click();
+      await expect(page.locator('.exercise-name')).toBeVisible();
+      await expect(page.locator('.screen-header h2')).toContainText(`Workout ${id}`);
+      // Back out without logging (the resume snapshot is cleared by a quit).
+      await page.evaluate(() => localStorage.removeItem('workout-tracker:active-session'));
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toBeVisible();
+    }
+  });
+
+  test("(c) a Saturday that swung to last week reads in words on Thursday: 0 of 3 · Sat's C went to Week 3", async ({
+    page,
+  }) => {
+    await seedLogs(page, [SWING_WEEK3_A, SWING_WEEK3_B, SWING_SAT_C]);
+    await mockDate(page, THU_WEEK4);
+    await page.goto('/');
+    const line = page.locator('.week-line');
+    await expect(line).toContainText('0 of 3 this week');
+    await expect(line).toContainText("Sat's");
+    await expect(line).toContainText('went to');
+    await expect(line).toHaveText("0 of 3 this week · Sat's C went to Week 3 · 3 total");
+    // The Saturday dot is still lit, and still opens its session (not the card).
+    await page.locator('.week-dot.dot-C').click();
+    await expect(page.locator('#app')).toContainText('Sat, Sep 19, 2026');
+    await expect(page.locator('.week-line')).toHaveCount(0);
+    await expect(page.locator('.weekly-review-subtitle')).toHaveCount(0);
+  });
+
+  test('(d) what left home: no title/subtitle/pick copy, no Recent, no streak, no week arrows', async ({
+    page,
+  }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, thirtyNine());
+    await page.goto('/');
+    const text = await page.locator('#app').innerText();
+    for (const gone of [
+      'Workout Tracker',
+      'Show up 3x/week',
+      'Pick today',
+      'Recent workouts',
+      'streak',
+      'Weekly review',
+      'capacity',
+      'Gear',
+      'Past weeks',
+      'Coming next week',
+    ]) {
+      expect(text.toLowerCase(), gone).not.toContain(gone.toLowerCase());
+    }
+    await expect(page.locator('#prev-week, #next-week')).toHaveCount(0);
+    await expect(page.locator('.week-banner, .stat-number, .last-line')).toHaveCount(0);
+    await expect(page.locator('#open-weekly-review-link')).toHaveCount(0);
+    // The two doors: one component, same height, stacked with no gap.
+    const doors = page.locator('.home-doors .door-row');
+    await expect(doors).toHaveCount(2);
+    await expect(doors.nth(0)).toContainText('Progress');
+    await expect(doors.nth(1)).toContainText('Sessions');
+    const p = (await doors.nth(0).boundingBox())!;
+    const s = (await doors.nth(1).boundingBox())!;
+    expect(p.height).toBeGreaterThanOrEqual(48);
+    expect(Math.abs(p.height - s.height)).toBeLessThan(1);
+    expect(Math.abs(p.y + p.height - s.y)).toBeLessThan(2);
+    // "synced ✓" hides; the sync word shows only when something is pending.
+    await expect(page.locator('#sync-indicator')).toHaveText('');
+  });
+
+  test('(e) after Save today: "Done ✓ · Workout A", no sage; a first elliptical ride + 1.4 km are its firsts', async ({
+    page,
+    context,
+  }) => {
+    await movableClock(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#start-timed').click();
+    await advanceClock(page, 10 * 60_000 + 2_000);
+    await expect(page.locator('.timer-done')).toHaveText('✓ 10 min done');
+    await page.locator('#ell-km').fill('1.4');
+    for (let i = 0; i < 60; i++) {
+      if (await page.locator('text=Quick log').isVisible()) break;
+      if (!(await tapForward(page))) break;
+    }
+    await page.locator('button:has-text("Save & finish")').click();
+    const done = page.locator('#home-done-card');
+    await expect(done.locator('.home-done-title')).toHaveText('Done ✓ · Workout A');
+    await expect(done).toContainText('1 of 3 this week');
+    const firsts = done.locator('.home-done-firsts');
+    await expect(firsts).toContainText('first elliptical ride');
+    await expect(firsts).toContainText('1.4 km');
+    await expect(firsts).toContainText('supported split squat');
+    await expect(page.locator('.home-hero')).toHaveCount(0);
+    expect(await sageFills(page)).toHaveLength(0);
+    // The chips stay — the other two workouts, one tap each.
+    await expect(page.locator('button.btn-chip[data-workout="B"]')).toBeVisible();
+    await expect(page.locator('button.btn-chip[data-workout="C"]')).toBeVisible();
+    // Without the per-phone firsts key the card still witnesses the session.
+    // (A fresh page in the same context: `page` clears storage on every load.)
+    await page.evaluate(() => localStorage.removeItem('workout-tracker:last-done'));
+    const reopened = await context.newPage();
+    await movableClock(reopened, TUE_WEEK4);
+    await reopened.goto('/');
+    await expect(reopened.locator('.home-done-title')).toHaveText('Done ✓ · Workout A');
+    await expect(reopened.locator('#home-done-card')).toContainText('1 of 3 this week');
+    await expect(reopened.locator('.home-done-firsts')).toHaveText('Elliptical · 1.4 km');
+    await reopened.close();
+  });
+
+  test('(e) the next day the hero is back, pointing at the next workout', async ({ page }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, [
+      {
+        id: 'wed-a',
+        date: '2026-09-23T15:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 7,
+        capacityAfter: 7,
+        wallSitSec: 45,
+        backPain: 0,
+        word: '',
+        synced: true,
+      },
+    ]);
+    await page.goto('/');
+    await expect(page.locator('#home-done-card')).toHaveCount(0);
+    await expect(page.locator('button.home-hero[data-workout="B"]')).toContainText('Up next');
+  });
+
+  test('(f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress', async ({
+    page,
+  }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, thirtyNine());
+    await page.goto('/');
+    await page.locator('#open-weekly-review').click();
+    await expect(page.locator('h2').first()).toContainText('Week of');
+    const wbw = page.locator('details.consistency-wrap');
+    await expect(wbw.locator('.next-week-summary-label')).toHaveText('Week by week');
+    await expect(wbw).toHaveJSProperty('open', false);
+    await page.locator('#back-home').click();
+    await page.locator('#open-settings').click();
+    await expect(page.locator('.settings-screen .gear-card')).toContainText('Gear');
+    // The auto-suggest switch went with the tiles (DECISIONS §5).
+    await expect(page.locator('#setting-suggest')).toHaveCount(0);
+    await page.locator('#back-home').click();
+    await page.locator('#open-progress-link').click();
+    await expect(page.locator('.program-archive')).toContainText('Past weeks');
+    await page.locator('#back-home').click();
+    await page.locator('#view-history').click();
+    await expect(page.locator('.history-row')).toHaveCount(39);
+  });
+
+  test('(f) the week card opens from the keyboard too', async ({ page }) => {
+    await page.locator('#open-weekly-review').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('h2').first()).toContainText('Week of');
+  });
+
+  test('(h) the walk row: "4,210 steps today" only when Fit answered; one row, no paragraph', async ({
+    page,
+  }) => {
+    const walk = page.locator('.walk-card');
+    await expect(page.locator('#log-walk-start')).toHaveText('🚶 Start a walk');
+    await expect(walk).not.toContainText(/steps/i);
+    await expect(walk.locator('p')).toHaveCount(0);
+    await page.evaluate(() =>
+      (window as unknown as { __wtSetStepsToday: (n: number) => void }).__wtSetStepsToday(4210)
+    );
+    await expect(walk.locator('.walk-text')).toHaveText('4,210 steps today');
+    await page.locator('#log-walk-start').click();
+    await expect(page.locator('#finish-walk')).toHaveText('■ Done');
+    await page.locator('#finish-walk').click();
+    await expect(walk.locator('.walk-text')).toHaveText('1 this week · 4,210 steps today');
   });
 });
