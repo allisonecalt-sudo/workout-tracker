@@ -3192,3 +3192,41 @@ test('post-log: the free-text note saves verbatim on a session with no cardio la
   const logs = JSON.parse(raw ?? '[]') as { notes?: string | null }[];
   expect(logs[0]?.notes).toBe('skipped the bird dog, wrist tired');
 });
+
+// --- Back (v47, Sep 24 2026) -------------------------------------------------
+// Her words: "this app needs back button like i can go back an exercise or a
+// round" → "i need to be able to go back". One step backwards, across rounds.
+
+test('back (v47): Back steps to the previous exercise, is hidden on the first step, and crosses the round boundary', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-24T14:00:00.000Z');
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  // First step: nothing behind her → no Back.
+  await expect(page.locator('.exercise-name')).toHaveText('Cardio');
+  await expect(page.locator('#step-back')).toHaveCount(0);
+
+  await page.locator('button:has-text("Done ·")').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Belly breathing');
+  await expect(page.locator('#step-back')).toBeVisible();
+  await page.locator('#step-back').click();
+  await expect(page.locator('.exercise-name')).toHaveText('Cardio');
+  await expect(page.locator('#step-back')).toHaveCount(0);
+
+  // Walk forward into Round 2, then Back → Round 1's last exercise.
+  for (let i = 0; i < 40; i++) {
+    const label = await page.locator('.round-indicator').first().textContent();
+    if (label && label.includes('Round 2/')) break;
+    await page.locator('button:has-text("Done ·")').click();
+  }
+  await expect(page.locator('.round-indicator').first()).toContainText('Round 2/');
+  await expect(page.locator('.progress-text')).toHaveText(/Exercise 1 of/);
+  const mainCount = Number(
+    (await page.locator('.progress-text').textContent())?.match(/of (\d+)/)?.[1]
+  );
+  await page.locator('#step-back').click();
+  await expect(page.locator('.round-indicator').first()).toContainText('Round 1/');
+  await expect(page.locator('.progress-text')).toHaveText(`Exercise ${mainCount} of ${mainCount}`);
+});

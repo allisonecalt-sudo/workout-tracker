@@ -265,8 +265,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v46';
-const BUILD_DATE = 'Sep 24, 2026 · 16:25';
+const APP_VERSION = 'v47';
+const BUILD_DATE = 'Sep 24, 2026 · 16:50';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -3692,6 +3692,71 @@ function advanceExercise(): void {
   render();
 }
 
+// ---------- Back (Allison Sep 24 2026, v47) ----------
+// Her words: "this app needs back button like i can go back an exercise or a
+// round" → "i need to be able to go back". One step backwards through the
+// same walk advanceExercise takes forwards: within a phase, then across the
+// round boundary (Round 2 step 1 → Round 1 last step), then across phases
+// (main → warm-up, upper back → main last round, cool-down → the block before
+// it). Nothing is logged by going back: a running timer stops, a pending
+// wall-sit capture is discarded (she's redoing it), a rest is cancelled.
+function canGoBack(): boolean {
+  if (state.screen !== 'workout') return false;
+  return !(state.currentPhase === 'warmup' && state.currentExerciseIndex === 0 && !state.isResting);
+}
+
+function goBack(): void {
+  const w = getCurrentWorkout();
+  if (!w || !canGoBack()) return;
+  stopTimer();
+  state.wallSitStartedAt = null;
+  state.videoExpandedFor = null;
+  // On the rest screen the index already points at the NEXT exercise, so
+  // "back" from rest = the exercise she just finished = one index back.
+  state.isResting = false;
+
+  const lastOf = (phase: Phase): number => Math.max(0, (w[phase] ?? []).length - 1);
+  if (state.currentPhase === 'cooldown') {
+    if (w.upperBack?.length) {
+      state.currentPhase = 'upperBack';
+      state.currentExerciseIndex = lastOf('upperBack');
+    } else {
+      state.currentPhase = 'main';
+      state.currentRound = effectiveRounds(w);
+      state.currentExerciseIndex = lastOf('main');
+    }
+  } else if (state.currentExerciseIndex > 0) {
+    state.currentExerciseIndex -= 1;
+  } else if (state.currentPhase === 'main') {
+    if (state.currentRound > 1) {
+      state.currentRound -= 1;
+      state.currentExerciseIndex = lastOf('main');
+    } else {
+      state.currentPhase = 'warmup';
+      state.currentExerciseIndex = lastOf('warmup');
+    }
+  } else if (state.currentPhase === 'upperBack') {
+    state.currentPhase = 'main';
+    state.currentRound = effectiveRounds(w);
+    state.currentExerciseIndex = lastOf('main');
+  }
+  render();
+}
+
+// The Back + Done pair under every step (v47). Back is hidden on the very
+// first step, where there is nothing behind her.
+function renderStepNav(doneLabel: string): string {
+  const back = canGoBack()
+    ? `<button class="btn-large btn-back" id="step-back" type="button" aria-label="Back one step">‹ Back</button>`
+    : '';
+  return `
+    <div class="step-nav">
+      ${back}
+      <button class="btn-large btn-primary" id="next" type="button">${doneLabel}</button>
+    </div>
+  `;
+}
+
 function captureWallSitIfPending(): void {
   if (state.wallSitStartedAt !== null) {
     const heldSec = Math.max(0, Math.round((Date.now() - state.wallSitStartedAt) / 1000));
@@ -5641,6 +5706,7 @@ function renderRestScreen(workoutId: WorkoutId, phaseLabel: string): string {
         <span class="hold-fill"></span>
         <span class="hold-label">Hold to skip rest</span>
       </button>
+      <button class="btn-ghost" id="step-back" type="button" aria-label="Back to the exercise you just did">‹ Back to that exercise</button>
     </div>
   `;
 }
@@ -5691,7 +5757,7 @@ function renderCooldownList(w: Workout): string {
       <ul class="stretch-list">${rows}</ul>
     </div>
 
-    <button class="btn-large btn-primary" id="next" type="button">Done · Finish</button>
+    ${renderStepNav('Done · Finish')}
   `;
 }
 
@@ -5996,7 +6062,7 @@ function renderWorkout(): string {
           : renderHowToCard(ex.name)
     }
 
-    <button class="btn-large btn-primary" id="next" type="button">Done · Next</button>
+    ${renderStepNav('Done · Next')}
   `;
 }
 
@@ -7548,6 +7614,10 @@ function attachHandlers(): void {
 
   bindClick('next', () => {
     advanceExercise();
+  });
+  // v47: one step back (her ask Sep 24: "i need to be able to go back").
+  bindClick('step-back', () => {
+    goBack();
   });
 
   // v45: the post-log text is kept as she types, so an app close on that
