@@ -3756,7 +3756,10 @@ input[type='number']:focus {
   color: var(--text-dim);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  height: 36px;
+  /* v48 (Sep 24 2026): 44px tap target, same negative-margin trick as
+   * .quit-link, so the header keeps the 36px it had. */
+  min-height: 44px;
+  margin: -4px 0;
   padding: 8px 12px;
   font-size: var(--font-meta);
   font-weight: 500;
@@ -3865,4 +3868,216 @@ input[type='number']:focus {
 /* On the rest ring, Back sits under "Hold to skip rest" as a plain ghost link. */
 .rest-card #step-back {
   margin-top: 8px;
+}
+
+/* ---- v48 P2 (Sep 24 2026) — the workout step shell ------------------------ */
+
+/* Back + Done pinned to the bottom (walk-in-her-shoes: "Back and Done pinned to
+ * the bottom"). Done used to sit at the end of each step's scroll, under the
+ * picture and the detail card — below the fold on most steps. Sits under the
+ * paused overlay and the quit panel (both z 1000). */
+.action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 800;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
+.action-bar-inner {
+  max-width: 520px; /* #app's 560 minus its side padding */
+  margin: 0 auto;
+}
+
+/* 60px button + 24px padding + 1px border, and a little air, so the last line
+ * of a step scrolls clear of the bar. */
+#app.has-action-bar {
+  padding-bottom: calc(108px + env(safe-area-inset-bottom));
+}
+
+/* ONE progress line for the whole workout: phase on the left, "7 of 22" on the
+ * right, one bar under it. Replaces the round pill + "Exercise N of M" + the
+ * in-card phase label (three counters that restarted every phase). */
+.step-progress {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.step-progress .round-indicator {
+  display: inline;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  letter-spacing: 0;
+}
+
+.step-count {
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.step-progress + .progress-bar {
+  margin: 0 0 18px;
+}
+
+/* Name + the "New tonight" badge beside it (wraps under a long name). */
+.exercise-name-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+}
+
+.exercise-name-row .exercise-name {
+  margin-bottom: 0;
+}
+
+/* Outlined, never a sage fill — the sage is the one primary action. */
+.new-tonight-badge {
+  display: inline-block;
+  border: 1px solid var(--accent-progress);
+  color: var(--text);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  font-size: var(--font-meta);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* The one safety line on the card face; the full cue sits behind "Cue ▸". */
+.exercise-safety {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  line-height: 1.45;
+  text-align: left;
+  margin: 4px 0 6px;
+}
+
+.cue-section {
+  text-align: left;
+  margin-top: 6px;
+}
+
+.cue-section .detail-section-toggle {
+  padding: 10px 4px;
+  color: var(--text-dim);
+}
+
+.cue-section .detail-chev {
+  color: var(--text-dim);
+}
+
+.cue-section .detail-section-body {
+  padding: 0 4px 6px;
+}
+
+.cue-section .exercise-notes {
+  max-width: none;
+  margin: 0;
+}
+
+/* Compact "▶ Watch how it looks" row: round 2+, and moves with no still. */
+.exercise-visual-compact {
+  padding: 6px;
+}
+
+.exercise-visual-compact .visual-video-toggle {
+  margin-top: 0;
+}
+
+.exercise-visual-compact .exercise-visual-still {
+  margin-top: 8px;
+}
+
+/* Hold timer: the idle number is plain text — sage only while counting
+ * (one sage per screen = the Start button). */
+.timer-display.timer-idle {
+  color: var(--text);
+}
+
+/* "✓ held 45 s · last time 43" — a witness, not a second primary. */
+.timer-done.timer-held {
+  color: var(--text);
+}
+
+.timer-last {
+  color: var(--text-dim);
+  font-weight: 500;
+  font-size: var(--font-subheading);
+}
+
+/* Quiet text links in the Quit register: rest-screen Back, Redo, Finish here. */
+.back-link {
+  display: block;
+  margin: 8px auto 0;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 6px 12px;
+  min-height: 44px;
+  font-size: var(--font-small);
+  font-weight: 500;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.back-link:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
+/* Done · Next before a hold has run: the Back look, but it keeps its width. */
+.step-nav .btn-done-quiet {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Rest: what's next. */
+.rest-next {
+  color: var(--text);
+  font-size: var(--font-small);
+  margin: 4px auto 0;
+  max-width: 420px;
+}
+
+/* Round 1 done ✓ */
+.round-break-card {
+  text-align: center;
+  padding: 28px 20px 16px;
+}
+
+.round-break-title {
+  font-size: var(--font-heading);
+  margin-bottom: 10px;
+}
+
+.round-break-next {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+}
+
+.round-break-finish {
+  margin-top: 18px;
+}
+
+/* Quit panel's third choice — quiet, full width under Cancel / Quit. */
+.quit-confirm-log {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
 }

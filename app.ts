@@ -24,6 +24,11 @@ type Exercise = {
   //   • Outdoor walk — auto-tracks steps/km + "tap done", intentionally no countdown.
   durationSec?: number;
   isTimed?: boolean;
+  // v48 (Sep 24 2026): the ONE line that belongs on the card face mid-set — the
+  // safety rule, not the whole cue. Falls back to SAFETY_LINE by name. The full
+  // `notes` moves behind a closed "Cue ▸" (47-70 words on the face, mid-set, on 7
+  // of 12 moves — uxui exercise 3/5; her words: "its a bit all over the place").
+  safety?: string;
   // One-time SETUP the exercise needs before the first rep — kit you have to
   // prepare, not the movement itself (v37, Sep 14 2026, her ask: "make sure
   // there s avideo and expalation" about tying the band).
@@ -183,6 +188,24 @@ type AppState = {
   // the card face stays minimal — "show whats important, everything else i click
   // to open." Per-render/transient; not persisted.
   openSections: Record<string, boolean>;
+  // v48 (Sep 24 2026) — the round-1 floor. True while the "Round 1 done ✓"
+  // screen is up (between round 1's last main step and round 2). Her weeks are
+  // 3/3 or 0; on a bad day the "stop here" choice comes mid-session, not on
+  // pre-log. Persisted in the resume snapshot.
+  roundBreak: boolean;
+  // "Finish here — it still counts" jumped to the cool-down: the liteDay value
+  // from BEFORE that tap, so Back from the cool-down can undo it honestly (back
+  // to the round-break screen, not into an upper-back block she skipped).
+  // null = she didn't finish here.
+  finishHereLitePrev: boolean | null;
+  // v48: the quit panel's "Log what I did" — the step she stopped on, saved as a
+  // "stopped early at …" annotation (ux.md #8: "a half session vanishing is the
+  // quiet quit"). null = she didn't stop early.
+  stoppedEarlyAt: string | null;
+  // v48: real seconds held on each hold STEP (wall sit, plank, wall lean), keyed
+  // "phase|round|index" — for the "✓ held 45 s" done-face only (the saved wall
+  // sit number stays wallSitSec). Transient; not in the resume snapshot.
+  heldSecFor: Record<string, number>;
 };
 
 const STORAGE_KEY = 'workout-tracker:logs';
@@ -2512,6 +2535,29 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   },
 };
 
+// v48 (Sep 24 2026): the one safety line per move for the card FACE, keyed by
+// name so every week carrying the move gets it. Face-only wording — no numbers,
+// no dates (those drift week to week and live in the full cue behind "Cue ▸").
+// PROGRAM notes are NOT edited: the prescription and its full cue stay hers +
+// Lisa's. An Exercise's own `safety` wins over this map.
+const SAFETY_LINE: Record<string, string> = {
+  'Supported split squat':
+    'Fingertips on the couch for balance only — no weight through the hands.',
+  'Bodyweight hip hinge': 'Do NOT round the low back.',
+  'Wall sit': 'Knees toward 90°. Hands on thighs or hanging — no pushing on the wall.',
+  'Full dead bug': 'Low back pressed to the mat the whole time.',
+  'Forearm plank': 'Forearms only, not hands. Stop if any wrist sensation.',
+  'Wall angels': 'If the wrists lift off, stop there — no forcing.',
+  'IWYT raises': 'Thumbs up, wrist neutral. Stop if the neck complains.',
+  'Prone row (bodyweight)': 'Head down. Pain tells — stop on any wrist signal.',
+  '1 kg biceps curl': 'Wrist neutral, never bending back. Pain tells.',
+  'Bird dog (legs only)': 'Pressure is fine; pain = done for today.',
+  'Wall lean (wrist on-ramp)': 'Pressure is fine; pain = stop.',
+  'Side-lying clamshells': 'Hips rolling back? Band lower, or off.',
+  'Standing calf raises': 'Fingertips on the wall for balance only.',
+  'Bodyweight squats': 'Wall behind the shoulders if wobbly.',
+};
+
 const state: AppState = {
   screen: 'home',
   selectedWorkout: null,
@@ -2542,6 +2588,10 @@ const state: AppState = {
   howToOpenFor: null,
   exerciseBreakdownOpen: false,
   openSections: {},
+  roundBreak: false,
+  finishHereLitePrev: null,
+  stoppedEarlyAt: null,
+  heldSecFor: {},
 };
 
 // ---------- audio ----------
@@ -3742,6 +3792,12 @@ function beginExercises(): void {
   state.pausedAt = null; // fresh session, no paused time carried in
   state.pausedMs = 0;
   state.voicePlays = 0; // v48: plays are counted per session
+  // v48 (Sep 24 2026): the round-1 floor, the stop-early marker and the hold
+  // done-faces all start fresh with the session.
+  state.roundBreak = false;
+  state.finishHereLitePrev = null;
+  state.stoppedEarlyAt = null;
+  state.heldSecFor = {};
   // v46: the post-log sliders haven't been seen yet (capacity-before was just
   // set on pre-log, so its flag stays as it is).
   state.capacityAfterTouched = false;
@@ -3787,6 +3843,15 @@ function advanceExercise(): void {
     state.currentExerciseIndex = 0;
   } else if (state.currentPhase === 'main') {
     if (state.currentRound < effectiveRounds(w)) {
+      // v48 (Sep 24 2026) — the round-1 floor: after round 1's last move, a
+      // "Round 1 done ✓" screen offers "Start round 2" or "Finish here — it
+      // still counts". Her weeks are 3/3 or 0 (7 zero weeks); Lite exists but
+      // only before she starts, and a bad day shows up mid-session.
+      if (state.currentRound === 1) {
+        state.roundBreak = true;
+        render();
+        return;
+      }
       state.currentRound += 1;
       state.currentExerciseIndex = 0;
       startRestTimer();
@@ -3824,12 +3889,29 @@ function goBack(): void {
   stopTimer();
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
+  // v48: Back from the "Round 1 done ✓" screen = round 1's last move, which is
+  // where the state already points (the break sits on top of it).
+  if (state.roundBreak) {
+    state.roundBreak = false;
+    render();
+    return;
+  }
   // On the rest screen the index already points at the NEXT exercise, so
   // "back" from rest = the exercise she just finished = one index back.
   state.isResting = false;
 
   const lastOf = (phase: Phase): number => Math.max(0, (w[phase] ?? []).length - 1);
-  if (state.currentPhase === 'cooldown') {
+  if (state.currentPhase === 'cooldown' && state.finishHereLitePrev !== null) {
+    // v48: she tapped "Finish here" — Back undoes exactly that: the round-break
+    // screen again, with Lite as it was before the tap (she skipped round 2 and
+    // the upper-back block, so they are not "one step back").
+    state.liteDay = state.finishHereLitePrev;
+    state.finishHereLitePrev = null;
+    state.currentPhase = 'main';
+    state.currentRound = 1;
+    state.currentExerciseIndex = lastOf('main');
+    state.roundBreak = true;
+  } else if (state.currentPhase === 'cooldown') {
     if (w.upperBack?.length) {
       state.currentPhase = 'upperBack';
       state.currentExerciseIndex = lastOf('upperBack');
@@ -3856,18 +3938,198 @@ function goBack(): void {
   render();
 }
 
-// The Back + Done pair under every step (v47). Back is hidden on the very
-// first step, where there is nothing behind her.
-function renderStepNav(doneLabel: string): string {
+// v48 (Sep 24 2026): the pinned bottom bar. Done sat at the END of each step's
+// scroll — under a video, a detail card and a cue paragraph — so on most steps
+// it was below the fold (walk-in-her-shoes: "Back and Done pinned to the
+// bottom"). One helper so pre-log Start and post-log Save (P5) pin the same way.
+// render() gives #app the matching bottom padding whenever a bar is on screen.
+function renderActionBar(inner: string): string {
+  return `<div class="action-bar"><div class="action-bar-inner">${inner}</div></div>`;
+}
+
+// The Back + Done pair under every step (v47), pinned since v48. Back is hidden
+// on the very first step, where there is nothing behind her. `quiet` = Done
+// in the Back style (v48: a timed hold before it has run — the sage belongs to
+// Start timer then; one sage per screen). Still tappable either way: she may
+// have used her own clock.
+function renderStepNav(doneLabel: string, quiet = false): string {
   const back = canGoBack()
     ? `<button class="btn-large btn-back" id="step-back" type="button" aria-label="Back one step">‹ Back</button>`
     : '';
-  return `
+  return renderActionBar(`
     <div class="step-nav">
       ${back}
-      <button class="btn-large btn-primary" id="next" type="button">${doneLabel}</button>
+      <button class="btn-large ${quiet ? 'btn-back btn-done-quiet' : 'btn-primary'}" id="next" type="button">${doneLabel}</button>
     </div>
-  `;
+  `);
+}
+
+// v48 (Sep 24 2026): ONE count for the whole workout, replacing the round pill +
+// "Exercise N of M" (which restarted at 1 in every phase and every round) + the
+// in-card phase label — three counters, none of which said how far along she
+// was. Total = warm-up + main × rounds + upper back + 1 (the cool-down list is
+// one step). The rest screen's index already points at the NEXT step, so it
+// shows the next step's position; the round-break screen shows round 1's last.
+function workoutStepPosition(w: Workout): { index: number; total: number } {
+  const warm = w.warmup.length;
+  const main = w.main.length;
+  const rounds = effectiveRounds(w);
+  const upper = w.upperBack?.length ?? 0;
+  const total = warm + main * rounds + upper + 1;
+  const i = state.currentExerciseIndex;
+  let index: number;
+  switch (state.currentPhase) {
+    case 'warmup':
+      index = i + 1;
+      break;
+    case 'main':
+      index = warm + (Math.min(state.currentRound, rounds) - 1) * main + i + 1;
+      break;
+    case 'upperBack':
+      index = warm + main * rounds + i + 1;
+      break;
+    default:
+      index = total;
+  }
+  return { index: Math.max(1, Math.min(total, index)), total };
+}
+
+function phaseLabelFor(w: Workout): string {
+  const base =
+    state.currentPhase === 'main'
+      ? `Main · Round ${state.currentRound} of ${effectiveRounds(w)}`
+      : state.currentPhase === 'warmup'
+        ? 'Warm-up'
+        : state.currentPhase === 'upperBack'
+          ? 'Upper back'
+          : 'Cool-down';
+  return `${base}${state.liteDay ? ' · lite' : ''}`;
+}
+
+// The one progress line + the one bar (v48). `.round-indicator` stays on the
+// left label — the resume tests key on it.
+function renderProgressLine(w: Workout): string {
+  const { index, total } = workoutStepPosition(w);
+  return `
+    <div class="step-progress">
+      <span class="round-indicator">${phaseLabelFor(w)}</span>
+      <span class="step-count">${index} of ${total}</span>
+    </div>
+    <div class="progress-bar">
+      <div class="progress-bar-fill" style="width: ${(index / total) * 100}%"></div>
+    </div>`;
+}
+
+// v48 (Sep 24 2026): "New tonight" — a move that wasn't in this workout last
+// encoded week AND she hasn't done this workout since the week began. Her first
+// split squat sat on the same face as her 40th bridge (walk-in-her-shoes: "A
+// 'New tonight' badge"). Nothing to decide — a label, gone after one session.
+// Reused by P4/P5 (pre-log overview, home hero).
+function isNewTonight(ex: Exercise, id: WorkoutId): boolean {
+  const current = getWeekPlan();
+  const idx = PROGRAM.indexOf(current);
+  const prev = idx > 0 ? PROGRAM[idx - 1] : undefined;
+  if (!prev) return false; // Week 1 of the program: everything is new, so nothing is
+  const pw = prev.workouts[id];
+  const phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
+  if (phases.some((p) => (pw[p] ?? []).some((e) => e.name === ex.name))) return false;
+  const startMs = new Date(current.startsOn + 'T00:00:00').getTime();
+  return !loadLogs().some((l) => l.workout === id && new Date(l.date).getTime() >= startMs);
+}
+
+// v48: is the current step a hold (wall sit, plank, wall lean) rather than a
+// cardio lane? Lanes keep their v46 face — P3 owns them.
+function isHoldStep(ex: Exercise): boolean {
+  return !!ex.isTimed && !isIndoorLane(ex.name) && ex.name !== 'Outdoor walk';
+}
+
+// v48: round 2+ of the main block — the quieter face (visual folded, how-to
+// never auto-open).
+function isLaterRound(): boolean {
+  return state.currentPhase === 'main' && state.currentRound > 1;
+}
+
+// The hold done-faces are keyed per STEP (phase|round|index), not per name: the
+// wall sit comes round again in round 2, and that one hasn't been held yet —
+// a name key would greet round 2 with "✓ held 45 s". Back to a held step
+// shows its done-face again.
+function holdStepKey(): string {
+  return `${state.currentPhase}|${state.currentRound}|${state.currentExerciseIndex}`;
+}
+
+// Seconds held on THIS step so far (0 = not run yet).
+function heldOnThisStep(): number {
+  return state.heldSecFor[holdStepKey()] ?? 0;
+}
+
+function recordHeld(key: string, sec: number): void {
+  // Max: a redo can add a better hold, never erase a real one (the saved wall
+  // sit follows the same rule in captureWallSitIfPending).
+  if (sec > 0) state.heldSecFor[key] = Math.max(state.heldSecFor[key] ?? 0, sec);
+}
+
+// v48 (Sep 24 2026): the quiet Stop on a running hold. Saves the REAL seconds
+// — walk §4: "No way to say I held less". There used to be only a disabled
+// "Running…" slab. Stopped during the 3-2-1 = nothing held, back to Ready.
+function stopTimedHold(): void {
+  const ex = getCurrentExercise();
+  if (!ex) return;
+  const t = activeTimer;
+  if (t && t.kind === 'timed-exercise' && ex.durationSec) {
+    const remainSec = Math.max(0, (t.endsAt - Date.now()) / 1000);
+    recordHeld(holdStepKey(), Math.max(0, Math.round(ex.durationSec - remainSec)));
+  }
+  if (ex.name === 'Wall sit') captureWallSitIfPending(); // the saved number
+  stopTimer();
+  render();
+}
+
+// "Start round 2" on the round-break screen (v48). Rest (if she set one) runs
+// first, exactly as it did at the round boundary before.
+function startRoundTwo(): void {
+  // Round 2 opens quiet: the Cue and detail dropdowns she opened in round 1
+  // close again (walk-in-her-shoes: "Round 2 notes closed"). Setup blocks
+  // ("setup:<name>") keep whatever she chose.
+  for (const key of Object.keys(state.openSections)) {
+    if (key.includes('::')) delete state.openSections[key];
+  }
+  state.roundBreak = false;
+  state.currentRound = 2;
+  state.currentExerciseIndex = 0;
+  startRestTimer(); // rest 0 (her default) = straight on; it renders either way
+}
+
+// "Finish here — it still counts" (v48): skip round 2 and the upper-back block,
+// land on the cool-down list in Lite, save lite_day = true. Your weeks are 3/3
+// or 0 — the cheapest floor is inside the session you're already in.
+function finishAtRoundOne(): void {
+  state.finishHereLitePrev = state.liteDay;
+  state.liteDay = true;
+  state.roundBreak = false;
+  state.currentPhase = 'cooldown';
+  state.currentExerciseIndex = 0;
+  render();
+}
+
+// Quit panel's "Log what I did" (v48): the half session is logged, not thrown
+// away (assumptions Kill #10, ux.md #8). Lite if round 2 never started.
+function logWhatIDid(): void {
+  const ex = getCurrentExercise();
+  captureWallSitIfPending(); // a hold she was in the middle of still counts
+  captureLaneMinutesIfLeaving();
+  stopTimer();
+  state.stoppedEarlyAt =
+    state.currentPhase === 'cooldown' ? 'the cool-down' : (ex?.name ?? state.currentPhase);
+  if (
+    state.currentRound === 1 &&
+    (state.currentPhase === 'warmup' || state.currentPhase === 'main')
+  ) {
+    state.liteDay = true;
+  }
+  state.isResting = false;
+  state.roundBreak = false;
+  state.screen = 'post-log';
+  render();
 }
 
 function captureWallSitIfPending(): void {
@@ -3894,9 +4156,16 @@ function startTimedExercise(): void {
     if (isIndoorLane(exerciseName)) {
       localStorage.setItem(WW_LANE_STARTED_KEY, String(Date.now()));
     }
+    const stepKey = holdStepKey(); // v48: the done-face belongs to this step
     startTimerCore('timed-exercise', duration, () => {
+      if (!isIndoorLane(exerciseName)) recordHeld(stepKey, duration); // v48 "✓ held 45 s"
       if (exerciseName === 'Wall sit') {
-        captureWallSitIfPending();
+        // v48 (Sep 24 2026): a hold that ran to the end held exactly its
+        // duration. Measuring the wall clock here logged 46+ when the frame
+        // fired late (phone asleep → the loop resumes minutes later), and the
+        // new "✓ held 45 s" face would repeat that number to her.
+        state.wallSitStartedAt = null;
+        state.wallSitSec = Math.max(state.wallSitSec, duration);
       }
       render();
     });
@@ -3973,10 +4242,17 @@ async function saveCompletedSession(): Promise<void> {
   // information at the end about what I did". Kept verbatim, in its own column
   // from v48 — her words, not the tail of a machine log line.
   const sessionNote = state.sessionNote.trim() || null;
-  // `notes` = system annotations only.
-  const notes = leftOpen
-    ? `duration not recorded — session was left open ${Math.round(rawDurationSec / 3600)}h before Done`
-    : null;
+  // `notes` = system annotations only. v48 (Sep 24 2026): "stopped early at
+  // <move>" when she logged a partial session from the quit panel.
+  const notes =
+    [
+      leftOpen
+        ? `duration not recorded — session was left open ${Math.round(rawDurationSec / 3600)}h before Done`
+        : null,
+      state.stoppedEarlyAt ? `stopped early at ${state.stoppedEarlyAt}` : null,
+    ]
+      .filter((s): s is string => s !== null)
+      .join(' · ') || null;
   const stored = saveLog({
     date: completedAt,
     workout: state.selectedWorkout,
@@ -4040,6 +4316,11 @@ type ActiveSessionSnapshot = {
   pausedAt: number | null;
   pausedMs: number;
   liteDay: boolean;
+  // v48: an app close on the "Round 1 done ✓" screen reopens on it; a
+  // finish-here and a stop-early survive a close too.
+  roundBreak: boolean;
+  finishHereLitePrev: boolean | null;
+  stoppedEarlyAt: string | null;
 };
 
 function saveActiveSession(): void {
@@ -4066,6 +4347,9 @@ function saveActiveSession(): void {
       pausedAt: state.pausedAt,
       pausedMs: state.pausedMs,
       liteDay: state.liteDay,
+      roundBreak: state.roundBreak,
+      finishHereLitePrev: state.finishHereLitePrev,
+      stoppedEarlyAt: state.stoppedEarlyAt,
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
   } catch {
@@ -4134,6 +4418,13 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       pausedAt: typeof snap.pausedAt === 'number' ? snap.pausedAt : null,
       pausedMs: typeof snap.pausedMs === 'number' && snap.pausedMs >= 0 ? snap.pausedMs : 0,
       liteDay: snap.liteDay === true, // default false on old snapshots
+      // v48: pre-v48 snapshots have none of these → the plain step, no marker.
+      roundBreak: snap.roundBreak === true && phase === 'main',
+      finishHereLitePrev:
+        typeof snap.finishHereLitePrev === 'boolean' && phase === 'cooldown'
+          ? snap.finishHereLitePrev
+          : null,
+      stoppedEarlyAt: typeof snap.stoppedEarlyAt === 'string' ? snap.stoppedEarlyAt : null,
     };
   } catch {
     clearActiveSession();
@@ -4161,6 +4452,10 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.voicePlays = snap.voicePlays;
   state.startedAt = snap.startedAt ?? new Date().toISOString();
   state.liteDay = snap.liteDay;
+  state.roundBreak = snap.roundBreak;
+  state.finishHereLitePrev = snap.finishHereLitePrev;
+  state.stoppedEarlyAt = snap.stoppedEarlyAt;
+  state.heldSecFor = {}; // v48: display-only, not carried across a close
   // Preserve pause accounting across an app close. If she closed while paused,
   // she stays paused on reopen (the closed span counts as paused, so it's
   // subtracted from duration — faithful to "I stepped away").
@@ -4288,6 +4583,11 @@ function resetState(): void {
   state.videoExpandedFor = null;
   state.howToOpenFor = null;
   state.openSections = {};
+  // v48 (Sep 24 2026): round-1 floor, stop-early marker, hold done-faces.
+  state.roundBreak = false;
+  state.finishHereLitePrev = null;
+  state.stoppedEarlyAt = null;
+  state.heldSecFor = {};
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
   clearElliptical();
@@ -4838,7 +5138,11 @@ function renderExerciseSetup(ex: Exercise): string {
   `;
 }
 
-function renderExerciseVisual(exerciseName: string): string {
+// `compact` (v48, Sep 24 2026): one quiet "▶ Watch how it looks" row that
+// expands on tap — used from round 2 on (she has just done the move; walk:
+// "Round 2 notes closed") and ALWAYS for moves with no still, where the old
+// face was a 342×257 black poster with a play icon (split squat, bird dog).
+function renderExerciseVisual(exerciseName: string, compact = false): string {
   const v = EXERCISE_VISUALS[exerciseName];
   const still = getPrimaryStill(exerciseName);
   const youtubeId = v?.youtubeId;
@@ -4849,6 +5153,12 @@ function renderExerciseVisual(exerciseName: string): string {
   const isExpanded = state.videoExpandedFor === exerciseName;
   const safeAlt = escapeHtml(`${exerciseName} — exercise demonstration`);
   const attribution = v?.attribution ? escapeHtml(v.attribution) : '';
+
+  const stillMarkup = still
+    ? 'svg' in still
+      ? `<div class="exercise-visual-still exercise-visual-still-svg">${still.svg}</div>`
+      : `<img class="exercise-visual-still" src="${escapeHtml(still.image)}" alt="${safeAlt}" loading="lazy" />`
+    : '';
 
   const videoIframe = youtubeId
     ? `<div class="visual-video-wrap">
@@ -4863,47 +5173,39 @@ function renderExerciseVisual(exerciseName: string): string {
       </div>`
     : '';
 
-  // Still picture (trusted inline SVG, or a curated/illustration JPG). Shown as
-  // the primary visual; the video sits behind a "Watch full video" expander.
-  if (still) {
-    const stillHtml =
-      'svg' in still
-        ? `<div class="exercise-visual-still exercise-visual-still-svg">${still.svg}</div>`
-        : `<img class="exercise-visual-still" src="${escapeHtml(still.image)}" alt="${safeAlt}" loading="lazy" />`;
-
-    const videoBlock = youtubeId
-      ? `
-      <button class="visual-video-toggle" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isExpanded}">
-        ${isExpanded ? '× Hide video' : '▶ Watch full video'}
-      </button>
-      ${isExpanded ? videoIframe : ''}`
-      : '';
-
+  // v48: the compact row (round 2+, or no still to show). Open = the picture
+  // (if any) and the video together, closed = one quiet line.
+  if (compact || !still) {
     return `
-      <div class="exercise-visual">
-        ${stillHtml}
-        ${videoBlock}
-        ${attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
+      <div class="exercise-visual exercise-visual-compact">
+        <button class="visual-video-toggle" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isExpanded}">
+          ${isExpanded ? '× Hide' : '▶ Watch how it looks'}
+        </button>
+        ${isExpanded ? `${stillMarkup}${videoIframe}` : ''}
+        ${isExpanded && attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
       </div>
     `;
   }
 
-  // No still anywhere — video poster is primary (autoplay-off is intentional;
-  // YouTube embeds can't autoplay on mobile without a user gesture and we don't
-  // want unrequested data downloads).
+  // Still picture (trusted inline SVG, or a curated/illustration JPG). Shown as
+  // the primary visual; the video sits behind a "Watch full video" expander.
+  // (v48: the no-still video POSTER that used to follow is gone — a still-less
+  // move takes the compact row above. Autoplay stays off: the embed loads on tap.)
+  const videoBlock = youtubeId
+    ? `
+      <button class="visual-video-toggle" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isExpanded}">
+        ${isExpanded ? '× Hide video' : '▶ Watch full video'}
+      </button>
+      ${isExpanded ? videoIframe : ''}`
+    : '';
+
   return `
-    <div class="exercise-visual exercise-visual-video-only">
-      ${
-        isExpanded
-          ? videoIframe
-          : `<button class="visual-video-poster" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="false">
-              <span class="visual-video-poster-icon">▶</span>
-              <span class="visual-video-poster-label">Watch how it looks</span>
-            </button>`
-      }
-      ${attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
-    </div>
-  `;
+      <div class="exercise-visual">
+        ${stillMarkup}
+        ${videoBlock}
+        ${attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
+      </div>
+    `;
 }
 
 function renderHowToFrame(frame: HowToFrame, idx: number, exerciseName: string): string {
@@ -5086,7 +5388,9 @@ function renderHowToCard(exerciseName: string): string {
   const userClosed = state.howToOpenFor === `__closed__${exerciseName}`;
   // Ship 6: respect "Show how-to expanded first time per week" setting (default
   // on). If off, never auto-expand — only show when user explicitly opens.
-  const autoExpand = getHowToFirstExpand();
+  // v48 (Sep 24 2026): never auto-open from round 2 on — she has just done the
+  // move (walk-in-her-shoes: "Round 2 notes closed").
+  const autoExpand = getHowToFirstExpand() && !isLaterRound();
   const isOpen = userOpened || (autoExpand && isFirstThisWeek && !userClosed);
 
   const innerHtml = howto
@@ -5848,7 +6152,7 @@ function renderTempoBar(): string {
 
 // Group 2H: rest screen now leads with a large countdown ring/arc; Skip is a
 // hold-to-confirm button.
-function renderRestScreen(workoutId: WorkoutId, phaseLabel: string): string {
+function renderRestScreen(w: Workout): string {
   // Ship 6: read user-configured rest length (default 60).
   const total = getRestSec();
   const remaining = state.timerSeconds;
@@ -5857,15 +6161,25 @@ function renderRestScreen(workoutId: WorkoutId, phaseLabel: string): string {
   const r = 90;
   const C = 2 * Math.PI * r;
   const offset = C * (1 - pct);
+  // v48 (Sep 24 2026): one line saying what comes next (uxui rest 3/5 — the
+  // ring said how long, never what for). The index already points at it.
+  const next = rawCurrentExercise();
+  const roundStart =
+    state.currentPhase === 'main' && state.currentExerciseIndex === 0 && state.currentRound > 1;
+  const nextLine = next
+    ? roundStart
+      ? `Next · Round ${state.currentRound} · ${next.name}`
+      : `Next · ${next.name}${next.reps ? ` · ${next.reps}` : ''}`
+    : '';
   return `
     <div class="screen-header">
-      <h2>Workout ${workoutId}</h2>
+      <h2>Workout ${w.id}</h2>
       <div class="screen-header-actions">
         ${renderPauseButton()}
         <button class="quit-link" id="quit" type="button">× Quit workout</button>
       </div>
     </div>
-    <span class="round-indicator">${phaseLabel}</span>
+    ${renderProgressLine(w)}
     <div class="card rest-card">
       <div class="rest-ring-wrap">
         <svg class="rest-ring" viewBox="0 0 200 200">
@@ -5880,12 +6194,40 @@ function renderRestScreen(workoutId: WorkoutId, phaseLabel: string): string {
         </div>
       </div>
       <p class="exercise-notes">Breathe. Sip water if you have it.</p>
+      ${nextLine ? `<p class="rest-next">${escapeHtml(nextLine)}</p>` : ''}
       <button class="btn-ghost hold-to-skip" id="skip-rest" type="button" data-hold-ms="${HOLD_TO_SKIP_MS}">
         <span class="hold-fill"></span>
         <span class="hold-label">Hold to skip rest</span>
       </button>
-      <button class="btn-ghost" id="step-back" type="button" aria-label="Back to the exercise you just did">‹ Back to that exercise</button>
+      <button class="back-link" id="step-back" type="button" aria-label="Back to the exercise you just did">‹ Back</button>
     </div>
+  `;
+}
+
+// v48 (Sep 24 2026) — the round-1 floor. Between round 1's last move and round
+// 2: rest if she wants it, go on, or stop here with a session that still counts.
+// Your words for Lite: one round, "still counts". One sage (Start round 2).
+function renderRoundBreak(w: Workout): string {
+  const first = w.main[0];
+  return `
+    <div class="screen-header">
+      <h2>Workout ${w.id}</h2>
+      <div class="screen-header-actions">
+        ${renderPauseButton()}
+        <button class="quit-link" id="quit" type="button">× Quit workout</button>
+      </div>
+    </div>
+    ${renderProgressLine(w)}
+    <div class="card round-break-card">
+      <h2 class="round-break-title">Round 1 done ✓</h2>
+      ${first ? `<p class="round-break-next">Next · Round 2 · ${escapeHtml(first.name)}</p>` : ''}
+      <button class="back-link round-break-finish" id="finish-here" type="button">Finish here — it still counts</button>
+    </div>
+    ${renderActionBar(`
+      <div class="step-nav">
+        <button class="btn-large btn-back" id="step-back" type="button" aria-label="Back to round 1's last move">‹ Back</button>
+        <button class="btn-large btn-primary" id="start-round-2" type="button">Start round 2</button>
+      </div>`)}
   `;
 }
 
@@ -5924,7 +6266,7 @@ function renderCooldownList(w: Workout): string {
         <button class="quit-link" id="quit" type="button">× Quit workout</button>
       </div>
     </div>
-    <span class="round-indicator">Stretch · ${stretches.length} stretches</span>
+    ${/* v48: the same one progress line as every step (the list = one step). */ renderProgressLine(w)}
     <p class="subtitle">${
       state.liteDay
         ? 'Lite day — do the stretches you need, skip the rest. Done · Finish whenever.'
@@ -6103,23 +6445,76 @@ function renderEllipticalGuide(): string {
   `;
 }
 
+// v48 (Sep 24 2026): the face of a hold (wall sit, plank, wall lean). Four
+// states, one sage at a time: Ready (sage Start) → Get ready / Hold (a quiet
+// Stop that saves the real seconds; no dead "Running…" slab) → Done ("✓ held
+// 45 s · last time 43", a quiet Redo; Done · Next turns sage). uxui timed 4/5
+// (the hold reset silently) and 3/5 (two sage buttons, a dead slab); walk §4:
+// "No way to say I held less".
+function renderHoldTimerCard(ex: Exercise, showTempo: boolean): string {
+  const held = heldOnThisStep();
+  const idle = state.timerSeconds === 0 && state.preCountdown === 0;
+  let inner: string;
+  if (state.preCountdown > 0) {
+    inner = `
+      <div class="timer-label">Get ready</div>
+      <div class="timer-display countdown-big">${state.preCountdown}</div>
+      <button class="btn-ghost" id="stop-timed" type="button">Stop</button>`;
+  } else if (!idle) {
+    inner = `
+      <div class="timer-label">Hold</div>
+      <div class="timer-display">${formatTimerDisplay(state.timerSeconds)}</div>
+      <button class="btn-ghost" id="stop-timed" type="button">Stop</button>`;
+  } else if (held > 0) {
+    // "last time" = the most recent saved session with a real wall sit (logs
+    // are newest-first; this session isn't saved yet). Omitted when none.
+    const last =
+      ex.name === 'Wall sit' ? loadLogs().find((l) => l.wallSitSec > 0)?.wallSitSec : undefined;
+    inner = `
+      <div class="timer-label">Done</div>
+      <div class="timer-done timer-held">✓ held ${held} s${last ? `<span class="timer-last"> · last time ${last}</span>` : ''}</div>
+      <button class="back-link" id="redo-timed" type="button">Redo</button>`;
+  } else {
+    inner = `
+      <div class="timer-label">Ready</div>
+      <div class="timer-display timer-idle">${formatTimerDisplay(ex.durationSec ?? 0)}</div>
+      <button class="btn-large btn-primary" id="start-timed" type="button">Start timer</button>`;
+  }
+  return `
+    <div class="card timer-card">
+      ${inner}
+      ${showTempo ? renderTempoBar() : ''}
+    </div>`;
+}
+
+// v48: the full cue behind one closed "Cue ▸" (same toggle + openSections as
+// the detail-card dropdowns). The face keeps only the safety line.
+function renderCueExpander(ex: Exercise): string {
+  if (!ex.notes) return '';
+  const key = `${ex.name}::cue`;
+  const isOpen = !!state.openSections[key];
+  return `
+    <div class="detail-section cue-section ${isOpen ? 'detail-section-open' : ''}">
+      <button class="detail-section-toggle cue-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${isOpen}">
+        <span class="detail-section-label">Cue</span>
+        <span class="detail-chev" aria-hidden="true">▸</span>
+      </button>
+      ${isOpen ? `<div class="detail-section-body"><p class="exercise-notes">${ex.notes}</p></div>` : ''}
+    </div>`;
+}
+
 function renderWorkout(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
   const ex = getCurrentExercise();
-  const phaseList = w[state.currentPhase] ?? [];
-  const total = phaseList.length;
-  const phaseLabel =
-    state.currentPhase === 'main'
-      ? `Main · Round ${state.currentRound}/${effectiveRounds(w)}${state.liteDay ? ' · lite' : ''}`
-      : state.currentPhase === 'warmup'
-        ? 'Warm-up'
-        : state.currentPhase === 'upperBack'
-          ? 'Upper back'
-          : 'Cool-down';
+
+  // v48: the round-1 floor sits on top of round 1's last move.
+  if (state.roundBreak) {
+    return renderRoundBreak(w);
+  }
 
   if (state.isResting) {
-    return renderRestScreen(w.id, phaseLabel);
+    return renderRestScreen(w);
   }
 
   // Cool-down stretches render as a single scrollable list, not stepped cards.
@@ -6138,57 +6533,21 @@ function renderWorkout(): string {
   const indoorLane = isIndoorLane(ex.name);
   const laneRan = indoorLane && localStorage.getItem(WW_LANE_STARTED_KEY) !== null;
   const timerIdle = state.timerSeconds === 0 && state.preCountdown === 0;
+  const hold = isHoldStep(ex);
+  const holdRan = hold && heldOnThisStep() > 0;
+  const safety = ex.safety ?? SAFETY_LINE[ex.name];
+  const isCardioChoice = ex.name === 'Outdoor walk' && workoutWalkStart() === null;
+  const newTonight =
+    !isCardioChoice && state.selectedWorkout !== null && isNewTonight(ex, state.selectedWorkout);
 
-  return `
-    <div class="screen-header">
-      <h2>Workout ${w.id}</h2>
-      <div class="screen-header-actions">
-        ${renderPauseButton()}
-        <button class="quit-link" id="quit" type="button">× Quit workout</button>
-      </div>
-    </div>
-    <span class="round-indicator">${phaseLabel}</span>
-    <div class="progress-text">Exercise ${state.currentExerciseIndex + 1} of ${total}</div>
-    <div class="progress-bar">
-      <div class="progress-bar-fill" style="width: ${((state.currentExerciseIndex + 1) / total) * 100}%"></div>
-    </div>
+  // v48: a hold's timer comes straight after name + reps + safety line — it IS
+  // the step. It used to sit under a 257 px picture, below the fold.
+  const holdTimer = hold ? renderHoldTimerCard(ex, showTempo) : '';
 
-    <div class="card">
-      <div class="exercise-display">
-        <div class="exercise-phase">${phaseLabel}</div>
-        <div class="exercise-name">${
-          // Before a lane is picked the step is a CHOICE, not a walk (Sep 24:
-          // "no more walk it could be walk or elliptical").
-          ex.name === 'Outdoor walk' && workoutWalkStart() === null ? 'Cardio' : ex.name
-        }</div>
-        <div class="exercise-reps">${ex.reps ?? ''}</div>
-        ${ex.notes ? `<p class="exercise-notes">${ex.notes}</p>` : ''}
-        ${renderExerciseSetup(ex)}
-        ${
-          ex.name === 'Outdoor walk'
-            ? workoutWalkStart() !== null
-              ? `<p class="gear-note">🚶 Tracking your walk: <span id="walk-live">starting…</span><br>Keep the phone on you — steps count indoors, km outdoors. It saves with this workout. Tap “Done · Next” when you finish.</p>`
-              : `<div class="ww-start-block"><button class="btn-large btn-primary" id="ww-elliptical" type="button">▶ Elliptical</button><button class="cardio-alt-btn" id="ww-start" type="button">🚶 Walk outside (tracked)</button><button class="cardio-alt-btn" id="ww-apartment" type="button">🏠 Apartment instead (timer)</button><p class="gear-note">Pick one — same minutes whichever you choose. The walk only starts tracking when you tap it, so tap it as you head out.</p></div>`
-            : ex.name === APARTMENT_CARDIO_NAME
-              ? `<div class="ww-start-block"><button class="cardio-alt-btn" id="ww-outdoor" type="button">↩ Elliptical or walk instead</button></div>`
-              : ex.name === ELLIPTICAL_NAME
-                ? renderEllipticalControls()
-                : ''
-        }
-      </div>
-    </div>
-
-    ${renderExerciseVisual(ex.name)}
-
-    ${
-      // v46: the machine setup sits ABOVE the timer — she needs it before
-      // Start, and it used to render after (UX audit Sep 24).
-      ex.name === ELLIPTICAL_NAME ? renderEllipticalGuide() : ''
-    }
-
-    ${
-      ex.isTimed
-        ? `
+  // Lanes (elliptical / apartment) keep their v46 timer face — P3 owns them.
+  const laneTimer =
+    ex.isTimed && !hold
+      ? `
       <div class="card timer-card">
         ${
           state.preCountdown > 0
@@ -6210,10 +6569,59 @@ function renderWorkout(): string {
         ${showTempo ? renderTempoBar() : ''}
       </div>
     `
-        : showTempo
-          ? `<div class="card">${renderTempoBar()}</div>`
-          : ''
+      : !ex.isTimed && showTempo
+        ? `<div class="card">${renderTempoBar()}</div>`
+        : '';
+
+  return `
+    <div class="screen-header">
+      <h2>Workout ${w.id}</h2>
+      <div class="screen-header-actions">
+        ${renderPauseButton()}
+        <button class="quit-link" id="quit" type="button">× Quit workout</button>
+      </div>
+    </div>
+    ${renderProgressLine(w)}
+
+    <div class="card">
+      <div class="exercise-display">
+        <div class="exercise-name-row">
+          <div class="exercise-name">${
+            // Before a lane is picked the step is a CHOICE, not a walk (Sep 24:
+            // "no more walk it could be walk or elliptical").
+            isCardioChoice ? 'Cardio' : ex.name
+          }</div>
+          ${newTonight ? `<span class="new-tonight-badge">New tonight</span>` : ''}
+        </div>
+        <div class="exercise-reps">${ex.reps ?? ''}</div>
+        ${safety ? `<p class="exercise-safety">${escapeHtml(safety)}</p>` : ''}
+        ${renderCueExpander(ex)}
+        ${renderExerciseSetup(ex)}
+        ${
+          ex.name === 'Outdoor walk'
+            ? workoutWalkStart() !== null
+              ? `<p class="gear-note">🚶 Tracking your walk: <span id="walk-live">starting…</span><br>Keep the phone on you — steps count indoors, km outdoors. It saves with this workout. Tap “Done · Next” when you finish.</p>`
+              : `<div class="ww-start-block"><button class="btn-large btn-primary" id="ww-elliptical" type="button">▶ Elliptical</button><button class="cardio-alt-btn" id="ww-start" type="button">🚶 Walk outside (tracked)</button><button class="cardio-alt-btn" id="ww-apartment" type="button">🏠 Apartment instead (timer)</button><p class="gear-note">Pick one — same minutes whichever you choose. The walk only starts tracking when you tap it, so tap it as you head out.</p></div>`
+            : ex.name === APARTMENT_CARDIO_NAME
+              ? `<div class="ww-start-block"><button class="cardio-alt-btn" id="ww-outdoor" type="button">↩ Elliptical or walk instead</button></div>`
+              : ex.name === ELLIPTICAL_NAME
+                ? renderEllipticalControls()
+                : ''
+        }
+      </div>
+    </div>
+
+    ${holdTimer}
+
+    ${renderExerciseVisual(ex.name, isLaterRound())}
+
+    ${
+      // v46: the machine setup sits ABOVE the timer — she needs it before
+      // Start, and it used to render after (UX audit Sep 24).
+      ex.name === ELLIPTICAL_NAME ? renderEllipticalGuide() : ''
     }
+
+    ${laneTimer}
 
     ${
       // The guided indoor strip sits directly under the countdown it's derived
@@ -6240,7 +6648,11 @@ function renderWorkout(): string {
           : renderHowToCard(ex.name)
     }
 
-    ${renderStepNav('Done · Next')}
+    ${
+      // v48: on a hold, Done stays quiet until the timer has run on this step
+      // (the sage belongs to Start timer until then) — one sage per screen.
+      renderStepNav('Done · Next', hold && !holdRan)
+    }
   `;
 }
 
@@ -7541,11 +7953,12 @@ function showQuitConfirmPanel(): void {
   panel.innerHTML = `
     <div class="quit-confirm-card">
       <div class="quit-confirm-title">Quit this workout?</div>
-      <div class="quit-confirm-sub">Progress so far won't save.</div>
+      <div class="quit-confirm-sub">Quit = nothing saved.</div>
       <div class="quit-confirm-row">
         <button class="btn quit-confirm-cancel" id="quit-cancel" type="button">Cancel</button>
         <button class="btn quit-confirm-yes" id="quit-yes" type="button">Quit</button>
       </div>
+      <button class="btn quit-confirm-log" id="quit-log" type="button">Log what I did</button>
     </div>
   `;
   document.body.appendChild(panel);
@@ -7559,6 +7972,12 @@ function showQuitConfirmPanel(): void {
   };
 
   panel.querySelector('#quit-cancel')?.addEventListener('click', dismiss);
+  // v48 (Sep 24 2026): the third choice — keep the half session (ux.md #8: "a
+  // half session vanishing is the quiet quit"). Goes to the post-log as usual.
+  panel.querySelector('#quit-log')?.addEventListener('click', () => {
+    dismiss();
+    logWhatIDid();
+  });
   panel.querySelector('#quit-yes')?.addEventListener('click', () => {
     dismiss();
     resetState();
@@ -7578,7 +7997,7 @@ let lastNavKey: string | null = null;
 
 function navigationKey(): string {
   if (state.screen === 'workout') {
-    return `workout|${state.currentPhase}|${state.currentRound}|${state.currentExerciseIndex}|${state.isResting ? 'rest' : 'go'}`;
+    return `workout|${state.currentPhase}|${state.currentRound}|${state.currentExerciseIndex}|${state.isResting ? 'rest' : state.roundBreak ? 'break' : 'go'}`;
   }
   if (state.screen === 'history-detail') return `history-detail|${state.historyDetailId ?? ''}`;
   return state.screen;
@@ -7627,6 +8046,9 @@ function render(): void {
   // workout/timer screens where it would feel laggy mid-rep. The class
   // triggers a 220ms fade + 8px translateY with the spring ease curve.
   root.innerHTML = html;
+  // v48 (Sep 24 2026): room under the last line for the pinned action bar, so
+  // nothing scrolls out of reach behind it (same idea as the old has-pause-fab).
+  root.classList.toggle('has-action-bar', root.querySelector('.action-bar') !== null);
   // v13: the in-workout walk tracker follows the screen — starts on the
   // Outdoor-walk step, harvests when she moves past it (or quits).
   syncWorkoutWalkTracking();
@@ -7953,6 +8375,20 @@ function attachHandlers(): void {
 
   bindClick('start-timed', () => {
     startTimedExercise();
+  });
+  // v48 (Sep 24 2026): the hold's quiet Stop (real seconds) and Redo.
+  bindClick('stop-timed', () => {
+    stopTimedHold();
+  });
+  bindClick('redo-timed', () => {
+    startTimedExercise();
+  });
+  // v48: the round-1 floor — go on, or finish here (it still counts).
+  bindClick('start-round-2', () => {
+    startRoundTwo();
+  });
+  bindClick('finish-here', () => {
+    finishAtRoundOne();
   });
 
   bindClick('save-log', () => {

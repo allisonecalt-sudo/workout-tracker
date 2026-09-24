@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -6,6 +6,13 @@ test.beforeEach(async ({ page }) => {
   });
   await page.goto('/');
 });
+
+// v48 (Sep 24 2026): the full cue sits behind a closed "Cue ▸" — the card face
+// carries only the one safety line. Tests that read the cue open it first.
+async function openCue(page: Page): Promise<void> {
+  const toggle = page.locator('.cue-toggle[aria-expanded="false"]');
+  if (await toggle.count()) await toggle.first().click();
+}
 
 test('home screen shows three workout options and zero sessions', async ({ page }) => {
   await expect(page.locator('h1')).toHaveText('Workout Tracker');
@@ -81,7 +88,7 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
     if (isPostLog) break;
     // Matches both the stepped "Done · Next" and the cool-down list's
     // single "Done · Finish" button.
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -127,11 +134,11 @@ test('cool-down renders as a single stretch list with no per-stretch video', asy
         .locator('.round-indicator')
         .textContent()
         .catch(() => '')) ?? '';
-    if (phase.includes('Stretch')) {
+    if (phase.includes('Cool-down')) {
       reachedStretch = true;
       break;
     }
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -179,7 +186,7 @@ test('workout B reaches the upper-back phase after main (wall angels, unloaded)'
       reachedUpperBack = true;
       break;
     }
-    const nextBtn = page.locator('button:has-text("Done · Next")');
+    const nextBtn = page.locator('button:has-text("Done · Next"), #start-round-2');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -313,7 +320,7 @@ async function walkToPostLog(page: import('@playwright/test').Page): Promise<voi
       .isVisible()
       .catch(() => false);
     if (isPostLog) return;
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else return;
   }
@@ -711,6 +718,7 @@ test('R2 W3: workout B carries the yellow band on the clamshells, reps back to 1
         .textContent({ timeout: 1000 })
         .catch(() => '')) ?? '';
     if (name.includes('Side-lying clamshells')) {
+      await openCue(page);
       repsSeen =
         (await page
           .locator('.exercise-reps')
@@ -724,7 +732,7 @@ test('R2 W3: workout B carries the yellow band on the clamshells, reps back to 1
           .catch(() => '')) ?? '';
       break;
     }
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -751,7 +759,7 @@ test('R2 W3: the clamshell step carries a tying explanation AND its own video, o
         .textContent({ timeout: 1000 })
         .catch(() => '')) ?? '';
     if (name.includes('Side-lying clamshells')) break;
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -807,10 +815,11 @@ test('R2 W3: the tying setup does NOT leak onto Week 2, whose clamshell is bodyw
     if (name.includes('Side-lying clamshells')) {
       await expect(page.locator('.setup-block')).toHaveCount(0);
       await expect(page.locator('.exercise-reps')).not.toContainText('yellow band');
+      await openCue(page);
       await expect(page.locator('.exercise-notes').first()).toContainText('Bodyweight this week');
       return;
     }
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -823,7 +832,7 @@ test('R2 W3: workout C carries no setup block anywhere', async ({ page }) => {
   await page.locator('button:has-text("Start")').click();
   for (let i = 0; i < 40; i++) {
     await expect(page.locator('.setup-block')).toHaveCount(0);
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -1098,6 +1107,7 @@ test('R2 W4: the wall sit step itself reads 45 sec (the earned nudge from 40)', 
         .catch(() => '')) ?? '';
     if (name.includes('Wall sit')) {
       await expect(page.locator('.exercise-reps')).toContainText('45 sec');
+      await openCue(page);
       await expect(page.locator('.exercise-notes').first()).toContainText('40 → 45');
       return;
     }
@@ -1108,7 +1118,7 @@ test('R2 W4: the wall sit step itself reads 45 sec (the earned nudge from 40)', 
       // Catch-up, not a raise: the hinge now says she holds the 1 kg.
       await expect(page.locator('.exercise-reps')).toContainText('holding the 1 kg');
     }
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -1291,6 +1301,7 @@ test('R2 W3 (v41): the plank in B is the SAME prescription as the one in A', asy
           .textContent({ timeout: 1000 })
           .catch(() => '')) ?? '';
       if (name.includes('Forearm plank')) {
+        await openCue(page);
         const reps =
           (await page
             .locator('.exercise-reps')
@@ -1304,7 +1315,7 @@ test('R2 W3 (v41): the plank in B is the SAME prescription as the one in A', asy
             .catch(() => '')) ?? '';
         return `${reps.trim()} :: ${notes.trim()}`;
       }
-      const nextBtn = page.locator('button:has-text("Done ·")');
+      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
       if (await nextBtn.isVisible()) await nextBtn.click();
       else {
         const skipRest = page.locator('#skip-rest');
@@ -1357,7 +1368,7 @@ test('setup blocks (v40): every phase that renders an Exercise also renders its 
         .catch(() => false)
     )
       break;
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else {
       const skipRest = page.locator('#skip-rest');
@@ -1507,7 +1518,7 @@ test('Done safety net: a session that comes out longer than 3h logs no duration,
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = reopened.locator('button:has-text("Done ·")');
+    const nextBtn = reopened.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -1552,7 +1563,8 @@ test('detail card: a dropdown section opens and closes on click', async ({ page 
   // A opens on the walk step, which deliberately has NO card (stripped Jul 12) —
   // advance one step to the first real exercise before asserting the card.
   await page.locator('button:has-text("Done ·")').click();
-  const toggle = page.locator('.detail-section-toggle').first();
+  // v48: scoped to the detail card — the step card now has its own "Cue ▸".
+  const toggle = page.locator('.detail-card .detail-section-toggle').first();
   await expect(toggle).toBeVisible();
   await toggle.click(); // open
   await expect(page.locator('.detail-section-body')).toHaveCount(1);
@@ -2441,7 +2453,8 @@ test('lite day: pre-log toggle drops one round and marks the session lite', asyn
   await page.locator('button:has-text("Start")').click();
   // C's warmup is the walk step — advance past it into the main block.
   await page.locator('button:has-text("Done ·")').click();
-  await expect(page.locator('.round-indicator')).toContainText('Round 1/1 · lite');
+  // v48: one progress line — "Main · Round 1 of 1 · lite".
+  await expect(page.locator('.round-indicator')).toContainText('Main · Round 1 of 1 · lite');
 });
 
 test('walk: Cancel discards an opened walk without logging it', async ({ page }) => {
@@ -2524,6 +2537,7 @@ test('R2 W2: workout A carries the full dead bug, bird dog legs-only, the tilted
         .textContent({ timeout: 1000 })
         .catch(() => '')) ?? '';
     if (name) {
+      await openCue(page);
       const notes =
         (await page
           .locator('.exercise-notes')
@@ -2538,7 +2552,7 @@ test('R2 W2: workout A carries the full dead bug, bird dog legs-only, the tilted
       seen[name] = `${reps} :: ${notes}`;
     }
     if (seen['Forearm plank']) break;
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -2744,7 +2758,7 @@ test('cardio either/or: finishing after the apartment option saves the lane + it
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -3033,7 +3047,7 @@ test('elliptical: finishing saves the minutes + level + readings, never POSTs, a
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -3194,7 +3208,7 @@ test('post-log: the free-text note saves verbatim on a session with no cardio la
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = page.locator('button:has-text("Done ·")');
+    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -3232,19 +3246,27 @@ test('back (v47): Back steps to the previous exercise, is hidden on the first st
   await expect(page.locator('#step-back')).toHaveCount(0);
 
   // Walk forward into Round 2, then Back → Round 1's last exercise.
+  // v48: the one progress line reads "Main · Round 2 of 2" and one count for the
+  // whole workout; the round-1 floor screen sits between the rounds.
+  let lastRoundOneName = '';
   for (let i = 0; i < 40; i++) {
     const label = await page.locator('.round-indicator').first().textContent();
-    if (label && label.includes('Round 2/')) break;
+    if (label && label.includes('Round 2 of')) break;
+    if (await page.locator('#start-round-2').isVisible()) {
+      await page.locator('#start-round-2').click();
+      continue;
+    }
+    lastRoundOneName = (await page.locator('.exercise-name').textContent()) ?? '';
     await page.locator('button:has-text("Done ·")').click();
   }
-  await expect(page.locator('.round-indicator').first()).toContainText('Round 2/');
-  await expect(page.locator('.progress-text')).toHaveText(/Exercise 1 of/);
-  const mainCount = Number(
-    (await page.locator('.progress-text').textContent())?.match(/of (\d+)/)?.[1]
+  await expect(page.locator('.round-indicator').first()).toContainText('Main · Round 2 of 2');
+  const roundTwoStep = Number(
+    (await page.locator('.step-count').textContent())?.match(/^(\d+) of/)?.[1]
   );
   await page.locator('#step-back').click();
-  await expect(page.locator('.round-indicator').first()).toContainText('Round 1/');
-  await expect(page.locator('.progress-text')).toHaveText(`Exercise ${mainCount} of ${mainCount}`);
+  await expect(page.locator('.round-indicator').first()).toContainText('Main · Round 1 of 2');
+  await expect(page.locator('.exercise-name')).toHaveText(lastRoundOneName);
+  await expect(page.locator('.step-count')).toHaveText(new RegExp(`^${roundTwoStep - 1} of`));
 });
 
 // --- v48 P1 · data (Sep 24 2026) ---------------------------------------------
@@ -3262,7 +3284,7 @@ test.describe('v48 P1 data', () => {
         .isVisible()
         .catch(() => false);
       if (isPostLog) break;
-      const nextBtn = page.locator('button:has-text("Done ·")');
+      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2');
       if (await nextBtn.isVisible()) await nextBtn.click();
       else break;
     }
@@ -3536,7 +3558,7 @@ test.describe('v48 P1 data', () => {
         );
         return;
       }
-      await page.locator('button:has-text("Done ·")').click();
+      await page.locator('button:has-text("Done ·"), #start-round-2').click();
     }
     throw new Error('never reached the hip hinge');
   });
@@ -3663,5 +3685,363 @@ test.describe('v48 P1 data', () => {
     await expect(note).toHaveText('Knee fine, legs heavy on the last round');
     await expect(note).toHaveAttribute('dir', 'auto');
     await expect(page.locator('.detail-card')).toContainText('Your note');
+  });
+});
+
+// --- v48 P2 · the workout step shell (Sep 24 2026) ---------------------------
+// DECISIONS-v48 §4-5 (Workout rows). Her words: "look at home ux ui and make it
+// better i feel like its a bit all over the place". Back/Done pinned, one bar
+// for the whole workout, one safety line on the face, holds that witness the
+// real seconds, and the round-1 floor ("Finish here — it still counts").
+test.describe('v48 P2 shell', () => {
+  type Row = Record<string, unknown>;
+  const TUE_WEEK4 = '2026-09-22T14:00:00.000Z'; // Tue inside Round 2 Week 4 (startsOn Sep 19)
+
+  const seedLogs = async (page: Page, logs: Row[]): Promise<void> => {
+    await page.addInitScript((rows) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    }, logs);
+  };
+  const aLog = (id: string, date: string, wallSitSec: number): Row => ({
+    id,
+    date,
+    workout: 'A',
+    capacityBefore: 6,
+    capacityAfter: 7,
+    wallSitSec,
+    backPain: 0,
+    word: '',
+    synced: true,
+  });
+
+  // One tap forward: Done · Next / Done · Finish, or "Start round 2" on the
+  // round-break screen. Returns false once nothing is left to tap.
+  const tapForward = async (page: Page): Promise<boolean> => {
+    if (await page.locator('#start-round-2').isVisible()) {
+      await page.locator('#start-round-2').click();
+      return true;
+    }
+    const next = page.locator('#next');
+    if (await next.isVisible()) {
+      await next.click();
+      return true;
+    }
+    return false;
+  };
+
+  const goToStep = async (page: Page, name: string): Promise<void> => {
+    for (let i = 0; i < 40; i++) {
+      const now =
+        (await page
+          .locator('.exercise-name')
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      if (now === name) return;
+      if (!(await tapForward(page))) break;
+    }
+    throw new Error(`never reached ${name}`);
+  };
+
+  const startA = async (page: Page): Promise<void> => {
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await expect(page.locator('.exercise-name')).toBeVisible();
+  };
+
+  const toRoundBreak = async (page: Page): Promise<string> => {
+    let lastName = '';
+    for (let i = 0; i < 40 && !(await page.locator('#start-round-2').isVisible()); i++) {
+      lastName = (await page.locator('.exercise-name').textContent()) ?? '';
+      await page.locator('#next').click();
+    }
+    await expect(page.locator('#start-round-2')).toBeVisible();
+    return lastName;
+  };
+
+  const saveAndRead = async (page: Page): Promise<Row> => {
+    await page.locator('button:has-text("Save & finish")').click();
+    await expect(page.locator('h1')).toHaveText('Workout Tracker');
+    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+    const logs = JSON.parse(raw ?? '[]') as Row[];
+    return logs[0]!;
+  };
+
+  test.describe('at phone size', () => {
+    test.use({ viewport: { width: 412, height: 915 } });
+
+    test('(a) Done is inside the fold on every step of A, without scrolling', async ({ page }) => {
+      await mockDate(page, TUE_WEEK4);
+      await page.goto('/');
+      await startA(page);
+      let steps = 0;
+      for (let i = 0; i < 60; i++) {
+        if (await page.locator('text=Quick log').isVisible()) break;
+        const target = (await page.locator('#start-round-2').isVisible())
+          ? page.locator('#start-round-2')
+          : page.locator('#next');
+        await expect(target).toBeVisible();
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        const box = await target.boundingBox();
+        expect(box).not.toBeNull();
+        expect(box!.y + box!.height).toBeLessThanOrEqual(915);
+        await target.click();
+        steps++;
+      }
+      await expect(page.locator('text=Quick log')).toBeVisible();
+      expect(steps).toBeGreaterThan(15);
+    });
+  });
+
+  test('(b) one count for the whole workout: 1 of N, +1 per Done across phases and rounds', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    // The old three counters are gone.
+    await expect(page.locator('.progress-text')).toHaveCount(0);
+    await expect(page.locator('.exercise-phase')).toHaveCount(0);
+    const read = async (): Promise<[number, number]> => {
+      const t = (await page.locator('.step-count').textContent()) ?? '';
+      const m = t.match(/^(\d+) of (\d+)$/);
+      expect(m, t).not.toBeNull();
+      return [Number(m![1]), Number(m![2])];
+    };
+    const [first, total] = await read();
+    expect(first).toBe(1);
+    await expect(page.locator('.round-indicator')).toHaveText('Warm-up');
+    await expect(page.locator('.progress-bar')).toHaveCount(1);
+    let prev = first;
+    const labels = new Set<string>();
+    for (let i = 0; i < 60; i++) {
+      if (await page.locator('#start-round-2').isVisible()) {
+        await page.locator('#start-round-2').click(); // not a step — the count holds
+      } else {
+        await page.locator('#next').click();
+      }
+      if (await page.locator('text=Quick log').isVisible()) break;
+      if (await page.locator('#start-round-2').isVisible()) continue;
+      const [idx, n] = await read();
+      expect(n).toBe(total);
+      expect(idx).toBe(prev + 1);
+      prev = idx;
+      labels.add((await page.locator('.round-indicator').textContent()) ?? '');
+    }
+    expect(prev).toBe(total); // the cool-down list is the last step
+    expect([...labels]).toEqual(
+      expect.arrayContaining([
+        'Warm-up',
+        'Main · Round 1 of 2',
+        'Main · Round 2 of 2',
+        'Upper back',
+        'Cool-down',
+      ])
+    );
+  });
+
+  test('(c) the split squat face shows the safety line, and the full cue only behind "Cue ▸"', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, 'Supported split squat');
+    await expect(page.locator('.exercise-safety')).toHaveText(
+      'Fingertips on the couch for balance only — no weight through the hands.'
+    );
+    await expect(page.locator('.exercise-notes')).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText('Front foot flat, back heel up');
+    const cue = page.locator('.cue-toggle');
+    await expect(cue).toContainText('Cue');
+    await expect(cue).toHaveAttribute('aria-expanded', 'false');
+    await cue.click();
+    await expect(page.locator('.exercise-notes')).toContainText('Front foot flat, back heel up');
+    await expect(page.locator('.exercise-notes')).toContainText('In for the squats in A');
+  });
+
+  test('(d) "New tonight" on the split squat until an A is logged this plan week', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await seedLogs(page, [aLog('last-week-a', '2026-09-17T15:00:00.000Z', 43)]);
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, 'Supported split squat');
+    await expect(page.locator('.new-tonight-badge')).toHaveText('New tonight');
+    // A move that was already in last week's A carries no badge.
+    await goToStep(page, 'Bodyweight hip hinge');
+    await expect(page.locator('.new-tonight-badge')).toHaveCount(0);
+  });
+
+  test('(d) no "New tonight" once an A is logged on/after the week started', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await seedLogs(page, [aLog('this-week-a', '2026-09-20T15:00:00.000Z', 45)]);
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, 'Supported split squat');
+    await expect(page.locator('.new-tonight-badge')).toHaveCount(0);
+  });
+
+  test('(e)(f) wall sit: Stop instead of "Running…", then "✓ held 45 s · last time 43"; one sage either side', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+    await seedLogs(page, [aLog('seed-43', '2026-09-15T15:00:00.000Z', 43)]);
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, 'Wall sit');
+    // Before the run: Start is the one sage; Done is quiet; the idle number is not sage.
+    await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
+    await expect(page.locator('#start-timed')).toHaveClass(/btn-primary/);
+    await expect(page.locator('#next')).not.toHaveClass(/btn-primary/);
+    await expect(page.locator('.timer-display')).toHaveClass(/timer-idle/);
+    // The timer sits right under the name/reps/safety card, above the detail card.
+    const timerY = (await page.locator('.timer-card').boundingBox())!.y;
+    const detailY = (await page.locator('.detail-card').boundingBox())!.y;
+    expect(timerY).toBeLessThan(detailY);
+
+    await page.locator('#start-timed').click();
+    await expect(page.locator('#stop-timed')).toBeVisible();
+    await expect(page.getByText('Running…')).toHaveCount(0);
+    await advanceClock(page, 45_000);
+    await expect(page.locator('.timer-done')).toHaveText('✓ held 45 s · last time 43');
+    await expect(page.locator('.timer-label')).toHaveText('Done');
+    await expect(page.locator('#redo-timed')).toBeVisible();
+    // After the run: Done · Next is the one sage.
+    await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
+    await expect(page.locator('#next')).toHaveClass(/btn-primary/);
+  });
+
+  test('(e) wall sit: Stop mid-hold saves the REAL seconds to the post-log', async ({ page }) => {
+    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, 'Wall sit');
+    await page.locator('#start-timed').click();
+    await expect(page.getByText('Running…')).toHaveCount(0);
+    await advanceClock(page, 20_000);
+    await expect(page.locator('.timer-display')).toHaveText('25');
+    await page.locator('#stop-timed').click();
+    await expect(page.locator('.timer-done')).toHaveText('✓ held 20 s'); // no earlier wall sit on record
+    for (let i = 0; i < 60; i++) {
+      if (await page.locator('text=Quick log').isVisible()) break;
+      if (!(await tapForward(page))) break;
+    }
+    await expect(page.locator('#wallsit')).toHaveValue('20');
+  });
+
+  test('(g) round-1 floor: "Finish here — it still counts" lands on the lite cool-down and saves lite', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await toRoundBreak(page);
+    await expect(page.locator('.round-break-title')).toHaveText('Round 1 done ✓');
+    await expect(page.locator('.round-break-next')).toContainText('Next · Round 2 · ');
+    await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
+    await page.locator('#finish-here').click();
+    await expect(page.locator('.stretch-list')).toBeVisible();
+    await expect(page.locator('.subtitle')).toContainText('Lite day');
+    await expect(page.locator('.round-indicator')).toHaveText('Cool-down · lite');
+    await page.locator('#next').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    const log = await saveAndRead(page);
+    expect(log['liteDay']).toBe(true);
+  });
+
+  test('(g) Back from the lite cool-down undoes "Finish here" (round-break screen, Lite as before)', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await toRoundBreak(page);
+    await page.locator('#finish-here').click();
+    await page.locator('#step-back').click();
+    await expect(page.locator('.round-break-title')).toHaveText('Round 1 done ✓');
+    await expect(page.locator('.round-indicator')).toHaveText('Main · Round 1 of 2');
+  });
+
+  test('(g) round-1 floor: "Start round 2" lands on round 2 step 1; Back returns to round 1', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    const lastRoundOne = await toRoundBreak(page);
+    const nextLine = (await page.locator('.round-break-next').textContent()) ?? '';
+    const firstMain = nextLine.replace('Next · Round 2 · ', '');
+    // Back from the break → round 1's last move.
+    await page.locator('#step-back').click();
+    await expect(page.locator('.exercise-name')).toHaveText(lastRoundOne);
+    await expect(page.locator('.round-indicator')).toHaveText('Main · Round 1 of 2');
+    await page.locator('#next').click();
+    await page.locator('#start-round-2').click();
+    await expect(page.locator('.round-indicator')).toHaveText('Main · Round 2 of 2');
+    await expect(page.locator('.exercise-name')).toHaveText(firstMain);
+  });
+
+  test('(h) the quit panel\'s "Log what I did" keeps the half session', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, 'Supported split squat');
+    const box = (await page.locator('#quit').boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(700);
+    await page.mouse.up();
+    await expect(page.locator('#quit-confirm-panel')).toBeVisible();
+    await expect(page.locator('.quit-confirm-sub')).toHaveText('Quit = nothing saved.');
+    await page.locator('#quit-log').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    const log = await saveAndRead(page);
+    expect(String(log['notes'])).toContain('stopped early at Supported split squat');
+    expect(log['liteDay']).toBe(true); // round 2 never started
+  });
+
+  test('(i) round 2: the split squat shows the compact "Watch how it looks" row, never the poster', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, 'Supported split squat');
+    // Round 1 too: a move with no still gets the row, not the black poster.
+    await expect(page.locator('.visual-video-poster')).toHaveCount(0);
+    await page.locator('.cue-toggle').click(); // opened in round 1…
+    await expect(page.locator('.exercise-notes')).toBeVisible();
+    await toRoundBreak(page);
+    await page.locator('#start-round-2').click();
+    await goToStep(page, 'Supported split squat');
+    await expect(page.locator('.round-indicator')).toHaveText('Main · Round 2 of 2');
+    // …closed again in round 2 ("Round 2 notes closed").
+    await expect(page.locator('.cue-toggle')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('.exercise-notes')).toHaveCount(0);
+    const row = page.locator('.exercise-visual-compact .visual-video-toggle');
+    await expect(row).toHaveText('▶ Watch how it looks');
+    await expect(page.locator('.visual-video-poster')).toHaveCount(0);
+    await row.click();
+    await expect(page.locator('.visual-video-wrap iframe')).toHaveCount(1);
+    // A move WITH a still is folded in round 2 as well.
+    await goToStep(page, 'Bodyweight hip hinge');
+    await expect(page.locator('.exercise-visual-still')).toHaveCount(0);
+    await expect(page.locator('.exercise-visual-compact')).toHaveCount(1);
+  });
+
+  test('rest screen: one "Next ·" line and a quiet ‹ Back link', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.addInitScript(() => {
+      window.localStorage.setItem('workout-tracker:setting-rest-sec', '30');
+    });
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, 'Supported split squat');
+    await page.locator('#next').click();
+    await expect(page.locator('.rest-card')).toBeVisible();
+    await expect(page.locator('.rest-next')).toContainText('Next · Bodyweight hip hinge · 12 reps');
+    await expect(page.locator('.rest-card #step-back')).toHaveText('‹ Back');
+    await expect(page.locator('.rest-card #step-back')).toHaveClass(/back-link/);
   });
 });
