@@ -3921,11 +3921,19 @@ test.describe('v48 P2 shell', () => {
       }
       if (await page.locator('text=Quick log').isVisible()) break;
       if (await page.locator('#start-round-2').isVisible()) continue;
+      labels.add((await page.locator('.round-indicator').textContent()) ?? '');
+      // v48 · P8: the cool-down (always the last step) drops "N of N" — its
+      // own "~13 min · N of 11" line is the one count there. The bar stays full.
+      if (await page.locator('.stretch-list').isVisible()) {
+        await expect(page.locator('.step-count')).toHaveCount(0);
+        await expect(page.locator('.progress-bar-fill')).toHaveAttribute('style', /width: 100%/);
+        prev += 1;
+        continue;
+      }
       const [idx, n] = await read();
       expect(n).toBe(total);
       expect(idx).toBe(prev + 1);
       prev = idx;
-      labels.add((await page.locator('.round-indicator').textContent()) ?? '');
     }
     expect(prev).toBe(total); // the cool-down list is the last step
     expect([...labels]).toEqual(
@@ -5763,5 +5771,266 @@ test.describe('v48 P7 cool-down', () => {
     const raw = (await page.evaluate(() => localStorage.getItem('workout-tracker:logs'))) ?? '';
     expect(raw).toContain('"workout":"A"');
     expect(raw).not.toMatch(/stretch/i);
+  });
+});
+
+// v48 · P8 (Sep 24 2026) — the copy + consistency sweep, and the version. Every
+// screen of a real Workout A is walked once: no developer words or streak talk
+// on her screen, labels readable (>= 4.5:1), one sage action per step, tap
+// targets >= 44 px, and the version she checks after a deploy says v48.
+test.describe('v48 P8 sweep', () => {
+  type Row = Record<string, unknown>;
+  const TUE_WEEK4 = '2026-09-22T14:00:00.000Z'; // Tue inside Round 2 Week 4
+  const BANNED = ['streak', 'Do a workout', 'app.ts', 'localStorage', 'oEmbed'];
+  const SAGE = ['rgb(143, 188, 143)', 'rgb(163, 207, 163)'];
+
+  const log = (id: string, date: string, workout: 'A' | 'B' | 'C'): Row => ({
+    id,
+    date,
+    workout,
+    capacityBefore: 6,
+    capacityAfter: 7,
+    wallSitSec: workout === 'A' ? 44 : 0,
+    backPain: 0,
+    word: '',
+    synced: true,
+    durationSec: 2400,
+  });
+  // Two weeks of history, so Sessions, the review and Progress have rows.
+  const history = (): Row[] => [
+    log('h1', '2026-09-20T15:00:00.000Z', 'C'),
+    log('h2', '2026-09-17T15:00:00.000Z', 'B'),
+    log('h3', '2026-09-15T15:00:00.000Z', 'A'),
+    log('h4', '2026-09-13T15:00:00.000Z', 'C'),
+  ];
+  const seed = async (page: Page): Promise<void> => {
+    await mockDate(page, TUE_WEEK4);
+    await page.addInitScript((rows) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    }, history());
+    await page.goto('/');
+  };
+
+  const appText = (page: Page): Promise<string> =>
+    page.evaluate(() => document.getElementById('app')?.textContent ?? '');
+  const expectClean = async (page: Page, where: string): Promise<void> => {
+    const text = (await appText(page)).toLowerCase();
+    for (const word of BANNED) {
+      expect(text, `${where}: "${word}"`).not.toContain(word.toLowerCase());
+    }
+  };
+
+  // Visible elements painted with the sage primary (fill or gradient), plus any
+  // .btn-primary — the "one sage per screen" rule.
+  const sageCount = (page: Page): Promise<string[]> =>
+    page.evaluate((sage) => {
+      return [...document.querySelectorAll<HTMLElement>('#app *')]
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return false;
+          const cs = getComputedStyle(el);
+          return (
+            el.classList.contains('btn-primary') ||
+            sage.includes(cs.backgroundColor) ||
+            sage.some((c) => cs.backgroundImage.includes(c))
+          );
+        })
+        .map((el) => el.id || String(el.className));
+    }, SAGE);
+
+  // Every visible tap target under 44 px tall. A switch's hidden checkbox is
+  // measured by the row label that carries the tap.
+  const smallTargets = (page: Page): Promise<string[]> =>
+    page.evaluate(() => {
+      const sel = [
+        'button',
+        'a[href]',
+        'select',
+        'textarea',
+        'summary',
+        '[role="button"]',
+        '[role="radio"]',
+        'input',
+      ]
+        .map((s) => `#app ${s}`)
+        .join(', ');
+      return [...document.querySelectorAll<HTMLElement>(sel)]
+        .map((el) => (el instanceof HTMLInputElement && el.closest('label')) || el)
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+        })
+        .filter((el) => el.getBoundingClientRect().height < 44)
+        .map((el) => {
+          const h = Math.round(el.getBoundingClientRect().height);
+          return `${el.id || String(el.className) || el.tagName} ${h}px`;
+        });
+    });
+
+  // Walk Workout A from pre-log to the post-log, calling `check` on every step.
+  const walkA = async (page: Page, check: (label: string) => Promise<void>): Promise<void> => {
+    await page.locator('button[data-workout="A"]').first().click();
+    await check('pre-log');
+    await page.locator('#begin').click();
+    await expect(page.locator('.exercise-name, #start-round-2').first()).toBeVisible();
+    for (let i = 0; i < 60; i++) {
+      if (await page.locator('text=Quick log').isVisible()) break;
+      const onStep = await page.locator('.exercise-name').first().isVisible();
+      const name = onStep ? await page.locator('.exercise-name').first().textContent() : '';
+      const isCooldown = await page.locator('.stretch-list').isVisible();
+      await check(isCooldown ? 'cool-down' : `step ${i} · ${(name ?? '').trim() || 'round break'}`);
+      await page.locator('#next, #ww-skip, #start-round-2').first().click();
+    }
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await check('post-log');
+  };
+
+  test('(a) no "streak", "Do a workout", "app.ts", "localStorage" or "oEmbed" on any screen', async ({
+    page,
+  }) => {
+    await seed(page);
+    await expectClean(page, 'home');
+    await walkA(page, async (where) => {
+      // Open the cue and the video on each step, so the closed text is read too.
+      if (where.startsWith('step')) {
+        const cue = page.locator('.cue-toggle[aria-expanded="false"]');
+        if (await cue.count()) await cue.first().click();
+        const video = page.locator('.visual-video-toggle[aria-expanded="false"]');
+        if (await video.count()) await video.first().click();
+      }
+      await expectClean(page, where);
+    });
+    await page.locator('#save-log').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    await expectClean(page, 'home after save');
+    await page.locator('#view-history').click();
+    await expectClean(page, 'Sessions');
+    await page.locator('#back-home').click();
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await expectClean(page, 'weekly review');
+    await page.locator('#back-home').click();
+    await page.locator('#open-progress-link').click();
+    await expectClean(page, 'Progress');
+    await page.locator('#back-home').click();
+    await page.locator('#open-settings').click();
+    await expectClean(page, 'Settings');
+  });
+
+  test('(b) label tier (timer label, session meta, review tile label) >= 4.5:1 on its card', async ({
+    page,
+  }) => {
+    await seed(page);
+    // Parse "rgb(...)", "rgba(...)" and "color(srgb r g b)" into 0-255 channels.
+    const ratio = (sel: string): Promise<number> =>
+      page.evaluate((selector) => {
+        type RGBA = [number, number, number, number];
+        const parse = (c: string): RGBA | null => {
+          let m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/.exec(c);
+          if (m) return [+m[1]!, +m[2]!, +m[3]!, m[4] === undefined ? 1 : +m[4]];
+          m = /color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)/.exec(c);
+          if (m) {
+            return [+m[1]! * 255, +m[2]! * 255, +m[3]! * 255, m[4] === undefined ? 1 : +m[4]];
+          }
+          return null;
+        };
+        const lum = (c: RGBA): number => {
+          const f = (v: number): number => {
+            const s = v / 255;
+            return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+          };
+          return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+        };
+        const el = document.querySelector<HTMLElement>(selector);
+        if (!el) return -1;
+        const fg = parse(getComputedStyle(el).color);
+        if (!fg) return -1;
+        // The card behind it: the nearest ancestor with a solid fill; for a
+        // gradient card every stop counts and the worst one is reported.
+        const backs: RGBA[] = [];
+        for (let a: HTMLElement | null = el; a && !backs.length; a = a.parentElement) {
+          const cs = getComputedStyle(a);
+          const stops = [...cs.backgroundImage.matchAll(/(rgba?\([^)]*\)|color\([^)]*\))/g)]
+            .map((s) => parse(s[0]))
+            .filter((s): s is RGBA => s !== null && s[3] > 0.5);
+          if (stops.length) {
+            backs.push(...stops);
+            break;
+          }
+          const bg = parse(cs.backgroundColor);
+          if (bg && bg[3] > 0.5) backs.push(bg);
+        }
+        if (!backs.length) {
+          const body = parse(getComputedStyle(document.body).backgroundColor);
+          if (body) backs.push(body);
+        }
+        const lf = lum(fg);
+        return Math.min(
+          ...backs.map((b) => {
+            const lb = lum(b);
+            return (Math.max(lf, lb) + 0.05) / (Math.min(lf, lb) + 0.05);
+          })
+        );
+      }, sel);
+
+    // Sessions: the meta line under each row.
+    await page.locator('#view-history').click();
+    expect(await ratio('.history-meta')).toBeGreaterThanOrEqual(4.5);
+    await page.locator('#back-home').click();
+    // Weekly review: a totals tile label.
+    await page.locator('#open-weekly-review .week-card-head').click();
+    expect(await ratio('.weekly-review-total-lbl')).toBeGreaterThanOrEqual(4.5);
+    await page.locator('#back-home').click();
+    // A hold: the timer card's label (the wall sit on A).
+    await page.locator('button[data-workout="A"]').first().click();
+    await page.locator('#begin').click();
+    for (let i = 0; i < 20 && !(await page.locator('.timer-label').isVisible()); i++) {
+      await page.locator('#next, #ww-skip').first().click();
+    }
+    expect(await ratio('.timer-label')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  test.describe('at phone size', () => {
+    test.use({ viewport: { width: 412, height: 915 } });
+
+    test('(c) every Workout A screen has at most one sage primary', async ({ page }) => {
+      await seed(page);
+      expect(await sageCount(page), 'home').toHaveLength(1);
+      await walkA(page, async (where) => {
+        const sage = await sageCount(page);
+        expect(sage.length, `${where}: ${sage.join(', ')}`).toBeLessThanOrEqual(1);
+      });
+    });
+
+    test('(e) every tap target on home, Settings and each Workout A step is >= 44 px tall', async ({
+      page,
+    }) => {
+      await seed(page);
+      expect(await smallTargets(page), 'home').toEqual([]);
+      await page.locator('#open-settings').click();
+      const data = page.locator('details.settings-data > summary');
+      if (await data.count()) await data.click();
+      expect(await smallTargets(page), 'Settings').toEqual([]);
+      await page.locator('#back-home').click();
+      await walkA(page, async (where) => {
+        expect(await smallTargets(page), where).toEqual([]);
+      });
+    });
+  });
+
+  test('(d) the version: home "v48 · <date, no year>", Settings "Build v48 · <full date>", sw.js v48', async ({
+    page,
+  }) => {
+    const src = await (await page.request.get('/app.ts')).text();
+    const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
+    const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
+    expect(version).toBe('v48');
+    expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
+    await expect(page.locator('.app-version')).toHaveText(
+      `v48 · ${built.replace(/,\s*\d{4}/, '')}`
+    );
+    await page.locator('#open-settings').click();
+    await expect(page.locator('#app')).toContainText(`Build v48 · ${built}`);
+    const sw = await (await page.request.get('/sw.js')).text();
+    expect(sw).toContain("'workout-tracker-v48'");
   });
 });

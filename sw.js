@@ -9,7 +9,9 @@
 
 // Keep this version number in sync with APP_VERSION in app.ts (shown in the
 // home header) so a deploy visibly busts the cache AND the on-screen tag moves.
-const VERSION = 'workout-tracker-v47';
+// v48 (Sep 24 2026): the redesign — no new shell files in P1-P8 (the archive
+// and migration files are not shell), so only the cache name moves.
+const VERSION = 'workout-tracker-v48';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 

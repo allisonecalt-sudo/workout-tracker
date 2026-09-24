@@ -333,8 +333,11 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v47';
-const BUILD_DATE = 'Sep 24, 2026 · 16:50';
+// v48 (Sep 24 2026): the home + workout redesign, P1-P8 on branch redesign-v48
+// (DECISIONS-v48-2026-09-24.md). Her words: "look at home ux ui and make it
+// better i feel like its a bit all over the place".
+const APP_VERSION = 'v48';
+const BUILD_DATE = 'Sep 24, 2026 · 19:54';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -1847,8 +1850,10 @@ PROGRAM.push({
         {
           name: 'Wall sit',
           reps: '35 sec hold',
+          // Sep 24 2026, v48 P8: "streak" → "showing up" (DECISIONS §5: the word
+          // is gone from the UI; there's no streak to break). Meaning unchanged.
           notes:
-            "Restart at 35s (you held 45s pre-break — don't chase the old number; the streak is the asset). Hands rest on thighs or hang. No pushing on wall.",
+            "Restart at 35s (you held 45s pre-break — don't chase the old number; showing up is the asset). Hands rest on thighs or hang. No pushing on wall.",
           durationSec: 35,
           isTimed: true,
         },
@@ -4091,10 +4096,16 @@ function cooldownChipLabel(w: Workout): string {
 // left label — the resume tests key on it.
 function renderProgressLine(w: Workout): string {
   const { index, total } = workoutStepPosition(w);
+  // v48 · P8 (Sep 24 2026): no "23 of 23" on the cool-down. It's always the
+  // last step, so the number only repeats the full bar. The list's own live
+  // line ("~13 min · 5 of 11") is the one count on that screen (DECISIONS §2:
+  // "one quiet count").
+  const count =
+    state.currentPhase === 'cooldown' ? '' : `<span class="step-count">${index} of ${total}</span>`;
   return `
     <div class="step-progress">
       <span class="round-indicator">${phaseLabelFor(w)}</span>
-      <span class="step-count">${index} of ${total}</span>
+      ${count}
     </div>
     <div class="progress-bar">
       <div class="progress-bar-fill" style="width: ${(index / total) * 100}%"></div>

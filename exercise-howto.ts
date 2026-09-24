@@ -611,7 +611,9 @@ const SVG_HIP_HINGE_START = s(`
   <line x1="120" y1="66" x2="108" y2="104" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
   <!-- legs, slight knee bend -->
   <line x1="120" y1="108" x2="116" y2="150" stroke="#8fbc8f" stroke-width="6" stroke-linecap="round" />
-  <text x="40" y="34" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">stand tall · soft knees</text>
+  <!-- Sep 24 2026, v48 P8: was y=34, across the head (cy 40, r 13) — lifted
+       above it so the words read. -->
+  <text x="40" y="18" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">stand tall · soft knees</text>
 `);
 
 // Hip-hinge HINGED — hips travel back, flat spine, hands slide down thighs
@@ -675,7 +677,10 @@ const SVG_BICEPS_CURL_DOWN = sNoMat(`
   <line x1="100" y1="70" x2="100" y2="100" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
   <line x1="100" y1="100" x2="100" y2="135" stroke="#8fbc8f" stroke-width="4" stroke-linecap="round" />
   <rect x="93" y="134" width="15" height="10" rx="2" fill="#e6b450" stroke="#1a1f1c" stroke-width="1.5" />
-  <text x="30" y="36" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">elbow tucked · start low · 1 kg</text>
+  <!-- Sep 24 2026, v48 P8: the caption sat at y=36, across the head (cy 40,
+       r 13), unreadable in the final walk — it moves under the figure, where
+       the UP frame keeps its own captions. -->
+  <text x="30" y="168" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">elbow tucked · start low · 1 kg</text>
 `);
 
 const SVG_BICEPS_CURL_UP = sNoMat(`

@@ -21,6 +21,17 @@
 // MP3s live in ./assets/voice/<slug>.mp3, committed + shell-cached for offline
 // gym use. The spoken script is kept in `voiceScript` so it's regenerable.
 //
+// VOICE CHECK (Sep 24 2026, v48 P8): the v48 plan asked for a "VOICE RE-RECORD
+// QUEUED" note here for curl, hinge, plank, calf raises, modified dead bug,
+// clamshells, belly breathing and pelvic tilts (second-brain
+// self/health/workout-app-audit-2026-09-24/content.md #1-3, #7). Checked line by
+// line in P8: that audit read v44. v45 (4404a4e) had already fixed those cards'
+// visible text AND their voiceScripts, and re-recorded all eight mp3s (plus four
+// more) in the same commit. So nothing is queued. This note replaces the queue
+// note, because a note saying the audio is stale would be false.
+// The rule stays: a voiceScript change regenerates its mp3 in the same commit.
+// Never let the text and the audio say different things.
+//
 // ROLLOUT: this file starts with two exemplars (Bodyweight squats + the
 // previously-bare Eccentric step-down) to validate the format on the live app
 // before fanning the card out to all ~50 exercises.
@@ -71,7 +82,10 @@ export type MuscleRegion =
   | 'calves';
 
 const MUSCLE_BASE = '#525c54'; // muted body fill
-const MUSCLE_ON = 'var(--accent)'; // highlighted target
+// highlighted target. Sep 24 2026, v48 P8: was var(--accent) — sage on a
+// picture read as a second primary action next to Done · Next (her rule: sage =
+// "the primary action right now"). currentColor = .muscle-svg's --text-dim.
+const MUSCLE_ON = 'currentColor';
 
 export function muscleDiagram(regions: MuscleRegion[]): string {
   const on = new Set(regions);
@@ -499,7 +513,9 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       "Don't round your low back — flat spine the whole way.",
       "Don't squat down — the move is hips back, not knees forward.",
       "Don't lock your knees.",
-      "Don't go heavier than the 1 kg without Lisa — bodyweight, or holding the 1 kg.",
+      // Sep 24 2026, v48 P8: the one rule, said once — the card's steps and the
+      // screen's reps already say "bodyweight or the 1 kg".
+      'Nothing heavier than the 1 kg without Lisa.',
     ],
     mistakes: [
       {

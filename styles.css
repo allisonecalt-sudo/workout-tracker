@@ -32,7 +32,15 @@
   /* --- Text -------------------------------------------------------------- */
   --text: #f0ede5; /* primary, warm white */
   --text-dim: #a8a59c; /* secondary, body-meta */
-  --text-dim-2: #767368; /* tertiary (labels, small-caps) */
+  /* tertiary (labels, small-caps). Sep 24 2026, v48 P8: was #767368 = 3.24:1
+   * on the card surface (--bg-elev), below AA on every label tier (timer label,
+   * session meta, detail labels, section labels, progress labels, rest sub).
+   * #9c998f = 5.41:1 on --bg-elev, 4.68:1 on --bg-elev-2 (the review tiles,
+   * inputs and chips sit on that one), 5.86:1 on --bg — one token lifts them
+   * all ("fix the class, not the instance"). The tiers now differ by size,
+   * weight and caps more than by a hard-to-read grey; --text-dim stays a
+   * shade lighter. */
+  --text-dim-2: #9c998f;
 
   /* --- Borders (replaces box-shadow for elevation) ----------------------- */
   --border: rgba(255, 255, 255, 0.06); /* subtle separator */
@@ -50,7 +58,11 @@
   --accent: #8fbc8f; /* PRIMARY ACTION + active timer ONLY */
   --accent-hover: #a3cfa3;
   --accent-progress: #7a9b7a; /* sync-good, completed-bar fill, week-dot A */
-  --accent-do: #8fbc8f; /* "Do" cues in how-to (trusted sage) */
+  /* "Do" cues in how-to + detail cards. Sep 24 2026, v48 P8: was the same
+   * sage as --accent, so every ✓ Do mark, → fix arrow and chevron read as a
+   * second primary action. Now an ALIAS of --text-dim (her rule: sage = "the
+   * primary action right now"); Don't keeps its own warm-orange mark. */
+  --accent-do: var(--text-dim);
   --accent-warn: #e6b450; /* back/wrist warnings (was --warn) */
   --accent-danger: #d97757; /* destructive / quit / error */
   --accent-rest: #6c8a9b; /* rest screen — blue-gray, distinct from work */
@@ -877,30 +889,8 @@ button:disabled {
   border-color: var(--accent-progress);
 }
 
-.visual-video-poster {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  background: #0f1311;
-  border-radius: var(--radius-sm);
-  color: var(--accent-progress);
-  font-size: var(--font-body);
-  border: 1px solid var(--border);
-}
-
-.visual-video-poster-icon {
-  font-size: 36px;
-}
-
-.visual-video-poster-label {
-  font-size: var(--font-small);
-  font-weight: 500;
-  color: var(--text);
-}
+/* .visual-video-poster* deleted Sep 24 2026, v48 P8: P2 removed the 342x257
+ * black poster branch — no markup uses these classes (git has them, v47). */
 
 .visual-video-wrap {
   position: relative;
@@ -1752,7 +1742,7 @@ input[type='number']:focus {
 
 .how-to-chev {
   font-size: var(--font-meta);
-  color: var(--accent-do);
+  color: var(--text-dim); /* v48 P8: chevrons are not actions — off sage */
   display: inline-block;
   /* COOLER-LOOK: spring-eased chevron rotation when expander opens. */
   transition: transform var(--dur-base) var(--ease-spring);
@@ -1836,7 +1826,9 @@ input[type='number']:focus {
 .muscle-svg {
   width: 100%;
   height: 100%;
-  color: var(--accent);
+  /* v48 P8 (Sep 24 2026): the lit regions fill with currentColor (see
+   * MUSCLE_ON in exercise-detail.ts) — a picture, not an action, so off sage. */
+  color: var(--text-dim);
 }
 
 .muscle-target-label {
@@ -1884,7 +1876,7 @@ input[type='number']:focus {
 }
 
 .detail-chev {
-  color: var(--accent-do);
+  color: var(--text-dim); /* v48 P8: chevrons are not actions — off sage */
   font-size: var(--font-meta);
   transition: transform var(--dur-base) var(--ease-spring);
 }
@@ -2099,38 +2091,9 @@ input[type='number']:focus {
   }
 }
 
-/* --- Stats: big-number, small-label hierarchy (§C move 8) -------------- */
-
-.streak-stat {
-  display: flex;
-  justify-content: space-around;
-  margin-top: 14px;
-  margin-bottom: 6px;
-}
-
-.stat-block {
-  text-align: center;
-}
-
-.stat-number {
-  font-size: var(--font-display);
-  /* COOLER-LOOK: 500→650 brings the big number into the modern display-weight
-   * register (Linear / Stripe) without crossing into the "shouty" 700+ zone. */
-  font-weight: 650;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: var(--track-display);
-  line-height: 1;
-}
-
-.stat-label {
-  font-size: var(--font-micro);
-  color: var(--text-dim-2);
-  text-transform: uppercase;
-  letter-spacing: var(--track-label);
-  margin-top: 6px;
-  font-weight: 600;
-}
+/* Stats block (.streak-stat / .stat-block / .stat-number / .stat-label)
+ * deleted Sep 24 2026, v48 P8: home's big-number stats went in P4 and nothing
+ * renders these classes any more. The old rules are in git (v47, 9617ae3). */
 
 /* --- Sync indicator: quiet, role-named token --------------------------- *
  * COOLER-LOOK: when the indicator is showing a state (synced / syncing /
@@ -3184,6 +3147,11 @@ input[type='number']:focus {
 }
 
 .settings-link {
+  /* v48 P8 (Sep 24 2026): a 20 px-tall text link was the one tap target
+   * under 44 px left in Settings — the row now carries the height. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   color: var(--text-dim);
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -3572,7 +3540,7 @@ input[type='number']:focus {
   font-weight: 600;
   line-height: 1.15;
   letter-spacing: var(--track-heading);
-  color: var(--accent);
+  color: var(--text); /* v48 P8: words, not an action — Start is the sage */
 }
 
 .cardio-seg-cue {
@@ -3612,8 +3580,10 @@ input[type='number']:focus {
 }
 
 .cardio-seg-item.is-current {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  /* v48 P8 (Sep 24 2026): marked by weight + a stronger border, not a sage
+   * tint — the timer's Start/Stop is the one action on this screen. */
+  border-color: var(--border-strong);
+  background: var(--bg-elev-2);
   color: var(--text);
   font-weight: 600;
 }
@@ -3633,7 +3603,7 @@ input[type='number']:focus {
 }
 
 .cardio-seg-item.is-current .cardio-seg-num {
-  background: var(--accent);
+  background: var(--text); /* v48 P8: the live move is marked, not sage */
   color: var(--bg);
 }
 
@@ -3700,7 +3670,7 @@ input[type='number']:focus {
   background: transparent;
   color: var(--text-dim);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm); /* v48 P8: the token, not a literal */
   padding: 8px 12px;
   font-size: var(--font-small);
   white-space: nowrap;
@@ -4781,4 +4751,49 @@ input[type='number']:focus {
 .twokg-noted {
   flex-shrink: 0;
   min-height: 44px;
+}
+
+/* ---- v48 · P8 (Sep 24 2026) — the consistency sweep, appended only -------- */
+
+/* ONE quiet-button recipe. Before P8 the app had five near-copies of "quiet
+ * outlined button" (cardio alt lane, watch-how-it-looks, walk Cancel, the
+ * Settings data buttons + every .btn-ghost, Listen's secondary state), each with
+ * its own padding, radius and font size — two of them under 44 px tall. The old
+ * class names stay in the markup and are aliased here, so each keeps its own
+ * layout (width, margin) and only the look is shared. */
+.btn-quiet,
+.btn-ghost,
+.cardio-alt-btn,
+.visual-video-toggle,
+.walk-cancel-btn,
+.voice-note-btn.is-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  min-height: 48px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-small);
+  font-weight: 500;
+}
+
+/* Pressed = a stronger border, not a sage flash (sage = the one primary). */
+.cardio-alt-btn:active {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+/* Tap targets >= 44 px on home, the workout and Settings (her Pixel, one hand,
+ * mid-set). Measured at 412x915 in P8: the "Cue ▸" row was 43, the arm-feel
+ * chips 40, "‹ Back to the stretches" in the pinned bar 40. */
+.cue-section .detail-section-toggle,
+.arm-chip,
+.action-bar .postlog-back {
+  min-height: 44px;
+}
+
+/* The one safety line sits under a CENTRED name + reps, so it centres too — it
+ * was the only left-aligned line in that stack, on every step, the cardio
+ * choice included (P3 flagged it for this sweep). */
+.exercise-safety {
+  text-align: center;
 }

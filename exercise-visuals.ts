@@ -11,7 +11,12 @@
 //   - source: where the visual comes from. 'free-exercise-db' = Unlicense,
 //     'youtube-only' = no still, video embed is primary.
 //   - license: short note on legal basis for inclusion.
-//   - attribution: optional credit text rendered in the report / UI tooltip.
+//   - attribution: the credit shown under the video — 'title — author' only
+//     (Sep 24 2026, v48 P8: developer QA provenance — "Checked live via YouTube
+//     oEmbed…", "Replaced 2026-06-18 (old embed 404)", the still's source name —
+//     moved into code comments next to each entry. The audit read those captions
+//     as developer voice on her screen; the free-exercise-db stills are
+//     Unlicense and need no credit.)
 //
 // Coverage notes: MuscleWiki was the original first choice but their ToS
 // (api.musclewiki.com/api-terms, checked 2026-05-15) explicitly forbids
@@ -42,7 +47,7 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     youtubeId: 'U0dfnyfhpwk',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution: 'Still: yuhonas/free-exercise-db. Video: MedBridge — Supine Pelvic Tilt',
+    attribution: 'Supine Pelvic Tilt — MedBridge',
   },
   'Glute squeezes': {
     youtubeId: 'a63bCK4GGEc',
@@ -57,21 +62,21 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     youtubeId: 'DlS-GAF8Edg',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution: 'Still: yuhonas/free-exercise-db. Video: bodyweight squat tutorial',
+    attribution: 'Bodyweight squat tutorial',
   },
   'Glute bridges': {
     loop: 'assets/exercises/glute-bridges-0.jpg',
     youtubeId: 'OUgsJ8-Vi0E',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution:
-      'Still: yuhonas/free-exercise-db (Butt Lift Bridge). Video: NASM glute bridge form',
+    // Still: free-exercise-db "Butt Lift Bridge".
+    attribution: 'Glute bridge form — NASM',
   },
   'Wall sit': {
     youtubeId: 'y-wV4Venusw',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'How To: Wall-Sit — YouTube instructional',
+    attribution: 'How To: Wall-Sit',
   },
   'Side-lying clamshells': {
     youtubeId: '2c5xiz4q7ow',
@@ -84,7 +89,7 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     youtubeId: 'GbSC02oU3To',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution: 'Still: yuhonas/free-exercise-db. Video: Hinge Health PT — Dead Bug',
+    attribution: 'Dead Bug — Hinge Health (PT)',
   },
   'Heel taps': {
     // ARCHIVED 2026-05-15: Heel taps swapped out of Workout A in week 3
@@ -111,23 +116,24 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     youtubeId: 'LugNxxfIdvo',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution: 'Still: yuhonas/free-exercise-db (One Knee To Chest). Video: Double Knee to Chest',
+    // Still: free-exercise-db "One Knee To Chest".
+    attribution: 'Double Knee to Chest',
   },
   'Figure-4 stretch': {
     loop: 'assets/exercises/figure-4-stretch-0.jpg',
     youtubeId: '-g0nuyTHMrI',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution:
-      'Still: yuhonas/free-exercise-db (Piriformis-SMR). Video: Ask Doctor Jo — Piriformis Figure 4',
+    // Still: free-exercise-db "Piriformis-SMR".
+    attribution: 'Piriformis Figure 4 — Ask Doctor Jo',
   },
   'Seated forward fold': {
     loop: 'assets/exercises/seated-forward-fold-0.jpg',
     youtubeId: 'oJX8EKF3TqM',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution:
-      'Still: yuhonas/free-exercise-db (Spinal Stretch, weaker match). Video: Seated Forward Fold beginner tutorial',
+    // Still: free-exercise-db "Spinal Stretch" (a weaker match).
+    attribution: 'Seated Forward Fold beginner tutorial',
   },
   'Slow breathing': {
     youtubeId: 'LiUnFJ8P4gM',
@@ -142,21 +148,21 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     youtubeId: 'dBQXWsdrnfo',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution:
-      'Still: yuhonas/free-exercise-db (Side Leg Raises). Video: Pain Science PT — Dr. Orit Hickman',
+    // Still: free-exercise-db "Side Leg Raises".
+    attribution: 'Side leg raises — Pain Science PT',
   },
   'Single-leg glute bridges': {
     loop: 'assets/exercises/single-leg-glute-bridges-0.jpg',
     youtubeId: '18GVqjfHy-M',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution: 'Still: yuhonas/free-exercise-db. Video: Single Leg Bridge step-by-step tutorial',
+    attribution: 'Single Leg Bridge step-by-step tutorial',
   },
   'Slow supine bicycle': {
     youtubeId: 'R2RUQC8x9rY',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'Supine Bicycle — Workout Dojo (slow, controlled variant)',
+    attribution: 'Supine Bicycle — Workout Dojo',
   },
   'Standing calf raises': {
     youtubeId: 'aZh9tCFh46o',
@@ -171,8 +177,8 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     youtubeId: 'enYITYwvPAQ',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution:
-      'Still: yuhonas/free-exercise-db (Trail Running/Walking). Video: Fast walking 30-min reference',
+    // Still: free-exercise-db "Trail Running/Walking".
+    attribution: 'Fast walking 30-min reference',
   },
 
   // ----- Wrist PT (Lisa Cohen protocol) -----
@@ -183,27 +189,27 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     youtubeId: 'D4-jQu5GfBg',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution:
-      'Wrist Flexor + Extensor Stretch — AskDoctorJo. Replaced 2026-06-18 (old embed 404).',
+    // Replaced 2026-06-18 (old embed 404).
+    attribution: 'Wrist Flexor + Extensor Stretch — AskDoctorJo',
   },
   'Right wrist stretch': {
     youtubeId: 'D4-jQu5GfBg',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution:
-      'Wrist Flexor + Extensor Stretch — AskDoctorJo. Replaced 2026-06-18 (old embed 404).',
+    // Replaced 2026-06-18 (old embed 404).
+    attribution: 'Wrist Flexor + Extensor Stretch — AskDoctorJo',
   },
   'Left flexion/extension (tuna can)': {
     youtubeId: 'Aky1uJBS5UY',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'Wrist Pain Rehab Exercises — generic PT reference',
+    attribution: 'Wrist Pain Rehab Exercises',
   },
   'Right flexion/extension (tuna can)': {
     youtubeId: 'Aky1uJBS5UY',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'Wrist Pain Rehab Exercises — generic PT reference',
+    attribution: 'Wrist Pain Rehab Exercises',
   },
   'Left radial deviation (tuna can)': {
     youtubeId: 'pwodoGsoIpM',
@@ -241,20 +247,21 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     youtubeId: '2W_gXhut5S8',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'How to Do a Hip Hinge — Hinge Health (PT). Replaced 2026-06-18 (old embed 404).',
+    // Replaced 2026-06-18 (old embed 404).
+    attribution: 'How to Do a Hip Hinge — Hinge Health (PT)',
   },
   'Prone row (bodyweight)': {
     youtubeId: 'CFt3WjCBbpc',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution:
-      'Prone W/T/Y Scapular Retraction — Peak Form Health Center. Bodyweight, wrist-neutral. Replaced 2026-06-18 (old embed 404).',
+    // Replaced 2026-06-18 (old embed 404). Bodyweight, wrist-neutral.
+    attribution: 'Prone W/T/Y Scapular Retraction — Peak Form Health Center',
   },
   '1 kg biceps curl': {
     youtubeId: 'ykJmrZ5v0Oo',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'Dumbbell Biceps Curl — neutral-wrist form reference',
+    attribution: 'Dumbbell Biceps Curl',
   },
   // Added 2026-06-18 — Lisa Cohen prescribed WYT (Y-T-W raises); renamed IWYT
   // 2026-07-04 when Allison added the I position (hers to keep — the video
@@ -264,7 +271,8 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     youtubeId: 'Yv6sUKOwOY8',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution: 'Prone I-T-W-Y for Shoulder — AskDoctorJo (DPT). All four positions: I, W, Y, T.',
+    // The video demos all four positions: I, W, Y, T.
+    attribution: 'Prone I-T-W-Y for Shoulder — AskDoctorJo (DPT)',
   },
 
   // ----- Round-2 Week-2 additions (2026-09-07) -----
@@ -275,22 +283,29 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     youtubeId: 'Oe086pgL5fw',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
-    attribution:
-      'Supported Split Squat — 18STRONG. Checked live via YouTube oEmbed Sep 19 2026 (exists, embeddable, title + author as quoted); not watched end to end. Their support is a rack — yours is the couch or a chair, fingertips only.',
+    // Checked live via YouTube oEmbed Sep 19 2026 (exists, embeddable, title +
+    // author as quoted); not watched end to end. Their support is a rack — hers
+    // is the couch or a chair, fingertips only (the face safety line says so:
+    // SAFETY_LINE['Supported split squat'] in app.ts).
+    attribution: 'Supported Split Squat — 18STRONG',
   },
   'Bird dog (legs only)': {
     youtubeId: 'xEDnlOxeJH4',
     source: 'youtube-only',
     license: 'YouTube embed (ToS)',
+    // The video demos the FULL bird dog (arm + leg); hers is legs only — both
+    // hands stay down. The face safety line is about pain, not the arms, so a
+    // short version of that one sentence STAYS in the caption: it's the only
+    // place that says it right under the video.
     attribution:
-      'How to Do the Bird Dog Exercise — Hinge Health (PT). NOTE: the video demos the FULL bird dog (arm + leg). This week is LEGS ONLY — both your hands stay down. Watch it for the setup and the flat-back cue.',
+      'How to Do the Bird Dog Exercise — Hinge Health (PT) · the video lifts an arm; your hands stay down',
   },
   'Full dead bug': {
     loop: 'assets/exercises/modified-dead-bug-0.jpg',
     youtubeId: 'GbSC02oU3To',
     source: 'free-exercise-db',
     license: 'Unlicense (public domain) + YouTube embed (ToS)',
-    attribution:
-      'Still: yuhonas/free-exercise-db. Video: Hinge Health PT — Dead Bug (the full arm-and-leg version, which is exactly this move).',
+    // The video is the full arm-and-leg version, which is exactly this move.
+    attribution: 'Dead Bug — Hinge Health (PT)',
   },
 };
