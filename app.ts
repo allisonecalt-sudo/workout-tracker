@@ -22,6 +22,10 @@ type Exercise = {
   //   • per-rep micro-holds ("10 holds × 3 sec", "12 reps · 2-sec hold at top")
   //     — these are reps, not one sustained hold; they want a rep/tempo cue.
   //   • Outdoor walk — auto-tracks steps/km + "tap done", intentionally no countdown.
+  //   • The cool-down LIST (v48 · P7, Sep 24 2026) — exempt by her Jun 6 call:
+  //     ONE self-paced list, no timer ("About 45 s each — no timer, go by
+  //     feel"). The stretches keep isTimed/durationSec on the DATA, so a
+  //     per-side timer can come back if she asks for it; only the list ignores them.
   durationSec?: number;
   isTimed?: boolean;
   // v48 (Sep 24 2026): the ONE line that belongs on the card face mid-set — the
@@ -217,6 +221,12 @@ type AppState = {
   // v48 · P5: post-log "Back: Something" was tapped — the 1-10 row is open but
   // no number is chosen yet (untouched = null). Transient.
   backSomethingOpen: boolean;
+  // v48 · P7 (Sep 24 2026): the cool-down rows she has ticked, keyed by the
+  // stretch group (groupStretchPairs). A place-keeper for HER list ("i dont do
+  // yur stretches i do this", May 29), not tracking: never saved to Supabase,
+  // nothing reads it after the session. Kept in the resume snapshot so an app
+  // close mid-stretch doesn't lose her place.
+  stretchTicks: Record<string, boolean>;
 };
 
 type ArmFeel = 'easy' | 'right' | 'hard';
@@ -2608,6 +2618,7 @@ const state: AppState = {
   heldSecFor: {},
   armFeel: {},
   backSomethingOpen: false,
+  stretchTicks: {},
 };
 
 // ---------- audio ----------
@@ -3847,6 +3858,7 @@ function beginExercises(): void {
   state.stoppedEarlyAt = null;
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
+  state.stretchTicks = {}; // v48 · P7: ticks belong to one session
   // v46: the post-log sliders haven't been seen yet (capacity-before was just
   // set on pre-log, so its flag stays as it is).
   state.capacityAfterTouched = false;
@@ -4062,8 +4074,17 @@ function phaseLabelFor(w: Workout): string {
         ? 'Warm-up'
         : state.currentPhase === 'upperBack'
           ? 'Upper back'
-          : 'Cool-down';
+          : cooldownChipLabel(w);
   return `${base}${state.liteDay ? ' · lite' : ''}`;
+}
+
+// v48 · P7 (Sep 24 2026): the cool-down chip counts HER rows — "Stretch · 11",
+// not "Stretch · 18 stretches" (a number that overstated the hill at the end of
+// a workout, and said "stretch" twice — uxui cooldown). An empty list keeps the
+// plain phase name rather than print "Stretch · 0".
+function cooldownChipLabel(w: Workout): string {
+  const n = groupStretchPairs(w.cooldown ?? []).length;
+  return n > 0 ? `Stretch · ${n}` : 'Cool-down';
 }
 
 // The one progress line + the one bar (v48). `.round-indicator` stays on the
@@ -4328,6 +4349,17 @@ function isArmFeel(v: unknown): v is ArmFeel {
   return typeof v === 'string' && (ARM_FEEL_VALUES as readonly string[]).includes(v);
 }
 
+// v48 · P7: only string keys with `true` survive — a corrupt value is dropped,
+// never crashed on (the snapshot is a convenience).
+function sanitizeStretchTicks(v: unknown): Record<string, boolean> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out: Record<string, boolean> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (val === true) out[k] = true;
+  }
+  return out;
+}
+
 function sanitizeArmFeel(v: unknown): ArmFeelState {
   if (!v || typeof v !== 'object') return {};
   const o = v as { curl?: unknown; row?: unknown };
@@ -4547,6 +4579,8 @@ type ActiveSessionSnapshot = {
   stoppedEarlyAt: string | null;
   // v48 · P5: the arm-feel taps so far survive an app close.
   armFeel: ArmFeelState;
+  // v48 · P7: her cool-down ticks survive an app close (she keeps her place).
+  stretchTicks: Record<string, boolean>;
 };
 
 function saveActiveSession(): void {
@@ -4577,6 +4611,7 @@ function saveActiveSession(): void {
       finishHereLitePrev: state.finishHereLitePrev,
       stoppedEarlyAt: state.stoppedEarlyAt,
       armFeel: state.armFeel,
+      stretchTicks: state.stretchTicks,
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
   } catch {
@@ -4654,6 +4689,8 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       stoppedEarlyAt: typeof snap.stoppedEarlyAt === 'string' ? snap.stoppedEarlyAt : null,
       // v48 · P5: a pre-P5 snapshot has no feel → none, never a guess.
       armFeel: sanitizeArmFeel(snap.armFeel),
+      // v48 · P7: a pre-P7 snapshot has no ticks → {} (nothing ticked).
+      stretchTicks: sanitizeStretchTicks(snap.stretchTicks),
     };
   } catch {
     clearActiveSession();
@@ -4686,6 +4723,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.stoppedEarlyAt = snap.stoppedEarlyAt;
   state.heldSecFor = {}; // v48: display-only, not carried across a close
   state.armFeel = snap.armFeel;
+  state.stretchTicks = snap.stretchTicks;
   state.backSomethingOpen = false;
   // Preserve pause accounting across an app close. If she closed while paused,
   // she stays paused on reopen (the closed span counts as paused, so it's
@@ -4821,6 +4859,7 @@ function resetState(): void {
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5
   state.backSomethingOpen = false;
+  state.stretchTicks = {}; // v48 · P7
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
   clearElliptical();
@@ -6574,27 +6613,118 @@ function renderRoundBreak(w: Workout): string {
 // stretch as its own screen. No per-stretch video, no per-stretch timer; the
 // reps text already carries the hold time and the notes carry the cue. Real
 // (non-stretch) exercises keep their stepped screens + videos.
-function renderCooldownList(w: Workout): string {
-  const stretches = w.cooldown ?? [];
-  const rows = stretches
-    .map(
-      (s) => `
-      <li class="stretch-row">
+//
+// v48 · P7 (Sep 24 2026): her 18 stretches as 11 tick-off rows. The list is
+// HER routine — "i dont do yur stretches i do this" (May 29) — so all 18 stay
+// in the data; only the right/left pairs fold into one "each side" row. It was
+// 2.9 screens and 547 words under a "No timer" line with "45 sec" on every row
+// (uxui cooldown 4/5; walk-in-her-shoes: "rows I tick off, and ~13 min · 5 of
+// 18"). Cues sit behind a closed ▸; the one sage stays Done · Finish.
+type StretchGroup = {
+  key: string;
+  name: string;
+  eachSide: boolean;
+  cue: string | null;
+  items: Exercise[];
+};
+
+// "Wrist extension — right" / "— left" → one "Wrist extension" group; the two
+// hip-flexor rows ("Hip flexor — right knee in, left leg dangles" / "— left
+// knee in, …") → "Hip flexor". The side word right after " — " is the marker.
+// Singles pass through in order. A placeholder cue ("Your usual neck
+// stretch.") says nothing on a list she already knows, so it becomes null.
+function groupStretchPairs(stretches: Exercise[]): StretchGroup[] {
+  const groups: StretchGroup[] = [];
+  const byStem = new Map<string, StretchGroup>();
+  for (const s of stretches) {
+    const m = s.name.match(/^(.+?) — (?:right|left)\b/i);
+    const stem = m?.[1];
+    if (stem) {
+      const existing = byStem.get(stem);
+      if (existing) {
+        existing.items.push(s);
+        existing.eachSide = true;
+        continue;
+      }
+    }
+    const notes = s.notes?.trim() ?? '';
+    const g: StretchGroup = {
+      key: stem ?? s.name,
+      name: stem ?? s.name,
+      // A single entry can still be "each side" by its own reps (the Week 1-4
+      // "Figure-4 stretch · 45 sec each side").
+      eachSide: /each side/i.test(s.reps ?? ''),
+      cue: notes === '' || /^Your usual .* stretch\.$/.test(notes) ? null : notes,
+      items: [s],
+    };
+    groups.push(g);
+    if (stem) byStem.set(stem, g);
+  }
+  return groups;
+}
+
+// Seconds one entry asks for: durationSec, else the number in "45 sec"/"60 sec";
+// null for a count ("8 breaths").
+function stretchHoldSec(s: Exercise): number | null {
+  if (typeof s.durationSec === 'number' && s.durationSec > 0) return s.durationSec;
+  const m = (s.reps ?? '').match(/(\d+)\s*sec/i);
+  return m ? Number(m[1]) : null;
+}
+
+// "~45 s each side" / "~45 s" — the honest estimate, never a "45 sec" that
+// reads like a timer under a "no timer" line. A count ("8 breaths") shows as is.
+function stretchRowTime(g: StretchGroup): string {
+  const first = g.items[0];
+  const sec = first ? stretchHoldSec(first) : null;
+  if (sec === null) return first?.reps ?? '';
+  return `~${sec} s${g.eachSide ? ' each side' : ''}`;
+}
+
+// Whole-list estimate in minutes: each side counts (7 pairs × 2 + 4 singles =
+// 18 holds × 45 s = 13.5 min → "~13 min", the figure in DECISIONS §4). Floor,
+// not round: an estimate that sits under the truth feels like room, not a debt.
+function stretchListMinutes(groups: StretchGroup[]): number {
+  let sec = 0;
+  for (const g of groups) {
+    const sides = g.eachSide ? 2 : 1;
+    const each = g.items[0] ? (stretchHoldSec(g.items[0]) ?? 45) : 45;
+    sec += each * sides;
+  }
+  return Math.max(1, Math.floor(sec / 60));
+}
+
+function renderStretchRow(g: StretchGroup): string {
+  const ticked = state.stretchTicks[g.key] === true;
+  const cueKey = `stretch::${g.key}`;
+  const cueOpen = g.cue !== null && state.openSections[cueKey] === true;
+  const cueToggle =
+    g.cue === null
+      ? ''
+      : `<button class="stretch-cue-toggle ${cueOpen ? 'is-open' : ''}" data-toggle-section="${escapeHtml(cueKey)}" type="button" aria-expanded="${cueOpen}" aria-label="How to do ${escapeHtml(g.name)}"><span aria-hidden="true">▸</span></button>`;
+  const setups = g.items.map((s) => renderExerciseSetup(s)).join('');
+  return `
+      <li class="stretch-row ${ticked ? 'stretch-row-done' : ''}">
         <div class="stretch-row-head">
-          <span class="stretch-name">${escapeHtml(s.name)}</span>
-          ${s.reps ? `<span class="stretch-reps">${escapeHtml(s.reps)}</span>` : ''}
+          <button class="stretch-check" data-stretch-tick="${escapeHtml(g.key)}" type="button" aria-pressed="${ticked}" aria-label="${escapeHtml(g.name)} done"><span aria-hidden="true">✓</span></button>
+          <span class="stretch-name">${escapeHtml(g.name)}</span>
+          <span class="stretch-reps">${escapeHtml(stretchRowTime(g))}</span>
+          ${cueToggle}
         </div>
-        ${s.notes ? `<p class="stretch-cue">${escapeHtml(s.notes)}</p>` : ''}
+        ${cueOpen && g.cue !== null ? `<p class="stretch-cue">${escapeHtml(g.cue)}</p>` : ''}
         ${
           /* v40: cooldown is Exercise[] like every other phase, so a stretch CAN
              carry `setup`. Without this call it would silently never render — a
              trap rather than a live bug (no stretch carries one today), found by
              the v32-v39 consistency audit. Rendering it here means the field
-             works everywhere its type is allowed. */ renderExerciseSetup(s)
+             works everywhere its type is allowed. */ setups
         }
-      </li>`
-    )
-    .join('');
+      </li>`;
+}
+
+function renderCooldownList(w: Workout): string {
+  const groups = groupStretchPairs(w.cooldown ?? []);
+  const ticked = groups.filter((g) => state.stretchTicks[g.key] === true).length;
+  const rows = groups.map((g) => renderStretchRow(g)).join('');
 
   return `
     <div class="screen-header">
@@ -6608,10 +6738,13 @@ function renderCooldownList(w: Workout): string {
     <p class="subtitle">${
       state.liteDay
         ? 'Lite day — do the stretches you need, skip the rest. Done · Finish whenever.'
-        : 'Work down the list at your own pace. No timer — hold each as long as feels right.'
+        : /* v48 · P7: one honest line — the old "No timer" sat over "45 sec"
+             on every row (DECISIONS §4). Her Jun 6 call: one list, no timer. */
+          'About 45 s each — no timer, go by feel.'
     }</p>
+    <p class="stretch-progress" aria-live="polite">~${stretchListMinutes(groups)} min · ${ticked} of ${groups.length}</p>
 
-    <div class="card">
+    <div class="card stretch-card">
       <ul class="stretch-list">${rows}</ul>
     </div>
 
@@ -8952,6 +9085,24 @@ function attachHandlers(): void {
         [step]: state.armFeel[step] === feel ? undefined : feel,
       };
       if (state.armFeel[step] === undefined) delete state.armFeel[step];
+      saveActiveSession();
+      render();
+    });
+  });
+  // v48 · P7 (Sep 24 2026): tick a cool-down row off — tap again to untick.
+  // Place-keeping only (her list, her pace); saved to the resume snapshot,
+  // never to Supabase.
+  document.querySelectorAll<HTMLButtonElement>('[data-stretch-tick]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset['stretchTick'];
+      if (!key) return;
+      if (state.stretchTicks[key] === true) {
+        const next = { ...state.stretchTicks };
+        delete next[key];
+        state.stretchTicks = next;
+      } else {
+        state.stretchTicks = { ...state.stretchTicks, [key]: true };
+      }
       saveActiveSession();
       render();
     });

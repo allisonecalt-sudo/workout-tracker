@@ -689,8 +689,22 @@ button:disabled {
   padding: 0;
 }
 
+/* v48 · P7 (Sep 24 2026): 11 tick-off rows — check · name · ~45 s · ▸. The
+ * card gives up its side padding so the rows get the width (names wrap to two
+ * lines otherwise); the check is the row's own 44×44 target. */
+.stretch-card {
+  padding: 4px 12px;
+}
+
+.stretch-progress {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  font-variant-numeric: tabular-nums;
+  margin: -6px 0 12px;
+}
+
 .stretch-row {
-  padding: 14px 4px;
+  padding: 3px 0;
   border-bottom: 1px solid var(--border);
   text-align: left;
 }
@@ -701,12 +715,42 @@ button:disabled {
 
 .stretch-row-head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+}
+
+.stretch-check {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: transparent;
+  color: transparent;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+/* Ticked: filled in the progress green, never the sage of the ONE action. */
+.stretch-check[aria-pressed='true'] {
+  background: var(--accent-progress);
+  border-color: var(--accent-progress);
+  color: var(--bg);
 }
 
 .stretch-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--font-body);
   font-weight: 600;
   color: var(--text);
   line-height: 1.25;
@@ -715,13 +759,53 @@ button:disabled {
 .stretch-reps {
   flex-shrink: 0;
   color: var(--text-dim);
-  font-size: var(--font-small);
+  font-size: var(--font-meta);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
+.stretch-cue-toggle {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 44px;
+  margin-right: -6px;
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  cursor: pointer;
+  padding: 0;
+}
+
+/* No grey box after a tap (the global button:hover sticks on touch). */
+.stretch-cue-toggle:hover,
+.stretch-cue-toggle:active {
+  background: transparent;
+  transform: none;
+}
+
+.stretch-cue-toggle span {
+  display: inline-block;
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+.stretch-cue-toggle.is-open span {
+  transform: rotate(90deg);
+}
+
+/* A row with no cue keeps the same right edge as one with a ▸. */
+.stretch-row-head .stretch-reps:last-child {
+  margin-right: 36px;
+}
+
+.stretch-row-done .stretch-name,
+.stretch-row-done .stretch-reps,
+.stretch-row-done .stretch-cue-toggle {
+  opacity: 0.55;
+}
+
 .stretch-cue {
-  margin: 6px 0 0;
+  margin: 2px 0 8px 54px;
   color: var(--text-dim);
   font-size: var(--font-small);
   line-height: 1.5;

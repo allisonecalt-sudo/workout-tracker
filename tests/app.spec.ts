@@ -147,7 +147,8 @@ test('cool-down renders as a single stretch list with no per-stretch video', asy
         .locator('.round-indicator')
         .textContent()
         .catch(() => '')) ?? '';
-    if (phase.includes('Cool-down')) {
+    // v48 · P7: the cool-down chip counts her rows ("Stretch · 11").
+    if (phase.includes('Stretch ·')) {
       reachedStretch = true;
       break;
     }
@@ -3933,7 +3934,7 @@ test.describe('v48 P2 shell', () => {
         'Main · Round 1 of 2',
         'Main · Round 2 of 2',
         'Upper back',
-        'Cool-down',
+        'Stretch · 11', // v48 · P7: the cool-down chip counts her 11 rows
       ])
     );
   });
@@ -4042,7 +4043,7 @@ test.describe('v48 P2 shell', () => {
     await page.locator('#finish-here').click();
     await expect(page.locator('.stretch-list')).toBeVisible();
     await expect(page.locator('.subtitle')).toContainText('Lite day');
-    await expect(page.locator('.round-indicator')).toHaveText('Cool-down · lite');
+    await expect(page.locator('.round-indicator')).toHaveText('Stretch · 11 · lite');
     await page.locator('#next').click();
     await expect(page.locator('text=Quick log')).toBeVisible();
     const log = await saveAndRead(page);
@@ -5136,7 +5137,7 @@ test.describe('v48 P5 logs', () => {
     await page.locator('#session-note').fill('almost done');
     await page.locator('#back-to-stretches').click();
     await expect(page.locator('.stretch-list')).toBeVisible();
-    await expect(page.locator('.round-indicator')).toContainText('Cool-down');
+    await expect(page.locator('.round-indicator')).toContainText('Stretch ·');
     expect(await readLogs(page)).toHaveLength(0);
     // Done · Finish brings her back to the log with her words still there.
     await page.locator('#next').click();
@@ -5598,5 +5599,169 @@ test.describe('v48 P6 mirror', () => {
           .backgroundColor
     );
     expect(onTrack).not.toBe('rgb(143, 188, 143)');
+  });
+});
+
+// --- v48 P7 · the cool-down: her 18 stretches as 11 tick-off rows (Sep 24 2026) ---
+// DECISIONS-v48 §4 (cool-down row). Her routine — "i dont do yur stretches i do
+// this" (May 29) — and her Jun 6 call: one list, no timer. All 18 stay in the
+// data; right/left pairs fold into one "each side" row; rows tick off; one
+// honest line instead of "No timer" over "45 sec"; Done · Finish stays pinned.
+test.describe('v48 P7 cool-down', () => {
+  const TUE_WEEK4 = '2026-09-22T14:00:00.000Z'; // Tue inside Round 2 Week 4
+  const STARTED = '2026-09-22T13:30:00.000Z'; // 30 min earlier → a silent resume
+
+  const coolSnap = (liteDay = false): Record<string, unknown> => ({
+    screen: 'workout',
+    selectedWorkout: 'A',
+    capacityBefore: 6,
+    capacityAfter: 5,
+    wallSitSec: 45,
+    backPain: 0,
+    word: '',
+    currentRound: 2,
+    currentPhase: 'cooldown',
+    currentExerciseIndex: 0,
+    startedAt: STARTED,
+    pausedAt: null,
+    pausedMs: 0,
+    liteDay,
+  });
+
+  // Seeded after the beforeEach clear, so every load of `page` lands on A's
+  // cool-down list (a fresh snapshot resumes silently).
+  const toCooldown = async (page: Page, liteDay = false): Promise<void> => {
+    await mockDate(page, TUE_WEEK4);
+    await page.addInitScript(([key, snap]) => window.localStorage.setItem(key, snap), [
+      'workout-tracker:active-session',
+      JSON.stringify(coolSnap(liteDay)),
+    ] as const);
+    await page.goto('/');
+    await expect(page.locator('.stretch-list')).toBeVisible();
+  };
+
+  test('(a) A has 11 rows, the chip reads "Stretch · 11", pairs read "~45 s each side"', async ({
+    page,
+  }) => {
+    await toCooldown(page);
+    await expect(page.locator('.stretch-row')).toHaveCount(11);
+    await expect(page.locator('.round-indicator')).toHaveText('Stretch · 11');
+    const wrist = page.locator('.stretch-row', { hasText: 'Wrist extension' });
+    await expect(wrist).toHaveCount(1);
+    await expect(wrist.locator('.stretch-name')).toHaveText('Wrist extension');
+    await expect(wrist.locator('.stretch-reps')).toHaveText('~45 s each side');
+    // The hip-flexor pair folds too; a single reads a plain "~45 s".
+    await expect(page.locator('.stretch-name', { hasText: 'Hip flexor' })).toHaveText('Hip flexor');
+    await expect(
+      page.locator('.stretch-row', { hasText: 'Doorway pec stretch' }).locator('.stretch-reps')
+    ).toHaveText('~45 s');
+    // All 18 are still there: 7 pairs + 4 singles.
+    await expect(page.locator('.stretch-reps', { hasText: 'each side' })).toHaveCount(7);
+  });
+
+  test('(b) one honest line: "no timer" in the subtitle, no "45 sec" anywhere on the list', async ({
+    page,
+  }) => {
+    await toCooldown(page);
+    await expect(page.locator('.subtitle')).toHaveText('About 45 s each — no timer, go by feel.');
+    const list = await page.locator('.stretch-list').innerText();
+    expect(list).not.toContain('45 sec');
+    expect(list).not.toContain('No timer');
+    await expect(page.locator('.stretch-reps').first()).toHaveText('~45 s each side');
+    await expect(page.locator('.stretch-progress')).toHaveText('~13 min · 0 of 11');
+  });
+
+  test('(c) a tick updates the live line and survives an app close mid-cool-down', async ({
+    page,
+    context,
+  }) => {
+    await toCooldown(page);
+    const check = (p: Page) => p.locator('[data-stretch-tick="Wrist extension"]');
+    await expect(check(page)).toHaveAttribute('aria-pressed', 'false');
+    await check(page).click();
+    await expect(page.locator('.stretch-progress')).toHaveText('~13 min · 1 of 11');
+    await expect(check(page)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.stretch-row').first()).toHaveClass(/stretch-row-done/);
+    // The check fills in the progress green, never the sage of the one action.
+    const fill = await check(page).evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(fill).toBe('rgb(122, 155, 122)');
+    // Tap again = untick; then tick it back for the close.
+    await check(page).click();
+    await expect(page.locator('.stretch-progress')).toHaveText('~13 min · 0 of 11');
+    await check(page).click();
+    await expect(page.locator('.stretch-progress')).toHaveText('~13 min · 1 of 11');
+    const snap = await page.evaluate(() => localStorage.getItem('workout-tracker:active-session'));
+    expect(snap).not.toBeNull();
+    // A fresh page in the same context (`page` re-seeds on every load).
+    const reopened = await context.newPage();
+    await mockDate(reopened, TUE_WEEK4);
+    await reopened.addInitScript(([key, s]) => window.localStorage.setItem(key, s), [
+      'workout-tracker:active-session',
+      snap ?? '',
+    ] as const);
+    await reopened.goto('/');
+    await expect(reopened.locator('.stretch-list')).toBeVisible();
+    await expect(reopened.locator('.stretch-progress')).toHaveText('~13 min · 1 of 11');
+    await expect(check(reopened)).toHaveAttribute('aria-pressed', 'true');
+    await reopened.close();
+  });
+
+  test('(d) a placeholder cue has no ▸; a real cue opens behind ▸, closed by default', async ({
+    page,
+  }) => {
+    await toCooldown(page);
+    const neck = page.locator('.stretch-row', { hasText: 'Neck stretch' });
+    await expect(neck.locator('.stretch-cue-toggle')).toHaveCount(0);
+    await expect(page.locator('.stretch-cue')).toHaveCount(0);
+    const pec = page.locator('.stretch-row', { hasText: 'Doorway pec stretch' });
+    await expect(pec.locator('.stretch-cue-toggle')).toHaveAttribute('aria-expanded', 'false');
+    await pec.locator('.stretch-cue-toggle').click();
+    await expect(pec.locator('.stretch-cue')).toContainText('Stand in a doorway');
+    await expect(pec.locator('.stretch-cue-toggle')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('.stretch-cue')).toHaveCount(1);
+  });
+
+  test.describe('at phone size', () => {
+    test.use({ viewport: { width: 412, height: 915 } });
+
+    test('(e) the whole list fits: Done · Finish pinned in view, page ≤ 1400 px, one sage', async ({
+      page,
+    }) => {
+      await toCooldown(page);
+      const done = page.locator('.action-bar #next');
+      await expect(done).toHaveText('Done · Finish');
+      await expect(done).toBeInViewport();
+      const box = (await done.boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(915);
+      const h = await page.evaluate(() => document.documentElement.scrollHeight);
+      expect(h).toBeLessThanOrEqual(1400);
+      await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
+      // Every check is a real 44×44 target.
+      for (const c of await page.locator('.stretch-check').all()) {
+        const b = (await c.boundingBox())!;
+        expect(b.width).toBeGreaterThanOrEqual(44);
+        expect(b.height).toBeGreaterThanOrEqual(44);
+      }
+    });
+  });
+
+  test('(f) a lite day keeps its own subtitle', async ({ page }) => {
+    await toCooldown(page, true);
+    await expect(page.locator('.subtitle')).toHaveText(
+      'Lite day — do the stretches you need, skip the rest. Done · Finish whenever.'
+    );
+    await expect(page.locator('.round-indicator')).toHaveText('Stretch · 11 · lite');
+  });
+
+  test('(g) Done · Finish lands on the post-log; the ticks go nowhere', async ({ page }) => {
+    await toCooldown(page);
+    await page.locator('[data-stretch-tick="Neck stretch"]').click();
+    await page.locator('#next').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await page.locator('#save-log').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    const raw = (await page.evaluate(() => localStorage.getItem('workout-tracker:logs'))) ?? '';
+    expect(raw).toContain('"workout":"A"');
+    expect(raw).not.toMatch(/stretch/i);
   });
 });
