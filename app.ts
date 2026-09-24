@@ -115,6 +115,8 @@ type AppState = {
   wallSitSec: number;
   backPain: number;
   word: string;
+  // Post-log free text (v44): "any information at the end about what I did".
+  sessionNote: string;
   currentRound: number;
   currentPhase: Phase;
   currentExerciseIndex: number;
@@ -256,8 +258,8 @@ const SUPABASE_ANON_KEY =
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
 // BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
 // (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
-const APP_VERSION = 'v43';
-const BUILD_DATE = 'Sep 24, 2026 · 11:05';
+const APP_VERSION = 'v44';
+const BUILD_DATE = 'Sep 24, 2026 · 14:50';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2460,7 +2462,7 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   // v43 (2026-09-24) — the York BX200 arrived; the third cardio lane.
   Elliptical: {
     howTo:
-      "Your York BX200, for the same minutes as the walk. Step on, hands light on the handles, and skip the preset programs for now so the level only changes when you change it. Warm up for the first couple of minutes on a low level. Then raise it until you're working but can still talk in full sentences, and hold that. That's your level for today. Ease back down for the last minute. Stand tall with your weight through your heels and midfoot, not up on your toes, and don't lean on the handles. The fixed grips read your pulse if you want a number. It's zero impact and nearly silent, so it's easy on the back and on the neighbours downstairs. Before you tap Done, set the level on screen to the one you rode at. The app remembers it and starts there next time, and that is how your progress becomes visible.",
+      "Form: stand tall with your weight through your heels and midfoot, not up on your toes. Whole foot on the pedal, toes pointing forward. Don't lean on the handles. The moving arms bring your upper body in, or rest your hands on the fixed grips. Pedal forward. Effort stays conversational: you can still talk in full sentences. It's zero impact and nearly silent, so it's easy on your back and on the neighbours downstairs. How progress shows up: same minutes, but a higher level or more distance than last time.",
   },
 };
 
@@ -2472,6 +2474,7 @@ const state: AppState = {
   wallSitSec: 0,
   backPain: 0,
   word: '',
+  sessionNote: '',
   currentRound: 1,
   currentPhase: 'warmup',
   currentExerciseIndex: 0,
@@ -3258,9 +3261,49 @@ function chooseElliptical(minutes: number): void {
   setEllipticalLevel(ellipticalLevel());
 }
 
+// Console readings (v44, Sep 24 2026 — her words: "make it measurable whatever
+// you say I'm gonna copy it"). Two numbers copied off the BX200's screen after
+// the ride: DISTANCE (same machine, same minutes → more km = fitter; comparable
+// against HER OWN rides, not against a walk) and PULSE (read off the fixed grips
+// in the last 30 s — says whether the level was really conversational). The
+// console's calories are its own estimate from the same inputs, so they're not
+// asked for. Blank = not recorded, never a zero.
+const WW_ELLIPTICAL_KM_KEY = 'workout-tracker:ww-elliptical-km';
+const WW_ELLIPTICAL_PULSE_KEY = 'workout-tracker:ww-elliptical-pulse';
+
+function ellipticalKm(): number | null {
+  const n = Number(localStorage.getItem(WW_ELLIPTICAL_KM_KEY) ?? '');
+  return Number.isFinite(n) && n > 0 && n < 100 ? Math.round(n * 100) / 100 : null;
+}
+
+function ellipticalPulse(): number | null {
+  const n = Number(localStorage.getItem(WW_ELLIPTICAL_PULSE_KEY) ?? '');
+  return Number.isFinite(n) && n >= 30 && n <= 230 ? Math.round(n) : null;
+}
+
+// Saved on every keystroke so the value survives a re-render or an app close.
+function setEllipticalReading(key: string, raw: string): void {
+  const v = raw.trim().replace(',', '.');
+  if (v === '') localStorage.removeItem(key);
+  else localStorage.setItem(key, v);
+}
+
+// The notes marker. Its "cardio: elliptical N min · level L" head is what
+// lastEllipticalLevel() reads back; the readings ride after it when present.
+function ellipticalMarker(minutes: number): string {
+  const parts = [`cardio: elliptical ${minutes} min`, `level ${ellipticalLevel()}`];
+  const km = ellipticalKm();
+  const pulse = ellipticalPulse();
+  if (km !== null) parts.push(`${km} km`);
+  if (pulse !== null) parts.push(`pulse ${pulse}`);
+  return parts.join(' · ');
+}
+
 function clearElliptical(): void {
   localStorage.removeItem(WW_ELLIPTICAL_KEY);
   localStorage.removeItem(WW_ELLIPTICAL_LEVEL_KEY);
+  localStorage.removeItem(WW_ELLIPTICAL_KM_KEY);
+  localStorage.removeItem(WW_ELLIPTICAL_PULSE_KEY);
 }
 
 function ellipticalStep(minutes: number): Exercise {
@@ -3572,9 +3615,13 @@ async function logCompleteAndHome(): Promise<void> {
   const ellipticalMin = ellipticalMinutes();
   const notesParts: string[] = [];
   if (ellipticalMin !== null) {
-    notesParts.push(`cardio: elliptical ${ellipticalMin} min · level ${ellipticalLevel()}`);
+    notesParts.push(ellipticalMarker(ellipticalMin));
   }
   if (apartmentMin !== null) notesParts.push(`cardio: apartment ${apartmentMin} min`);
+  // Her free-text line from the post-log (v44): "a way to put in any
+  // information at the end about what I did". Kept verbatim.
+  const sessionNote = state.sessionNote.trim();
+  if (sessionNote) notesParts.push(sessionNote);
   if (leftOpen) {
     notesParts.push(
       `duration not recorded — session was left open ${Math.round(rawDurationSec / 3600)}h before Done`
@@ -3835,6 +3882,7 @@ function resetState(): void {
   state.wallSitSec = 0;
   state.backPain = 0;
   state.word = '';
+  state.sessionNote = '';
   state.currentRound = 1;
   state.currentPhase = 'warmup';
   state.currentExerciseIndex = 0;
@@ -5456,6 +5504,22 @@ function renderEllipticalControls(): string {
     last === null
       ? `First ride — ${ELLIPTICAL_FIRST_LEVEL} is only a guess. Set it to the level you ended on.`
       : `Starts at your last level (${last}). Change it if today was different.`;
+  // The timer re-renders this screen every second while it runs, which would
+  // wipe a half-typed number — so the copy-from-the-screen boxes only show
+  // while it is NOT running (before the ride, and once it ends).
+  const running = state.timerSeconds > 0 || state.preCountdown > 0;
+  const km = localStorage.getItem(WW_ELLIPTICAL_KM_KEY) ?? '';
+  const pulse = localStorage.getItem(WW_ELLIPTICAL_PULSE_KEY) ?? '';
+  const readings = running
+    ? `<p class="gear-note">When the timer ends, boxes for distance + pulse appear here.</p>`
+    : `
+      <div class="ell-readings">
+        <div class="ell-readings-title">From the elliptical's screen, after the ride</div>
+        <div class="ell-readings-row">
+          <label class="ell-reading"><span>Distance (km)</span><input type="number" id="ell-km" inputmode="decimal" step="0.01" min="0" placeholder="—" value="${escapeHtml(km)}" /></label>
+          <label class="ell-reading"><span>Pulse</span><input type="number" id="ell-pulse" inputmode="numeric" step="1" min="30" max="230" placeholder="—" value="${escapeHtml(pulse)}" /></label>
+        </div>
+      </div>`;
   return `
     <div class="ww-start-block">
       <div class="ell-level-row">
@@ -5468,7 +5532,44 @@ function renderEllipticalControls(): string {
         <span class="ell-level-of">of ${ELLIPTICAL_MAX_LEVEL}</span>
       </div>
       <p class="gear-note">${hint}</p>
+      ${readings}
       <button class="cardio-alt-btn" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>
+    </div>
+  `;
+}
+
+// Setup + ride steps (v44, her ask: "make sure you tell me how to do it and how
+// to set the elliptical"). NO BX200 manual is published online (searched Sep 24:
+// York, ManualsLib, 4 Israeli stores) — so the console steps are the standard
+// ones for this class of console and SAY so, until she sends a photo of hers.
+// Hidden while the timer runs: she needs it before the ride, not during.
+const ELLIPTICAL_SETUP_STEPS: readonly string[] = [
+  'Plug it in and turn it on. Step on while holding the fixed middle handles, and start pedalling forward. That wakes the screen.',
+  'Choose MANUAL, not one of the programs. Scroll with the arrow buttons and confirm with ENTER or MODE.',
+  'If it asks for time, age or weight, just press ENTER to skip. The app is timing you.',
+  'Press START, then use the arrows to set level 3 for the warm-up.',
+];
+
+const ELLIPTICAL_RIDE_STEPS: readonly string[] = [
+  'Start the app timer. Ride the first 2 minutes on level 3, easy.',
+  'First ride: go up 1 level every 30 seconds until talking in full sentences starts to take effort. Then go back down 1 level. That is your level today. After this, go straight to your last level once the warm-up ends.',
+  'Stay there. Stand tall, feet flat on the pedals, and keep your hands light.',
+  'For the last minute, go back to level 3.',
+  'For the last 30 seconds, hold the fixed metal grips until your pulse shows.',
+  'Before you step off, copy the Distance and Pulse into the boxes above, and set the Level to the one you rode at. Then press STOP on the machine.',
+];
+
+function renderEllipticalGuide(): string {
+  if (state.timerSeconds > 0 || state.preCountdown > 0) return '';
+  const ol = (steps: readonly string[]): string =>
+    `<ol class="ell-steps">${steps.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ol>`;
+  return `
+    <div class="card ell-guide">
+      <div class="ell-guide-title">Setting up the machine</div>
+      ${ol(ELLIPTICAL_SETUP_STEPS)}
+      <p class="gear-note">These are the usual steps for this kind of console. The button names on yours may be a little different.</p>
+      <div class="ell-guide-title">The ride</div>
+      ${ol(ELLIPTICAL_RIDE_STEPS)}
     </div>
   `;
 }
@@ -5574,7 +5675,9 @@ function renderWorkout(): string {
             state.timerSeconds > 0 ? state.timerSeconds : (ex.durationSec ?? 0),
             state.timerSeconds > 0
           )
-        : ''
+        : ex.name === ELLIPTICAL_NAME
+          ? renderEllipticalGuide()
+          : ''
     }
 
     ${
@@ -5632,6 +5735,11 @@ function renderPostLog(): string {
       <label class="field">
         <span class="label-text">One word for how it felt</span>
         <input type="text" id="word" placeholder="proud, tired, looser…" maxlength="40" value="${escapeHtml(state.word)}" />
+      </label>
+
+      <label class="field">
+        <span class="label-text">Anything else about what you did? (optional)</span>
+        <textarea id="session-note" rows="3" maxlength="500" dir="auto" placeholder="Did 3 rounds, knee felt fine, stopped the elliptical early…">${escapeHtml(state.sessionNote)}</textarea>
       </label>
     </div>
 
@@ -7132,6 +7240,13 @@ function attachHandlers(): void {
     setEllipticalLevel(ellipticalLevel() + 1);
     render();
   });
+  // Console readings (v44): saved per keystroke, no re-render (keeps focus).
+  const ellKm = document.getElementById('ell-km') as HTMLInputElement | null;
+  ellKm?.addEventListener('input', () => setEllipticalReading(WW_ELLIPTICAL_KM_KEY, ellKm.value));
+  const ellPulse = document.getElementById('ell-pulse') as HTMLInputElement | null;
+  ellPulse?.addEventListener('input', () =>
+    setEllipticalReading(WW_ELLIPTICAL_PULSE_KEY, ellPulse.value)
+  );
 
   // …and back out again to the three-way choice, in case she changes her mind.
   bindClick('ww-outdoor', () => {
@@ -7214,6 +7329,8 @@ function attachHandlers(): void {
     }
     const wordEl = document.getElementById('word') as HTMLInputElement | null;
     if (wordEl) state.word = wordEl.value.trim();
+    const noteEl = document.getElementById('session-note') as HTMLTextAreaElement | null;
+    if (noteEl) state.sessionNote = noteEl.value;
     void logCompleteAndHome();
   });
 

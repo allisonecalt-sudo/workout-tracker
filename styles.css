@@ -3592,6 +3592,73 @@ input[type='number']:focus {
   font-size: var(--font-small);
 }
 
+/* Console readings (v44) — two numbers copied off the machine's screen. */
+.ell-readings {
+  border-top: 1px solid var(--border-divider);
+  padding-top: 10px;
+}
+
+.ell-readings-title {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.ell-readings-row {
+  display: flex;
+  gap: 12px;
+}
+
+.ell-reading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  text-align: left;
+}
+
+.ell-reading input {
+  width: 100%;
+  min-width: 0;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Setup + ride steps (v44). */
+.ell-guide-title {
+  font-weight: 600;
+  margin: 4px 0 6px;
+}
+
+.ell-steps {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: 1.45;
+}
+
+#session-note {
+  width: 100%;
+  resize: vertical;
+  background: var(--bg-elev-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font: inherit;
+  font-size: var(--font-body);
+}
+
+#session-note:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
 /* Guided indoor strip (v30, Sep 7 2026) — the apartment lane stopped being a
    timer + a decision. Five 2-minute segments cycle for the whole block; the
    card says which one is LIVE right now and shows the rest so she can see

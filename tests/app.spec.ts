@@ -2845,6 +2845,9 @@ test('elliptical: finishing saves the minutes + a level marker, never POSTs, and
   await page.locator('#ell-level-up').click();
   await page.locator('#ell-level-up').click();
   await expect(page.locator('#ell-level')).toHaveText('7');
+  // Copied off the machine's screen after the ride.
+  await page.locator('#ell-km').fill('2.15');
+  await page.locator('#ell-pulse').fill('128');
 
   for (let i = 0; i < 30; i++) {
     const isPostLog = await page
@@ -2858,6 +2861,7 @@ test('elliptical: finishing saves the minutes + a level marker, never POSTs, and
   }
   await expect(page.locator('text=Quick log')).toBeVisible();
   await page.locator('#word').fill('smooth');
+  await page.locator('#session-note').fill('Knee fine, legs heavy on the elliptical');
   await page.locator('button:has-text("Save & finish")').click();
   await expect(page.locator('h1')).toHaveText('Workout Tracker');
 
@@ -2865,9 +2869,17 @@ test('elliptical: finishing saves the minutes + a level marker, never POSTs, and
   const logs = JSON.parse(raw ?? '[]') as { walkMinutes?: number | null; notes?: string | null }[];
   expect(logs.length).toBe(1);
   expect(logs[0]?.walkMinutes).toBe(25);
-  expect(logs[0]?.notes).toBe('cardio: elliptical 25 min · level 7');
+  // Readings from the machine's screen ride after the level; her note comes last, verbatim.
+  expect(logs[0]?.notes).toBe(
+    'cardio: elliptical 25 min · level 7 · 2.15 km · pulse 128 · Knee fine, legs heavy on the elliptical'
+  );
   expect(posted.filter((u) => u.includes('workout_sessions'))).toEqual([]);
-  for (const key of ['workout-tracker:ww-elliptical', 'workout-tracker:ww-elliptical-level']) {
+  for (const key of [
+    'workout-tracker:ww-elliptical',
+    'workout-tracker:ww-elliptical-level',
+    'workout-tracker:ww-elliptical-km',
+    'workout-tracker:ww-elliptical-pulse',
+  ]) {
     expect(await page.evaluate((k) => localStorage.getItem(k), key)).toBeNull();
   }
 });
@@ -2902,7 +2914,7 @@ test('elliptical: the next ride starts at the level from the last saved session'
           wallSitSec: 45,
           backPain: 0,
           word: '',
-          notes: 'cardio: elliptical 10 min · level 8',
+          notes: 'cardio: elliptical 10 min · level 8 · 1.9 km · pulse 130 · felt good',
           synced: true,
         },
       ])
@@ -2924,4 +2936,56 @@ test('elliptical: the step carries how-to guidance', () => {
   const guideBlock = appSrc.slice(guideStart, appSrc.indexOf('\n};', guideStart));
   // Prettier unquotes a single-word key, so accept either spelling.
   expect(guideBlock).toMatch(/^ {2}'?Elliptical'?: \{/m);
+});
+
+test('elliptical: the reading boxes + setup steps hide while the timer runs and come back when it ends', async ({
+  page,
+}) => {
+  // The timer re-renders every second; a box shown mid-ride would lose what
+  // she is typing. So the boxes (and the setup card) only show while stopped.
+  await movableClock(page, '2026-09-24T08:00:00.000Z', { skipPreCountdown: true });
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await page.locator('#ww-elliptical').click();
+  await expect(page.locator('#ell-km')).toBeVisible();
+  await expect(page.locator('#ell-pulse')).toBeVisible();
+  await expect(page.locator('.ell-guide')).toContainText('Setting up the machine');
+  await expect(page.locator('.ell-guide')).toContainText('MANUAL');
+
+  await page.locator('#start-timed').click();
+  await expect(page.locator('#ell-km')).toHaveCount(0);
+  await expect(page.locator('.ell-guide')).toHaveCount(0);
+  // The level stepper stays usable mid-ride.
+  await expect(page.locator('#ell-level-up')).toBeVisible();
+
+  await advanceClock(page, 10 * 60_000 + 2_000);
+  await expect(page.locator('#ell-km')).toBeVisible();
+  await expect(page.locator('#ell-pulse')).toBeVisible();
+});
+
+test('post-log: the free-text note saves verbatim on a session with no cardio lane picked', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-24T08:00:00.000Z');
+  await page.goto('/');
+  await page.locator('button[data-workout="B"]').click();
+  await page.locator('button:has-text("Start")').click();
+  for (let i = 0; i < 40; i++) {
+    const isPostLog = await page
+      .locator('text=Quick log')
+      .isVisible()
+      .catch(() => false);
+    if (isPostLog) break;
+    const nextBtn = page.locator('button:has-text("Done ·")');
+    if (await nextBtn.isVisible()) await nextBtn.click();
+    else break;
+  }
+  await expect(page.locator('#session-note')).toBeVisible();
+  await page.locator('#session-note').fill('skipped the bird dog, wrist tired');
+  await page.locator('button:has-text("Save & finish")').click();
+  await expect(page.locator('h1')).toHaveText('Workout Tracker');
+  const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+  const logs = JSON.parse(raw ?? '[]') as { notes?: string | null }[];
+  expect(logs[0]?.notes).toBe('skipped the bird dog, wrist tired');
 });
