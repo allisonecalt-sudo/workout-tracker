@@ -80,10 +80,27 @@ type LogEntry = {
   walkMinutes?: number | null;
   walkSteps?: number | null;
   walkMeters?: number | null;
-  // Free-text session marker (existing Supabase column). Currently carries the
-  // cardio-lane marker — "cardio: apartment 10 min" — when she took the indoor
-  // option instead of the tracked walk (Sep 7 2026).
+  // System annotations only from v48 ("duration not recorded — left open…").
+  // Until v47 it also carried the cardio-lane marker ("cardio: elliptical 10 min
+  // · level 7 …") and her note; older rows still do, and are read back by regex.
   notes?: string | null;
+  // v48 (Sep 24 2026): real columns instead of prose in `notes` — the numbers she
+  // copies off the machine come back to her as numbers (her words: "make it
+  // measurable whatever you say I'm gonna copy it"). All optional: a row saved
+  // before v48, or an old export, simply has none of them.
+  cardioLane?: 'walk' | 'apartment' | 'elliptical' | null;
+  cardioMinutes?: number | null;
+  ellipticalLevel?: number | null;
+  ellipticalKm?: number | null;
+  ellipticalPulse?: number | null;
+  // Her free-text post-log line, verbatim — never glued to a machine marker.
+  sessionNote?: string | null;
+  liteDay?: boolean | null;
+  // "curl=easy;row=right" — the one-tap Easy/Right/Hard on the 1 kg moves (P5).
+  armFeel?: string | null;
+  // How many voice notes she started this session. Her words: "I can hear
+  // details in audio better"; Gemini said she never plays them — count, don't guess.
+  voicePlays?: number | null;
   synced?: boolean;
 };
 
@@ -124,6 +141,10 @@ type AppState = {
   word: string;
   // Post-log free text (v44): "any information at the end about what I did".
   sessionNote: string;
+  // v48 (Sep 24 2026): voice notes STARTED this session (a stop doesn't count).
+  // Her words: "I can hear details in audio better"; Gemini said she never plays
+  // them. There was no play data at all — count instead of guessing.
+  voicePlays: number;
   currentRound: number;
   currentPhase: Phase;
   currentExerciseIndex: number;
@@ -2194,7 +2215,10 @@ const R2W4_WALL_SIT: Exercise = (() => {
 // existing practice, now written down.
 const HIP_HINGE_R2W4: Exercise = {
   name: 'Bodyweight hip hinge',
-  reps: '2 sets · 12 reps · holding the 1 kg',
+  // v48 (Sep 24 2026): she does 2 sets in EACH of the 2 rounds; "2 sets · 12
+  // reps" inside "Round 1/2" read as 2 in total (same class as the v45 split-
+  // squat label). Label only — the prescription is unchanged.
+  reps: '12 reps · 2 sets each round · holding the 1 kg',
   notes:
     'Same hinge, now HOLDING the 1 kg the way you already do — it hangs from the hands, wrists neutral, light grip. Hinge at the hips, soft knees, flat/neutral spine; feel it in hamstrings + glutes. Do NOT round the low back. 1 kg is the ceiling for now; anything heavier is a Lisa question.',
 };
@@ -2500,6 +2524,7 @@ const state: AppState = {
   backPainTouched: false,
   word: '',
   sessionNote: '',
+  voicePlays: 0,
   currentRound: 1,
   currentPhase: 'warmup',
   currentExerciseIndex: 0,
@@ -3119,9 +3144,16 @@ async function pushWalk(walk: WalkEntry): Promise<void> {
         steps: walk.steps ?? null,
       }),
     });
-    if (res.ok) markWalkSynced(walk.id);
-  } catch {
-    /* stays unsynced; flushed on next load */
+    if (res.ok) {
+      markWalkSynced(walk.id);
+      return;
+    }
+    // v48 (Sep 24 2026): fail loud, same shape as the session push. movement_log
+    // has 0 rows EVER and a silent catch couldn't tell "unused" from "broken"
+    // (slow-walking audit). Still stays unsynced and is flushed on next load.
+    console.warn('[sync] walk push failed:', res.status, await res.text().catch(() => ''));
+  } catch (err) {
+    console.warn('[sync] walk push threw:', err);
   }
 }
 
@@ -3329,10 +3361,15 @@ function clampEllipticalLevel(n: number): number {
   return Math.max(1, Math.min(ELLIPTICAL_MAX_LEVEL, Math.round(n)));
 }
 
-// The level from her most recent elliptical session, off the saved notes marker.
+// The level from her most recent elliptical session. v48 (Sep 24 2026): the
+// real `ellipticalLevel` column first; older rows (and a v47 ride saved tonight)
+// only carry the notes marker, so the regex stays as the fallback.
 function lastEllipticalLevel(): number | null {
   const newestFirst = [...loadLogs()].sort((a, b) => b.date.localeCompare(a.date));
   for (const l of newestFirst) {
+    if (typeof l.ellipticalLevel === 'number' && l.ellipticalLevel > 0) {
+      return clampEllipticalLevel(l.ellipticalLevel);
+    }
     const m = ELLIPTICAL_MARKER_RE.exec(l.notes ?? '');
     if (m?.[1]) return clampEllipticalLevel(Number(m[1]));
   }
@@ -3382,14 +3419,19 @@ function setEllipticalReading(key: string, raw: string): void {
   else localStorage.setItem(key, v);
 }
 
-// The notes marker. Its "cardio: elliptical N min · level L" head is what
+// The v47 notes marker, rebuilt from a saved entry's columns. v48 (Sep 24
+// 2026): only the legacy push uses it now (a phone ahead of the schema — see
+// pushLogToSupabase). Its "cardio: elliptical N min · level L" head is what
 // lastEllipticalLevel() reads back; the readings ride after it when present.
-function ellipticalMarker(minutes: number): string {
-  const parts = [`cardio: elliptical ${minutes} min`, `level ${ellipticalLevel()}`];
-  const km = ellipticalKm();
-  const pulse = ellipticalPulse();
-  if (km !== null) parts.push(`${km} km`);
-  if (pulse !== null) parts.push(`pulse ${pulse}`);
+function legacyCardioMarker(entry: LogEntry): string | null {
+  const minutes = entry.cardioMinutes;
+  if (entry.cardioLane === 'apartment' && minutes != null)
+    return `cardio: apartment ${minutes} min`;
+  if (entry.cardioLane !== 'elliptical' || minutes == null) return null;
+  const parts = [`cardio: elliptical ${minutes} min`];
+  if (entry.ellipticalLevel != null) parts.push(`level ${entry.ellipticalLevel}`);
+  if (entry.ellipticalKm != null) parts.push(`${entry.ellipticalKm} km`);
+  if (entry.ellipticalPulse != null) parts.push(`pulse ${entry.ellipticalPulse}`);
   return parts.join(' · ');
 }
 
@@ -3502,40 +3544,110 @@ function walksThisWeek(): number {
 // wrist May 10. App was silently writing 0s for two columns the user no
 // longer fills. Schema still has the columns (no Supabase change) so existing
 // rows survive; new inserts just omit them and let the DB use NULL/default.
+// v48 (Sep 24 2026): does this workout have a timed wall sit anywhere in it?
+// B and C don't — and a 0 sent for them was "a hole wearing a number"
+// (data-integrity #3), so their payload says null instead.
+function workoutHasWallSit(w: Workout): boolean {
+  return [...w.warmup, ...w.main, ...(w.upperBack ?? [])].some((ex) => ex.name === 'Wall sit');
+}
+
+// The nine columns added in v48 (migrations/2026-09-24-v48-session-columns.sql).
+const V48_SESSION_COLUMNS = [
+  'cardio_lane',
+  'cardio_minutes',
+  'elliptical_level',
+  'elliptical_km',
+  'elliptical_pulse',
+  'session_note',
+  'lite_day',
+  'arm_feel',
+  'voice_plays',
+] as const;
+
+// The workout_sessions row for a saved entry — pure, so it's testable without a
+// network (v48, Sep 24 2026). Every structured number has its own column now;
+// `notes` carries only system annotations.
+function sessionPayload(entry: LogEntry): Record<string, unknown> {
+  const hasWallSit = workoutHasWallSit(getWorkoutById(entry.workout, new Date(entry.date)));
+  return {
+    id: entry.id,
+    date: entry.date,
+    workout_type: entry.workout,
+    capacity_before_1_10: entry.capacityBefore,
+    capacity_after_1_10: entry.capacityAfter,
+    wall_sit_seconds: hasWallSit ? entry.wallSitSec : null,
+    pain_back_0_10: entry.backPain,
+    one_word: entry.word || null,
+    started_at: entry.startedAt ?? null,
+    completed_at: entry.completedAt ?? null,
+    duration_seconds: entry.durationSec ?? null,
+    walk_minutes: entry.walkMinutes ?? null,
+    walk_steps: entry.walkSteps ?? null,
+    walk_meters: entry.walkMeters ?? null,
+    notes: entry.notes ?? null,
+    cardio_lane: entry.cardioLane ?? null,
+    cardio_minutes: entry.cardioMinutes ?? null,
+    elliptical_level: entry.ellipticalLevel ?? null,
+    elliptical_km: entry.ellipticalKm ?? null,
+    elliptical_pulse: entry.ellipticalPulse ?? null,
+    session_note: entry.sessionNote ?? null,
+    lite_day: entry.liteDay ?? null,
+    arm_feel: entry.armFeel ?? null,
+    voice_plays: entry.voicePlays ?? null,
+  };
+}
+
+// The v47-shaped row, for a server that doesn't have the v48 columns yet
+// (PostgREST 400 PGRST204). Nothing is lost: the lane marker and her note go
+// back into `notes` the way v47 wrote them, and the indoor minutes back into
+// walk_minutes — so a sync is never dropped for being ahead of the schema.
+function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
+  const payload = sessionPayload(entry);
+  for (const col of V48_SESSION_COLUMNS) delete payload[col];
+  const noteParts = [legacyCardioMarker(entry), entry.sessionNote, entry.notes].filter(
+    (p): p is string => typeof p === 'string' && p.trim() !== ''
+  );
+  payload['notes'] = noteParts.length > 0 ? noteParts.join(' · ') : null;
+  if (entry.cardioLane === 'elliptical' || entry.cardioLane === 'apartment') {
+    payload['walk_minutes'] = entry.walkMinutes ?? entry.cardioMinutes ?? null;
+  }
+  return payload;
+}
+
+async function postSession(payload: Record<string, unknown>): Promise<Response> {
+  return fetch(`${SUPABASE_URL}/rest/v1/workout_sessions`, {
+    method: 'POST',
+    // v45: ignore-duplicates — if an earlier push already landed (the reply
+    // was lost), the retry is a no-op success instead of a 409 forever.
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal,resolution=ignore-duplicates',
+    },
+    body: JSON.stringify([payload]),
+  });
+}
+
 async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
   if (syncDisabled()) return false;
   if (!entry.id) return false;
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/workout_sessions`, {
-      method: 'POST',
-      // v45: ignore-duplicates — if an earlier push already landed (the reply
-      // was lost), the retry is a no-op success instead of a 409 forever.
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal,resolution=ignore-duplicates',
-      },
-      body: JSON.stringify([
-        {
-          id: entry.id,
-          date: entry.date,
-          workout_type: entry.workout,
-          capacity_before_1_10: entry.capacityBefore,
-          capacity_after_1_10: entry.capacityAfter,
-          wall_sit_seconds: entry.wallSitSec,
-          pain_back_0_10: entry.backPain,
-          one_word: entry.word || null,
-          started_at: entry.startedAt ?? null,
-          completed_at: entry.completedAt ?? null,
-          duration_seconds: entry.durationSec ?? null,
-          walk_minutes: entry.walkMinutes ?? null,
-          walk_steps: entry.walkSteps ?? null,
-          walk_meters: entry.walkMeters ?? null,
-          notes: entry.notes ?? null,
-        },
-      ]),
-    });
+    let res = await postSession(sessionPayload(entry));
+    if (res.status === 400) {
+      const body = await res.text().catch(() => '');
+      if (!body.includes('PGRST204')) {
+        console.warn('[sync] push failed:', res.status, body);
+        return false;
+      }
+      // v48: the phone is ahead of the schema (an unknown column). Say so, then
+      // retry ONCE with the v47 shape so the session still lands.
+      console.warn(
+        '[sync] v48 columns missing on the server — retrying with the legacy row:',
+        body
+      );
+      res = await postSession(legacySessionPayload(entry));
+    }
     if (res.ok) {
       markLogSynced(entry.id);
       return true;
@@ -3629,6 +3741,7 @@ function beginExercises(): void {
   state.startedAt = new Date().toISOString();
   state.pausedAt = null; // fresh session, no paused time carried in
   state.pausedMs = 0;
+  state.voicePlays = 0; // v48: plays are counted per session
   // v46: the post-log sliders haven't been seen yet (capacity-before was just
   // set on pre-log, so its flag stays as it is).
   state.capacityAfterTouched = false;
@@ -3829,31 +3942,41 @@ async function saveCompletedSession(): Promise<void> {
   // before Done has no honest duration. Blank it instead of logging 46 hours.
   const leftOpen = rawDurationSec > MAX_PLAUSIBLE_DURATION_SEC;
   // Cardio either/or (Sep 7 2026): the apartment lane has nothing to track, so
-  // the PRESCRIBED minutes are the honest number and a marker in `notes` says
-  // which lane it was — no new Supabase column, both already exist.
+  // the PRESCRIBED minutes are the honest number.
   // v45: when she ran the lane's timer, the minutes she actually did win over
   // the prescription (Done at 4 of 10 min used to log 10).
+  // v48 (Sep 24 2026): the lane, its minutes and the elliptical readings go to
+  // their OWN columns — no more "cardio: elliptical 10 min · level 7 · …" prose
+  // in `notes` read back by regex (a note of hers in that shape would have been
+  // misread as her level, data-integrity #1). walk_minutes is for real walks only.
   const laneDone = laneDoneMinutes();
-  const prescribedApartment = apartmentCardioMinutes();
-  const apartmentMin = prescribedApartment !== null ? (laneDone ?? prescribedApartment) : null;
-  // Elliptical lane (Sep 24 2026): minutes + the level she set.
-  // The marker's shape is what lastEllipticalLevel() reads back next time.
   const prescribedElliptical = ellipticalMinutes();
-  const ellipticalMin = prescribedElliptical !== null ? (laneDone ?? prescribedElliptical) : null;
-  const notesParts: string[] = [];
-  if (ellipticalMin !== null) {
-    notesParts.push(ellipticalMarker(ellipticalMin));
-  }
-  if (apartmentMin !== null) notesParts.push(`cardio: apartment ${apartmentMin} min`);
+  const prescribedApartment = apartmentCardioMinutes();
+  const cardioLane: LogEntry['cardioLane'] =
+    prescribedElliptical !== null
+      ? 'elliptical'
+      : prescribedApartment !== null
+        ? 'apartment'
+        : workoutWalk
+          ? 'walk'
+          : null;
+  const cardioMinutes =
+    cardioLane === 'elliptical'
+      ? (laneDone ?? prescribedElliptical)
+      : cardioLane === 'apartment'
+        ? (laneDone ?? prescribedApartment)
+        : cardioLane === 'walk' && workoutWalk
+          ? workoutWalk.minutes
+          : null;
+  const onElliptical = cardioLane === 'elliptical';
   // Her free-text line from the post-log (v44): "a way to put in any
-  // information at the end about what I did". Kept verbatim.
-  const sessionNote = state.sessionNote.trim();
-  if (sessionNote) notesParts.push(sessionNote);
-  if (leftOpen) {
-    notesParts.push(
-      `duration not recorded — session was left open ${Math.round(rawDurationSec / 3600)}h before Done`
-    );
-  }
+  // information at the end about what I did". Kept verbatim, in its own column
+  // from v48 — her words, not the tail of a machine log line.
+  const sessionNote = state.sessionNote.trim() || null;
+  // `notes` = system annotations only.
+  const notes = leftOpen
+    ? `duration not recorded — session was left open ${Math.round(rawDurationSec / 3600)}h before Done`
+    : null;
   const stored = saveLog({
     date: completedAt,
     workout: state.selectedWorkout,
@@ -3866,10 +3989,19 @@ async function saveCompletedSession(): Promise<void> {
     startedAt,
     completedAt,
     ...(leftOpen ? {} : { durationSec: rawDurationSec }),
-    walkMinutes: workoutWalk ? workoutWalk.minutes : (ellipticalMin ?? apartmentMin),
+    walkMinutes: workoutWalk ? workoutWalk.minutes : null,
     walkSteps: workoutWalk && workoutWalk.steps > 0 ? workoutWalk.steps : null,
     walkMeters: workoutWalk && workoutWalk.meters > 0 ? workoutWalk.meters : null,
-    notes: notesParts.length > 0 ? notesParts.join(' · ') : null,
+    notes,
+    cardioLane,
+    cardioMinutes,
+    ellipticalLevel: onElliptical ? ellipticalLevel() : null,
+    ellipticalKm: onElliptical ? ellipticalKm() : null,
+    ellipticalPulse: onElliptical ? ellipticalPulse() : null,
+    sessionNote,
+    liteDay: state.liteDay,
+    armFeel: null, // v48: P5 fills the one-tap Easy/Right/Hard
+    voicePlays: state.voicePlays,
   });
   resetState();
   render();
@@ -3899,6 +4031,8 @@ type ActiveSessionSnapshot = {
   word: string;
   // v45: the post-log note survives an app close (it was lost before).
   sessionNote: string;
+  // v48: voice-note plays so far — an app close mid-session keeps the count.
+  voicePlays: number;
   currentRound: number;
   currentPhase: Phase;
   currentExerciseIndex: number;
@@ -3924,6 +4058,7 @@ function saveActiveSession(): void {
       backPainTouched: state.backPainTouched,
       word: state.word,
       sessionNote: state.sessionNote,
+      voicePlays: state.voicePlays,
       currentRound: state.currentRound,
       currentPhase: state.currentPhase,
       currentExerciseIndex: state.currentExerciseIndex,
@@ -3990,6 +4125,8 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       backPainTouched: snap.backPainTouched ?? true,
       word: snap.word ?? '',
       sessionNote: typeof snap.sessionNote === 'string' ? snap.sessionNote : '',
+      // v48: a pre-v48 snapshot has no count → 0, never a guess.
+      voicePlays: typeof snap.voicePlays === 'number' && snap.voicePlays >= 0 ? snap.voicePlays : 0,
       currentRound: snap.currentRound ?? 1,
       currentPhase: phase,
       currentExerciseIndex: phase === 'cooldown' ? 0 : idx,
@@ -4021,6 +4158,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.backPainTouched = snap.backPainTouched;
   state.word = snap.word;
   state.sessionNote = snap.sessionNote;
+  state.voicePlays = snap.voicePlays;
   state.startedAt = snap.startedAt ?? new Date().toISOString();
   state.liteDay = snap.liteDay;
   // Preserve pause accounting across an app close. If she closed while paused,
@@ -4135,6 +4273,7 @@ function resetState(): void {
   state.backPainTouched = false;
   state.word = '';
   state.sessionNote = '';
+  state.voicePlays = 0;
   state.currentRound = 1;
   state.currentPhase = 'warmup';
   state.currentExerciseIndex = 0;
@@ -4174,6 +4313,18 @@ type RemoteSession = {
   walk_minutes?: number | null;
   walk_steps?: number | null;
   walk_meters?: number | null;
+  // v48 (Sep 24 2026): the nine new columns. Optional — a server that hasn't
+  // run the migration, or an old row, simply doesn't carry them.
+  cardio_lane?: 'walk' | 'apartment' | 'elliptical' | null;
+  cardio_minutes?: number | null;
+  elliptical_level?: number | null;
+  // numeric(5,2) — PostgREST may hand it back as a string.
+  elliptical_km?: number | string | null;
+  elliptical_pulse?: number | null;
+  session_note?: string | null;
+  lite_day?: boolean | null;
+  arm_feel?: string | null;
+  voice_plays?: number | null;
 };
 
 // How many sessions a pull fetches (newest first) and the phone keeps. The
@@ -4232,6 +4383,16 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       walkMinutes: r.walk_minutes ?? null,
       walkSteps: r.walk_steps ?? null,
       walkMeters: r.walk_meters ?? null,
+      // v48: the new columns round-trip the same way; null stays null.
+      cardioLane: r.cardio_lane ?? null,
+      cardioMinutes: r.cardio_minutes ?? null,
+      ellipticalLevel: r.elliptical_level ?? null,
+      ellipticalKm: r.elliptical_km == null ? null : Number(r.elliptical_km),
+      ellipticalPulse: r.elliptical_pulse ?? null,
+      sessionNote: r.session_note ?? null,
+      liteDay: r.lite_day ?? null,
+      armFeel: r.arm_feel ?? null,
+      voicePlays: r.voice_plays ?? null,
       synced: true,
     });
   }
@@ -4247,10 +4408,15 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     __wtMergeRemoteSessions?: typeof mergeRemoteSessions;
     __wtIsValidLogEntry?: typeof isValidLogEntry;
     __wtComputeWeekTotals?: typeof computeWeekTotals;
+    __wtSessionPayload?: typeof sessionPayload;
+    __wtLegacySessionPayload?: typeof legacySessionPayload;
   };
   w.__wtMergeRemoteSessions = mergeRemoteSessions;
   w.__wtIsValidLogEntry = isValidLogEntry;
   w.__wtComputeWeekTotals = computeWeekTotals;
+  // v48: the push payloads are pure — tested here since sync is off in tests.
+  w.__wtSessionPayload = sessionPayload;
+  w.__wtLegacySessionPayload = legacySessionPayload;
 }
 
 async function pullFromSupabase(): Promise<void> {
@@ -4808,6 +4974,18 @@ function toggleVoiceNote(btn: HTMLButtonElement, src: string): void {
   voiceAudio = audio;
   voiceAudioSrc = src;
   audio.addEventListener('play', () => setVoiceBtnPlaying(btn, true));
+  // v48 (Sep 24 2026): count each play that actually STARTS (a stop is not a
+  // play; an autoplay-blocked tap never fires this). Her words: "I can hear
+  // details in audio better"; Gemini said she never plays them — count instead
+  // of guessing. Each tap makes a fresh Audio, so `once` = one count per play.
+  audio.addEventListener(
+    'play',
+    () => {
+      state.voicePlays += 1;
+      saveActiveSession();
+    },
+    { once: true }
+  );
   audio.addEventListener('pause', () => setVoiceBtnPlaying(btn, false));
   audio.addEventListener('ended', () => setVoiceBtnPlaying(btn, false));
   void audio.play().catch(() => {
@@ -6186,8 +6364,17 @@ function renderHistoryDetail(): string {
       <div class="detail-row"><span class="detail-label">Back pain</span><span>${log.backPain === null ? '—' : `${log.backPain}/10`}</span></div>
       ${log.word ? `<div class="detail-row"><span class="detail-label">One word</span><span><em>"${escapeHtml(log.word)}"</em></span></div>` : ''}
       ${
+        // v48 (Sep 24 2026): her post-log words live in their own column now,
+        // so they get their own row, verbatim — they never vanish between the
+        // data change and the Session-detail redesign.
+        log.sessionNote
+          ? `<div class="detail-row detail-row-stack"><span class="detail-label">Your note</span><div class="detail-note" id="detail-session-note" dir="auto">${escapeHtml(log.sessionNote)}</div></div>`
+          : ''
+      }
+      ${
         // v46: her note gets its own block under the label — on one row the
-        // label ran straight into the text (UX audit Sep 24).
+        // label ran straight into the text (UX audit Sep 24). From v48 this is
+        // system notes (and pre-v48 rows, where her words sat in here too).
         log.notes
           ? `<div class="detail-row detail-row-stack"><span class="detail-label">Note</span><div class="detail-note" dir="auto">${escapeHtml(log.notes)}</div></div>`
           : ''
@@ -7232,16 +7419,37 @@ function isNullableNumber(v: unknown): boolean {
   return v === null || typeof v === 'number';
 }
 
+// v48 (Sep 24 2026): the nine new fields are optional AND nullable — an export
+// from before v48 has none of them and must still restore. Present → the right
+// type (a hand-edited backup with junk there is refused like any other junk).
+function isOptionalOf(v: unknown, type: 'number' | 'string' | 'boolean'): boolean {
+  return v === undefined || v === null || typeof v === type;
+}
+
 function isValidLogEntry(x: unknown): x is LogEntry {
   if (!x || typeof x !== 'object') return false;
   const o = x as Record<string, unknown>;
+  const lane = o['cardioLane'];
   return (
     typeof o['date'] === 'string' &&
     (o['workout'] === 'A' || o['workout'] === 'B' || o['workout'] === 'C') &&
     isNullableNumber(o['capacityBefore']) &&
     isNullableNumber(o['capacityAfter']) &&
     typeof o['wallSitSec'] === 'number' &&
-    isNullableNumber(o['backPain'])
+    isNullableNumber(o['backPain']) &&
+    (lane === undefined ||
+      lane === null ||
+      lane === 'walk' ||
+      lane === 'apartment' ||
+      lane === 'elliptical') &&
+    isOptionalOf(o['cardioMinutes'], 'number') &&
+    isOptionalOf(o['ellipticalLevel'], 'number') &&
+    isOptionalOf(o['ellipticalKm'], 'number') &&
+    isOptionalOf(o['ellipticalPulse'], 'number') &&
+    isOptionalOf(o['sessionNote'], 'string') &&
+    isOptionalOf(o['liteDay'], 'boolean') &&
+    isOptionalOf(o['armFeel'], 'string') &&
+    isOptionalOf(o['voicePlays'], 'number')
   );
 }
 

@@ -2719,7 +2719,7 @@ test('cardio either/or: the walk step offers an apartment option that swaps in a
   await expect(page.locator('#ww-start')).toBeVisible();
 });
 
-test('cardio either/or: finishing after the apartment option saves walk_minutes + the notes marker, and never POSTs', async ({
+test('cardio either/or: finishing after the apartment option saves the lane + its minutes, and never POSTs', async ({
   page,
 }) => {
   // C's cardio block is 25 min, so the saved marker must read 25. Sync is off
@@ -2754,10 +2754,19 @@ test('cardio either/or: finishing after the apartment option saves walk_minutes 
   await expect(page.locator('h1')).toHaveText('Workout Tracker');
 
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
-  const logs = JSON.parse(raw ?? '[]') as { walkMinutes?: number | null; notes?: string | null }[];
+  const logs = JSON.parse(raw ?? '[]') as {
+    walkMinutes?: number | null;
+    notes?: string | null;
+    cardioLane?: string | null;
+    cardioMinutes?: number | null;
+  }[];
   expect(logs.length).toBe(1);
-  expect(logs[0]?.walkMinutes).toBe(25);
-  expect(logs[0]?.notes).toBe('cardio: apartment 25 min');
+  // v48: the lane + its minutes have their own fields; walk_minutes is for real
+  // walks only and `notes` no longer carries a marker.
+  expect(logs[0]?.cardioLane).toBe('apartment');
+  expect(logs[0]?.cardioMinutes).toBe(25);
+  expect(logs[0]?.walkMinutes).toBeNull();
+  expect(logs[0]?.notes).toBeNull();
   expect(posted.filter((u) => u.includes('workout_sessions'))).toEqual([]);
 
   // The choice is per-session — it must not leak into the next workout.
@@ -2998,7 +3007,7 @@ test('elliptical: the cardio step offers three lanes and the elliptical swaps in
   ).toBeNull();
 });
 
-test('elliptical: finishing saves the minutes + a level marker, never POSTs, and clears the lane', async ({
+test('elliptical: finishing saves the minutes + level + readings, never POSTs, and clears the lane', async ({
   page,
 }) => {
   const posted: string[] = [];
@@ -3035,13 +3044,18 @@ test('elliptical: finishing saves the minutes + a level marker, never POSTs, and
   await expect(page.locator('h1')).toHaveText('Workout Tracker');
 
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
-  const logs = JSON.parse(raw ?? '[]') as { walkMinutes?: number | null; notes?: string | null }[];
+  const logs = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>;
   expect(logs.length).toBe(1);
-  expect(logs[0]?.walkMinutes).toBe(25);
-  // Readings from the machine's screen ride after the level; her note comes last, verbatim.
-  expect(logs[0]?.notes).toBe(
-    'cardio: elliptical 25 min · level 7 · 2.15 km · pulse 128 · Knee fine, legs heavy on the elliptical'
-  );
+  // v48: the readings off the machine's screen are numbers in their own fields,
+  // and her note is its own field, verbatim — nothing is glued into `notes`.
+  expect(logs[0]?.['cardioLane']).toBe('elliptical');
+  expect(logs[0]?.['cardioMinutes']).toBe(25);
+  expect(logs[0]?.['ellipticalLevel']).toBe(7);
+  expect(logs[0]?.['ellipticalKm']).toBe(2.15);
+  expect(logs[0]?.['ellipticalPulse']).toBe(128);
+  expect(logs[0]?.['sessionNote']).toBe('Knee fine, legs heavy on the elliptical');
+  expect(logs[0]?.['walkMinutes']).toBeNull();
+  expect(logs[0]?.['notes']).toBeNull();
   expect(posted.filter((u) => u.includes('workout_sessions'))).toEqual([]);
   for (const key of [
     'workout-tracker:ww-elliptical',
@@ -3189,8 +3203,10 @@ test('post-log: the free-text note saves verbatim on a session with no cardio la
   await page.locator('button:has-text("Save & finish")').click();
   await expect(page.locator('h1')).toHaveText('Workout Tracker');
   const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
-  const logs = JSON.parse(raw ?? '[]') as { notes?: string | null }[];
-  expect(logs[0]?.notes).toBe('skipped the bird dog, wrist tired');
+  const logs = JSON.parse(raw ?? '[]') as { notes?: string | null; sessionNote?: string | null }[];
+  // v48: her words land in their own field, verbatim; `notes` stays system-only.
+  expect(logs[0]?.sessionNote).toBe('skipped the bird dog, wrist tired');
+  expect(logs[0]?.notes).toBeNull();
 });
 
 // --- Back (v47, Sep 24 2026) -------------------------------------------------
@@ -3229,4 +3245,423 @@ test('back (v47): Back steps to the previous exercise, is hidden on the first st
   await page.locator('#step-back').click();
   await expect(page.locator('.round-indicator').first()).toContainText('Round 1/');
   await expect(page.locator('.progress-text')).toHaveText(`Exercise ${mainCount} of ${mainCount}`);
+});
+
+// --- v48 P1 · data (Sep 24 2026) ---------------------------------------------
+// The lead's decision (DECISIONS-v48 §3): nine additive columns on
+// workout_sessions, so the numbers she copies off the machine come back to her
+// as numbers — her words: "make it measurable whatever you say I'm gonna copy
+// it". Her note gets its own column (verbatim), notes = system annotations only.
+test.describe('v48 P1 data', () => {
+  type Row = Record<string, unknown>;
+
+  async function finishToPostLog(page: import('@playwright/test').Page): Promise<void> {
+    for (let i = 0; i < 80; i++) {
+      const isPostLog = await page
+        .locator('text=Quick log')
+        .isVisible()
+        .catch(() => false);
+      if (isPostLog) break;
+      const nextBtn = page.locator('button:has-text("Done ·")');
+      if (await nextBtn.isVisible()) await nextBtn.click();
+      else break;
+    }
+    await expect(page.locator('text=Quick log')).toBeVisible();
+  }
+
+  async function saveAndReadLog(page: import('@playwright/test').Page): Promise<Row> {
+    await page.locator('button:has-text("Save & finish")').click();
+    await expect(page.locator('h1')).toHaveText('Workout Tracker');
+    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+    const logs = JSON.parse(raw ?? '[]') as Row[];
+    expect(logs.length).toBe(1);
+    return logs[0]!;
+  }
+
+  async function payloadOf(page: import('@playwright/test').Page, entry: Row): Promise<Row> {
+    return page.evaluate(
+      (e) =>
+        (window as unknown as { __wtSessionPayload: (x: unknown) => Row }).__wtSessionPayload(e),
+      entry
+    );
+  }
+
+  test('(a) an elliptical A session sends the lane, minutes and readings as columns', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-24T14:00:00.000Z');
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await finishToPostLog(page);
+    // The lane as it stands at Done: 10 min on the elliptical, level 7, and the
+    // two readings copied off the console; she ran the full 10.
+    await page.evaluate(() => {
+      localStorage.setItem('workout-tracker:ww-elliptical', '10');
+      localStorage.setItem('workout-tracker:ww-elliptical-level', '7');
+      localStorage.setItem('workout-tracker:ww-elliptical-km', '1.4');
+      localStorage.setItem('workout-tracker:ww-elliptical-pulse', '128');
+      localStorage.setItem('workout-tracker:ww-lane-done-min', '10');
+    });
+    const log = await saveAndReadLog(page);
+    const p = await payloadOf(page, log);
+    expect(p['cardio_lane']).toBe('elliptical');
+    expect(p['cardio_minutes']).toBe(10);
+    expect(p['elliptical_level']).toBe(7);
+    expect(p['elliptical_km']).toBe(1.4);
+    expect(p['elliptical_pulse']).toBe(128);
+    expect(p['walk_minutes']).toBeNull();
+    expect(p['notes']).toBeNull();
+    expect(p['lite_day']).toBe(false);
+    expect(p['voice_plays']).toBe(0);
+    expect(p['arm_feel']).toBeNull();
+  });
+
+  test('(b) wall_sit_seconds is null on B and C (no wall sit), the number on A', async ({
+    page,
+  }) => {
+    const base = {
+      id: 'x',
+      date: '2026-09-24T14:00:00.000Z',
+      capacityBefore: 6,
+      capacityAfter: 7,
+      wallSitSec: 45,
+      backPain: null,
+      word: '',
+    };
+    const a = await payloadOf(page, { ...base, workout: 'A' });
+    const b = await payloadOf(page, { ...base, workout: 'B', wallSitSec: 0 });
+    const c = await payloadOf(page, { ...base, workout: 'C', wallSitSec: 0 });
+    expect(a['wall_sit_seconds']).toBe(45);
+    expect(b['wall_sit_seconds']).toBeNull();
+    expect(c['wall_sit_seconds']).toBeNull();
+  });
+
+  test('(c) the post-log note lands in session_note, never in notes', async ({ page }) => {
+    await mockDate(page, '2026-09-24T14:00:00.000Z');
+    await page.goto('/');
+    await page.locator('button[data-workout="B"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await finishToPostLog(page);
+    const words = 'cardio: elliptical 10 min · level 9 — just kidding';
+    await page.locator('#session-note').fill(words);
+    const log = await saveAndReadLog(page);
+    expect(log['sessionNote']).toBe(words);
+    expect(log['notes']).toBeNull();
+    const p = await payloadOf(page, log);
+    expect(p['session_note']).toBe(words);
+    expect(p['notes']).toBeNull();
+    // A B session has no wall sit: null, not a 0 wearing a number.
+    expect(p['wall_sit_seconds']).toBeNull();
+    // Her note is in the shape of the old marker — and is NOT read as her level.
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await page.locator('#ww-elliptical').click();
+    await expect(page.locator('#ell-level')).toHaveText('5');
+  });
+
+  test('(d) Lite on pre-log saves liteDay true', async ({ page }) => {
+    await mockDate(page, '2026-09-24T14:00:00.000Z');
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#lite-toggle').click();
+    await page.locator('button:has-text("Start")').click();
+    await finishToPostLog(page);
+    const log = await saveAndReadLog(page);
+    expect(log['liteDay']).toBe(true);
+    expect((await payloadOf(page, log))['lite_day']).toBe(true);
+  });
+
+  test('(e) each voice-note play that starts is counted onto the saved session', async ({
+    page,
+  }) => {
+    // A stand-in for the audio element: play() starts and finishes at once, so
+    // each tap is a fresh play (a real tap mid-play would be a stop, not a play).
+    await page.addInitScript(() => {
+      class FakeAudio extends EventTarget {
+        paused = true;
+        src: string;
+        constructor(src: string) {
+          super();
+          this.src = src;
+        }
+        play(): Promise<void> {
+          this.paused = false;
+          this.dispatchEvent(new Event('play'));
+          this.paused = true;
+          this.dispatchEvent(new Event('ended'));
+          return Promise.resolve();
+        }
+        pause(): void {
+          this.paused = true;
+          this.dispatchEvent(new Event('pause'));
+        }
+      }
+      (window as unknown as { Audio: unknown }).Audio = FakeAudio;
+    });
+    await mockDate(page, '2026-09-24T14:00:00.000Z');
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await page.locator('button:has-text("Done ·")').click(); // past the cardio step
+    await expect(page.locator('.voice-note-btn')).toBeVisible();
+    await page.locator('.voice-note-btn').click();
+    await page.locator('.voice-note-btn').click();
+    await finishToPostLog(page);
+    const log = await saveAndReadLog(page);
+    expect(log['voicePlays']).toBe(2);
+    expect((await payloadOf(page, log))['voice_plays']).toBe(2);
+  });
+
+  test('(f) the nine new columns round-trip through the pull; a row without them still loads', async ({
+    page,
+  }) => {
+    const out = await page.evaluate(() => {
+      const merge = (
+        window as unknown as {
+          __wtMergeRemoteSessions: (l: unknown[], r: unknown[]) => Record<string, unknown>[];
+        }
+      ).__wtMergeRemoteSessions;
+      const common = {
+        workout_type: 'A',
+        capacity_before_1_10: 6,
+        capacity_after_1_10: 7,
+        wall_sit_seconds: 45,
+        pain_back_0_10: 0,
+        one_word: null,
+        started_at: null,
+        completed_at: null,
+        duration_seconds: null,
+        notes: null,
+      };
+      return merge(
+        [],
+        [
+          {
+            ...common,
+            id: 'new-shape',
+            date: '2026-09-24T14:00:00+00:00',
+            cardio_lane: 'elliptical',
+            cardio_minutes: 10,
+            elliptical_level: 7,
+            elliptical_km: '1.40', // numeric(5,2) can come back as a string
+            elliptical_pulse: 128,
+            session_note: 'knee fine',
+            lite_day: true,
+            arm_feel: 'curl=easy;row=right',
+            voice_plays: 3,
+          },
+          { ...common, id: 'old-shape', date: '2026-09-20T14:00:00+00:00' },
+        ]
+      );
+    });
+    const byId = new Map(out.map((r) => [r['id'], r]));
+    const n = byId.get('new-shape')!;
+    expect(n['cardioLane']).toBe('elliptical');
+    expect(n['cardioMinutes']).toBe(10);
+    expect(n['ellipticalLevel']).toBe(7);
+    expect(n['ellipticalKm']).toBe(1.4);
+    expect(n['ellipticalPulse']).toBe(128);
+    expect(n['sessionNote']).toBe('knee fine');
+    expect(n['liteDay']).toBe(true);
+    expect(n['armFeel']).toBe('curl=easy;row=right');
+    expect(n['voicePlays']).toBe(3);
+    const o = byId.get('old-shape')!;
+    expect(o['wallSitSec']).toBe(45);
+    for (const k of [
+      'cardioLane',
+      'cardioMinutes',
+      'ellipticalLevel',
+      'ellipticalKm',
+      'ellipticalPulse',
+      'sessionNote',
+      'liteDay',
+      'armFeel',
+      'voicePlays',
+    ]) {
+      expect(o[k] ?? null).toBeNull();
+    }
+  });
+
+  test('(g) the import accepts an old-shape and a new-shape entry, and refuses junk in a new field', async ({
+    page,
+  }) => {
+    const out = await page.evaluate(() => {
+      const ok = (window as unknown as { __wtIsValidLogEntry: (x: unknown) => boolean })
+        .__wtIsValidLogEntry;
+      const old = {
+        date: '2026-09-01T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 6,
+        capacityAfter: 7,
+        wallSitSec: 40,
+        backPain: 0,
+        word: '',
+        notes: 'cardio: elliptical 10 min · level 6',
+      };
+      const fresh = {
+        ...old,
+        notes: null,
+        cardioLane: 'elliptical',
+        cardioMinutes: 10,
+        ellipticalLevel: 6,
+        ellipticalKm: 1.4,
+        ellipticalPulse: 128,
+        sessionNote: 'knee fine',
+        liteDay: false,
+        armFeel: null,
+        voicePlays: 0,
+      };
+      return {
+        old: ok(old),
+        fresh: ok(fresh),
+        nulls: ok({ ...fresh, cardioLane: null, ellipticalKm: null, liteDay: null }),
+        badLane: ok({ ...fresh, cardioLane: 'rowing' }),
+        badPlays: ok({ ...fresh, voicePlays: 'two' }),
+      };
+    });
+    expect(out).toEqual({ old: true, fresh: true, nulls: true, badLane: false, badPlays: false });
+  });
+
+  test('(h) the Week-4 hinge reads 2 sets in EACH round', async ({ page }) => {
+    await mockDate(page, '2026-09-24T14:00:00.000Z');
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    for (let i = 0; i < 20; i++) {
+      const name = (await page.locator('.exercise-name').textContent()) ?? '';
+      if (name.includes('Bodyweight hip hinge')) {
+        await expect(page.locator('.exercise-reps')).toContainText(
+          '12 reps · 2 sets each round · holding the 1 kg'
+        );
+        return;
+      }
+      await page.locator('button:has-text("Done ·")').click();
+    }
+    throw new Error('never reached the hip hinge');
+  });
+
+  test('(i) the next ride reads the level column first, and a marker-only legacy row still works', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-24T14:00:00.000Z');
+    const legacy: Row = {
+      id: 'legacy',
+      date: '2026-09-22T15:00:00.000Z',
+      workout: 'B',
+      capacityBefore: 6,
+      capacityAfter: 7,
+      wallSitSec: 0,
+      backPain: 0,
+      word: '',
+      notes: 'cardio: elliptical 10 min · level 6',
+      synced: true,
+    };
+    const v48Row: Row = {
+      ...legacy,
+      id: 'v48-row',
+      date: '2026-09-23T15:00:00.000Z',
+      notes: null,
+      cardioLane: 'elliptical',
+      cardioMinutes: 10,
+      ellipticalLevel: 9,
+    };
+    for (const [logs, expected] of [
+      [[legacy], '6'],
+      [[legacy, v48Row], '9'],
+    ] as const) {
+      // Init scripts run in the order added, so each seed replaces the last.
+      await page.addInitScript((l) => {
+        window.localStorage.setItem('workout-tracker:logs', JSON.stringify(l));
+      }, logs);
+      await page.goto('/');
+      await page.locator('button[data-workout="A"]').click();
+      await page.locator('button:has-text("Start")').click();
+      await page.locator('#ww-elliptical').click();
+      await expect(page.locator('#ell-level')).toHaveText(expected);
+    }
+  });
+
+  test('legacy push: a server without the v48 columns gets the v47 row, nothing lost', async ({
+    page,
+  }) => {
+    const p = await page.evaluate(() =>
+      (
+        window as unknown as { __wtLegacySessionPayload: (x: unknown) => Record<string, unknown> }
+      ).__wtLegacySessionPayload({
+        id: 'x',
+        date: '2026-09-24T14:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 6,
+        capacityAfter: 7,
+        wallSitSec: 45,
+        backPain: 0,
+        word: '',
+        walkMinutes: null,
+        notes: 'duration not recorded — session was left open 4h before Done',
+        cardioLane: 'elliptical',
+        cardioMinutes: 10,
+        ellipticalLevel: 7,
+        ellipticalKm: 1.4,
+        ellipticalPulse: 128,
+        sessionNote: 'knee fine',
+        liteDay: true,
+        voicePlays: 2,
+      })
+    );
+    for (const col of [
+      'cardio_lane',
+      'cardio_minutes',
+      'elliptical_level',
+      'elliptical_km',
+      'elliptical_pulse',
+      'session_note',
+      'lite_day',
+      'arm_feel',
+      'voice_plays',
+    ]) {
+      expect(col in p).toBe(false);
+    }
+    expect(p['notes']).toBe(
+      'cardio: elliptical 10 min · level 7 · 1.4 km · pulse 128 · knee fine · duration not recorded — session was left open 4h before Done'
+    );
+    expect(p['walk_minutes']).toBe(10);
+    expect(p['wall_sit_seconds']).toBe(45);
+  });
+
+  test('session detail shows her note verbatim under "Your note", apart from system notes', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-24T14:00:00.000Z');
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'workout-tracker:logs',
+        JSON.stringify([
+          {
+            id: 'with-note',
+            date: '2026-09-24T12:00:00.000Z',
+            workout: 'A',
+            capacityBefore: 6,
+            capacityAfter: 7,
+            wallSitSec: 45,
+            backPain: 0,
+            word: '',
+            notes: null,
+            sessionNote: 'Knee fine, legs heavy on the last round',
+            cardioLane: 'elliptical',
+            cardioMinutes: 10,
+            ellipticalLevel: 7,
+            synced: true,
+          },
+        ])
+      );
+    });
+    await page.goto('/');
+    await page.locator('#view-history').click();
+    await page.locator('[data-detail="with-note"]').first().click();
+    const note = page.locator('#detail-session-note');
+    await expect(note).toHaveText('Knee fine, legs heavy on the last round');
+    await expect(note).toHaveAttribute('dir', 'auto');
+    await expect(page.locator('.detail-card')).toContainText('Your note');
+  });
 });
