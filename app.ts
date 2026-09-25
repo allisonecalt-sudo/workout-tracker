@@ -86,6 +86,15 @@ type LogEntry = {
   capacityAfter: number | null;
   wallSitSec: number;
   backPain: number | null;
+  // v49 · engine (Sep 25 2026): the wrist half of the combined "Back & wrist:
+  // Fine · Back · Wrist" tap the progression engine needs (PROGRESSION-ENGINE-
+  // SPEC-2026-09-24.md §10) — same null-means-not-answered shape as backPain.
+  // Optional (not just nullable): a session logged before v49 has no key at
+  // all for either field, same as the other engine-era additions below.
+  wristPain?: number | null;
+  // The one-tap read on a brand-new rung's first sessions: 'fine' | 'too_much'.
+  // null/absent = not asked this session (most sessions — no rung changed recently).
+  stepFeel?: 'fine' | 'too_much' | null;
   word: string;
   startedAt?: string;
   completedAt?: string;
@@ -151,6 +160,16 @@ type AppState = {
   capacityAfter: number;
   wallSitSec: number;
   backPain: number;
+  // v49 · engine: wrist half of the combined body tap, same shape as backPain.
+  wristPain: number;
+  wristPainTouched: boolean;
+  // v48 · P5: post-log "Wrist: Something" was tapped — the 1-10 row is open but
+  // no number is chosen yet. Transient, mirrors backSomethingOpen below.
+  wristSomethingOpen: boolean;
+  // v49 · engine: the new-rung "Fine · Too much" tap. Transient, unset most
+  // sessions (only offered when a rung changed recently — see
+  // needsStepFeelPrompt()). Reset to null at the start of every session.
+  stepFeel: 'fine' | 'too_much' | null;
   // v46: did she actually MOVE the slider? The three sliders start at 5/5/0 and
   // used to save as if she chose them — capacity-after was exactly 5 in 6 of 8
   // sessions since Aug 30, a "decline" the mirror invented (UX audit Sep 24).
@@ -2619,6 +2638,10 @@ const state: AppState = {
   capacityAfter: 5,
   wallSitSec: 0,
   backPain: 0,
+  wristPain: 0,
+  wristPainTouched: false,
+  wristSomethingOpen: false,
+  stepFeel: null,
   capacityBeforeTouched: false,
   capacityAfterTouched: false,
   backPainTouched: false,
@@ -3749,6 +3772,10 @@ const V48_SESSION_COLUMNS = [
 // The two columns added in v49 (migrations/2026-09-25-v49-elliptical-time-kcal.sql).
 const V49_SESSION_COLUMNS = ['elliptical_time_sec', 'elliptical_kcal'] as const;
 
+// The two columns added for the progression engine, shadow mode
+// (migrations/2026-09-25-v49-progression-engine.sql).
+const V49_ENGINE_SESSION_COLUMNS = ['wrist_pain_0_10', 'step_feel'] as const;
+
 // The workout_sessions row for a saved entry — pure, so it's testable without a
 // network (v48, Sep 24 2026). Every structured number has its own column now;
 // `notes` carries only system annotations.
@@ -3762,6 +3789,8 @@ function sessionPayload(entry: LogEntry): Record<string, unknown> {
     capacity_after_1_10: entry.capacityAfter,
     wall_sit_seconds: hasWallSit ? entry.wallSitSec : null,
     pain_back_0_10: entry.backPain,
+    wrist_pain_0_10: entry.wristPain,
+    step_feel: entry.stepFeel,
     one_word: entry.word || null,
     started_at: entry.startedAt ?? null,
     completed_at: entry.completedAt ?? null,
@@ -3792,6 +3821,7 @@ function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
   const payload = sessionPayload(entry);
   for (const col of V48_SESSION_COLUMNS) delete payload[col];
   for (const col of V49_SESSION_COLUMNS) delete payload[col];
+  for (const col of V49_ENGINE_SESSION_COLUMNS) delete payload[col];
   const noteParts = [legacyCardioMarker(entry), entry.sessionNote, entry.notes].filter(
     (p): p is string => typeof p === 'string' && p.trim() !== ''
   );
@@ -3991,6 +4021,9 @@ function beginExercises(): void {
   state.capacityAfterTouched = false;
   state.backPainTouched = false;
   state.backSomethingOpen = false;
+  state.wristPainTouched = false;
+  state.wristSomethingOpen = false;
+  state.stepFeel = null; // v49 · engine: a feel belongs to one session
   state.howToOpenFor = null;
   state.videoExpandedFor = null;
   clearWorkoutWalk(); // fresh session, fresh walk numbers
@@ -4677,6 +4710,9 @@ async function saveCompletedSession(): Promise<void> {
     capacityAfter: state.capacityAfterTouched ? state.capacityAfter : null,
     wallSitSec: state.wallSitSec,
     backPain: state.backPainTouched ? state.backPain : null,
+    // v49 · engine: same null-means-not-answered shape as backPain.
+    wristPain: state.wristPainTouched ? state.wristPain : null,
+    stepFeel: state.stepFeel,
     word: state.word,
     startedAt,
     completedAt,
@@ -4720,6 +4756,10 @@ type ActiveSessionSnapshot = {
   capacityAfter: number;
   wallSitSec: number;
   backPain: number;
+  // v49 · engine: survives an app close the same way backPain does.
+  wristPain: number;
+  wristPainTouched: boolean;
+  stepFeel: 'fine' | 'too_much' | null;
   // v46: which sliders she actually moved (see AppState). A snapshot written
   // before v46 has no flags and is read as "chosen", the way v45 saved it.
   capacityBeforeTouched: boolean;
@@ -4760,6 +4800,9 @@ function saveActiveSession(): void {
       capacityAfter: state.capacityAfter,
       wallSitSec: state.wallSitSec,
       backPain: state.backPain,
+      wristPain: state.wristPain,
+      wristPainTouched: state.wristPainTouched,
+      stepFeel: state.stepFeel,
       capacityBeforeTouched: state.capacityBeforeTouched,
       capacityAfterTouched: state.capacityAfterTouched,
       backPainTouched: state.backPainTouched,
@@ -4831,6 +4874,10 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       capacityAfter: snap.capacityAfter ?? 5,
       wallSitSec: snap.wallSitSec ?? 0,
       backPain: snap.backPain ?? 0,
+      // v49 · engine: a pre-engine snapshot has neither → 0/false/null, never a guess.
+      wristPain: snap.wristPain ?? 0,
+      wristPainTouched: snap.wristPainTouched ?? false,
+      stepFeel: snap.stepFeel === 'fine' || snap.stepFeel === 'too_much' ? snap.stepFeel : null,
       // Pre-v46 snapshot (no flags) → the numbers were saved as chosen then;
       // keep that reading rather than blank a session already under way.
       capacityBeforeTouched: snap.capacityBeforeTouched ?? true,
@@ -4881,6 +4928,9 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.capacityAfter = snap.capacityAfter;
   state.wallSitSec = snap.wallSitSec;
   state.backPain = snap.backPain;
+  state.wristPain = snap.wristPain;
+  state.wristPainTouched = snap.wristPainTouched;
+  state.stepFeel = snap.stepFeel;
   state.capacityBeforeTouched = snap.capacityBeforeTouched;
   state.capacityAfterTouched = snap.capacityAfterTouched;
   state.backPainTouched = snap.backPainTouched;
@@ -4897,6 +4947,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.armFeel = snap.armFeel;
   state.stretchTicks = snap.stretchTicks;
   state.backSomethingOpen = false;
+  state.wristSomethingOpen = false;
   // Preserve pause accounting across an app close. If she closed while paused,
   // she stays paused on reopen (the closed span counts as paused, so it's
   // subtracted from duration — faithful to "I stepped away").
@@ -5004,6 +5055,10 @@ function resetState(): void {
   state.capacityAfter = 5;
   state.wallSitSec = 0;
   state.backPain = 0;
+  state.wristPain = 0;
+  state.wristPainTouched = false;
+  state.wristSomethingOpen = false;
+  state.stepFeel = null;
   state.capacityBeforeTouched = false;
   state.capacityAfterTouched = false;
   state.backPainTouched = false;
@@ -5032,6 +5087,10 @@ function resetState(): void {
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5
   state.backSomethingOpen = false;
+  state.wristPain = 0;
+  state.wristPainTouched = false;
+  state.wristSomethingOpen = false;
+  state.stepFeel = null; // v49 · engine
   state.stretchTicks = {}; // v48 · P7
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
@@ -5051,6 +5110,10 @@ type RemoteSession = {
   capacity_after_1_10: number | null;
   wall_sit_seconds: number | null;
   pain_back_0_10: number | null;
+  // v49 · engine (Sep 25 2026): optional — a server that hasn't run the
+  // migration, or a pre-engine row, simply doesn't carry them.
+  wrist_pain_0_10?: number | null;
+  step_feel?: 'fine' | 'too_much' | null;
   one_word: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -5123,6 +5186,8 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       capacityAfter: r.capacity_after_1_10 ?? null,
       wallSitSec: r.wall_sit_seconds ?? 0,
       backPain: r.pain_back_0_10 ?? null,
+      wristPain: r.wrist_pain_0_10 ?? null,
+      stepFeel: r.step_feel === 'fine' || r.step_feel === 'too_much' ? r.step_feel : null,
       word: r.one_word ?? '',
       startedAt: r.started_at ?? undefined,
       completedAt: r.completed_at ?? undefined,
@@ -7595,6 +7660,17 @@ function renderPostLog(): string {
     ? `${renderChipRow('back', state.backPain, state.backPainTouched && state.backPain > 0, 'Back pain, 1 to 10')}
        <div class="body-anchor">1 barely · 10 worst</div>`
     : '';
+  // v49 · engine (Sep 25 2026): the wrist half of the progression engine's
+  // combined "Back & wrist" signal (PROGRESSION-ENGINE-SPEC-2026-09-24.md
+  // §10) — its OWN Fine/Something row, same shape as Back, kept SEPARATE
+  // rather than merged into one control so Back's already-shipped tap
+  // (#back-fine/#back-some, tested in tests/app.spec.ts) is untouched.
+  const wristFine = state.wristPainTouched && state.wristPain === 0;
+  const wristSome = state.wristSomethingOpen || (state.wristPainTouched && state.wristPain > 0);
+  const wristRow = wristSome
+    ? `${renderChipRow('wrist', state.wristPain, state.wristPainTouched && state.wristPain > 0, 'Wrist pain, 1 to 10')}
+       <div class="body-anchor">1 barely · 10 worst</div>`
+    : '';
   // v48 · fix r1 (Sep 24 2026): a stopped session is not called "done", and its
   // Back goes to the step she stopped on, not to stretches she never reached.
   // Still counts, no verdict.
@@ -7631,6 +7707,15 @@ function renderPostLog(): string {
           <button class="back-chip${backSome ? ' back-chip-open' : ''}" id="back-some" type="button" aria-pressed="${backSome ? 'true' : 'false'}">Something</button>
         </div>
         ${backRow}
+      </div>
+
+      <div class="field back-field">
+        <span class="label-text">Wrist</span>
+        <div class="back-choice">
+          <button class="back-chip${wristFine ? ' body-chip-on' : ''}" id="wrist-fine" type="button" aria-pressed="${wristFine ? 'true' : 'false'}">Fine</button>
+          <button class="back-chip${wristSome ? ' back-chip-open' : ''}" id="wrist-some" type="button" aria-pressed="${wristSome ? 'true' : 'false'}">Something</button>
+        </div>
+        ${wristRow}
       </div>
 
       <label class="field note-field">
@@ -7965,6 +8050,7 @@ function renderHistoryDetail(): string {
     rows.push(detailRow('Wall sit', log.wallSitSec > 0 ? `${log.wallSitSec} s` : '—'));
   }
   rows.push(detailRow('Back pain', log.backPain === null ? '—' : `${log.backPain}/10`));
+  rows.push(detailRow('Wrist pain', log.wristPain === null ? '—' : `${log.wristPain}/10`));
   const cardio = sessionCardio(log);
   if (cardio)
     rows.push(detailRow('Cardio', escapeHtml(cardioText(cardio)), { id: 'detail-cardio' }));
@@ -9047,7 +9133,14 @@ function isValidLogEntry(x: unknown): x is LogEntry {
     isOptionalOf(o['sessionNote'], 'string') &&
     isOptionalOf(o['liteDay'], 'boolean') &&
     isOptionalOf(o['armFeel'], 'string') &&
-    isOptionalOf(o['voicePlays'], 'number')
+    isOptionalOf(o['voicePlays'], 'number') &&
+    // v49 · engine: optional AND nullable, same as the v48 fields above — an
+    // export from before the engine has neither key and must still restore.
+    isOptionalOf(o['wristPain'], 'number') &&
+    (o['stepFeel'] === undefined ||
+      o['stepFeel'] === null ||
+      o['stepFeel'] === 'fine' ||
+      o['stepFeel'] === 'too_much')
   );
 }
 
@@ -9509,6 +9602,10 @@ function attachHandlers(): void {
         state.backPain = v;
         state.backPainTouched = !again;
         state.backSomethingOpen = true;
+      } else if (group === 'wrist') {
+        state.wristPain = v;
+        state.wristPainTouched = !again;
+        state.wristSomethingOpen = true;
       }
       render();
     });
@@ -9531,6 +9628,25 @@ function attachHandlers(): void {
     } else {
       state.backSomethingOpen = true;
       state.backPainTouched = false; // "Fine" is no longer the answer
+    }
+    render();
+  });
+  // v49 · engine: Wrist — the same Fine/Something shape as Back, above.
+  bindClick('wrist-fine', () => {
+    const wasFine = state.wristPainTouched && state.wristPain === 0;
+    state.wristPain = 0;
+    state.wristPainTouched = !wasFine;
+    state.wristSomethingOpen = false;
+    render();
+  });
+  bindClick('wrist-some', () => {
+    const open = state.wristSomethingOpen || (state.wristPainTouched && state.wristPain > 0);
+    if (open) {
+      state.wristSomethingOpen = false;
+      state.wristPainTouched = false;
+    } else {
+      state.wristSomethingOpen = true;
+      state.wristPainTouched = false;
     }
     render();
   });
