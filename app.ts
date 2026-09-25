@@ -7,6 +7,15 @@
 import { EXERCISE_VISUALS } from './exercise-visuals.js';
 import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
 import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
+import {
+  buildPhaseTable,
+  buildTimeline,
+  questionLine as cycleQuestionLine,
+  excludedUntouchedCount,
+  type CyclePeriod,
+  type CapacitySession,
+  type CyclePhase,
+} from './cycle.js';
 
 type WorkoutId = 'A' | 'B' | 'C';
 
@@ -5262,6 +5271,180 @@ async function pullFromSupabase(): Promise<void> {
   }
 }
 
+// ---------- v50 · cycle_periods sync (Sep 25 2026) ----------
+//
+// Tandem rule (CLAUDE.md "Core Role"): her cycle log used to live only in
+// self/health/reproductive.md, a file Claude could read but the app never
+// could. cycle_periods (migrations/2026-09-25-v50-cycle-periods.sql) is the
+// shared table both sides read/write now. The table is tiny (one row per
+// period start) so the sync here is simpler than workout_sessions' — no
+// pagination, no delete-detection window, just "pull replaces synced rows,
+// an unsynced local write always wins until it's confirmed."
+const CYCLE_STORAGE_KEY = 'workout-tracker:cycle-periods';
+
+type StoredCyclePeriod = CyclePeriod & { synced?: boolean };
+
+function loadCyclePeriods(): StoredCyclePeriod[] {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem(CYCLE_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p): p is StoredCyclePeriod =>
+        !!p && typeof p === 'object' && typeof (p as StoredCyclePeriod).startDate === 'string'
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeCyclePeriods(periods: StoredCyclePeriod[]): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const sorted = [...periods].sort((a, b) => b.startDate.localeCompare(a.startDate));
+    localStorage.setItem(CYCLE_STORAGE_KEY, JSON.stringify(sorted));
+  } catch {
+    // localStorage full/unavailable — non-fatal, same as writeLogs.
+  }
+}
+
+type RemoteCyclePeriod = { start_date: string; source?: string | null; note?: string | null };
+
+function mergeCyclePeriods(
+  local: StoredCyclePeriod[],
+  remote: RemoteCyclePeriod[]
+): StoredCyclePeriod[] {
+  const byDate = new Map<string, StoredCyclePeriod>();
+  for (const l of local) if (l.synced === false) byDate.set(l.startDate, l);
+  for (const r of remote) {
+    const existing = byDate.get(r.start_date);
+    if (existing && existing.synced === false) continue; // local unsynced write wins on content
+    byDate.set(r.start_date, {
+      startDate: r.start_date,
+      source: r.source ?? null,
+      note: r.note ?? null,
+      synced: true,
+    });
+  }
+  return [...byDate.values()];
+}
+
+async function pullCyclePeriodsFromSupabase(): Promise<void> {
+  if (syncDisabled()) return;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/cycle_periods?select=start_date,source,note&order=start_date.desc`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+    );
+    if (res.ok && res.headers.get('X-SW-Cache') !== '1') {
+      const remote: RemoteCyclePeriod[] = await res.json();
+      writeCyclePeriods(mergeCyclePeriods(loadCyclePeriods(), remote));
+      if (state.screen === 'progress' || state.screen === 'settings') render();
+    } else if (!res.ok) {
+      console.warn('[sync] pull cycle_periods failed:', res.status);
+    }
+  } catch (err) {
+    console.warn('[sync] pull cycle_periods threw:', err);
+  }
+}
+
+// Pure — the exact body a push sends. Kept separate from the fetch call so
+// tests can assert it via the __wtCyclePeriodPayload hook the same way
+// __wtSessionPayload already covers workout_sessions.
+function cyclePeriodPayload(p: StoredCyclePeriod): RemoteCyclePeriod {
+  return { start_date: p.startDate, source: p.source ?? null, note: p.note ?? null };
+}
+
+async function pushCyclePeriod(p: StoredCyclePeriod): Promise<void> {
+  if (syncDisabled()) return;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/cycle_periods`, {
+      method: 'POST',
+      // start_date is UNIQUE — merge-duplicates makes a repeat tap on the same
+      // day an upsert, not a 409.
+      headers: { ...supabaseHeaders(), Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(cyclePeriodPayload(p)),
+    });
+    if (res.ok) {
+      const periods = loadCyclePeriods();
+      const idx = periods.findIndex((x) => x.startDate === p.startDate);
+      if (idx >= 0) {
+        periods[idx] = { ...periods[idx]!, synced: true };
+        writeCyclePeriods(periods);
+      }
+    } else {
+      console.warn('[sync] push cycle_periods failed:', res.status);
+    }
+  } catch (err) {
+    console.warn('[sync] push cycle_periods threw:', err);
+  }
+}
+
+async function deleteCyclePeriod(startDate: string): Promise<void> {
+  if (syncDisabled()) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/cycle_periods?start_date=eq.${startDate}`, {
+      method: 'DELETE',
+      headers: supabaseHeaders(),
+    });
+  } catch (err) {
+    console.warn('[sync] delete cycle_periods threw:', err);
+  }
+}
+
+// "Period started today" (or a picked day): her own logging, one tap, with a
+// 10s undo (app-building-guide §1-2: <=2 taps, and every destructive-feeling
+// action gets an out). Optimistic local write first — offline-safe, same as
+// every other save in this app — then pushed if a network is allowed.
+const CYCLE_UNDO_MS = 10_000;
+let cycleUndoTimer: ReturnType<typeof setTimeout> | null = null;
+let cycleUndoStartDate: string | null = null;
+
+function logPeriodStart(dateISO: string): void {
+  const periods = loadCyclePeriods();
+  const stored: StoredCyclePeriod = {
+    startDate: dateISO,
+    source: 'app',
+    note: null,
+    synced: syncDisabled(), // automation: mark synced so no network is attempted
+  };
+  writeCyclePeriods([...periods.filter((p) => p.startDate !== dateISO), stored]);
+  cycleUndoStartDate = dateISO;
+  if (cycleUndoTimer) clearTimeout(cycleUndoTimer);
+  cycleUndoTimer = setTimeout(() => {
+    cycleUndoStartDate = null;
+    render();
+  }, CYCLE_UNDO_MS);
+  void pushCyclePeriod(stored);
+  render();
+}
+
+function undoPeriodStart(): void {
+  if (!cycleUndoStartDate) return;
+  const dateISO = cycleUndoStartDate;
+  if (cycleUndoTimer) clearTimeout(cycleUndoTimer);
+  cycleUndoTimer = null;
+  cycleUndoStartDate = null;
+  writeCyclePeriods(loadCyclePeriods().filter((p) => p.startDate !== dateISO));
+  void deleteCyclePeriod(dateISO);
+  render();
+}
+
+if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
+  const w = window as unknown as {
+    __wtCyclePeriodPayload?: typeof cyclePeriodPayload;
+    __wtLogPeriodStart?: typeof logPeriodStart;
+  };
+  w.__wtCyclePeriodPayload = cyclePeriodPayload;
+  // v50: the tap's real timer (10s) is too slow to wait out in a test — this
+  // hook drives the same function a click does, so tests assert the local
+  // row + the payload without a real-time wait (her sync-is-off automation
+  // rule: assert local state + payload, not a round trip).
+  w.__wtLogPeriodStart = logPeriodStart;
+}
+
 async function flushPendingSyncs(): Promise<void> {
   if (syncDisabled()) {
     // v48 · P4 (Sep 24 2026): under automation nothing syncs, so say so rather
@@ -8873,6 +9056,235 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
   `;
 }
 
+// ---------- v50 · Capacity & cycle card (Sep 25 2026) ----------
+//
+// Her words (04:01-04:02): "I also want capacity analysis in progress before
+// and after and period what phase and then comparing capacity and phase" ->
+// "you have all past cycle info". The v48 · P6 capacity chart above was
+// pulled because it charted untouched slider defaults as if she'd chosen
+// them (DECISIONS §2 #6) — this card reuses that lesson: cycle.ts's
+// honestBefore/honestAfter drop every ambiguous pre-v48 "5" before anything
+// here sees it, and a phase with under 3 honest sessions shows "not enough
+// yet" rather than an average of 1-2. Register: neutral, no PMS, no verdicts
+// (app-building-guide.md §1-2 + her Sep 25 ask) — the one optional line is a
+// question, never a statement.
+const PHASE_LABEL: Record<CyclePhase, string> = {
+  menstrual: 'Menstrual',
+  follicular: 'Follicular',
+  ovulatory: 'Ovulatory',
+  luteal: 'Luteal',
+};
+
+const PHASE_TOKEN: Record<CyclePhase, string> = {
+  menstrual: 'var(--phase-menstrual)',
+  follicular: 'var(--phase-follicular)',
+  ovulatory: 'var(--phase-ovulatory)',
+  luteal: 'var(--phase-luteal)',
+};
+
+// l.date is NOT reliably a plain 'YYYY-MM-DD': a just-saved, not-yet-synced
+// row holds the full ISO datetime it was saved with (`completedAt`), while a
+// row that's round-tripped through Supabase's `date` column comes back plain
+// — both shapes coexist on a real phone. cycle.ts's day math needs the plain
+// form, so every date crosses through localIsoDate(new Date(...)) here, the
+// same normalization the walk-date and export paths already use elsewhere in
+// this file — her LOCAL calendar day, not the UTC one a raw slice would give.
+function capacitySessionsFrom(logs: LogEntry[]): CapacitySession[] {
+  return logs.map((l) => ({
+    date: localIsoDate(new Date(l.date)),
+    capacityBefore: l.capacityBefore,
+    capacityAfter: l.capacityAfter,
+  }));
+}
+
+function cyclePeriodsForLogic(): CyclePeriod[] {
+  return loadCyclePeriods().map((p) => ({
+    startDate: p.startDate,
+    source: p.source,
+    note: p.note,
+  }));
+}
+
+// A dot/slope-per-session strip: one thin phase-coloured column per session
+// (x = session order, not real time — sessions aren't evenly spaced, same
+// choice every other progress chart here already makes), a before-dot and an
+// after-dot, and a connecting slope when both readings exist for that
+// session. An estimated (current, open) cycle's columns sit at lower opacity
+// — a visible "this part is a guess", not a silent one.
+function renderCapacityCycleChart(points: ReturnType<typeof buildTimeline>): string {
+  if (points.length === 0) return '';
+  const W = 320;
+  const H = 150;
+  const PAD_L = 6;
+  const PAD_R = 6;
+  const PAD_T = 10;
+  const PAD_B = 10;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+  const n = points.length;
+  const slot = innerW / n;
+  const yMin = 1;
+  const yMax = 10;
+  const yFor = (v: number): number => PAD_T + (1 - (v - yMin) / (yMax - yMin)) * innerH;
+
+  const bands = points
+    .map((p, i) => {
+      if (!p.phase) return '';
+      const x = PAD_L + i * slot;
+      const opacity = p.estimated ? 0.55 : 1;
+      return `<rect x="${x.toFixed(1)}" y="${PAD_T}" width="${slot.toFixed(1)}" height="${innerH}" fill="${PHASE_TOKEN[p.phase]}" opacity="${opacity}" />`;
+    })
+    .join('');
+
+  const marks = points
+    .map((p, i) => {
+      const cx = PAD_L + i * slot + slot / 2;
+      let out = '';
+      if (p.before !== null && p.after !== null) {
+        out += `<line x1="${cx.toFixed(1)}" y1="${yFor(p.before).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yFor(p.after).toFixed(1)}" stroke="var(--accent-progress)" stroke-width="1.5" stroke-linecap="round" />`;
+      }
+      if (p.before !== null) {
+        out += `<circle cx="${cx.toFixed(1)}" cy="${yFor(p.before).toFixed(1)}" r="2.6" fill="var(--text-dim)" />`;
+      }
+      if (p.after !== null) {
+        out += `<circle cx="${cx.toFixed(1)}" cy="${yFor(p.after).toFixed(1)}" r="3.2" fill="var(--accent-progress)" />`;
+      }
+      return out;
+    })
+    .join('');
+
+  return `
+    <svg class="progress-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+         aria-label="Capacity before and after, ${n} session${n === 1 ? '' : 's'}, by cycle phase">
+      <title>Capacity before and after, by cycle phase</title>
+      ${bands}
+      ${marks}
+    </svg>
+  `;
+}
+
+function renderCycleLegend(): string {
+  const phaseItems = (['menstrual', 'follicular', 'ovulatory', 'luteal'] as CyclePhase[])
+    .map(
+      (p) =>
+        `<span class="cc-legend-item"><span class="cc-legend-swatch" style="background:${PHASE_TOKEN[p]}"></span>${PHASE_LABEL[p]}</span>`
+    )
+    .join('');
+  return `
+    <div class="cc-legend">
+      ${phaseItems}
+      <span class="cc-legend-item"><span class="cc-legend-dot" style="background:var(--text-dim)"></span>before</span>
+      <span class="cc-legend-item"><span class="cc-legend-dot" style="background:var(--accent-progress)"></span>after</span>
+    </div>`;
+}
+
+function renderCapacityCycleTable(rows: ReturnType<typeof buildPhaseTable>): string {
+  const fmt = (v: number | null): string => (v === null ? '—' : v.toFixed(1));
+  const fmtChange = (v: number | null): string => {
+    if (v === null) return '—';
+    const sign = v > 0 ? '+' : '';
+    return `${sign}${v.toFixed(1)}`;
+  };
+  const body = rows
+    .map((r) => {
+      const cls = r.notEnough ? 'cc-row cc-row-empty' : 'cc-row';
+      return `
+        <span class="${cls}" style="display:contents">
+          <span>${PHASE_LABEL[r.phase]}</span>
+          <span>${r.n}</span>
+          <span>${r.notEnough ? 'not enough yet' : fmt(r.avgBefore)}</span>
+          <span>${r.notEnough ? '' : fmt(r.avgAfter)}</span>
+          <span>${r.notEnough ? '' : fmtChange(r.avgChange)}</span>
+        </span>`;
+    })
+    .join('');
+  return `
+    <div class="cc-table">
+      <span class="cc-table-head" style="display:contents">
+        <span>Phase</span><span>n</span><span>Before</span><span>After</span><span>Δ</span>
+      </span>
+      ${body}
+    </div>`;
+}
+
+function renderCapacityCycleCard(logs: LogEntry[]): string {
+  const periods = cyclePeriodsForLogic();
+  if (periods.length === 0) {
+    // No cycle data yet — the card still offers the one tap that starts it,
+    // rather than staying invisible (fail-loud rule: say what's missing).
+    return `
+      <div class="card progress-card">
+        <div class="progress-card-label">Capacity & cycle</div>
+        <p class="cc-empty">No period starts logged yet.</p>
+        ${renderCycleLogRow()}
+      </div>`;
+  }
+
+  const sessions = capacitySessionsFrom(logs);
+  const timeline = buildTimeline(sessions, periods);
+  const rows = buildPhaseTable(sessions, periods);
+  const question = cycleQuestionLine(sessions, periods);
+  const excluded = excludedUntouchedCount(sessions);
+
+  const chart =
+    timeline.length > 0
+      ? `<div class="cc-chart-wrap">${renderCapacityCycleChart(timeline)}</div>${renderCycleLegend()}`
+      : `<p class="cc-empty">No capacity readings fall inside a tracked cycle yet.</p>`;
+
+  return `
+    <div class="card progress-card">
+      <div class="progress-card-label">Capacity & cycle</div>
+      ${chart}
+      ${renderCapacityCycleTable(rows)}
+      ${excluded > 0 ? `<div class="cc-quiet">${excluded} pre-Sep-24 "5" reading${excluded === 1 ? '' : 's'} left out — some were the untouched slider.</div>` : ''}
+      ${question ? `<div class="cc-question">${escapeHtml(question)}</div>` : ''}
+      ${renderCycleLogRow()}
+    </div>`;
+}
+
+// "Period started today" tap — hers, one tap, undo-able for CYCLE_UNDO_MS.
+// Also lives as a quiet row in Settings (renderCycleSettingsRow below).
+function renderCycleLogRow(): string {
+  if (cycleUndoStartDate) {
+    return `
+      <div class="cc-log-undo">
+        <span>Logged ${formatMonthDay(cycleUndoStartDate)}.</span>
+        <button class="cc-log-undo-btn" id="cc-undo" type="button">Undo</button>
+      </div>`;
+  }
+  return `
+    <div class="cc-log-row">
+      <button class="cc-log-btn" id="cc-log-today" type="button">Period started today</button>
+    </div>
+    <div class="cc-date-row">
+      <label for="cc-log-date" class="cc-quiet">A different day:</label>
+      <input class="cc-date-input" type="date" id="cc-log-date" max="${localIsoDate(new Date())}" />
+    </div>`;
+}
+
+// Settings' own quiet row (spec: "the Progress card (and a quiet row in
+// Settings)") — same logPeriodStart/undoPeriodStart, its own ids so both
+// screens' handlers can coexist without clashing.
+function renderCycleSettingsRow(): string {
+  if (cycleUndoStartDate) {
+    return `
+      <div class="settings-row">
+        <div class="settings-row-text">
+          <div class="settings-row-title">Logged ${formatMonthDay(cycleUndoStartDate)}</div>
+        </div>
+        <button class="settings-inline-btn" id="settings-cycle-undo" type="button">Undo</button>
+      </div>`;
+  }
+  return `
+    <div class="settings-row">
+      <div class="settings-row-text">
+        <div class="settings-row-title">Period started today</div>
+        <div class="settings-row-caption">Logs today to cycle tracking (Progress card).</div>
+      </div>
+      <button class="settings-inline-btn" id="settings-cycle-today" type="button">Log</button>
+    </div>`;
+}
+
 function renderProgress(): string {
   const logs = getChronologicalLogs(); // oldest → newest, by date
   const count = logs.length;
@@ -8894,24 +9306,31 @@ function renderProgress(): string {
       <button class="quit-link" id="back-home" type="button">× Back</button>
     </div>`;
 
-  // Empty state — fewer than 2 sessions.
+  // Empty state — fewer than 2 sessions. v50 · cycle: the capacity & cycle
+  // card still shows (it can start from just a logged period, no sessions
+  // needed for the "Period started today" tap itself).
   if (count < 2) {
     return `
       ${header}
       ${subtitle}
       <p class="progress-empty">Progress shows once you have 2+ sessions logged.</p>
+      ${renderCapacityCycleCard(logs)}
       ${renderProgramArchive()}
     `;
   }
 
-  // v48 · P6: the capacity chart is gone — it charted untouched defaults (6 of
-  // 8 Round-2 after-readings were the invented 5; the real mean change is 0.00
-  // over 24 pairs). DECISIONS §2 #6.
+  // v48 · P6: the OLD capacity chart is gone — it charted untouched defaults
+  // (6 of 8 Round-2 after-readings were the invented 5; the real mean change
+  // was 0.00 over 24 pairs). DECISIONS §2 #6. v50 · cycle brings capacity
+  // back honestly: cycle.ts's honestBefore/honestAfter drop that same class
+  // of ambiguous reading before this card ever sees it (see the card's own
+  // header comment above renderCapacityCycleCard).
   return `
     ${header}
     ${subtitle}
     <div class="progress-screen">
       ${renderStartNowCard(logs)}
+      ${renderCapacityCycleCard(logs)}
       ${renderWallSitTrendCard(logs)}
       ${renderBackPainTrendCard(logs)}
       ${renderSessionsPerWeekCard(logs)}
@@ -9020,6 +9439,11 @@ function renderSettings(): string {
             <span class="settings-toggle-track"><span class="settings-toggle-thumb"></span></span>
           </span>
         </label>
+      </div>
+
+      <div class="card settings-card">
+        <div class="settings-section-label">Cycle</div>
+        ${renderCycleSettingsRow()}
       </div>
 
       ${
@@ -9468,6 +9892,9 @@ function attachHandlers(): void {
 
   // Ship 6: Settings interactions — toggles, steppers, data buttons.
   attachSettingsHandlers();
+
+  // v50 · cycle: Progress card + Settings' quiet row.
+  attachCycleHandlers();
 
   // Ship 4: open weekly-review screen. v48 · P4 (Sep 24 2026): home only ever
   // shows THIS week now, so it opens this week (offset 0). The whole week card is the one door to Weekly review (the
@@ -9988,6 +10415,31 @@ function attachSettingsHandlers(): void {
   }
 }
 
+// v50 · cycle: "Period started today" + its date-input alternative + undo —
+// wired the same everywhere it appears (Progress card, Settings quiet row).
+function attachCycleHandlers(): void {
+  bindClick('cc-log-today', () => {
+    logPeriodStart(localIsoDate(new Date()));
+  });
+  bindClick('cc-undo', () => {
+    undoPeriodStart();
+  });
+  bindClick('settings-cycle-today', () => {
+    logPeriodStart(localIsoDate(new Date()));
+  });
+  bindClick('settings-cycle-undo', () => {
+    undoPeriodStart();
+  });
+  const dateInput = document.getElementById('cc-log-date') as HTMLInputElement | null;
+  if (dateInput) {
+    dateInput.addEventListener('change', () => {
+      const v = dateInput.value;
+      if (v) logPeriodStart(v);
+      dateInput.value = '';
+    });
+  }
+}
+
 function bindClick(id: string, fn: () => void): void {
   const el = document.getElementById(id);
   if (el) el.addEventListener('click', fn);
@@ -10001,12 +10453,14 @@ document.addEventListener('DOMContentLoaded', () => {
     void flushPendingSyncs();
     void fetchStepsToday(); // v48 · P4: once, after the pull
   });
+  void pullCyclePeriodsFromSupabase(); // v50 · cycle
   void flushPendingWalks();
   // v45: a session saved offline (gym basement, airplane mode) now syncs the
   // moment the signal comes back — before, only on the next app open.
   window.addEventListener('online', () => {
     void flushPendingSyncs();
     void flushPendingWalks();
+    void pullCyclePeriodsFromSupabase(); // v50 · cycle
   });
   // Resume an in-progress WALK too (Jul 4): restart GPS + step tracking and
   // the wake lock — accumulated meters/steps live in localStorage, so a

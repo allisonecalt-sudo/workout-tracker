@@ -57,6 +57,15 @@
   --dot-b: #7088a0;
   --dot-c: #8a7a8e; /* Sessions / Progress / Weekly only */
 
+  /* v50 · cycle (Sep 25 2026): phase bands on the capacity & cycle chart —
+     ink-tone steps only, no new hues (her design rule: "one accent only if
+     there's an action - there isn't, so no sage"). Ordered lightest to
+     darkest by how much attention each phase earns on the chart. */
+  --phase-menstrual: rgba(240, 237, 229, 0.11);
+  --phase-follicular: rgba(240, 237, 229, 0.04);
+  --phase-ovulatory: rgba(240, 237, 229, 0.17);
+  --phase-luteal: rgba(240, 237, 229, 0.07);
+
   /* Type */
   --font: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   /* v49 · look fix (Sep 25 2026): the self-hosted DM Sans ships no tabular
@@ -2865,6 +2874,165 @@ input[type='number']:focus {
   transition: filter var(--dur-base) var(--ease-out);
 }
 
+/* v50 · cycle (Sep 25 2026): "Capacity & cycle" Progress card. Fits the
+ * 412px phone width with no sideways scroll — the chart SVG scales via
+ * viewBox like every other progress-chart, and the table below uses a fixed
+ * 4-column grid sized to the narrowest phone rather than a wide table that
+ * would force a scrollbar. */
+.cc-chart-wrap {
+  width: 100%;
+  height: 150px;
+  margin: 4px 0 10px;
+}
+
+.cc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: var(--font-meta);
+  color: var(--text-dim-2);
+  margin-bottom: 14px;
+}
+
+.cc-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cc-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.cc-legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.cc-table {
+  display: grid;
+  grid-template-columns: 60px 22px 1fr 1fr 1fr;
+  column-gap: 6px;
+  row-gap: 8px;
+  font-size: var(--font-small);
+}
+
+.cc-table-head {
+  color: var(--text-dim-2);
+  font-size: var(--font-meta);
+}
+
+.cc-table-head span,
+.cc-row span {
+  text-align: right;
+}
+
+.cc-table-head span:first-child,
+.cc-row span:first-child {
+  text-align: left;
+}
+
+.cc-row span {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.cc-row span:first-child {
+  font-family: var(--font-family);
+  color: var(--text-dim);
+}
+
+.cc-row-empty span {
+  color: var(--text-dim-2);
+}
+
+.cc-quiet {
+  font-size: var(--font-meta);
+  color: var(--text-dim-2);
+  margin-top: 10px;
+}
+
+.cc-question {
+  font-size: var(--font-small);
+  color: var(--text);
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-divider);
+}
+
+.cc-empty {
+  font-size: var(--font-small);
+  color: var(--text-dim-2);
+  font-style: italic;
+}
+
+/* "Period started today" — the Progress card's own tap + Settings' quiet row. */
+.cc-log-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-divider);
+}
+
+.cc-log-btn {
+  min-height: var(--tap);
+  padding: 0 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: var(--font-small);
+  font-weight: 600;
+}
+
+.cc-log-undo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-divider);
+  font-size: var(--font-small);
+  color: var(--text-dim);
+}
+
+.cc-log-undo-btn {
+  min-height: var(--tap);
+  padding: 0 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--font-small);
+}
+
+.cc-date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.cc-date-input {
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-size: var(--font-small);
+  padding: 0 8px;
+}
+
 /* --- Tablet bumps ------------------------------------------------------ */
 
 @media (min-width: 600px) {
@@ -3071,6 +3239,29 @@ input[type='number']:focus {
 .settings-toggle.on .settings-toggle-thumb {
   transform: translateX(20px);
   background: var(--bg);
+}
+
+/* v50 · cycle (Sep 25 2026): a compact button for a .settings-row that isn't
+ * a toggle or stepper (the Cycle card's "Log" / "Undo"). .btn-ghost is
+ * `width: 100%; display: block` — meant to stand alone, not sit in a flex
+ * row — so it forced the row's text column down to almost nothing when used
+ * here (uxui: 3-word title wrapped to 3 lines). This sizes like the toggle
+ * instead: fixed to its own content, never grows. */
+.settings-inline-btn {
+  flex-shrink: 0;
+  min-height: var(--tap);
+  padding: 0 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--font-small);
+  font-weight: 500;
+}
+
+.settings-inline-btn:hover {
+  border-color: var(--edge);
+  color: var(--ink);
 }
 
 /* Stepper row — number with +/- buttons */

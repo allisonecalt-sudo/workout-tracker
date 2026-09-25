@@ -2235,10 +2235,13 @@ test('ship 6: settings reachable from gear icon in home header', async ({ page }
   await expect(page.locator('h2')).toHaveText('Settings');
   // v48 · P6: Audio, Timing, Display, Gear, Neck release, About as titled
   // cards; Data is one closed fold ("Data · export · import · clear").
+  // v50 · cycle (Sep 25 2026): a Cycle card ("Period started today") joins
+  // the lineup, between Display and Gear.
   await expect(page.locator('.settings-section-label')).toHaveText([
     'Audio',
     'Timing',
     'Display',
+    'Cycle',
     'Gear',
     'Neck release · Lisa · ~10 min',
     'About',
@@ -5790,7 +5793,7 @@ test.describe('v48 P6 mirror', () => {
     await expect(page.locator('#detail-session-note')).toHaveCount(0);
   });
 
-  test('(f) Progress: Start → Now first, no capacity chart, no breakdown; A/B/C chips; latest by date; held weeks "—"; Round 1 folded', async ({
+  test('(f) Progress: Start → Now first, no breakdown; A/B/C chips; latest by date; held weeks "—"; Round 1 folded; v50 capacity & cycle card present (no data yet)', async ({
     page,
   }) => {
     await mockDate(page, THU_WEEK4);
@@ -5816,7 +5819,14 @@ test.describe('v48 P6 mirror', () => {
     await page.locator('#open-progress-link').click();
     const app = page.locator('#app');
     await expect(app).not.toContainText('Exercise breakdown');
-    await expect(app).not.toContainText(/capacity/i);
+    // v50 · cycle (Sep 25 2026): the OLD capacity chart (charting untouched
+    // slider defaults) is still gone — DECISIONS §2 #6 below still holds —
+    // but a "Capacity & cycle" card now exists, honest this time (cycle.ts's
+    // honestBefore/honestAfter). No cycle_periods are seeded in this test, so
+    // it renders its own empty state, not a chart.
+    const cc = page.locator('.progress-card', { hasText: 'Capacity & cycle' });
+    await expect(cc).toContainText('No period starts logged yet');
+    await expect(cc.locator('.cc-chart-wrap')).toHaveCount(0);
     const cards = page.locator('.progress-screen > .progress-card');
     await expect(cards.first()).toHaveClass(/start-now-card/);
     const sn = page.locator('.start-now-card');
