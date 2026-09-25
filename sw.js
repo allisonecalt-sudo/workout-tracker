@@ -34,6 +34,9 @@ const SHELL_ASSETS = [
   // v50 · cycle (Sep 25 2026) — capacity & cycle phase math, its own module
   // the same way progression.js is (app.js imports it).
   './dist/cycle.js',
+  // v50 · jump list (Sep 25 2026) — the flat step list + completion tracking
+  // behind the List sheet, its own module the same way cycle.js is.
+  './dist/step-list.js',
   './manifest.webmanifest',
   // v49 · look (Sep 25 2026): self-hosted DM Sans (spec §3 "Font loading") —
   // precached so it renders offline on the floor, never a runtime Google
@@ -196,6 +199,7 @@ function isCodeRequest(url, request) {
     url.pathname.endsWith('/dist/ladders.js') ||
     url.pathname.endsWith('/dist/progression.js') ||
     url.pathname.endsWith('/dist/cycle.js') ||
+    url.pathname.endsWith('/dist/step-list.js') ||
     url.pathname.endsWith('/index.html')
   );
 }

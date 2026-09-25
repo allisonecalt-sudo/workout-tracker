@@ -16,6 +16,14 @@ import {
   type CapacitySession,
   type CyclePhase,
 } from './cycle.js';
+import {
+  flattenSteps,
+  nextUndoneStep,
+  reachedCount,
+  stepKey as buildStepKey,
+  type WorkoutStep,
+  type WorkoutSteps,
+} from './step-list.js';
 
 type WorkoutId = 'A' | 'B' | 'C';
 
@@ -139,6 +147,11 @@ type LogEntry = {
   // How many voice notes she started this session. Her words: "I can hear
   // details in audio better"; Gemini said she never plays them — count, don't guess.
   voicePlays?: number | null;
+  // v50 · jump list (Sep 25 2026): how many warm-up/main/upper-back moves were
+  // never marked done when this session saved — null on any session from
+  // before the jump list existed (nothing was tracked to skip), 0 on a v50
+  // session where everything got a Done tap. No verdict, just the count.
+  stepsSkipped?: number | null;
   synced?: boolean;
 };
 
@@ -270,6 +283,14 @@ type AppState = {
   // nothing reads it after the session. Kept in the resume snapshot so an app
   // close mid-stretch doesn't lose her place.
   stretchTicks: Record<string, boolean>;
+  // v50 · jump list (Sep 25 2026): every warm-up/main/upper-back step she has
+  // tapped Done on THIS session, keyed by step-list.ts's `phase:round:index`.
+  // Drives the List sheet's ✓ marks, the "N of 23" count (steps reached, not
+  // position — step-list.ts's reachedCount) and the post-log skipped-count.
+  // Cleared on begin/reset; persisted in the resume snapshot so an app close
+  // mid-workout doesn't lose her place. Her words (Sep 25 2026): "I dont
+  // always do the workouts in [order]".
+  completedSteps: Record<string, boolean>;
 };
 
 type ArmFeel = 'easy' | 'right' | 'hard';
@@ -2682,7 +2703,15 @@ const state: AppState = {
   armFeel: {},
   backSomethingOpen: false,
   stretchTicks: {},
+  completedSteps: {},
 };
+
+// v50 · jump list (Sep 25 2026): whether the "List" sheet is open. Transient
+// UI, not session progress — deliberately NOT on AppState/the resume
+// snapshot, the same way the quit-confirm panel isn't: a reload should land
+// her back on the step she was on, sheet closed, not reopen a sheet she'd
+// already dismissed.
+let stepListOpen = false;
 
 // ---------- audio ----------
 
@@ -3785,6 +3814,10 @@ const V49_SESSION_COLUMNS = ['elliptical_time_sec', 'elliptical_kcal'] as const;
 // (migrations/2026-09-25-v49-progression-engine.sql).
 const V49_ENGINE_SESSION_COLUMNS = ['wrist_pain_0_10', 'step_feel'] as const;
 
+// The one column added in v50 for the jump list
+// (migrations/2026-09-25-v50-jump-list-steps-skipped.sql).
+const V50_SESSION_COLUMNS = ['steps_skipped'] as const;
+
 // The workout_sessions row for a saved entry — pure, so it's testable without a
 // network (v48, Sep 24 2026). Every structured number has its own column now;
 // `notes` carries only system annotations.
@@ -3819,6 +3852,7 @@ function sessionPayload(entry: LogEntry): Record<string, unknown> {
     lite_day: entry.liteDay ?? null,
     arm_feel: entry.armFeel ?? null,
     voice_plays: entry.voicePlays ?? null,
+    steps_skipped: entry.stepsSkipped ?? null,
   };
 }
 
@@ -3831,6 +3865,7 @@ function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
   for (const col of V48_SESSION_COLUMNS) delete payload[col];
   for (const col of V49_SESSION_COLUMNS) delete payload[col];
   for (const col of V49_ENGINE_SESSION_COLUMNS) delete payload[col];
+  for (const col of V50_SESSION_COLUMNS) delete payload[col];
   const noteParts = [legacyCardioMarker(entry), entry.sessionNote, entry.notes].filter(
     (p): p is string => typeof p === 'string' && p.trim() !== ''
   );
@@ -4025,6 +4060,7 @@ function beginExercises(): void {
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
   state.stretchTicks = {}; // v48 · P7: ticks belong to one session
+  state.completedSteps = {}; // v50 · jump list: done-marks belong to one session
   // v46: the post-log sliders haven't been seen yet (capacity-before was just
   // set on pre-log, so its flag stays as it is).
   state.capacityAfterTouched = false;
@@ -4051,6 +4087,35 @@ function beginExercises(): void {
   render();
 }
 
+// v50 · jump list (Sep 25 2026) — step-list.ts's flat, ordered move list needs
+// only the warmup/main/upperBack arrays (never cooldown: that's already its
+// own one-step checklist screen, see step-list.ts's module doc). Structural
+// adapter only — Exercise already satisfies StepExercise's shape.
+function toStepWorkout(w: Workout): WorkoutSteps {
+  return { warmup: w.warmup, main: w.main, upperBack: w.upperBack };
+}
+
+// The key for wherever she's standing right now, in step-list.ts's
+// `phase:round:index` shape. Round is meaningless off the main phase, so it's
+// pinned to 1 there — the same convention flattenSteps uses.
+function currentStepKey(): string {
+  const phase = state.currentPhase;
+  if (phase === 'cooldown') return 'cooldown:1:0'; // never in the movable list; see below
+  const round = phase === 'main' ? state.currentRound : 1;
+  return buildStepKey(phase, round, state.currentExerciseIndex);
+}
+
+function markStepDone(key: string): void {
+  if (state.completedSteps[key]) return; // no-op re-render churn on a repeat
+  state.completedSteps = { ...state.completedSteps, [key]: true };
+}
+
+function applyStepTarget(step: WorkoutStep): void {
+  state.currentPhase = step.phase;
+  state.currentRound = step.round;
+  state.currentExerciseIndex = step.index;
+}
+
 function advanceExercise(): void {
   const w = getCurrentWorkout();
   if (!w) return;
@@ -4070,6 +4135,38 @@ function advanceExercise(): void {
     state.screen = 'post-log';
     render();
     return;
+  }
+
+  // v50 · jump list — mark what she just finished, then check whether an
+  // EARLIER skipped move is waiting before we walk on. Her ask: Done should
+  // come back for whatever she jumped past, not plow forward as if it never
+  // existed ("I dont always do the workouts in [order]"). We only ever
+  // deviate from the plain phase-by-phase walk below when a gap actually
+  // exists — `target.key !== structuralNextKey` is false on every ordinary
+  // tap, so an untouched List sheet leaves this whole block a no-op and the
+  // walk below runs exactly as it always has. The round-1 floor is a
+  // deliberate pause, never skipped over just because something else is open.
+  const curKey = currentStepKey();
+  markStepDone(curKey);
+  const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
+  const curPos = movable.findIndex((s) => s.key === curKey);
+  const structuralNextKey = curPos >= 0 ? (movable[curPos + 1]?.key ?? null) : null;
+  const isRoundOneFloor =
+    state.currentPhase === 'main' &&
+    state.currentRound === 1 &&
+    state.currentExerciseIndex === w.main.length - 1 &&
+    effectiveRounds(w) > 1;
+  if (!isRoundOneFloor) {
+    const target = nextUndoneStep(movable, curKey, state.completedSteps);
+    if (target && target.key !== structuralNextKey) {
+      applyStepTarget(target);
+      if (target.phase === 'main') {
+        startRestTimer();
+      } else {
+        render();
+      }
+      return;
+    }
   }
 
   const list = w[state.currentPhase] ?? [];
@@ -4179,6 +4276,53 @@ function goBack(): void {
   render();
 }
 
+// v50 · jump list (Sep 25 2026): a row's `data-jump-key`, parsed back into a
+// position. Bounds-checked against the live workout the same defensive way
+// readActiveSnapshot checks a resumed index — a stale or hand-edited key is
+// dropped, never crashed on.
+function parseStepKey(
+  w: Workout,
+  key: string
+): { phase: Phase; round: number; index: number } | null {
+  const parts = key.split(':');
+  if (parts.length !== 3) return null;
+  const [phaseRaw, roundRaw, indexRaw] = parts;
+  const phase = phaseRaw as Phase;
+  if (phase !== 'warmup' && phase !== 'main' && phase !== 'upperBack' && phase !== 'cooldown') {
+    return null;
+  }
+  const round = Number(roundRaw);
+  const index = Number(indexRaw);
+  if (!Number.isInteger(round) || round < 1 || !Number.isInteger(index) || index < 0) return null;
+  if (phase === 'cooldown') return { phase, round: 1, index: 0 };
+  const list = w[phase] ?? [];
+  if (index >= list.length) return null;
+  if (phase === 'main' && round > effectiveRounds(w)) return null;
+  return { phase, round, index };
+}
+
+// "Tapping a row jumps straight there" (her List-sheet spec, Sep 25 2026):
+// same cleanup as goBack() — a running timer stops, a pending wall-sit
+// capture is discarded, a rest is cancelled — but nothing is marked done and
+// nothing is logged. Unlike goBack this can land anywhere, so it also closes
+// the round-1 floor if it was up (she's jumping past the question it asks).
+function jumpToStep(key: string): void {
+  const w = getCurrentWorkout();
+  if (!w) return;
+  const parsed = parseStepKey(w, key);
+  if (!parsed) return;
+  stopTimer();
+  state.wallSitStartedAt = null;
+  state.videoExpandedFor = null;
+  state.isResting = false;
+  state.roundBreak = false;
+  state.currentPhase = parsed.phase;
+  state.currentRound = parsed.round;
+  state.currentExerciseIndex = parsed.index;
+  stepListOpen = false;
+  render();
+}
+
 // v48 (Sep 24 2026): the pinned bottom bar. Done sat at the END of each step's
 // scroll — under a video, a detail card and a cue paragraph — so on most steps
 // it was below the fold (walk-in-her-shoes: "Back and Done pinned to the
@@ -4209,30 +4353,38 @@ function renderStepNav(doneLabel: string, quiet = false): string {
 // "Exercise N of M" (which restarted at 1 in every phase and every round) + the
 // in-card phase label — three counters, none of which said how far along she
 // was. Total = warm-up + main × rounds + upper back + 1 (the cool-down list is
-// one step). The rest screen's index already points at the NEXT step, so it
-// shows the next step's position; the round-break screen shows round 1's last.
+// one step).
+// v50 · jump list (Sep 25 2026): the numerator is step-list.ts's reachedCount
+// (every step marked done, plus the one she's currently viewing if it isn't
+// done yet) — "count completed steps, not position" per her spec. On a plain
+// forward walk this is numerically identical to the old position count (every
+// step up to "here" really was done in order), so nothing on an untouched
+// List sheet changes; it only diverges once she jumps BACK to view an
+// already-finished step out of order, where it correctly stops claiming
+// credit for a position she's since revisited rather than newly reached.
+// Cool-down is still always the full bar — it's one step, always last,
+// whether or not everything before it got done (finishAtRoundOne can reach it
+// early on purpose).
 function workoutStepPosition(w: Workout): { index: number; total: number } {
   const warm = w.warmup.length;
   const main = w.main.length;
   const rounds = effectiveRounds(w);
   const upper = w.upperBack?.length ?? 0;
   const total = warm + main * rounds + upper + 1;
-  const i = state.currentExerciseIndex;
-  let index: number;
-  switch (state.currentPhase) {
-    case 'warmup':
-      index = i + 1;
-      break;
-    case 'main':
-      index = warm + (Math.min(state.currentRound, rounds) - 1) * main + i + 1;
-      break;
-    case 'upperBack':
-      index = warm + main * rounds + i + 1;
-      break;
-    default:
-      index = total;
+  if (state.currentPhase === 'cooldown') {
+    return { index: total, total };
   }
+  const movable = flattenSteps(toStepWorkout(w), rounds);
+  const index = reachedCount(movable, state.completedSteps, currentStepKey());
   return { index: Math.max(1, Math.min(total, index)), total };
+}
+
+// v50 · jump list (Sep 25 2026): how many warm-up/main/upper-back moves never
+// got a Done tap this session — the post-log's plain "N moves skipped" line
+// and the steps_skipped column (no verdict either place, just the count).
+function skippedStepsCount(w: Workout): number {
+  const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
+  return movable.filter((s) => state.completedSteps[s.key] !== true).length;
 }
 
 function phaseLabelFor(w: Workout): string {
@@ -4640,6 +4792,8 @@ async function logCompleteAndHome(): Promise<void> {
 
 async function saveCompletedSession(): Promise<void> {
   if (!state.selectedWorkout) return;
+  // v50 · jump list: read before resetState() wipes completedSteps.
+  const w = getCurrentWorkout();
   harvestWorkoutWalk(); // no-op unless a walk step is somehow still open
   if (!workoutWalk) workoutWalk = storedWorkoutWalk(); // survived an app close (v45)
   // By now the walk (first exercise) ended long ago, so Google Fit has synced it.
@@ -4743,6 +4897,7 @@ async function saveCompletedSession(): Promise<void> {
     // tapped, null when none (matches the arm_feel CHECK).
     armFeel: armFeelString(state.armFeel),
     voicePlays: state.voicePlays,
+    stepsSkipped: w ? skippedStepsCount(w) : null,
   });
   if (stored.id) saveLastDone({ id: stored.id, firsts, back });
   resetState();
@@ -4796,6 +4951,9 @@ type ActiveSessionSnapshot = {
   armFeel: ArmFeelState;
   // v48 · P7: her cool-down ticks survive an app close (she keeps her place).
   stretchTicks: Record<string, boolean>;
+  // v50 · jump list: which steps she's already done survive an app close too
+  // (the List sheet's ✓ marks and the "N of 23" count both read this).
+  completedSteps: Record<string, boolean>;
 };
 
 function saveActiveSession(): void {
@@ -4831,6 +4989,7 @@ function saveActiveSession(): void {
       stoppedEarlyLitePrev: state.stoppedEarlyLitePrev,
       armFeel: state.armFeel,
       stretchTicks: state.stretchTicks,
+      completedSteps: state.completedSteps,
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
   } catch {
@@ -4918,6 +5077,9 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       armFeel: sanitizeArmFeel(snap.armFeel),
       // v48 · P7: a pre-P7 snapshot has no ticks → {} (nothing ticked).
       stretchTicks: sanitizeStretchTicks(snap.stretchTicks),
+      // v50 · jump list: a pre-v50 snapshot has no done-marks → {} (same
+      // string→true shape as stretchTicks, so the same sanitizer applies).
+      completedSteps: sanitizeStretchTicks(snap.completedSteps),
     };
   } catch {
     clearActiveSession();
@@ -4955,6 +5117,8 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.heldSecFor = {}; // v48: display-only, not carried across a close
   state.armFeel = snap.armFeel;
   state.stretchTicks = snap.stretchTicks;
+  state.completedSteps = snap.completedSteps;
+  stepListOpen = false; // v50 · jump list: never reopen the sheet on resume
   state.backSomethingOpen = false;
   state.wristSomethingOpen = false;
   // Preserve pause accounting across an app close. If she closed while paused,
@@ -5101,6 +5265,8 @@ function resetState(): void {
   state.wristSomethingOpen = false;
   state.stepFeel = null; // v49 · engine
   state.stretchTicks = {}; // v48 · P7
+  state.completedSteps = {}; // v50 · jump list
+  stepListOpen = false; // v50 · jump list: a closed session closes the sheet too
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
   clearElliptical();
@@ -5147,6 +5313,9 @@ type RemoteSession = {
   lite_day?: boolean | null;
   arm_feel?: string | null;
   voice_plays?: number | null;
+  // v50 · jump list (Sep 25 2026): optional — a server that hasn't run the
+  // migration, or a pre-v50 row, simply doesn't carry it.
+  steps_skipped?: number | null;
 };
 
 // How many sessions a pull fetches (newest first) and the phone keeps. The
@@ -5220,6 +5389,7 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       liteDay: r.lite_day ?? null,
       armFeel: r.arm_feel ?? null,
       voicePlays: r.voice_plays ?? null,
+      stepsSkipped: r.steps_skipped ?? null,
       synced: true,
     });
   }
@@ -7089,6 +7259,7 @@ function renderRestScreen(w: Workout): string {
       <h2>Workout ${w.id}</h2>
       <div class="screen-header-actions">
         ${renderPauseButton()}
+        ${renderListButton()}
         <button class="quit-link" id="quit" type="button">× Quit workout</button>
       </div>
     </div>
@@ -7127,6 +7298,7 @@ function renderRoundBreak(w: Workout): string {
       <h2>Workout ${w.id}</h2>
       <div class="screen-header-actions">
         ${renderPauseButton()}
+        ${renderListButton()}
         <button class="quit-link" id="quit" type="button">× Quit workout</button>
       </div>
     </div>
@@ -7267,6 +7439,7 @@ function renderCooldownList(w: Workout): string {
       <h2>Workout ${w.id}</h2>
       <div class="screen-header-actions">
         ${renderPauseButton()}
+        ${renderListButton()}
         <button class="quit-link" id="quit" type="button">× Quit workout</button>
       </div>
     </div>
@@ -7295,6 +7468,88 @@ function renderCooldownList(w: Workout): string {
 function renderPauseButton(): string {
   if (state.pausedAt !== null) return '';
   return `<button class="pause-inline" id="pause-toggle" type="button" aria-label="Pause workout">⏸ Pause</button>`;
+}
+
+// v50 · jump list (Sep 25 2026) — a quiet button beside Pause, same look (ink,
+// not sage — this is wayfinding, not the one primary action per step). Her
+// words: "I dont always do the workouts in [order]" → "2" = the exercises
+// inside a workout. Opens renderStepListSheet below.
+function renderListButton(): string {
+  if (state.pausedAt !== null) return '';
+  // Icon only (not "☰ List") — with Pause + Quit already in this row, the
+  // full word pushed "Workout A" onto two lines at 412px and broke the fold
+  // on the elliptical first-ride screen (P8 sweep caught it). The aria-label
+  // still says the whole thing.
+  return `<button class="pause-inline step-list-open-btn" id="step-list-open" type="button" aria-label="List every step">☰</button>`;
+}
+
+// One row of the List sheet: display name + reps, a ✓ once she's tapped Done
+// on it this session, "here" on wherever she's standing now. Tapping jumps —
+// see jumpToStep().
+function renderStepListRow(
+  key: string,
+  exercise: { name: string; reps?: string; label?: string },
+  done: boolean,
+  isCurrent: boolean
+): string {
+  const reps = exercise.reps ? ` · ${escapeHtml(exercise.reps)}` : '';
+  return `
+    <button class="step-list-row${isCurrent ? ' step-list-row-current' : ''}" data-jump-key="${escapeHtml(key)}" type="button">
+      <span class="step-list-check" aria-hidden="true">${done ? '✓' : ''}</span>
+      <span class="step-list-name">${escapeHtml(displayName(exercise))}${reps}</span>
+      ${isCurrent ? '<span class="step-list-here">here</span>' : ''}
+    </button>`;
+}
+
+// The sheet: every warm-up/main(×round)/upper-back move in order, grouped by
+// her named groups ("Warm-up · Main round 1 · Main round 2 · Upper back ·
+// Cool-down"), plus the cool-down as its own single row — it's already one
+// step everywhere else in this app (workoutStepPosition's "+1", the P7
+// checklist screen), so this sheet doesn't invent a second way to step
+// through the 11 stretches.
+function renderStepListSheet(w: Workout): string {
+  const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
+  const curKey = currentStepKey();
+  const groups: { label: string; rows: string }[] = [];
+  for (const step of movable) {
+    const row = renderStepListRow(
+      step.key,
+      step.exercise,
+      state.completedSteps[step.key] === true,
+      step.key === curKey
+    );
+    const last = groups[groups.length - 1];
+    if (last && last.label === step.groupLabel) {
+      last.rows += row;
+    } else {
+      groups.push({ label: step.groupLabel, rows: row });
+    }
+  }
+  groups.push({
+    label: 'Cool-down',
+    rows: renderStepListRow(
+      'cooldown:1:0',
+      { name: 'Cool-down stretches' },
+      false,
+      state.currentPhase === 'cooldown'
+    ),
+  });
+  const body = groups
+    .map(
+      (g) =>
+        `<div class="step-list-group"><div class="step-list-group-label">${escapeHtml(g.label)}</div>${g.rows}</div>`
+    )
+    .join('');
+  return `
+    <div class="step-list-panel" id="step-list-panel">
+      <div class="step-list-card">
+        <div class="step-list-header">
+          <span class="step-list-title">Every step</span>
+          <button class="step-list-close" id="step-list-close" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="step-list-body">${body}</div>
+      </div>
+    </div>`;
 }
 
 // Full-screen "Paused" overlay — freezes the workout clock and any countdown
@@ -7640,6 +7895,7 @@ function renderWorkout(): string {
       <h2>Workout ${w.id}</h2>
       <div class="screen-header-actions">
         ${renderPauseButton()}
+        ${renderListButton()}
         <button class="quit-link" id="quit" type="button">× Quit workout</button>
       </div>
     </div>
@@ -7874,6 +8130,13 @@ function renderPostLog(): string {
   // Never shown on a stopped session: its duration and round count are both
   // honest-but-partial, and the title already says "Stopped early".
   const witnessLine = stopped ? '' : postLogWitnessLine(w);
+  // v50 · jump list (Sep 25 2026): plain, no verdict — "the log screen says so
+  // plainly ('2 moves skipped')" per her spec. Session still saves either way.
+  const skippedCount = skippedStepsCount(w);
+  const skippedLine =
+    skippedCount > 0
+      ? `<p class="postlog-skipped">${skippedCount} move${skippedCount === 1 ? '' : 's'} skipped</p>`
+      : '';
   // v48 · final (Sep 25 2026): the way back lives at the top now. At the
   // bottom it sat exactly where Done · Finish was tapped a moment earlier, so
   // a double or slow second tap bounced her back to the stretches.
@@ -7881,6 +8144,7 @@ function renderPostLog(): string {
     <div class="postlog-top">${backLink}</div>
     <h2>${title}</h2>
     ${witnessLine ? `<p class="postlog-witness">${escapeHtml(witnessLine)}</p>` : ''}
+    ${skippedLine}
     <p class="subtitle">Quick log — or just Save.</p>
 
     <div class="card postlog-card">
@@ -9751,6 +10015,15 @@ function render(): void {
   if (state.screen === 'workout' && state.pausedAt !== null) {
     html += renderPausedOverlay();
   }
+  // v50 · jump list (Sep 25 2026): the List sheet, over whichever workout
+  // sub-view is showing. Rendered through the normal cycle (not appended to
+  // document.body the way the quit-confirm panel is) so its ✓ marks and
+  // current-step marker are always live state, never a stale snapshot from
+  // the moment it opened.
+  if (state.screen === 'workout' && state.pausedAt === null && stepListOpen) {
+    const w = getCurrentWorkout();
+    if (w) html += renderStepListSheet(w);
+  }
   // Ship 6: screen transitions — apply enter-animation class except on
   // workout/timer screens where it would feel laggy mid-rep. The class
   // triggers a 220ms fade + 8px translateY with the spring ease curve.
@@ -9981,6 +10254,30 @@ function attachHandlers(): void {
   // v47: one step back (her ask Sep 24: "i need to be able to go back").
   bindClick('step-back', () => {
     goBack();
+  });
+
+  // v50 · jump list (Sep 25 2026): open/close the sheet, tap outside to
+  // dismiss (same convention as the quit-confirm panel), tap a row to jump.
+  bindClick('step-list-open', () => {
+    stepListOpen = true;
+    render();
+  });
+  bindClick('step-list-close', () => {
+    stepListOpen = false;
+    render();
+  });
+  const stepListPanel = document.getElementById('step-list-panel');
+  stepListPanel?.addEventListener('click', (e) => {
+    if (e.target === stepListPanel) {
+      stepListOpen = false;
+      render();
+    }
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-jump-key]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset['jumpKey'];
+      if (key) jumpToStep(key);
+    });
   });
 
   // v45: the post-log text is kept as she types, so an app close on that

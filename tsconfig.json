@@ -17,6 +17,13 @@
     "rootDir": ".",
     "lib": ["ES2020", "DOM", "DOM.Iterable"]
   },
-  "include": ["app.ts", "exercise-visuals.ts", "ladders.ts", "progression.ts", "cycle.ts"],
+  "include": [
+    "app.ts",
+    "exercise-visuals.ts",
+    "ladders.ts",
+    "progression.ts",
+    "cycle.ts",
+    "step-list.ts"
+  ],
   "exclude": ["node_modules", "dist", "tests", "playwright.config.ts"]
 }

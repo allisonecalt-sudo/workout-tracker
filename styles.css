@@ -4072,6 +4072,148 @@ input[type='number']:focus {
   color: var(--text);
 }
 
+/* ----------------------------------------------------------------------------
+ * Jump list (v50, Sep 25 2026) — the List button reuses .pause-inline's look
+ * exactly (ink, not sage: app-building-guide.md §1-2, "one sage per screen").
+ * The sheet is the same slide-from-bottom shell as .quit-confirm-panel, but
+ * it's built through the normal render() cycle (see renderStepListSheet), so
+ * it just appears/disappears with the HTML rather than animating a class —
+ * simpler, and it never risks a stale ✓ mark.
+ * --------------------------------------------------------------------------- */
+
+/* Icon-only, so it doesn't crowd "Workout A" onto two lines beside Pause +
+ * Quit at 412px (min-height stays the 44px tap target; only the side padding
+ * tightens). */
+.step-list-open-btn {
+  padding-left: 10px;
+  padding-right: 10px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.step-list-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.step-list-card {
+  background: var(--grad-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.step-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.step-list-title {
+  font-size: var(--font-subheading);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--track-tight);
+}
+
+.step-list-close {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-size: 24px;
+  line-height: 1;
+  padding: 4px 8px;
+  min-width: 44px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.step-list-body {
+  overflow-y: auto;
+  padding: 4px 20px calc(20px + env(safe-area-inset-bottom));
+}
+
+.step-list-group + .step-list-group {
+  margin-top: 14px;
+}
+
+.step-list-group-label {
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 0 4px;
+}
+
+.step-list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 2px;
+  min-height: 44px;
+  text-align: left;
+  color: var(--text);
+  font-size: var(--font-body);
+  cursor: pointer;
+}
+
+.step-list-group .step-list-row:last-child {
+  border-bottom: 0;
+}
+
+.step-list-row:active {
+  background: var(--surface-2);
+}
+
+.step-list-row-current {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.step-list-check {
+  flex: 0 0 18px;
+  color: var(--text-dim);
+}
+
+.step-list-name {
+  flex: 1 1 auto;
+}
+
+.step-list-here {
+  flex-shrink: 0;
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+}
+
+/* Post-log's plain skip count (v50, Sep 25 2026) — no verdict, same quiet
+ * treatment as the witness line above it. */
+.postlog-skipped {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  margin: 2px 0 0;
+}
+
 /* One sage button per screen = Done · Next. "Listen — how to do it" was a
  * second sage slab on every step (UI audit #3). */
 .voice-note-btn.is-secondary {
