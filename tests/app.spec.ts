@@ -2259,15 +2259,17 @@ test('ship 5: wall-sit line chart renders with 2+ wall-sit values', async ({ pag
   // v48 · P6: the hero is the LATEST hold (here also the best).
   const card = page.locator('.wall-sit-card');
   await expect(card.locator('.progress-stat-big')).toHaveText('30 s');
-  // At least one progress-chart SVG renders for wall sit.
-  await expect(page.locator('.progress-chart').first()).toBeVisible();
-  // Calm delta line — "+12s since first session" (30 - 18). No motivational
-  // language allowed: must NOT contain "great", "amazing", "you", etc.
-  const delta = await card.locator('.progress-card-meta').textContent();
-  expect(delta).toContain('best 30 s');
-  expect(delta).toContain('+12s');
-  expect(delta?.toLowerCase()).not.toContain('great');
-  expect(delta?.toLowerCase()).not.toContain('you got');
+  // v51 · her ask: "remove the big empty chart area" — a compact sparkline
+  // (.progress-sparkline) replaces the old axis'd .progress-chart line chart.
+  await expect(card.locator('.progress-sparkline')).toBeVisible();
+  // v51 · the numbers are said in words now ("best 30 s · latest 30 s"),
+  // not a "+Ns since <date>" delta. No motivational language allowed: must
+  // NOT contain "great", "amazing", "you", etc.
+  const meta = await card.locator('.progress-card-meta').textContent();
+  expect(meta).toContain('best 30 s');
+  expect(meta).toContain('latest 30 s');
+  expect(meta?.toLowerCase()).not.toContain('great');
+  expect(meta?.toLowerCase()).not.toContain('you got');
 });
 
 test('ship 5: empty state renders for fewer than 2 sessions', async ({ page }) => {
@@ -5965,7 +5967,7 @@ test.describe('v48 P6 mirror', () => {
     await expect(page.locator('#detail-session-note')).toHaveCount(0);
   });
 
-  test('(f) Progress: Start → Now first, no breakdown; A/B/C chips; latest by date; held weeks "—"; Round 1 folded; v50 capacity & cycle card present (no data yet)', async ({
+  test('(f) Progress: Start → Now first, no breakdown; A/B/C chips; latest by date; held weeks "—"; Round 1 folded; v51 "Your cycle" card present (no data yet)', async ({
     page,
   }) => {
     await mockDate(page, THU_WEEK4);
@@ -5993,19 +5995,23 @@ test.describe('v48 P6 mirror', () => {
     await expect(app).not.toContainText('Exercise breakdown');
     // v50 · cycle (Sep 25 2026): the OLD capacity chart (charting untouched
     // slider defaults) is still gone — DECISIONS §2 #6 below still holds —
-    // but a "Capacity & cycle" card now exists, honest this time (cycle.ts's
-    // honestBefore/honestAfter). No cycle_periods are seeded in this test, so
-    // it renders its own empty state, not a chart.
-    const cc = page.locator('.progress-card', { hasText: 'Capacity & cycle' });
+    // but a "Your cycle" card now exists, honest this time (cycle.ts's
+    // honestBefore/honestAfter). v51 renamed it from "Capacity & cycle" and
+    // dropped the dot/slope chart entirely (plain words instead). No
+    // cycle_periods are seeded in this test, so it renders its own empty
+    // state, not a chart.
+    const cc = page.locator('.progress-card', { hasText: 'Your cycle' });
     await expect(cc).toContainText('No period starts logged yet');
-    await expect(cc.locator('.cc-chart-wrap')).toHaveCount(0);
+    await expect(cc.locator('svg')).toHaveCount(0);
     const cards = page.locator('.progress-screen > .progress-card');
     await expect(cards.first()).toHaveClass(/start-now-card/);
     const sn = page.locator('.start-now-card');
     await expect(sn.locator('.start-now-hero')).toHaveText('6 sessions');
-    await expect(
-      sn.locator('.start-now-row').filter({ hasText: 'Elliptical level' })
-    ).toContainText('3 → 7');
+    // v51 · the old separate "Elliptical level" / "Elliptical km" rows are
+    // now one combined "Elliptical" line (level 3 -> 7; no km seeded here).
+    await expect(sn.locator('.start-now-row').filter({ hasText: 'Elliptical' })).toContainText(
+      'level 3 → 7'
+    );
     // v49 · look fix (Sep 25 2026): every wallSitSec here predates the v45
     // real-timing capture (Sep 24), so honestWallSitLogs() excludes all of
     // them — the row and the trend card both omit rather than show a
