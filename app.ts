@@ -372,7 +372,7 @@ const SUPABASE_ANON_KEY =
 // v49 (Sep 25 2026): the visual pass (SPEC-v49.md) + the two more machine
 // readings, calories and time ("every time put in").
 const APP_VERSION = 'v49';
-const BUILD_DATE = 'Sep 25, 2026 · 01:39';
+const BUILD_DATE = 'Sep 25, 2026 · 03:42';
 
 function supabaseHeaders(): HeadersInit {
   return {
