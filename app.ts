@@ -8,15 +8,21 @@ import { EXERCISE_VISUALS } from './exercise-visuals.js';
 import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
 import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
 import {
-  buildPhaseTable,
-  buildMoodPhaseTable,
-  buildTimeline,
-  questionLine as cycleQuestionLine,
   excludedUntouchedCount,
+  todayCycleStatus,
+  periodLogUrgency,
+  buildPlainPhaseTable,
+  buildPlainMoodPhaseTable,
+  plainQuestionLine,
+  PLAIN_PHASE_LABEL,
+  PLAIN_PHASE_HEADER_LABEL,
+  MOOD_TRACKING_START_DATE,
   type CyclePeriod,
   type CapacitySession,
   type MoodSession,
-  type CyclePhase,
+  type PlainPhase,
+  type TodayCycleStatus,
+  type PlainPhaseTableRow,
 } from './cycle.js';
 import {
   flattenSteps,
@@ -8392,6 +8398,14 @@ function formatMonthDay(iso: string): string {
   return `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
+// "May" — v51 · Your-cycle card ("15 workouts ... since May"): a month-only
+// stamp reads plainer than a full date for "since when has this phase's
+// data gone back".
+function formatMonthOnly(iso: string): string {
+  const d = new Date(iso);
+  return SHORT_MONTHS[d.getMonth()] ?? '';
+}
+
 // "18:31" — the 24-hour clock she reads (the old locale time could come out as
 // "06:31 PM" on one phone and "18:31" on another).
 function formatClock(iso: string): string {
@@ -9018,124 +9032,6 @@ function getChronologicalLogs(): LogEntry[] {
   return [...loadLogs()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// Generic line-chart helper. Renders one or more series on a shared
-// session-index x-axis. Each series has a color (CSS var name as string),
-// values array, and optional "emph last point" flag. SVG dimensions: 100%
-// width × 220px height via viewBox; the parent container constrains real
-// pixel size.
-type LineSeries = {
-  values: number[];
-  colorVar: string; // e.g. 'var(--accent-progress)'
-  dotFill?: string; // optional fill for non-emph dots
-  emphLast?: boolean;
-};
-
-function renderProgressLineChart(
-  series: LineSeries[],
-  opts: {
-    ariaLabel: string;
-    showMaxGuide?: boolean;
-    maxGuideLabel?: string;
-    // v48 · P6: indexes where a new round starts — a faint vertical rule before
-    // that point, so the post-break dip reads as a restart (DECISIONS §5).
-    boundaries?: { index: number; label: string }[];
-  }
-): string {
-  // Flatten all values to compute shared y-range across series.
-  const allVals: number[] = [];
-  for (const s of series) for (const v of s.values) allVals.push(v);
-  if (allVals.length < 2) return '';
-
-  const W = 320;
-  const H = 220;
-  const PAD_L = 8;
-  const PAD_R = 16;
-  const PAD_T = 16;
-  const PAD_B = 14;
-  const innerW = W - PAD_L - PAD_R;
-  const innerH = H - PAD_T - PAD_B;
-
-  const dataMin = Math.min(...allVals);
-  const dataMax = Math.max(...allVals);
-  // Pad y-range by 8% on each side so the line doesn't kiss the frame.
-  const span = dataMax - dataMin || 1;
-  const yMin = dataMin - span * 0.08;
-  const yMax = dataMax + span * 0.08;
-  const yRange = yMax - yMin || 1;
-
-  // Use the longest series for x-step.
-  const maxLen = Math.max(...series.map((s) => s.values.length));
-  const stepX = maxLen > 1 ? innerW / (maxLen - 1) : 0;
-
-  function xFor(i: number): number {
-    return PAD_L + i * stepX;
-  }
-  function yFor(v: number): number {
-    return PAD_T + (1 - (v - yMin) / yRange) * innerH;
-  }
-
-  // Optional dashed max guideline. v48 · P6: its label sits at the LEFT end —
-  // at the right it covered the latest point whenever the latest was the best.
-  let guide = '';
-  if (opts.showMaxGuide) {
-    const guideY = yFor(dataMax);
-    guide = `
-      <line x1="${PAD_L}" y1="${guideY.toFixed(1)}" x2="${(W - PAD_R).toFixed(1)}" y2="${guideY.toFixed(1)}"
-            stroke="var(--border)" stroke-width="1" stroke-dasharray="3 3" />
-      <text x="${PAD_L}" y="${(guideY - 4).toFixed(1)}" text-anchor="start"
-            font-size="9" fill="var(--text-dim-2)" letter-spacing="1.2px">${escapeHtml(opts.maxGuideLabel ?? 'max')}</text>
-    `;
-  }
-
-  const rules = (opts.boundaries ?? [])
-    .filter((b) => b.index > 0 && b.index < maxLen)
-    .map((b) => {
-      const x = (xFor(b.index - 1) + xFor(b.index)) / 2;
-      return `
-        <line class="round-rule" x1="${x.toFixed(1)}" y1="${PAD_T}" x2="${x.toFixed(1)}" y2="${(H - PAD_B).toFixed(1)}"
-              stroke="var(--border-strong)" stroke-width="1" />
-        <text x="${(x + 4).toFixed(1)}" y="${(PAD_T + 8).toFixed(1)}" font-size="9"
-              fill="var(--text-dim-2)" letter-spacing="1.2px">${escapeHtml(b.label)}</text>`;
-    })
-    .join('');
-
-  // Build a path + circles per series.
-  const seriesHtml = series
-    .map((s) => {
-      if (s.values.length < 2) return '';
-      const pts = s.values.map((v, i) => [xFor(i), yFor(v)] as [number, number]);
-      const path = pts
-        .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`)
-        .join(' ');
-      const dots = pts
-        .map(([x, y], i) => {
-          const isLast = i === pts.length - 1;
-          if (isLast && s.emphLast) {
-            return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="var(--accent-progress)" stroke="var(--text)" stroke-width="1.5" />`;
-          }
-          const fill = s.dotFill ?? s.colorVar;
-          return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${fill}" />`;
-        })
-        .join('');
-      return `
-        <path d="${path}" fill="none" stroke="${s.colorVar}" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round" />
-        ${dots}
-      `;
-    })
-    .join('');
-
-  return `
-    <svg class="progress-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
-         role="img" aria-label="${escapeHtml(opts.ariaLabel)}">
-      <title>${escapeHtml(opts.ariaLabel)}</title>
-      ${guide}
-      ${rules}
-      ${seriesHtml}
-    </svg>
-  `;
-}
-
 // Bar chart for back pain — categorical (0-10), bar per session.
 // v48 · P6 (Sep 24 2026): a pain-free session gets a faint tick instead of
 // nothing (the chart only witnessed the bad days — uxui progress 2/5), and a
@@ -9197,6 +9093,15 @@ function rideKm(l: LogEntry): number | null {
   return l.cardioLane ? null : (splitNotes(l.notes).cardio?.km ?? null);
 }
 
+// v51 · Start -> Now's combined elliptical line ("... 0.72 km in 10 min"):
+// the real ride duration, v49's own column only (no pre-v49 marker to fall
+// back to — those rides predate the elliptical entirely).
+function rideTimeSec(l: LogEntry): number | null {
+  return typeof l.ellipticalTimeSec === 'number' && l.ellipticalTimeSec > 0
+    ? l.ellipticalTimeSec
+    : null;
+}
+
 // v48 · P6 (Sep 24 2026): "Start → Now" — DECISIONS §2 #5 (Gemini, taken):
 // "elliptical level first → latest, km first → latest, wall sit first → latest,
 // and '40 sessions'. That's movement with no verdict (guide §2)." Rows only
@@ -9213,10 +9118,35 @@ function renderStartNowCard(logs: LogEntry[]): string {
       : `<span class="sn-first">${a}</span> → <span class="sn-last">${b}</span>${unit}`;
   };
   const rows: [string, string][] = [];
-  const levels = logs.map(rideLevel).filter((v): v is number => v !== null);
-  if (levels.length) rows.push(['Elliptical level', pair(levels, '')]);
-  const kms = logs.map(rideKm).filter((v): v is number => v !== null);
-  if (kms.length) rows.push(['Elliptical km', pair(kms, ' km')]);
+  // v51 · her ask: "look at ux ui and everything presentation" — one
+  // combined elliptical line ("level 5 → 7 · 0.72 km in 10 min") replaces
+  // the old two separate "Elliptical level" / "Elliptical km" rows. Level
+  // shows the trend (first ride → latest, a setting she steps herself); km
+  // and time are the LATEST ride only (a distance/duration trend across
+  // wildly different session lengths isn't a meaningful "→"). With exactly
+  // one ride logged ever, there's nothing to compare yet — just say when it
+  // was (her literal words: "first ride Sep 24").
+  const rides = logs.filter((l) => rideLevel(l) !== null || rideKm(l) !== null);
+  if (rides.length === 1) {
+    rows.push(['Elliptical', `first ride ${formatMonthDay(rides[0]!.date)}`]);
+  } else if (rides.length > 1) {
+    const firstRide = rides[0]!;
+    const lastRide = rides[rides.length - 1]!;
+    const firstLevel = rideLevel(firstRide);
+    const lastLevel = rideLevel(lastRide);
+    const levelPart =
+      firstLevel !== null && lastLevel !== null ? `level ${firstLevel} → ${lastLevel}` : '';
+    const lastKm = rideKm(lastRide);
+    const lastTimeSec = rideTimeSec(lastRide);
+    const distPart = [
+      lastKm !== null ? `${lastKm} km` : '',
+      lastTimeSec !== null ? `in ${Math.round(lastTimeSec / 60)} min` : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const val = [levelPart, distPart].filter(Boolean).join(' · ');
+    if (val) rows.push(['Elliptical', val]);
+  }
   // v49 · look fix (Sep 25 2026): honestWallSitLogs() — was every wallSitSec>0,
   // including pre-v45 rows that saved the week's PRESCRIBED hold, not a real
   // measurement (Home's own Start → Now card already excluded them; Progress's
@@ -9261,45 +9191,15 @@ function renderWallSitTrendCard(logs: LogEntry[]): string {
     return '';
   }
 
-  const first = wallSits[0] ?? 0;
   const last = wallSits[wallSits.length - 1] ?? 0;
   const maxVal = Math.max(...wallSits);
-  const diff = last - first;
-  // Plain words, no colour (v48 · P6): the hero reports where she IS.
-  // v49 · look fix (Sep 25 2026): names the wall sit's OWN start date (the
-  // first honest measurement, wallLogs[0]) — not "first session", which used
-  // to read as the program's start even though this trend only goes back to
-  // the real timing capture (Opus check).
-  const wallStartDate = wallLogs[0]?.date;
-  const sinceLabel = wallStartDate
-    ? `since ${formatMonthDay(wallStartDate)}`
-    : 'since first session';
-  const sinceFirst =
-    diff === 0 ? `same ${sinceLabel}` : `${diff > 0 ? '+' : ''}${diff}s ${sinceLabel}`;
 
-  // The Round 1 → 2 boundary (and any later round): the first wall sit on or
-  // after each round's start.
-  const boundaries = ROUNDS.slice(1)
-    .map((r) => ({
-      index: wallLogs.findIndex((l) => l.date >= r.start),
-      label: `R${r.num}`,
-    }))
-    .filter((b) => b.index > 0);
-
-  const chart = renderProgressLineChart(
-    [
-      {
-        values: wallSits,
-        colorVar: 'var(--accent-progress)',
-        emphLast: true,
-      },
-    ],
-    {
-      ariaLabel: `Wall sit trend: ${first} to ${last} seconds over ${wallSits.length} sessions, best ${maxVal}`,
-      showMaxGuide: true,
-      maxGuideLabel: 'best',
-      boundaries,
-    }
+  // v51 · her ask: "remove the big empty chart area" — a compact sparkline
+  // (≤80px, was 220px) with the numbers said in words ("best 45 s · latest
+  // 43 s") replaces the old axis'd line chart + "+Ns since <date>" meta.
+  const sparkline = renderWallSitSparkline(
+    wallSits,
+    `Wall sit trend: ${wallSits.length} sessions, latest ${last}, best ${maxVal}`
   );
 
   // v48 · P6 (Sep 24 2026): the hero is the LATEST hold, "best" sits quiet in
@@ -9308,10 +9208,41 @@ function renderWallSitTrendCard(logs: LogEntry[]): string {
     <div class="card progress-card wall-sit-card">
       <div class="progress-card-label">Wall sit · seconds held</div>
       <div class="progress-stat-big">${last} s</div>
-      <div class="progress-chart-wrap">${chart}</div>
-      <div class="progress-card-meta">best ${maxVal} s · ${sinceFirst}</div>
+      <div class="progress-sparkline-wrap">${sparkline}</div>
+      <div class="progress-card-meta">best ${maxVal} s · latest ${last} s</div>
     </div>
   `;
+}
+
+// v51 · Progress's Wall-sit card — a quiet, compact trend line (≤80px tall,
+// bigger than the row-level renderSparkline above): no axis, no guide, no
+// round-boundaries. The card's own words ("best X s · latest Y s") carry the
+// numbers, so the picture only needs to say "the shape of it".
+function renderWallSitSparkline(values: number[], ariaLabel: string): string {
+  if (values.length < 2) return '';
+  const W = 320;
+  const H = 64;
+  const PAD = 6;
+  const innerW = W - PAD * 2;
+  const innerH = H - PAD * 2;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const stepX = innerW / (values.length - 1);
+  const yFor = (v: number): number => PAD + (1 - (v - min) / span) * innerH;
+  const pts = values.map((v, i) => [PAD + i * stepX, yFor(v)] as [number, number]);
+  const path = pts
+    .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`)
+    .join(' ');
+  const lastPt = pts[pts.length - 1]!;
+  return `
+    <svg class="progress-sparkline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+         role="img" aria-label="${escapeHtml(ariaLabel)}">
+      <title>${escapeHtml(ariaLabel)}</title>
+      <path d="${path}" fill="none" stroke="var(--accent-progress)" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" />
+      <circle cx="${lastPt[0].toFixed(1)}" cy="${lastPt[1].toFixed(1)}" r="4" fill="var(--accent-progress)" />
+    </svg>`;
 }
 
 function renderBackPainTrendCard(allLogs: LogEntry[]): string {
@@ -9488,33 +9419,6 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
 // yet" rather than an average of 1-2. Register: neutral, no PMS, no verdicts
 // (app-building-guide.md §1-2 + her Sep 25 ask) — the one optional line is a
 // question, never a statement.
-const PHASE_LABEL: Record<CyclePhase, string> = {
-  menstrual: 'Menstrual',
-  follicular: 'Follicular',
-  ovulatory: 'Ovulatory',
-  luteal: 'Luteal',
-};
-
-const PHASE_TOKEN: Record<CyclePhase, string> = {
-  menstrual: 'var(--phase-menstrual)',
-  follicular: 'var(--phase-follicular)',
-  ovulatory: 'var(--phase-ovulatory)',
-  luteal: 'var(--phase-luteal)',
-};
-
-// v50 · fix 2 (Sep 25 2026): the legend swatches were drawn in the same
-// faint band fill as the chart — at 412px four dim squares read as
-// identical. The chart bands stay translucent on purpose (they sit behind
-// the dot/slope marks), but the legend swatch has nothing behind it, so it
-// borders in the phase's full-strength hue (same source each --phase-* is
-// mixed from, styles.css) instead of repeating the wash.
-const PHASE_BORDER: Record<CyclePhase, string> = {
-  menstrual: 'var(--dot-b)',
-  follicular: 'var(--dot-a)',
-  ovulatory: 'color-mix(in srgb, var(--dot-c) 60%, white 40%)',
-  luteal: 'var(--dot-d)',
-};
-
 // l.date is NOT reliably a plain 'YYYY-MM-DD': a just-saved, not-yet-synced
 // row holds the full ISO datetime it was saved with (`completedAt`), while a
 // row that's round-tripped through Supabase's `date` column comes back plain
@@ -9547,200 +9451,175 @@ function cyclePeriodsForLogic(): CyclePeriod[] {
   }));
 }
 
-// A dot/slope-per-session strip: one thin phase-coloured column per session
-// (x = session order, not real time — sessions aren't evenly spaced, same
-// choice every other progress chart here already makes), a before-dot and an
-// after-dot, and a connecting slope when both readings exist for that
-// session. An estimated (current, open) cycle's columns get a hatch overlay
-// AND an "est." tick, not just lower opacity — a visible "this part is a
-// guess", not a silent one.
-//
-// v50 · fix (Sep 25 2026): Opus's finding — the 4 phase bands were
-// near-identical greys, the before/after dots were the literal same colour
-// (--text-dim and --accent-progress both alias --ink-2), and the estimated
-// stretch's 0.55 opacity was invisible on an already-faint band. Distinct
-// hues per phase (PHASE_TOKEN, styles.css), a hollow ring for before vs a
-// filled dot for after (--cc-before/--cc-after), and a hatch + text tick for
-// "estimated" — phase, the card's whole point, has to be decodable from the
-// picture.
-function renderCapacityCycleChart(points: ReturnType<typeof buildTimeline>): string {
-  if (points.length === 0) return '';
-  const W = 320;
-  const H = 150;
-  const PAD_L = 6;
-  const PAD_R = 6;
-  const PAD_T = 10;
-  const PAD_B = 10;
-  const innerW = W - PAD_L - PAD_R;
-  const innerH = H - PAD_T - PAD_B;
-  const n = points.length;
-  const slot = innerW / n;
-  const yMin = 1;
-  const yMax = 10;
-  const yFor = (v: number): number => PAD_T + (1 - (v - yMin) / (yMax - yMin)) * innerH;
+// v51 · plain-words phrasing pieces — her spec (Sep 25 2026): no
+// menstrual/follicular/ovulatory/luteal anywhere on screen, no "n=", no "Δ".
+const PLAIN_PHASE_META_PHRASE: Record<PlainPhase, string> = {
+  'on-period': 'on your period',
+  'week-after': 'in the week after your period',
+  'mid-cycle': 'in the middle of your cycle',
+  'week-before': 'in the week before your period',
+};
 
-  const bands = points
-    .map((p, i) => {
-      if (!p.phase) return '';
-      const x = PAD_L + i * slot;
-      const rect = `<rect x="${x.toFixed(1)}" y="${PAD_T}" width="${slot.toFixed(1)}" height="${innerH}" fill="${PHASE_TOKEN[p.phase]}" />`;
-      // Estimated (the open, current cycle): a diagonal hatch on top, not
-      // just a dimmer fill — opacity alone at 412px read as "nothing here".
-      const hatch = p.estimated
-        ? `<rect x="${x.toFixed(1)}" y="${PAD_T}" width="${slot.toFixed(1)}" height="${innerH}" fill="url(#cc-hatch)" />`
-        : '';
-      return rect + hatch;
-    })
-    .join('');
-
-  // One "est." tick centred over the estimated run (it's always the trailing
-  // columns — the open cycle is always the most recent one).
-  const estIndices = points.reduce<number[]>((acc, p, i) => {
-    if (p.estimated) acc.push(i);
-    return acc;
-  }, []);
-  const estTick =
-    estIndices.length > 0
-      ? (() => {
-          const first = estIndices[0]!;
-          const span = estIndices.length;
-          const midX = PAD_L + (first + span / 2) * slot;
-          return `<text x="${midX.toFixed(1)}" y="${(PAD_T - 2).toFixed(1)}" text-anchor="middle" font-size="7" fill="var(--text-dim-2)">est.</text>`;
-        })()
-      : '';
-
-  const marks = points
-    .map((p, i) => {
-      const cx = PAD_L + i * slot + slot / 2;
-      let out = '';
-      if (p.before !== null && p.after !== null) {
-        out += `<line x1="${cx.toFixed(1)}" y1="${yFor(p.before).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yFor(p.after).toFixed(1)}" stroke="var(--cc-after)" stroke-width="1.5" stroke-linecap="round" opacity="0.6" />`;
-      }
-      if (p.before !== null) {
-        // Hollow ring — a reading, not the one that "landed".
-        out += `<circle cx="${cx.toFixed(1)}" cy="${yFor(p.before).toFixed(1)}" r="3" fill="none" stroke="var(--cc-before)" stroke-width="1.5" />`;
-      }
-      if (p.after !== null) {
-        // Filled — the after reading is the one that reads brightest.
-        out += `<circle cx="${cx.toFixed(1)}" cy="${yFor(p.after).toFixed(1)}" r="3" fill="var(--cc-after)" />`;
-      }
-      return out;
-    })
-    .join('');
-
-  return `
-    <svg class="progress-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-         aria-label="Capacity before and after, ${n} session${n === 1 ? '' : 's'}, by cycle phase${estIndices.length > 0 ? ', the most recent stretch estimated' : ''}">
-      <title>Capacity before and after, by cycle phase</title>
-      <defs>
-        <pattern id="cc-hatch" width="5" height="5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
-          <line x1="0" y1="0" x2="0" y2="5" stroke="var(--ink)" stroke-width="1" opacity="0.3" />
-        </pattern>
-      </defs>
-      ${bands}
-      ${marks}
-      ${estTick}
-    </svg>
-  `;
+// "day 25 · next one ~Sep 29" / "due any day" / "day 2 of your period" — the
+// header's sub-line. app.ts owns date formatting (cycle.ts stays DOM/format-
+// free), so this reads the raw fields todayCycleStatus() hands back.
+function cycleSubLine(status: TodayCycleStatus): string {
+  if (status.plainPhase === 'on-period') return `day ${status.cycleDay} of your period`;
+  if (status.overdue) return 'due any day';
+  return `day ${status.cycleDay} · next one ~${formatMonthDay(status.nextStart)}`;
 }
 
-function renderCycleLegend(): string {
-  const phaseItems = (['menstrual', 'follicular', 'ovulatory', 'luteal'] as CyclePhase[])
-    .map(
-      (p) =>
-        `<span class="cc-legend-item"><span class="cc-legend-swatch" style="background:${PHASE_TOKEN[p]};border:1px solid ${PHASE_BORDER[p]}"></span>${PHASE_LABEL[p]}</span>`
-    )
-    .join('');
-  return `
-    <div class="cc-legend">
-      ${phaseItems}
-      <span class="cc-legend-item"><span class="cc-legend-dot cc-legend-dot-hollow"></span>before</span>
-      <span class="cc-legend-item"><span class="cc-legend-dot" style="background:var(--cc-after)"></span>after</span>
-      <span class="cc-legend-item cc-legend-est">hatched · est.</span>
-    </div>`;
+// "8.7 → 8.9" / "not enough yet" — the current phase's own body-capacity
+// line (section 2, big numbers) and each Compare row share this formatting.
+function bodyAvgLine(row: PlainPhaseTableRow): string {
+  if (row.avgBefore === null || row.avgAfter === null) return 'not enough yet';
+  return `${row.avgBefore.toFixed(1)} → ${row.avgAfter.toFixed(1)}`;
 }
 
-// v50 · mood: the same table shape (PhaseTableRow) serves both capacity and
-// mood — `title` (when given) prints a small sub-label above it and tags the
-// wrapper with a data attribute so the two tables are distinguishable in
-// tests/CSS without duplicating the render logic.
-function renderCapacityCycleTable(
-  rows: ReturnType<typeof buildPhaseTable>,
-  title?: string
+// "15 workouts in the week before your period since May" — the current
+// phase's dim meta line under the big Body numbers. `sessions` is already
+// chronological (capacitySessionsFrom preserves getChronologicalLogs()'s
+// order), so sessions[0] is the earliest honest-or-not session on record —
+// the same "since" anchor Start → Now uses.
+function nowMetaLine(plainPhase: PlainPhase, n: number, sessions: CapacitySession[]): string {
+  const since = sessions[0]?.date;
+  const sinceClause = since ? ` since ${formatMonthOnly(since)}` : '';
+  return `${n} workout${n === 1 ? '' : 's'} ${PLAIN_PHASE_META_PHRASE[plainPhase]}${sinceClause}`;
+}
+
+// One row of the "Compare" list — name (+ a weight/ink "now" tag, never
+// colour, on the current phase), the body avg-or-"not enough yet" line, the
+// workout count in words (never "n="), and a mood line only when that
+// phase's OWN mood pairs clear MIN_PHASE_N (cycle.ts gate).
+function renderCompareRow(
+  row: PlainPhaseTableRow,
+  moodRow: PlainPhaseTableRow | undefined,
+  isCurrent: boolean
 ): string {
-  const fmt = (v: number | null): string => (v === null ? '—' : v.toFixed(1));
-  const fmtChange = (v: number | null): string => {
-    if (v === null) return '—';
-    const sign = v > 0 ? '+' : '';
-    return `${sign}${v.toFixed(1)}`;
-  };
-  const body = rows
-    .map((r) => {
-      const cls = r.notEnough ? 'cc-row cc-row-empty' : 'cc-row';
-      return `
-        <span class="${cls}" style="display:contents">
-          <span>${PHASE_LABEL[r.phase]}</span>
-          <span>${r.n}</span>
-          <span>${r.notEnough ? 'not enough yet' : fmt(r.avgBefore)}</span>
-          <span>${r.notEnough ? '' : fmt(r.avgAfter)}</span>
-          <span>${r.notEnough ? '' : fmtChange(r.avgChange)}</span>
-        </span>`;
-    })
-    .join('');
+  const moodLine =
+    moodRow && moodRow.avgBefore !== null && moodRow.avgAfter !== null
+      ? `<div class="cc2-row-mood">mood ${moodRow.avgBefore.toFixed(1)} → ${moodRow.avgAfter.toFixed(1)}</div>`
+      : '';
   return `
-    ${title ? `<div class="cc-table-title">${escapeHtml(title)}</div>` : ''}
-    <div class="cc-table" data-cc-table="${title ? title.toLowerCase() : 'capacity'}">
-      <span class="cc-table-head" style="display:contents">
-        <span>Phase</span><span>n</span><span>Before</span><span>After</span><span>Δ</span>
-      </span>
-      ${body}
+    <div class="cc2-row${isCurrent ? ' cc2-row-now' : ''}">
+      <div class="cc2-row-name">${escapeHtml(PLAIN_PHASE_LABEL[row.plainPhase])}${isCurrent ? '<span class="cc2-now-tag">now</span>' : ''}</div>
+      <div class="cc2-row-body">body ${bodyAvgLine(row)}</div>
+      <div class="cc2-row-meta">${row.n} workout${row.n === 1 ? '' : 's'}</div>
+      ${moodLine}
     </div>`;
 }
 
+// ---------- v51 · "Your cycle" card (Sep 25 2026) — plain words ----------
+//
+// Her words: "the period part is so confusing" -> "show gemini get some
+// help". Replaces the v50 "Capacity & cycle" card (jargon 4-phase table +
+// dot/slope chart + legend + hatch key + "17 pre-Sep-24 5s left out"
+// footnote — Gemini's review of that card is
+// self/health/workout-app-audit-2026-09-24/screens-v50/capacity-cycle-card-
+// v50.png; Claude decided what to take). Same underlying math (cycle.ts's
+// honest readings, MIN_PHASE_N gate) — only the vocabulary and the picture
+// change: 4 plain phase names, no chart, one collapsed "how these are
+// counted" row instead of a footnote sitting on the face.
 function renderCapacityCycleCard(logs: LogEntry[]): string {
   const periods = cyclePeriodsForLogic();
+  const todayISO = localIsoDate(new Date());
+
   if (periods.length === 0) {
     // No cycle data yet — the card still offers the one tap that starts it,
     // rather than staying invisible (fail-loud rule: say what's missing).
     return `
-      <div class="card progress-card">
-        <div class="progress-card-label">Capacity & cycle</div>
+      <div class="card progress-card cc2-card">
+        <div class="progress-card-label">Your cycle</div>
         <p class="cc-empty">No period starts logged yet.</p>
-        ${renderCycleLogRow()}
+        ${renderCycleLogRow(periods, todayISO)}
       </div>`;
   }
 
   const sessions = capacitySessionsFrom(logs);
-  const timeline = buildTimeline(sessions, periods);
-  const rows = buildPhaseTable(sessions, periods);
-  const question = cycleQuestionLine(sessions, periods);
+  const moodSessions = moodSessionsFrom(logs);
+  const status = todayCycleStatus(periods, todayISO);
+  const rows = buildPlainPhaseTable(sessions, periods);
+  const moodRows = buildPlainMoodPhaseTable(moodSessions, periods);
+  const question = plainQuestionLine(sessions, periods);
   const excluded = excludedUntouchedCount(sessions);
 
-  // v50 · mood: same phase math, no pre-v48-cutoff exclusion (mood didn't
-  // exist before v50 — there's no ambiguous default to leave a note about).
-  const moodSessions = moodSessionsFrom(logs);
-  const moodRows = buildMoodPhaseTable(moodSessions, periods);
+  const header = status
+    ? `
+      <div class="cc2-header">${escapeHtml(PLAIN_PHASE_HEADER_LABEL[status.plainPhase])}</div>
+      <div class="cc2-subline">${escapeHtml(cycleSubLine(status))}</div>`
+    : `<p class="cc-empty">Not enough logged yet to place today in a phase.</p>`;
 
-  const chart =
-    timeline.length > 0
-      ? `<div class="cc-chart-wrap">${renderCapacityCycleChart(timeline)}</div>${renderCycleLegend()}`
-      : `<p class="cc-empty">No capacity readings fall inside a tracked cycle yet.</p>`;
+  const currentRow = status ? rows.find((r) => r.plainPhase === status.plainPhase) : undefined;
+  const currentMoodRow = status
+    ? moodRows.find((r) => r.plainPhase === status.plainPhase)
+    : undefined;
+  const currentMoodReady =
+    currentMoodRow && currentMoodRow.avgBefore !== null && currentMoodRow.avgAfter !== null;
+
+  // Section 2: the phase she's in now, big numbers. Mood joins in the same
+  // style only once THIS phase clears 3 mood pairs; until then one quiet
+  // line for the whole card (her spec) instead of a per-phase "not enough".
+  // v51 · fix: "not enough yet" at the same giant digit size as a real
+  // average wrapped to 2 lines and shouted — a quieter, smaller style for
+  // the text case only (numbers stay big, per her spec).
+  const currentBodyEmpty = currentRow && currentRow.avgBefore === null;
+  const nowSection =
+    status && currentRow
+      ? `
+      <div class="cc2-now">
+        <span class="cc2-now-lbl">Body</span>
+        <span class="cc2-now-val${currentBodyEmpty ? ' cc2-now-val-empty' : ''}">${bodyAvgLine(currentRow)}</span>
+      </div>
+      <div class="cc2-now-meta">${escapeHtml(nowMetaLine(status.plainPhase, currentRow.n, sessions))}</div>
+      ${
+        currentMoodReady
+          ? `<div class="cc2-now">
+               <span class="cc2-now-lbl">Mood</span>
+               <span class="cc2-now-val">${currentMoodRow!.avgBefore!.toFixed(1)} → ${currentMoodRow!.avgAfter!.toFixed(1)}</span>
+             </div>`
+          : `<div class="cc-quiet">Mood: tracking started ${formatMonthDay(MOOD_TRACKING_START_DATE)} — it shows here after a few workouts in each phase.</div>`
+      }`
+      : '';
+
+  const compareRows = rows
+    .map((r) =>
+      renderCompareRow(
+        r,
+        moodRows.find((m) => m.plainPhase === r.plainPhase),
+        status?.plainPhase === r.plainPhase
+      )
+    )
+    .join('');
+
+  // Fail-loud rule, folded quiet instead of sitting on the face (her spec
+  // point 5): untouched sliders, the pre-Sep-24 "5" exclusion, and the 3+
+  // gate, in one or two sentences.
+  const infoRow = `
+    <details class="cc2-info">
+      <summary>ⓘ How these are counted</summary>
+      <p>An untouched capacity slider isn't counted as a real reading.${
+        excluded > 0
+          ? ` ${excluded} old "5" reading${excluded === 1 ? '' : 's'} from before Sep 24 ${excluded === 1 ? 'is' : 'are'} left out for the same reason.`
+          : ''
+      } An average only shows once a phase has 3 or more workouts with a reading.</p>
+    </details>`;
 
   return `
-    <div class="card progress-card">
-      <div class="progress-card-label">Capacity & cycle</div>
-      ${chart}
-      ${renderCapacityCycleTable(rows)}
-      ${excluded > 0 ? `<div class="cc-quiet">${excluded} pre-Sep-24 "5" reading${excluded === 1 ? '' : 's'} left out — some were the untouched slider.</div>` : ''}
+    <div class="card progress-card cc2-card">
+      <div class="progress-card-label">Your cycle</div>
+      ${header}
+      ${nowSection}
+      <div class="cc2-compare-label">Compare</div>
+      <div class="cc2-list">${compareRows}</div>
       ${question ? `<div class="cc-question">${escapeHtml(question)}</div>` : ''}
-      ${renderCapacityCycleTable(moodRows, 'Mood')}
-      ${renderCycleLogRow()}
+      ${infoRow}
+      ${renderCycleLogRow(periods, todayISO)}
     </div>`;
 }
 
 // "Period started today" tap — hers, one tap, undo-able for CYCLE_UNDO_MS.
 // Also lives as a quiet row in Settings (renderCycleSettingsRow below).
-function renderCycleLogRow(): string {
+function renderCycleLogRow(periods: CyclePeriod[], todayISO: string): string {
   if (cycleUndoStartDate) {
     // v50 · fix (Sep 25 2026): a re-log of an already-logged date has no
     // Undo — there's no new row it created, so an Undo tap must not be able
@@ -9751,20 +9630,28 @@ function renderCycleLogRow(): string {
           <span>Already logged ${formatMonthDay(cycleUndoStartDate)}.</span>
         </div>`;
     }
+    // v51 · her spec: "Logged · Sep 29 ✓ Undo".
     return `
       <div class="cc-log-undo">
-        <span>Logged ${formatMonthDay(cycleUndoStartDate)}.</span>
+        <span>Logged · ${formatMonthDay(cycleUndoStartDate)} ✓</span>
         <button class="cc-log-undo-btn" id="cc-undo" type="button">Undo</button>
       </div>`;
   }
+  // v51 · her spec: quiet (outline) most of the month, sage PRIMARY only in
+  // the window around a predicted start (periodLogUrgency, cycle.ts).
+  // "Another day?" stays folded — no date box sitting on the card — until
+  // tapped open.
+  const urgent = periodLogUrgency(periods, todayISO) === 'primary';
   return `
     <div class="cc-log-row">
-      <button class="cc-log-btn" id="cc-log-today" type="button">Period started today</button>
+      <button class="cc-log-btn${urgent ? ' cc-log-btn-primary' : ''}" id="cc-log-today" type="button">Period started today</button>
     </div>
-    <div class="cc-date-row">
-      <label for="cc-log-date" class="cc-quiet">A different day:</label>
-      <input class="cc-date-input" type="date" id="cc-log-date" max="${localIsoDate(new Date())}" />
-    </div>`;
+    <details class="cc-date-reveal">
+      <summary class="cc-quiet">Another day?</summary>
+      <div class="cc-date-row">
+        <input class="cc-date-input" type="date" id="cc-log-date" max="${todayISO}" />
+      </div>
+    </details>`;
 }
 
 // Settings' own quiet row (spec: "the Progress card (and a quiet row in
