@@ -6511,21 +6511,21 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v50 · <date, no year>", Settings "Build v50 · <full date>", sw.js v50', async ({
+  test('(d) the version: home "v51 · <date, no year>", Settings "Build v51 · <full date>", sw.js v51', async ({
     page,
   }) => {
     const src = await (await page.request.get('/app.ts')).text();
     const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
     const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
-    expect(version).toBe('v50');
+    expect(version).toBe('v51');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
-      `v50 · ${built.replace(/,\s*\d{4}/, '')}`
+      `v51 · ${built.replace(/,\s*\d{4}/, '')}`
     );
     await page.locator('#open-settings').click();
-    await expect(page.locator('#app')).toContainText(`Build v50 · ${built}`);
+    await expect(page.locator('#app')).toContainText(`Build v51 · ${built}`);
     const sw = await (await page.request.get('/sw.js')).text();
-    expect(sw).toContain("'workout-tracker-v50'");
+    expect(sw).toContain("'workout-tracker-v51'");
   });
 });
 

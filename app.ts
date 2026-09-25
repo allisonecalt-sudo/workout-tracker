@@ -424,8 +424,14 @@ const SUPABASE_ANON_KEY =
 // v50 (Sep 25 2026): capacity & cycle (cycle.ts) + the jump list — the List
 // sheet, out-of-order Done, skip-count on the log — + mood (a second 1-10
 // chip row, pre-log and post-log, and its own gated phase table on the card).
-const APP_VERSION = 'v50';
-const BUILD_DATE = 'Sep 25, 2026 · 10:08';
+// v51 (Sep 25 2026): the Progress page in plain words — her words "the
+// period part is so confusing" -> "show gemini get some help". "Your cycle"
+// (plain-word phases, no jargon table, no dot chart, one collapsed "how
+// these are counted" row, quiet/sage period-log button) + the rest of the
+// page's "everything presentation" (combined elliptical line, compact
+// wall-sit sparkline).
+const APP_VERSION = 'v51';
+const BUILD_DATE = 'Sep 25, 2026 · 11:25';
 
 function supabaseHeaders(): HeadersInit {
   return {

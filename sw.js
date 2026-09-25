@@ -13,7 +13,9 @@
 // and migration files are not shell), so only the cache name moves.
 // v49 (Sep 25 2026): the visual pass + the two more machine readings.
 // v50 (Sep 25 2026): capacity & cycle + the jump list (List sheet, step-list.js).
-const VERSION = 'workout-tracker-v50';
+// v51 (Sep 25 2026): the Progress page in plain words — no new shell files, so
+// only the cache name moves.
+const VERSION = 'workout-tracker-v51';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
