@@ -91,6 +91,11 @@ export type WeekDecision = {
   laneQueue: Lane[]; // the queue AFTER this week (for the next call)
   round: number; // the round number AFTER this week
   askLisaLine: boolean; // true on a back-3+ STEP_BACK (spec §5 "ask whether you want to tell Lisa")
+  /** Which safety signal triggered a STEP_BACK — undefined for every other mode.
+   *  Sep 25 2026 (engine fix): needed so a later week can tell WHY a lane is
+   *  resting (findRevertCandidate's lane list alone can't distinguish a back
+   *  revert from a wrist one once folded into plain ladder state). */
+  stepBackReason?: 'back' | 'wrist' | 'heaviness';
 };
 
 export type DecideWeekInput = {
@@ -299,6 +304,118 @@ function hasClearance(rungId: string, clearances: Clearance[]): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Back / wrist flare scanning (Sep 25 2026 engine fix, sev 5 #2 + #3)
+//
+// WHY: the original checks read ONLY `priorWeeks[-1]` — a back/wrist flare
+// followed by a partial week, or by a week off, fell out of the window
+// entirely and was never reverted. The probes that found this: 'back3partial'
+// (2 sessions, both back 3, used to hit the partial-week HOLD first) and
+// 'back4ThenOffWeek' (back 4, then an empty week — the z=1 break check fired
+// before back was ever read). Fix: scan a short backward window of WEEKS
+// (not just the last one) for the high-pain / twice-in-a-week signal, and
+// track which flare a STEP_BACK has already reacted to (via
+// `stepBackReason`) so the same flare can't re-fire forever once handled.
+// ---------------------------------------------------------------------------
+
+const FLARE_LOOKBACK_WEEKS = 3;
+
+function flareLookbackWindow(
+  priorWeeks: WeekHistory[],
+  priorDecisions: WeekDecision[],
+  reason: 'back' | 'wrist'
+): WeekHistory[] {
+  const lastHandled = priorDecisions
+    .filter((d) => d.mode === 'STEP_BACK' && d.stepBackReason === reason)
+    .map((d) => d.weekStart)
+    .sort()
+    .pop();
+  const windowFloor =
+    priorWeeks.length > FLARE_LOOKBACK_WEEKS
+      ? priorWeeks[priorWeeks.length - FLARE_LOOKBACK_WEEKS]!.weekStart
+      : (priorWeeks[0]?.weekStart ?? null);
+  return priorWeeks.filter((w) => {
+    if (lastHandled && w.weekStart <= lastHandled) return false;
+    if (windowFloor && w.weekStart < windowFloor) return false;
+    return true;
+  });
+}
+
+/** A week with one session ≥3, or ≥2 sessions ≥1 (spec §9.3/§9.4's "or 1+ in 2+ sessions"). */
+function flareWeek(
+  priorWeeks: WeekHistory[],
+  priorDecisions: WeekDecision[],
+  reason: 'back' | 'wrist',
+  field: 'backPain' | 'wristPain'
+): WeekHistory | null {
+  const candidates = flareLookbackWindow(priorWeeks, priorDecisions, reason);
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const w = candidates[i]!;
+    if (w.sessions.some((sess) => (sess[field] ?? -1) >= 3)) return w;
+    if (w.sessions.filter((sess) => (sess[field] ?? -1) >= 1).length >= 2) return w;
+  }
+  return null;
+}
+
+/** Every name any UPPER-lane rung can emit, plus the hinge (holds the 1 kg —
+ *  spec's grip-load ceiling), derived from LADDERS_BY_LANE instead of a
+ *  hand-written regex (sev 3 #6: the old regex matched only 2 of these). */
+function upperOrGripNames(): Set<string> {
+  const names = new Set<string>(['Bodyweight hip hinge']);
+  for (const ladder of LADDERS_BY_LANE.UPPER) {
+    for (const rung of ladder.rungs) {
+      for (const items of Object.values(rung.slots)) {
+        for (const ex of items ?? []) names.add(ex.name);
+      }
+    }
+  }
+  return names;
+}
+const UPPER_OR_GRIP_NAMES = upperOrGripNames();
+
+function stoppedAtHandsWeek(priorWeeks: WeekHistory[], priorDecisions: WeekDecision[]): boolean {
+  const candidates = flareLookbackWindow(priorWeeks, priorDecisions, 'wrist');
+  return candidates.some((w) =>
+    w.sessions.some((s) => s.stoppedEarlyAt !== null && UPPER_OR_GRIP_NAMES.has(s.stoppedEarlyAt))
+  );
+}
+
+/** A lane resting after a safety STEP_BACK (spec §9.3/§9.4's 2-week LEGS/CORE
+ *  rest and "wait until 2 clean A/B sessions" for UPPER). Recomputed from
+ *  `priorDecisions` on every call — nothing needs to be threaded through
+ *  `foldDecisions` because the full decision history is always in hand. */
+function activeLaneRests(
+  priorDecisions: WeekDecision[],
+  priorWeeks: WeekHistory[],
+  weekStart: string
+): Lane[] {
+  const rests = new Set<Lane>();
+  const lastBack = [...priorDecisions]
+    .reverse()
+    .find((d) => d.mode === 'STEP_BACK' && d.stepBackReason === 'back');
+  if (lastBack && weeksBetween(lastBack.weekStart, weekStart) <= 2) {
+    rests.add('LEGS');
+    rests.add('CORE');
+  }
+  const lastWrist = [...priorDecisions]
+    .reverse()
+    .find((d) => d.mode === 'STEP_BACK' && d.stepBackReason === 'wrist');
+  if (lastWrist) {
+    let cleanAB = 0;
+    for (const w of priorWeeks) {
+      if (w.weekStart <= lastWrist.weekStart) continue;
+      for (const sess of w.sessions) {
+        if (sess.workout !== 'A' && sess.workout !== 'B') continue;
+        if (sess.liteDay || sess.stoppedEarlyAt !== null) continue;
+        if (sess.backPain !== 0 || sess.wristPain !== 0) continue;
+        cleanAB++;
+      }
+    }
+    if (cleanAB < 2) rests.add('UPPER');
+  }
+  return [...rests];
+}
+
+// ---------------------------------------------------------------------------
 // decideWeek
 // ---------------------------------------------------------------------------
 
@@ -326,13 +443,75 @@ export function decideWeek(input: DecideWeekInput): WeekDecision {
     ...extra,
   });
 
+  const laneNow = laneQueue[0]!;
+  const twoWeeksAgo = input.priorWeeks[input.priorWeeks.length - 2] ?? null;
+
+  // --- 3/4 first: Back / Wrist (Sep 25 2026 engine fix, sev 5 #2 + #3) -------
+  // MOVED ahead of Break/Partial (spec §9 order 1,2,3,4 → run 3,4 first): a
+  // safety signal must win regardless of what the calendar tiers or the
+  // partial-week count say — a back-3 week that only got 2 sessions in (the
+  // likeliest SHAPE of a flare) used to hit the partial-week HOLD and never
+  // revert at all. Both scans look back up to FLARE_LOOKBACK_WEEKS, not just
+  // `lastWeek`, so a flare followed by a week off (or a partial week) is still
+  // caught the next time decideWeek runs, and `stepBackReason` on the prior
+  // decision stops the same flare from re-firing forever once it's handled.
+  const backFlare = flareWeek(input.priorWeeks, input.priorDecisions, 'back', 'backPain');
+  if (backFlare) {
+    const revert = findRevertCandidate(
+      input.priorDecisions,
+      state,
+      ['LEGS', 'CORE'],
+      input.weekStart
+    );
+    const reverts = revert ? [revert] : [];
+    return emptyDecision('STEP_BACK', laneNow, {
+      reverts,
+      askLisaLine: true,
+      stepBackReason: 'back',
+      gapNotes:
+        reverts.length === 0 ? ['Back flagged, but no recent LEGS/CORE change to revert.'] : [],
+    });
+  }
+  if ((lastWeek?.sessions ?? []).some((s) => s.backPain !== null && s.backPain >= 1)) {
+    return emptyDecision('HOLD', laneNow, {
+      gapNotes: ['Back at 1-2 once — holding, not stepping back.'],
+    });
+  }
+
+  const wristFlare = flareWeek(input.priorWeeks, input.priorDecisions, 'wrist', 'wristPain');
+  const stoppedAtHands = stoppedAtHandsWeek(input.priorWeeks, input.priorDecisions);
+  if (wristFlare || stoppedAtHands) {
+    const revert = findRevertCandidate(input.priorDecisions, state, ['UPPER'], input.weekStart);
+    const reverts = revert ? [revert] : [];
+    return emptyDecision('STEP_BACK', laneNow, {
+      reverts,
+      stepBackReason: 'wrist',
+      gapNotes:
+        reverts.length === 0 ? ['Wrist flagged, but no recent UPPER change to revert.'] : [],
+    });
+  }
+  if ((lastWeek?.sessions ?? []).some((s) => s.wristPain !== null && s.wristPain >= 1)) {
+    return emptyDecision('HOLD', laneNow, { gapNotes: ['Wrist at 1-2 once — holding.'] });
+  }
+  const maxWrist = (w: WeekHistory | null) =>
+    Math.max(0, ...(w?.sessions.map((s) => s.wristPain ?? 0) ?? [0]));
+  if (
+    twoWeeksAgo &&
+    lastWeek &&
+    maxWrist(lastWeek) > maxWrist(twoWeeksAgo) &&
+    maxWrist(twoWeeksAgo) > 0
+  ) {
+    return emptyDecision('HOLD', laneNow, {
+      gapNotes: ['Wrist max climbing 2 weeks running — holding.'],
+    });
+  }
+
   // --- 1. Break -------------------------------------------------------------
   let z = 0;
   for (let i = input.priorWeeks.length - 1; i >= 0; i--) {
     if (input.priorWeeks[i]!.sessions.length === 0) z++;
     else break;
   }
-  const laneNow = laneQueue[0]!;
 
   if (z >= 4) {
     // The ~80% rung drop (§9.1) is applied by applyDecisionToState/foldDecisions
@@ -371,65 +550,6 @@ export function decideWeek(input: DecideWeekInput): WeekDecision {
     return emptyDecision('HOLD', laneNow, { gapNotes: ['Only 1-2 sessions last week.'] });
   }
 
-  const twoWeeksAgo = input.priorWeeks[input.priorWeeks.length - 2] ?? null;
-
-  // --- 3. Back ---------------------------------------------------------------
-  const backSessions = lastWeek?.sessions ?? [];
-  const backHigh = backSessions.filter((s) => s.backPain !== null && s.backPain >= 3);
-  const backLowTwice =
-    backSessions.filter((s) => s.backPain !== null && s.backPain >= 1).length >= 2;
-  if (backHigh.length >= 1 || backLowTwice) {
-    const revert = findRevertCandidate(
-      input.priorDecisions,
-      state,
-      ['LEGS', 'CORE'],
-      input.weekStart
-    );
-    const reverts = revert ? [revert] : [];
-    return emptyDecision('STEP_BACK', laneNow, {
-      reverts,
-      askLisaLine: true,
-      gapNotes:
-        reverts.length === 0 ? ['Back flagged, but no recent LEGS/CORE change to revert.'] : [],
-    });
-  }
-  if (backSessions.some((s) => s.backPain !== null && s.backPain >= 1)) {
-    return emptyDecision('HOLD', laneNow, {
-      gapNotes: ['Back at 1-2 once — holding, not stepping back.'],
-    });
-  }
-
-  // --- 4. Wrist ----------------------------------------------------------------
-  const wristSessions = lastWeek?.sessions ?? [];
-  const wristHigh = wristSessions.some((s) => s.wristPain !== null && s.wristPain >= 3);
-  const stoppedAtHands = wristSessions.some(
-    (s) => s.stoppedEarlyAt !== null && /bird dog|wall (lean|push)/i.test(s.stoppedEarlyAt)
-  );
-  if (wristHigh || stoppedAtHands) {
-    const revert = findRevertCandidate(input.priorDecisions, state, ['UPPER'], input.weekStart);
-    const reverts = revert ? [revert] : [];
-    return emptyDecision('STEP_BACK', laneNow, {
-      reverts,
-      gapNotes:
-        reverts.length === 0 ? ['Wrist flagged, but no recent UPPER change to revert.'] : [],
-    });
-  }
-  if (wristSessions.some((s) => s.wristPain !== null && s.wristPain >= 1)) {
-    return emptyDecision('HOLD', laneNow, { gapNotes: ['Wrist at 1-2 once — holding.'] });
-  }
-  const maxWrist = (w: WeekHistory | null) =>
-    Math.max(0, ...(w?.sessions.map((s) => s.wristPain ?? 0) ?? [0]));
-  if (
-    twoWeeksAgo &&
-    lastWeek &&
-    maxWrist(lastWeek) > maxWrist(twoWeeksAgo) &&
-    maxWrist(twoWeeksAgo) > 0
-  ) {
-    return emptyDecision('HOLD', laneNow, {
-      gapNotes: ['Wrist max climbing 2 weeks running — holding.'],
-    });
-  }
-
   // --- 5. Heaviness --------------------------------------------------------------
   const heavySessions = lastWeek?.sessions ?? [];
   if (
@@ -442,6 +562,7 @@ export function decideWeek(input: DecideWeekInput): WeekDecision {
     if (stepBackRung) {
       return emptyDecision('STEP_BACK', laneNow, {
         reverts: [stepBackRung],
+        stepBackReason: 'heaviness',
         gapNotes: [`${stepBackRung.reason}`],
       });
     }
@@ -451,6 +572,10 @@ export function decideWeek(input: DecideWeekInput): WeekDecision {
   }
 
   // --- 6. STEP + NUDGE -------------------------------------------------------
+  // Sep 25 2026 engine fix (sev 5 #1): LEGS/CORE (a recent back STEP_BACK) or
+  // UPPER (a recent wrist STEP_BACK, until 2 clean A/B sessions) are excluded
+  // from BOTH the step search and the nudge search while resting.
+  const restingLanes = activeLaneRests(input.priorDecisions, input.priorWeeks, input.weekStart);
   const pick = pickStep(
     input.weekStart,
     state,
@@ -460,11 +585,35 @@ export function decideWeek(input: DecideWeekInput): WeekDecision {
     input.clearances,
     brakeMin,
     gapNotes,
-    lisaQuestions
+    lisaQuestions,
+    restingLanes
   );
   if (!pick) {
+    // Sep 25 2026 engine fix (sev 4 #5): a stuck week (every lane empty) used
+    // to give up on the nudge too — she'd see literally nothing move, her
+    // named quit trigger (spec §14). A nudge can still land even with no step.
+    const gapNote = [...gapNotes, 'No lane had an eligible candidate this week.'];
+    // sev 4 #6: name the gap when a skipped body tap — not a real hold — is
+    // why nothing is ready, so it reads as a fact, not a mystery.
+    const unanswered = (input.priorWeeks[input.priorWeeks.length - 1]?.sessions ?? []).filter(
+      (s) => s.backPain === null || s.wristPain === null
+    ).length;
+    if (unanswered > 0) {
+      gapNote.push(
+        `Back & wrist not answered on ${unanswered} session${unanswered === 1 ? '' : 's'} — the step waits.`
+      );
+    }
+    const fallbackNudge = pickNudge(
+      input.weekStart,
+      state,
+      null,
+      null,
+      input.priorWeeks,
+      restingLanes
+    );
     return emptyDecision('STEP', laneNow, {
-      gapNotes: [...gapNotes, 'No lane had an eligible candidate this week.'],
+      nudge: fallbackNudge ?? undefined,
+      gapNotes: gapNote,
     });
   }
   const nudge = pickNudge(
@@ -472,7 +621,8 @@ export function decideWeek(input: DecideWeekInput): WeekDecision {
     state,
     pick.step.ladderId,
     laneOf(pick.step.ladderId),
-    input.priorWeeks
+    input.priorWeeks,
+    restingLanes
   );
 
   return {
@@ -553,14 +703,19 @@ function pickStep(
   clearances: Clearance[],
   brakeMin: number,
   gapNotes: string[],
-  lisaQuestions: string[]
+  lisaQuestions: string[],
+  restingLanes: Lane[] = []
 ): StepPick | null {
-  // Try queue[0]; if it has no candidate, it stays at the front for next week
-  // and queue[1] takes this week's step instead (spec §9.6: "the skipped lane
-  // goes first next week").
-  for (let attempt = 0; attempt < laneQueue.length; attempt++) {
-    const tryIdx = attempt === 0 ? 0 : 1;
-    const lane = laneQueue[tryIdx];
+  // Sep 25 2026 engine fix (sev 4 #5): walk the WHOLE queue, not just
+  // queue[0]/queue[1] — with CARDIO capped and UPPER Lisa-gated for months at
+  // a time, the old 2-lane cap left CORE/LEGS candidates untried and nothing
+  // moved (probe 'easy30': 11 weeks straight of "no eligible candidate").
+  // Picking at index k rotates ONLY that lane to the back; every lane tried
+  // and skipped before it (including k=0) keeps its relative order at the
+  // front — spec §9.6 "the skipped lane goes first next week" generalizes the
+  // same way whether 1 lane was skipped or 3.
+  for (let k = 0; k < laneQueue.length; k++) {
+    const lane = laneQueue[k];
     if (lane === undefined) continue;
     const candidate = bestCandidateInLane(
       weekStart,
@@ -571,17 +726,13 @@ function pickStep(
       clearances,
       brakeMin,
       gapNotes,
-      lisaQuestions
+      lisaQuestions,
+      restingLanes
     );
     if (candidate) {
-      const nextLaneQueue =
-        tryIdx === 0
-          ? [...laneQueue.slice(1), laneQueue[0]!]
-          : [laneQueue[0]!, ...laneQueue.slice(2), laneQueue[1]!];
+      const nextLaneQueue = [...laneQueue.slice(0, k), ...laneQueue.slice(k + 1), laneQueue[k]!];
       return { lane, step: candidate, nextLaneQueue };
     }
-    if (attempt === 0) continue; // fall through to trying queue[1]
-    break; // both queue[0] and queue[1] failed — give up (all lanes stuck)
   }
   return null;
 }
@@ -595,8 +746,10 @@ function bestCandidateInLane(
   clearances: Clearance[],
   brakeMin: number,
   gapNotes: string[],
-  lisaQuestions: string[]
+  lisaQuestions: string[],
+  restingLanes: Lane[] = []
 ): LadderEdit | null {
+  if (restingLanes.includes(lane)) return null; // sev 5 #1: resting after a back/wrist STEP_BACK
   const ladders = LADDERS_BY_LANE[lane];
   const eligible: { ladder: Ladder; nextRung: Rung; nextIdx: number }[] = [];
   for (const ladder of ladders) {
@@ -693,15 +846,20 @@ function stalest(
 function pickNudge(
   weekStart: string,
   state: Record<string, LadderState>,
-  stepLadderId: string,
-  stepLane: Lane,
-  weeks: WeekHistory[]
+  stepLadderId: string | null,
+  stepLane: Lane | null,
+  weeks: WeekHistory[],
+  restingLanes: Lane[] = []
 ): LadderEdit | null {
   const candidates: { ladder: Ladder; nextRung: Rung; nextIdx: number }[] = [];
   for (const ladder of LADDERS) {
-    if (ladder.id === stepLadderId) continue;
-    if (ladder.lane === stepLane) continue;
+    // sev 4 #5: called with stepLadderId/stepLane = null on a stuck week (no
+    // step anywhere) — there's no step lane to avoid, so only the hard
+    // exclusions (cardio, resting lanes) still apply.
+    if (stepLadderId !== null && ladder.id === stepLadderId) continue;
+    if (stepLane !== null && ladder.lane === stepLane) continue;
     if (ladder.lane === 'CARDIO') continue; // never cardio
+    if (restingLanes.includes(ladder.lane)) continue; // sev 5 #1
     const st = state[ladder.id] ?? { rung: 0, changedWeek: null, herAsk: false };
     const nextIdx = st.rung + 1;
     const nextRung = ladder.rungs[nextIdx];
@@ -737,7 +895,8 @@ function pickNudge(
 export function composeWeekPlan(
   meta: { weekNum: number; round?: number; startsOn: string; label?: string },
   state: Record<string, LadderState>,
-  base: WeekPlan
+  base: WeekPlan,
+  opts: { deload?: boolean } = {}
 ): WeekPlan {
   const letters: Letter[] = ['A', 'B', 'C'];
   const workouts = {} as Record<WorkoutId, Workout>;
@@ -745,13 +904,35 @@ export function composeWeekPlan(
     const baseWorkout = base.workouts[letter]!;
     const main = buildBlock('main', letter, state);
     const upperBack = buildBlock('upperBack', letter, state);
+    const chosenMain = main.length > 0 ? main : baseWorkout.main;
+    const chosenUpperBack = upperBack.length > 0 ? upperBack : baseWorkout.upperBack;
     workouts[letter] = {
       ...baseWorkout,
-      main: main.length > 0 ? main : baseWorkout.main,
-      upperBack: upperBack.length > 0 ? upperBack : baseWorkout.upperBack,
+      main: opts.deload ? applyDeload(chosenMain) : chosenMain,
+      upperBack: chosenUpperBack && opts.deload ? applyDeload(chosenUpperBack) : chosenUpperBack,
+      // sev 4 #8: RESTART's "~80%, like Round 2" (spec §9.1) — see applyDeload.
+      rounds: opts.deload ? Math.max(1, baseWorkout.rounds - 1) : baseWorkout.rounds,
     };
   }
   return { ...meta, workouts };
+}
+
+// Sep 25 2026 (engine fix, sev 4 #8): a RESTART used to drop every ladder ONE
+// rung with a floor of 0 (applyDecisionToState) — a no-op for the ladders
+// already AT R0, which is most of them, so a 4+ week break came back at
+// 100%, not "~80%, like Round 2" (spec §9.1). `durationSec` and `rounds` are
+// unambiguous numbers to scale down; the free-text `reps` field mixes reps,
+// sets and weight in one sentence with no reliable position for "the reps
+// number" ("2 sets · 12 reps" vs "6-8 each side" vs "holding the 1 kg") — a
+// blind find/replace there risks quietly turning "1 kg" into "0.8 kg" or
+// "2 sets" into "1 set". Left for a content-authoring pass rather than
+// guessed at here; flagged, not silently skipped.
+function applyDeload(items: Exercise[]): Exercise[] {
+  return items.map((ex) =>
+    typeof ex.durationSec === 'number'
+      ? { ...ex, durationSec: Math.max(1, Math.floor(ex.durationSec * 0.8)) }
+      : ex
+  );
 }
 
 function buildBlock(block: Block, letter: Letter, state: Record<string, LadderState>): Exercise[] {
@@ -760,12 +941,28 @@ function buildBlock(block: Block, letter: Letter, state: Record<string, LadderSt
     if (ladder.block !== block) continue;
     if (ladder.id === 'plank' && letter === 'B' && sidePlankHasStarted(state)) continue;
     const st = state[ladder.id] ?? { rung: 0, changedWeek: null, herAsk: false };
-    const rung = ladder.rungs[st.rung];
-    if (!rung) continue;
-    const items = rung.slots[letter];
+    const items = latestSlotForLetter(ladder, st.rung, letter);
     if (items) out.push(...items);
   }
   return out;
+}
+
+// Sep 25 2026 (engine fix, sev 4 #4): most rungs list ONLY the letter(s) that
+// changed (e.g. calf.r1.b15 touches B only), so reading just `rung.slots[letter]`
+// silently DROPPED every other letter's move the moment any rung fired — 86
+// such losses on the real R2W4 row (the probe). A rung silent on a letter
+// means "unchanged", not "removed": walk backward to the most recent earlier
+// rung that DID define this letter, same as the ladder's own progression.
+function latestSlotForLetter(
+  ladder: Ladder,
+  rungIdx: number,
+  letter: Letter
+): Exercise[] | undefined {
+  for (let i = rungIdx; i >= 0; i--) {
+    const items = ladder.rungs[i]?.slots[letter];
+    if (items) return items;
+  }
+  return undefined;
 }
 
 /** For the fallback wiring in app.ts: everything a rung can emit must resolve. */

@@ -889,3 +889,206 @@ test('W5 sample: step = row+curl 2×12 → 2×15 (her ask), nudge = B calf raise
 test('ENGINE_VERSION is a non-empty string (stamped onto every progression_steps row)', () => {
   expect(ENGINE_VERSION.length).toBeGreaterThan(0);
 });
+
+// ---------------------------------------------------------------------------
+// v49 engine fix (Sep 25 2026) — regression tests for the Opus review findings
+// ---------------------------------------------------------------------------
+
+function laneOfId(id: string): string {
+  return LADDERS.find((l) => l.id === id)!.lane;
+}
+
+test('back STEP_BACK: LEGS and CORE rest for the next 2 weeks (no step or nudge in either lane)', () => {
+  const w5 = decideWeek(baseInput()); // UPPER step (rowcurl) + a LEGS nudge (calf) — the revert target
+  const heavyWeek: WeekHistory = {
+    weekStart: '2026-10-03',
+    sessions: [s('A', '2026-10-06', { backPain: 3 }), s('B', '2026-10-07'), s('C', '2026-10-08')],
+  };
+  const stepBack = decideWeek(
+    baseInput({ weekStart: '2026-10-10', priorWeeks: [R2W4_WEEK, heavyWeek], priorDecisions: [w5] })
+  );
+  expect(stepBack.mode).toBe('STEP_BACK');
+  expect(stepBack.stepBackReason).toBe('back');
+
+  const week3 = cleanWeek('2026-10-10', '2026-10-13', '2026-10-14', '2026-10-15');
+  const w1 = decideWeek(
+    baseInput({
+      weekStart: '2026-10-17',
+      priorWeeks: [R2W4_WEEK, heavyWeek, week3],
+      priorDecisions: [w5, stepBack],
+    })
+  );
+  const week4 = cleanWeek('2026-10-17', '2026-10-20', '2026-10-21', '2026-10-22');
+  const w2 = decideWeek(
+    baseInput({
+      weekStart: '2026-10-24',
+      priorWeeks: [R2W4_WEEK, heavyWeek, week3, week4],
+      priorDecisions: [w5, stepBack, w1],
+    })
+  );
+  for (const d of [w1, w2]) {
+    if (d.step) expect(['LEGS', 'CORE']).not.toContain(laneOfId(d.step.ladderId));
+    if (d.nudge) expect(['LEGS', 'CORE']).not.toContain(laneOfId(d.nudge.ladderId));
+  }
+});
+
+test('back at 3 in a partial (2-session) week → STEP_BACK, not the partial-week HOLD', () => {
+  const w5 = decideWeek(baseInput());
+  const partialWeek: WeekHistory = {
+    weekStart: '2026-10-03',
+    sessions: [s('A', '2026-10-06', { backPain: 3 }), s('B', '2026-10-07', { backPain: 3 })],
+  };
+  const d = decideWeek(
+    baseInput({
+      weekStart: '2026-10-10',
+      priorWeeks: [R2W4_WEEK, partialWeek],
+      priorDecisions: [w5],
+    })
+  );
+  expect(d.mode).toBe('STEP_BACK');
+  expect(d.stepBackReason).toBe('back');
+});
+
+test('back ≥3 then a week off: the flare is still caught, not lost behind the z=1 break check', () => {
+  const flareWeek: WeekHistory = {
+    weekStart: '2026-09-26',
+    sessions: [s('A', '2026-09-29', { backPain: 4 }), s('B', '2026-09-30'), s('C', '2026-10-01')],
+  };
+  const d = decideWeek(
+    baseInput({
+      weekStart: '2026-10-10',
+      priorWeeks: [R2W4_WEEK, flareWeek, emptyWeek('2026-10-03')],
+      priorDecisions: [],
+    })
+  );
+  expect(d.mode).toBe('STEP_BACK');
+  expect(d.stepBackReason).toBe('back');
+});
+
+test('stopped early at the 1 kg curl (a grip move, not bird dog/wall) → STEP_BACK reverting UPPER', () => {
+  const w5 = decideWeek(baseInput());
+  const heavyWeek: WeekHistory = {
+    weekStart: '2026-10-03',
+    sessions: [
+      s('A', '2026-10-06', { stoppedEarlyAt: '1 kg biceps curl' }),
+      s('B', '2026-10-07'),
+      s('C', '2026-10-08'),
+    ],
+  };
+  const d = decideWeek(
+    baseInput({ weekStart: '2026-10-10', priorWeeks: [R2W4_WEEK, heavyWeek], priorDecisions: [w5] })
+  );
+  expect(d.mode).toBe('STEP_BACK');
+  expect(d.stepBackReason).toBe('wrist');
+});
+
+test('stopped early at the hinge (holding the 1 kg) → STEP_BACK reverting UPPER', () => {
+  const w5 = decideWeek(baseInput());
+  const heavyWeek: WeekHistory = {
+    weekStart: '2026-10-03',
+    sessions: [
+      s('A', '2026-10-06', { stoppedEarlyAt: 'Bodyweight hip hinge' }),
+      s('B', '2026-10-07'),
+      s('C', '2026-10-08'),
+    ],
+  };
+  const d = decideWeek(
+    baseInput({ weekStart: '2026-10-10', priorWeeks: [R2W4_WEEK, heavyWeek], priorDecisions: [w5] })
+  );
+  expect(d.mode).toBe('STEP_BACK');
+});
+
+test('composeWeekPlan: a rung silent on a letter INHERITS that letter from the last rung that set it', () => {
+  // calf.r1.b15 only touches B — C must still carry R0's "Standing calf raises, 15 reps".
+  const state: Record<string, LadderState> = {
+    ...START_STATE,
+    calf: { rung: 1, changedWeek: '2026-10-03', herAsk: false },
+  };
+  const plan = composeWeekPlan({ weekNum: 6, startsOn: '2026-10-03' }, state, baseWeekPlan());
+  const cCalf = plan.workouts.C.main?.find((e) => e.name === 'Standing calf raises');
+  expect(cCalf).toBeDefined();
+  expect(cCalf?.reps).toBe('15 reps');
+  // B did change, to r1's own number.
+  const bCalf = plan.workouts.B.main?.find((e) => e.name === 'Standing calf raises');
+  expect(bCalf?.reps).toBe('15 reps');
+});
+
+test("composeWeekPlan: deadbug.r2.cfull (C only) does not drop A/B's Full dead bug", () => {
+  const state: Record<string, LadderState> = {
+    ...START_STATE,
+    deadbug: { rung: 2, changedWeek: '2026-10-03', herAsk: false },
+  };
+  const plan = composeWeekPlan({ weekNum: 6, startsOn: '2026-10-03' }, state, baseWeekPlan());
+  expect(plan.workouts.A.main?.some((e) => e.name === 'Full dead bug')).toBe(true);
+  expect(plan.workouts.B.main?.some((e) => e.name === 'Full dead bug')).toBe(true);
+});
+
+test('composeWeekPlan deload (RESTART): rounds drop by 1 and timed holds scale by ~0.8', () => {
+  const plan = composeWeekPlan(
+    { weekNum: 20, round: 3, startsOn: '2026-10-31' },
+    START_STATE,
+    baseWeekPlan(),
+    { deload: true }
+  );
+  expect(plan.workouts.A.rounds).toBe(1); // baseWeekPlan's 2 rounds, deloaded
+  const wallsit = plan.workouts.A.main?.find((e) => e.name === 'Wall sit');
+  expect(wallsit?.durationSec).toBe(36); // 45 × 0.8
+});
+
+test('pickStep walks the WHOLE queue: CARDIO capped and UPPER frozen still lets CORE/LEGS step', () => {
+  const priorDecisions: WeekDecision[] = [
+    {
+      weekStart: '2026-09-26',
+      mode: 'STEP',
+      lane: 'CARDIO',
+      step: { ladderId: 'CARDIO_AB', from: 0, to: 1, reason: '', receipt: '' },
+      reverts: [],
+      lisaQuestions: [],
+      gapNotes: [],
+      laneQueue: ['UPPER', 'CORE', 'LEGS', 'CARDIO'],
+      round: 2,
+      askLisaLine: false,
+    },
+    {
+      weekStart: '2026-10-03',
+      mode: 'STEP',
+      lane: 'CARDIO',
+      step: { ladderId: 'CARDIO_AB', from: 1, to: 2, reason: '', receipt: '' }, // now capped — no r3
+      reverts: [],
+      lisaQuestions: [],
+      gapNotes: [],
+      laneQueue: ['UPPER', 'CORE', 'LEGS', 'CARDIO'],
+      round: 2,
+      askLisaLine: false,
+    },
+    {
+      // rowcurl + scapular both change the week right before this test's call — frozen.
+      weekStart: '2026-10-10',
+      mode: 'STEP',
+      lane: 'UPPER',
+      step: { ladderId: 'rowcurl', from: 0, to: 1, reason: '', receipt: '' },
+      nudge: { ladderId: 'scapular', from: 0, to: 1, reason: '', receipt: '' },
+      reverts: [],
+      lisaQuestions: [],
+      gapNotes: [],
+      laneQueue: ['CARDIO', 'UPPER', 'CORE', 'LEGS'], // CARDIO and UPPER both fail — must reach CORE
+      round: 2,
+      askLisaLine: false,
+    },
+  ];
+  const d = decideWeek(
+    baseInput({
+      weekStart: '2026-10-17',
+      priorWeeks: [
+        R2W4_WEEK,
+        cleanWeek('2026-09-26', '2026-09-29', '2026-09-30', '2026-10-01'),
+        cleanWeek('2026-10-03', '2026-10-06', '2026-10-07', '2026-10-08'),
+        cleanWeek('2026-10-10', '2026-10-13', '2026-10-14', '2026-10-15'),
+      ],
+      priorDecisions,
+    })
+  );
+  expect(d.mode).toBe('STEP');
+  expect(d.step).toBeDefined();
+  expect(['CORE', 'LEGS']).toContain(d.lane);
+});

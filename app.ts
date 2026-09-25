@@ -7651,24 +7651,29 @@ function renderPostLog(): string {
         <input type="number" id="wallsit" min="0" max="600" inputmode="numeric" value="${state.wallSitSec > 0 ? state.wallSitSec : ''}" />
       </label>`
       : '';
-  // Back: "Fine / Something" (DECISIONS §5 — 34 of 39 rows are 0, and a
-  // truthful 0 used to take a drag away and back). Something opens 1-10 chips,
-  // none chosen until she taps one.
+  // Back & wrist: ONE combined control (DECISIONS §5 — 34 of 39 rows are 0,
+  // and a truthful 0 used to take a drag away and back).
+  // v49 · engine fix (Sep 25 2026): the Sep 24 build gave wrist its OWN
+  // Fine/Something row — a normal clean session went from 1 tap (Fine) to 2
+  // (Back Fine + Wrist Fine), which the commit message wrongly called
+  // "same tap cost either way" (spec §6: "Back & wrist: Fine · Back ·
+  // Wrist" is ONE control). Fine now writes both back=0 and wrist=0 in one
+  // tap; Back/Wrist each open their own 1-10 row (2 taps), same as before.
+  // #back-fine/#back-some/#wrist-some keep their ids so the already-shipped
+  // tests (tests/app.spec.ts) still hold.
   const backFine = state.backPainTouched && state.backPain === 0;
+  const wristFine = state.wristPainTouched && state.wristPain === 0;
+  const bothFine = backFine && wristFine;
   const backSome = state.backSomethingOpen || (state.backPainTouched && state.backPain > 0);
+  const wristSome = state.wristSomethingOpen || (state.wristPainTouched && state.wristPain > 0);
   const backRow = backSome
-    ? `${renderChipRow('back', state.backPain, state.backPainTouched && state.backPain > 0, 'Back pain, 1 to 10')}
+    ? `<div class="label-text body-label">Back</div>
+       ${renderChipRow('back', state.backPain, state.backPainTouched && state.backPain > 0, 'Back pain, 1 to 10')}
        <div class="body-anchor">1 barely · 10 worst</div>`
     : '';
-  // v49 · engine (Sep 25 2026): the wrist half of the progression engine's
-  // combined "Back & wrist" signal (PROGRESSION-ENGINE-SPEC-2026-09-24.md
-  // §10) — its OWN Fine/Something row, same shape as Back, kept SEPARATE
-  // rather than merged into one control so Back's already-shipped tap
-  // (#back-fine/#back-some, tested in tests/app.spec.ts) is untouched.
-  const wristFine = state.wristPainTouched && state.wristPain === 0;
-  const wristSome = state.wristSomethingOpen || (state.wristPainTouched && state.wristPain > 0);
   const wristRow = wristSome
-    ? `${renderChipRow('wrist', state.wristPain, state.wristPainTouched && state.wristPain > 0, 'Wrist pain, 1 to 10')}
+    ? `<div class="label-text body-label">Wrist</div>
+       ${renderChipRow('wrist', state.wristPain, state.wristPainTouched && state.wristPain > 0, 'Wrist pain, 1 to 10')}
        <div class="body-anchor">1 barely · 10 worst</div>`
     : '';
   // v48 · fix r1 (Sep 24 2026): a stopped session is not called "done", and its
@@ -7701,20 +7706,13 @@ function renderPostLog(): string {
       ${wallSitField}
 
       <div class="field back-field">
-        <span class="label-text">Back</span>
+        <span class="label-text">Back &amp; wrist</span>
         <div class="back-choice">
-          <button class="back-chip${backFine ? ' body-chip-on' : ''}" id="back-fine" type="button" aria-pressed="${backFine ? 'true' : 'false'}">Fine</button>
-          <button class="back-chip${backSome ? ' back-chip-open' : ''}" id="back-some" type="button" aria-pressed="${backSome ? 'true' : 'false'}">Something</button>
+          <button class="back-chip${bothFine ? ' body-chip-on' : ''}" id="back-fine" type="button" aria-pressed="${bothFine ? 'true' : 'false'}">Fine</button>
+          <button class="back-chip${backSome ? ' back-chip-open' : ''}" id="back-some" type="button" aria-pressed="${backSome ? 'true' : 'false'}">Back</button>
+          <button class="back-chip${wristSome ? ' back-chip-open' : ''}" id="wrist-some" type="button" aria-pressed="${wristSome ? 'true' : 'false'}">Wrist</button>
         </div>
         ${backRow}
-      </div>
-
-      <div class="field back-field">
-        <span class="label-text">Wrist</span>
-        <div class="back-choice">
-          <button class="back-chip${wristFine ? ' body-chip-on' : ''}" id="wrist-fine" type="button" aria-pressed="${wristFine ? 'true' : 'false'}">Fine</button>
-          <button class="back-chip${wristSome ? ' back-chip-open' : ''}" id="wrist-some" type="button" aria-pressed="${wristSome ? 'true' : 'false'}">Something</button>
-        </div>
         ${wristRow}
       </div>
 
@@ -9610,16 +9608,26 @@ function attachHandlers(): void {
       render();
     });
   });
-  // Back: Fine = 0 (one tap); tap again = no reading.
+  // Back & wrist: Fine = both 0 (ONE tap; v49 engine fix Sep 25 2026 — this
+  // used to be Back's own row only, and wrist had a SEPARATE Fine tap, which
+  // doubled the cost of a normal clean session from 1 tap to 2). Tap again =
+  // no reading, on both.
   bindClick('back-fine', () => {
-    const wasFine = state.backPainTouched && state.backPain === 0;
+    const wasBothFine =
+      state.backPainTouched &&
+      state.backPain === 0 &&
+      state.wristPainTouched &&
+      state.wristPain === 0;
     state.backPain = 0;
-    state.backPainTouched = !wasFine;
+    state.backPainTouched = !wasBothFine;
     state.backSomethingOpen = false;
+    state.wristPain = 0;
+    state.wristPainTouched = !wasBothFine;
+    state.wristSomethingOpen = false;
     render();
   });
-  // Something = open the 1-10 row, nothing chosen yet; tap again = close it
-  // and drop any number picked there.
+  // Back = open back's 1-10 row, nothing chosen yet; tap again = close it and
+  // drop any number picked there. Wrist is untouched by this button.
   bindClick('back-some', () => {
     const open = state.backSomethingOpen || (state.backPainTouched && state.backPain > 0);
     if (open) {
@@ -9631,14 +9639,7 @@ function attachHandlers(): void {
     }
     render();
   });
-  // v49 · engine: Wrist — the same Fine/Something shape as Back, above.
-  bindClick('wrist-fine', () => {
-    const wasFine = state.wristPainTouched && state.wristPain === 0;
-    state.wristPain = 0;
-    state.wristPainTouched = !wasFine;
-    state.wristSomethingOpen = false;
-    render();
-  });
+  // Wrist = the same shape as Back, above; Back is untouched by this button.
   bindClick('wrist-some', () => {
     const open = state.wristSomethingOpen || (state.wristPainTouched && state.wristPain > 0);
     if (open) {
