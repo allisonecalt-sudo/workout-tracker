@@ -2881,6 +2881,23 @@ input[type='number']:focus {
   display: block;
 }
 
+/* v51 · wall sit card — her ask: "remove the big empty chart area". A
+ * compact (<=80px) trend line; the best/latest numbers are said in words in
+ * .progress-card-meta, not read off the picture. */
+.progress-sparkline-wrap {
+  width: 100%;
+  height: 64px;
+  margin: 4px 0 10px;
+  display: flex;
+  align-items: stretch;
+}
+
+.progress-sparkline {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .progress-card-meta {
   font-size: var(--font-small);
   color: var(--text-dim);
@@ -2904,118 +2921,147 @@ input[type='number']:focus {
   transition: filter var(--dur-base) var(--ease-out);
 }
 
-/* v50 · cycle (Sep 25 2026): "Capacity & cycle" Progress card. Fits the
- * 412px phone width with no sideways scroll — the chart SVG scales via
- * viewBox like every other progress-chart, and the table below uses a fixed
- * 4-column grid sized to the narrowest phone rather than a wide table that
- * would force a scrollbar. */
-.cc-chart-wrap {
-  width: 100%;
-  height: 150px;
-  margin: 4px 0 10px;
+/* v51 · "Your cycle" Progress card (Sep 25 2026) — her words: "the period
+ * part is so confusing" -> "show gemini get some help". Replaces v50's dot
+ * chart + legend + jargon table (see cc2-card comment in app.ts). Fits the
+ * 412px phone width with no sideways scroll — no fixed-width table, just
+ * stacked plain-word rows. */
+.cc2-header {
+  font-size: var(--font-heading);
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.15;
 }
 
-.cc-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: var(--font-meta);
-  color: var(--text-dim-2);
-  margin-bottom: 14px;
-}
-
-.cc-legend-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.cc-legend-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  display: inline-block;
-  /* v50 · fix 2 (Sep 25 2026): the border (app.ts PHASE_BORDER) draws in the
-     phase's full-strength hue so the swatch doesn't repeat the same faint
-     wash as the chart band — box-sizing keeps it 10x10 with the border, not
-     12x12. */
-  box-sizing: border-box;
-}
-
-.cc-legend-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-/* v50 · fix (Sep 25 2026): before is now a hollow ring on the chart itself
-   (see renderCapacityCycleChart) — the legend swatch matches so "before"
-   reads as the same shape in both places, not just a colour she has to
-   memorize. */
-.cc-legend-dot-hollow {
-  background: transparent !important;
-  border: 1.5px solid var(--cc-before);
-  box-sizing: border-box;
-}
-
-/* v50 · fix (Sep 25 2026): the estimated (current, open) cycle's columns —
-   opacity alone was invisible at 0.55 on an already-faint band. A small
-   "est." tick sits above the band (drawn in the SVG); this just keeps the
-   legend note the same size/colour as the rest of the row. */
-.cc-legend-est {
-  color: var(--text-dim-2);
-  font-style: italic;
-}
-
-/* v50 · mood: the sub-label above the mood table — same table component as
-   capacity (renderCapacityCycleTable), a quiet divider so it doesn't read as
-   a continuation of the capacity table above it. */
-.cc-table-title {
-  font-size: var(--font-meta);
+.cc2-subline {
+  font-size: var(--font-small);
   color: var(--text-dim);
+  margin: 2px 0 16px;
+}
+
+.cc2-now {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.cc2-now-lbl {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.cc2-now-val {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-display);
+  font-weight: 650;
+  color: var(--ink);
+  line-height: 1.05;
+}
+
+/* "not enough yet" in the current-phase Body/Mood slot — text, not a
+ * number, so it reads at a normal size instead of shouting/wrapping at the
+ * display size real averages use. */
+.cc2-now-val-empty {
+  font-family: var(--font-family);
+  font-size: var(--font-small);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.cc2-now-meta {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.cc2-compare-label {
+  font-size: var(--font-small);
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-divider);
+  margin-bottom: 6px;
+}
+
+.cc2-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.cc2-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-divider);
+}
+
+.cc2-list .cc2-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
+.cc2-row-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-small);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Current phase marked by weight/ink, never colour (her spec). */
+.cc2-row-now .cc2-row-name {
+  font-weight: 700;
+}
+
+.cc2-now-tag {
+  font-size: var(--font-meta);
+  font-weight: 700;
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 1px 7px;
+  letter-spacing: 0.3px;
+}
+
+.cc2-row-body {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-small);
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.cc2-row-meta,
+.cc2-row-mood {
+  font-size: var(--font-meta);
+  color: var(--text-dim-2);
+}
+
+.cc2-info {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--border-divider);
 }
 
-.cc-table {
-  display: grid;
-  grid-template-columns: 60px 22px 1fr 1fr 1fr;
-  column-gap: 6px;
-  row-gap: 8px;
-  font-size: var(--font-small);
-  margin-top: 8px;
-}
-
-.cc-table-head {
-  color: var(--text-dim-2);
+.cc2-info summary {
   font-size: var(--font-meta);
-}
-
-.cc-table-head span,
-.cc-row span {
-  text-align: right;
-}
-
-.cc-table-head span:first-child,
-.cc-row span:first-child {
-  text-align: left;
-}
-
-.cc-row span {
-  font-family: var(--font-numeric);
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-
-.cc-row span:first-child {
-  font-family: var(--font-family);
-  color: var(--text-dim);
-}
-
-.cc-row-empty span {
   color: var(--text-dim-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.cc2-info summary::-webkit-details-marker {
+  display: none;
+}
+
+.cc2-info p {
+  font-size: var(--font-meta);
+  color: var(--text-dim-2);
+  margin: 8px 0 0;
+  line-height: 1.4;
 }
 
 .cc-quiet {
@@ -3058,6 +3104,27 @@ input[type='number']:focus {
   color: var(--text);
   font-size: var(--font-small);
   font-weight: 600;
+}
+
+/* v51 · her spec: sage PRIMARY only in the window around a predicted start
+ * (periodLogUrgency, cycle.ts) — quiet/outline the rest of the month. Same
+ * "sage means tap me now" discipline as every other primary action. */
+.cc-log-btn-primary {
+  background: var(--sage);
+  color: var(--on-sage);
+  border: 0;
+}
+
+/* "Another day?" — folded closed by default so no date box sits on the
+ * card; opens the plain <input type=date> only when tapped. */
+.cc-date-reveal > summary {
+  cursor: pointer;
+  list-style: none;
+  margin-top: 10px;
+}
+
+.cc-date-reveal > summary::-webkit-details-marker {
+  display: none;
 }
 
 .cc-log-undo {
