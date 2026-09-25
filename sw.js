@@ -31,6 +31,9 @@ const SHELL_ASSETS = [
   // these too, so they need the same offline treatment as the other modules.
   './dist/ladders.js',
   './dist/progression.js',
+  // v50 · cycle (Sep 25 2026) — capacity & cycle phase math, its own module
+  // the same way progression.js is (app.js imports it).
+  './dist/cycle.js',
   './manifest.webmanifest',
   // v49 · look (Sep 25 2026): self-hosted DM Sans (spec §3 "Font loading") —
   // precached so it renders offline on the floor, never a runtime Google
@@ -192,6 +195,7 @@ function isCodeRequest(url, request) {
     url.pathname.endsWith('/dist/exercise-detail.js') ||
     url.pathname.endsWith('/dist/ladders.js') ||
     url.pathname.endsWith('/dist/progression.js') ||
+    url.pathname.endsWith('/dist/cycle.js') ||
     url.pathname.endsWith('/index.html')
   );
 }
