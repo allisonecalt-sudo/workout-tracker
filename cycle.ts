@@ -73,13 +73,22 @@ const MEDIAN_CYCLES = 6; // her spec: "median of her last 6 cycle lengths"
 export const V48_CUTOFF_DATE = '2026-09-24';
 const UNTOUCHED_DEFAULT = 5;
 
+// v50 mood ship date — mood_before/mood_after didn't exist before this, so
+// there's no data to average until sessions accumulate past it. The v51
+// card's "tracking started" quiet line (app.ts) reads this instead of a
+// second hardcoded date drifting out of sync with this one.
+export const MOOD_TRACKING_START_DATE = '2026-09-25';
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function toMs(dateISO: string): number {
   return new Date(dateISO + 'T00:00:00').getTime();
 }
 
-function daysBetween(aISO: string, bISO: string): number {
+// v51 · exported (Sep 25 2026): the plain-words layer below needs "how many
+// days between today and the predicted start" for the period-log button's
+// quiet/primary window — same day math, no new logic.
+export function daysBetween(aISO: string, bISO: string): number {
   return Math.round((toMs(bISO) - toMs(aISO)) / MS_PER_DAY);
 }
 
@@ -94,7 +103,8 @@ function daysBetween(aISO: string, bISO: string): number {
 // rounds a fractional estimate (her median can be e.g. 27.5) to a whole day
 // first — a next start needs to land ON a day, not floor to whichever side
 // the leftover half-day's UTC conversion happened to fall on.
-function addDays(dateISO: string, days: number): string {
+// v51 · exported: same reason as daysBetween above — nextStartEstimateISO needs it.
+export function addDays(dateISO: string, days: number): string {
   const [y, m, d] = dateISO.split('-').map(Number) as [number, number, number];
   const dt = new Date(Date.UTC(y, m - 1, d + Math.round(days)));
   return dt.toISOString().slice(0, 10);
@@ -427,4 +437,196 @@ export function buildTimeline(
       };
     })
     .filter((p) => p.before !== null || p.after !== null);
+}
+
+// ---------------------------------------------------------------------------
+// Plain-words layer (v51, Sep 25 2026) — her words: "the period part is so
+// confusing" -> "show gemini get some help". Gemini reviewed the v50 card
+// (jargon table, dot chart, legend, "17 pre-Sep-24 '5' readings" footnote —
+// see self/health/workout-app-audit-2026-09-24/screens-v50/capacity-cycle-
+// card-v50.png) and Claude decided what to take. Nothing below is new MATH —
+// it's the same phaseForDate/prePeriod fields, MIN_PHASE_N gate and
+// honestBefore/After readings above, read into the 4 names she actually
+// thinks in instead of menstrual/follicular/ovulatory/luteal. app.ts does
+// all display formatting (dates, "X workouts") — this stays DOM/format-free,
+// same discipline as the rest of the file.
+// ---------------------------------------------------------------------------
+
+export type PlainPhase = 'on-period' | 'week-after' | 'mid-cycle' | 'week-before';
+
+export const PLAIN_PHASE_ORDER: PlainPhase[] = [
+  'on-period',
+  'week-after',
+  'mid-cycle',
+  'week-before',
+];
+
+// Compact label — used for the "Compare" list rows (spec: "On your period" ·
+// "Week after period" · "Mid-cycle" · "Week before period", no "your" on the
+// last one there).
+export const PLAIN_PHASE_LABEL: Record<PlainPhase, string> = {
+  'on-period': 'On your period',
+  'week-after': 'Week after period',
+  'mid-cycle': 'Mid-cycle',
+  'week-before': 'Week before period',
+};
+
+// The big TODAY header reads "Week before YOUR period" (her exact spec
+// wording differs from the compact list on this one row only).
+export const PLAIN_PHASE_HEADER_LABEL: Record<PlainPhase, string> = {
+  ...PLAIN_PHASE_LABEL,
+  'week-before': 'Week before your period',
+};
+
+/** Which of the 4 plain-words phases a technical PhaseResult maps to. Her
+ *  spec (Sep 25 2026): menstrual -> "on your period"; the last 7 days before
+ *  the (known or estimated) next start -> "week before period" (this wins
+ *  over follicular/luteal/ovulatory — a late period is still "week before",
+ *  see PhaseResult.prePeriod's own doc comment); follicular (after the
+ *  period, before ovulation) -> "week after period"; everything else
+ *  (ovulatory, and luteal days that aren't yet in the pre-period week) ->
+ *  "mid-cycle". */
+export function plainPhaseFor(info: PhaseResult): PlainPhase {
+  if (info.phase === 'menstrual') return 'on-period';
+  if (info.prePeriod) return 'week-before';
+  if (info.phase === 'follicular') return 'week-after';
+  return 'mid-cycle';
+}
+
+/** The latest logged start plus her median cycle length — the same estimate
+ *  phaseForDate computes internally for an open cycle, exposed on its own so
+ *  the period-log button (below) can compare "today" to it without needing a
+ *  session logged on that day. Null when there's no median yet (fewer than 2
+ *  starts logged, ever). */
+export function nextStartEstimateISO(periods: CyclePeriod[]): string | null {
+  const starts = sortStarts(periods);
+  if (starts.length === 0) return null;
+  const latest = starts[starts.length - 1]!;
+  const est = medianCycleLength(periods);
+  if (est === null) return null;
+  return addDays(latest, est);
+}
+
+export type PeriodLogUrgency = 'quiet' | 'primary';
+
+/** her spec (Sep 25 2026): the "Period started today" button is the sage
+ *  PRIMARY action only in the window from 3 days before the predicted start
+ *  through 7 days after it (a late period is still an open window, not a
+ *  missed one — capped so the button doesn't stay sage all month once a
+ *  prediction goes stale). Quiet/outline the rest of the month, and quiet
+ *  whenever there's no estimate yet to compare against. Logging a start
+ *  moves `latest`, so the window closes on its own the moment she taps —
+ *  no separate "already logged" branch needed here. */
+export function periodLogUrgency(periods: CyclePeriod[], todayISO: string): PeriodLogUrgency {
+  const next = nextStartEstimateISO(periods);
+  if (next === null) return 'quiet';
+  const daysUntil = daysBetween(todayISO, next); // positive = still ahead of the prediction
+  return daysUntil <= 3 && daysUntil >= -7 ? 'primary' : 'quiet';
+}
+
+export type TodayCycleStatus = {
+  plainPhase: PlainPhase;
+  cycleDay: number;
+  nextStart: string; // ISO — app.ts formats it for display
+  // The predicted start has passed and nothing new is logged. app.ts uses
+  // this to say "due any day" instead of a stale "next one ~<past date>".
+  overdue: boolean;
+};
+
+/** Where she is TODAY, in the plain vocabulary — null only when today is
+ *  before her very first logged start, or inside the open cycle with no
+ *  median yet (same null cases as phaseForDate itself). */
+export function todayCycleStatus(
+  periods: CyclePeriod[],
+  todayISO: string
+): TodayCycleStatus | null {
+  const info = phaseForDate(todayISO, periods);
+  if (!info) return null;
+  return {
+    plainPhase: plainPhaseFor(info),
+    cycleDay: info.cycleDay,
+    nextStart: info.nextStart,
+    overdue: info.phase !== 'menstrual' && daysBetween(todayISO, info.nextStart) <= 0,
+  };
+}
+
+export type PlainPhaseTableRow = {
+  plainPhase: PlainPhase;
+  n: number; // sessions in this plain phase with at least one honest reading
+  avgBefore: number | null; // null unless >= MIN_PHASE_N honest before-readings
+  avgAfter: number | null; // null unless >= MIN_PHASE_N honest after-readings
+};
+
+/** Same shared-generic pattern as buildPhaseTableGeneric above (capacity and
+ *  mood share it there too) — bucketed into the 4 PLAIN phases instead of
+ *  the 4 technical ones, same MIN_PHASE_N gate per column. */
+function buildPlainPhaseTableGeneric<S extends { date: string }>(
+  sessions: S[],
+  periods: CyclePeriod[],
+  before: (s: S) => number | null,
+  after: (s: S) => number | null
+): PlainPhaseTableRow[] {
+  const buckets = new Map<PlainPhase, S[]>();
+  for (const pp of PLAIN_PHASE_ORDER) buckets.set(pp, []);
+  for (const s of sessions) {
+    const info = phaseForDate(s.date, periods);
+    if (!info) continue;
+    if (before(s) === null && after(s) === null) continue;
+    buckets.get(plainPhaseFor(info))!.push(s);
+  }
+  return PLAIN_PHASE_ORDER.map((pp) => {
+    const inPhase = buckets.get(pp)!;
+    const n = inPhase.length;
+    const befores = inPhase.map(before).filter((v): v is number => v !== null);
+    const afters = inPhase.map(after).filter((v): v is number => v !== null);
+    return {
+      plainPhase: pp,
+      n,
+      avgBefore: befores.length >= MIN_PHASE_N ? avg(befores) : null,
+      avgAfter: afters.length >= MIN_PHASE_N ? avg(afters) : null,
+    };
+  });
+}
+
+/** The "Your cycle" card's Compare list + current-phase numbers — capacity. */
+export function buildPlainPhaseTable(
+  sessions: CapacitySession[],
+  periods: CyclePeriod[]
+): PlainPhaseTableRow[] {
+  return buildPlainPhaseTableGeneric(sessions, periods, honestBefore, honestAfter);
+}
+
+/** Same, for mood — no honest-reading cutoff (mood didn't exist pre-v50). */
+export function buildPlainMoodPhaseTable(
+  sessions: MoodSession[],
+  periods: CyclePeriod[]
+): PlainPhaseTableRow[] {
+  return buildPlainPhaseTableGeneric(
+    sessions,
+    periods,
+    (s) => s.moodBefore,
+    (s) => s.moodAfter
+  );
+}
+
+/** The one optional question line, in plain words — same gate as
+ *  questionLine above (>=1 point, n>=3 both sides, before checked first),
+ *  reusing prePeriodVsRest exactly (its "pre-period" window IS "the week
+ *  before period" — see PhaseResult.prePeriod). Only the wording changes:
+ *  no "n=", no decimal, no "luteal" anywhere. */
+export function plainQuestionLine(
+  sessions: CapacitySession[],
+  periods: CyclePeriod[]
+): string | null {
+  for (const metric of ['before', 'after'] as const) {
+    const cmp = prePeriodVsRest(sessions, periods, metric);
+    if (cmp && Math.abs(cmp.diff) >= 1) {
+      const label = metric === 'before' ? 'Body before workouts' : 'Body after workouts';
+      const direction = cmp.diff > 0 ? 'lower' : 'higher';
+      const points = Math.round(Math.abs(cmp.diff));
+      const amount = `${points} point${points === 1 ? '' : 's'}`;
+      return `${label} runs about ${amount} ${direction} in the week before your period (${cmp.prePeriodN} vs ${cmp.restN} workouts). Does that match how it feels?`;
+    }
+  }
+  return null;
 }
