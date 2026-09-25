@@ -18,6 +18,17 @@ import {
   honestAfter,
   MIN_PHASE_N,
   V48_CUTOFF_DATE,
+  // v51 · plain-words layer
+  plainPhaseFor,
+  nextStartEstimateISO,
+  periodLogUrgency,
+  todayCycleStatus,
+  buildPlainPhaseTable,
+  buildPlainMoodPhaseTable,
+  plainQuestionLine,
+  PLAIN_PHASE_ORDER,
+  PLAIN_PHASE_LABEL,
+  PLAIN_PHASE_HEADER_LABEL,
   type CyclePeriod,
   type CapacitySession,
   type MoodSession,
@@ -477,4 +488,231 @@ test.describe('buildTimeline', () => {
 // readable assertion, not just by the n<3 tests above happening to use 3.
 test('MIN_PHASE_N is 3 (spec: "If a phase has n < 3... never an average of 1-2")', () => {
   expect(MIN_PHASE_N).toBe(3);
+});
+
+// ---------------------------------------------------------------------------
+// v51 · plain-words layer (Sep 25 2026) — her words: "the period part is so
+// confusing" -> "show gemini get some help". Same HER_PERIODS fixture (Aug5
+// -> Sep1 = 27 days, median 27.5 -> estimated next start Sep29) so every
+// fact pinned above (menstrual 1-5, follicular 6-12, ovulatory 13-15 /
+// Aug17-19, luteal 16-27) carries straight over.
+// ---------------------------------------------------------------------------
+
+test.describe('plainPhaseFor', () => {
+  test('menstrual -> on-period', () => {
+    const r = phaseForDate('2026-08-05', HER_PERIODS)!;
+    expect(plainPhaseFor(r)).toBe('on-period');
+  });
+
+  test('follicular -> week-after', () => {
+    const r = phaseForDate('2026-08-10', HER_PERIODS)!; // day 6
+    expect(plainPhaseFor(r)).toBe('week-after');
+  });
+
+  test('ovulatory -> mid-cycle', () => {
+    const r = phaseForDate('2026-08-18', HER_PERIODS)!;
+    expect(plainPhaseFor(r)).toBe('mid-cycle');
+  });
+
+  test('early luteal (not yet within 7 days of the next start) -> mid-cycle, not week-before', () => {
+    const r = phaseForDate('2026-08-20', HER_PERIODS)!; // luteal, d=12 (>7)
+    expect(r.phase).toBe('luteal');
+    expect(r.prePeriod).toBe(false);
+    expect(plainPhaseFor(r)).toBe('mid-cycle');
+  });
+
+  test('the 7 days before the next start -> week-before, even though it is technically luteal', () => {
+    const r = phaseForDate('2026-08-31', HER_PERIODS)!; // luteal, prePeriod true
+    expect(r.phase).toBe('luteal');
+    expect(r.prePeriod).toBe(true);
+    expect(plainPhaseFor(r)).toBe('week-before');
+  });
+
+  test('an overdue open cycle still reads as week-before, not a crash', () => {
+    const r = phaseForDate('2026-10-15', HER_PERIODS)!;
+    expect(plainPhaseFor(r)).toBe('week-before');
+  });
+});
+
+test('PLAIN_PHASE_ORDER / PLAIN_PHASE_LABEL / PLAIN_PHASE_HEADER_LABEL — her exact wording, no jargon', () => {
+  expect(PLAIN_PHASE_ORDER).toEqual(['on-period', 'week-after', 'mid-cycle', 'week-before']);
+  expect(PLAIN_PHASE_LABEL['on-period']).toBe('On your period');
+  expect(PLAIN_PHASE_LABEL['week-after']).toBe('Week after period');
+  expect(PLAIN_PHASE_LABEL['mid-cycle']).toBe('Mid-cycle');
+  expect(PLAIN_PHASE_LABEL['week-before']).toBe('Week before period');
+  // The header reads "your" only on the week-before row — every other label
+  // is shared verbatim between the header and the Compare list.
+  expect(PLAIN_PHASE_HEADER_LABEL['week-before']).toBe('Week before your period');
+  expect(PLAIN_PHASE_HEADER_LABEL['on-period']).toBe(PLAIN_PHASE_LABEL['on-period']);
+  expect(PLAIN_PHASE_HEADER_LABEL['week-after']).toBe(PLAIN_PHASE_LABEL['week-after']);
+  expect(PLAIN_PHASE_HEADER_LABEL['mid-cycle']).toBe(PLAIN_PHASE_LABEL['mid-cycle']);
+  // No jargon leaks through either map.
+  const allLabels = [
+    ...Object.values(PLAIN_PHASE_LABEL),
+    ...Object.values(PLAIN_PHASE_HEADER_LABEL),
+  ].join(' ');
+  expect(allLabels.toLowerCase()).not.toMatch(/menstrual|follicular|ovulatory|luteal/);
+});
+
+test.describe('nextStartEstimateISO', () => {
+  test('her real data: Sep1 + median 27.5 (rounds to 28) = Sep29', () => {
+    expect(nextStartEstimateISO(HER_PERIODS)).toBe('2026-09-29');
+  });
+
+  test('null with only one period ever logged (nothing to estimate from)', () => {
+    expect(nextStartEstimateISO([{ startDate: '2026-09-01' }])).toBeNull();
+  });
+
+  test('null with no periods logged', () => {
+    expect(nextStartEstimateISO([])).toBeNull();
+  });
+});
+
+test.describe('periodLogUrgency — the quiet/primary window around a predicted start', () => {
+  // Predicted next start: 2026-09-29.
+  test('primary from 3 days before the prediction', () => {
+    expect(periodLogUrgency(HER_PERIODS, '2026-09-26')).toBe('primary'); // 3 days before
+    expect(periodLogUrgency(HER_PERIODS, '2026-09-25')).toBe('quiet'); // 4 days before
+  });
+
+  test('primary on the predicted day itself', () => {
+    expect(periodLogUrgency(HER_PERIODS, '2026-09-29')).toBe('primary');
+  });
+
+  test('primary stays through 7 days after the prediction (a late period is still open)', () => {
+    expect(periodLogUrgency(HER_PERIODS, '2026-10-06')).toBe('primary'); // +7 days
+    expect(periodLogUrgency(HER_PERIODS, '2026-10-07')).toBe('quiet'); // +8 days, capped
+  });
+
+  test('quiet the rest of the month', () => {
+    expect(periodLogUrgency(HER_PERIODS, '2026-09-10')).toBe('quiet');
+  });
+
+  test('quiet when there is no estimate yet (no periods, or only one ever logged)', () => {
+    expect(periodLogUrgency([], '2026-09-25')).toBe('quiet');
+    expect(periodLogUrgency([{ startDate: '2026-09-01' }], '2026-09-25')).toBe('quiet');
+  });
+});
+
+test.describe('todayCycleStatus — the card header', () => {
+  test('on her period: plain phase + cycleDay, not overdue', () => {
+    const s = todayCycleStatus(HER_PERIODS, '2026-08-06')!; // day 2
+    expect(s.plainPhase).toBe('on-period');
+    expect(s.cycleDay).toBe(2);
+    expect(s.overdue).toBe(false);
+  });
+
+  test('the week before period: not overdue while the prediction is still ahead', () => {
+    const s = todayCycleStatus(HER_PERIODS, '2026-08-31')!; // 1 day before Sep1
+    expect(s.plainPhase).toBe('week-before');
+    expect(s.overdue).toBe(false);
+    expect(s.nextStart).toBe('2026-09-01');
+  });
+
+  test('overdue: the estimated next start has passed with nothing new logged', () => {
+    const s = todayCycleStatus(HER_PERIODS, '2026-10-15')!; // well past the ~Sep29 estimate
+    expect(s.plainPhase).toBe('week-before');
+    expect(s.overdue).toBe(true);
+    expect(s.nextStart).toBe('2026-09-29');
+  });
+
+  test('null before her first logged period (nothing to place today in)', () => {
+    expect(todayCycleStatus(HER_PERIODS, '2026-01-01')).toBeNull();
+  });
+});
+
+test.describe('buildPlainPhaseTable / buildPlainMoodPhaseTable — bucketed into the 4 plain phases', () => {
+  test('a phase gathers sessions from across its technical sub-phases (ovulatory + early luteal -> mid-cycle)', () => {
+    const sessions: CapacitySession[] = [
+      { date: '2026-08-17', capacityBefore: 8, capacityAfter: 9 }, // ovulatory
+      { date: '2026-08-18', capacityBefore: 8, capacityAfter: 9 }, // ovulatory
+      { date: '2026-08-20', capacityBefore: 8, capacityAfter: 9 }, // luteal, not pre-period
+    ];
+    const rows = buildPlainPhaseTable(sessions, HER_PERIODS);
+    const midCycle = rows.find((r) => r.plainPhase === 'mid-cycle')!;
+    expect(midCycle.n).toBe(3);
+    expect(midCycle.avgBefore).toBeCloseTo(8, 5);
+    expect(midCycle.avgAfter).toBeCloseTo(9, 5);
+    // Every other phase stays untouched by these 3 sessions.
+    for (const r of rows) {
+      if (r.plainPhase !== 'mid-cycle') expect(r.n).toBe(0);
+    }
+  });
+
+  test('all 4 plain phases are always present, even with zero data', () => {
+    const rows = buildPlainPhaseTable([], HER_PERIODS);
+    expect(rows.map((r) => r.plainPhase)).toEqual(PLAIN_PHASE_ORDER);
+    expect(rows.every((r) => r.n === 0 && r.avgBefore === null && r.avgAfter === null)).toBe(true);
+  });
+
+  test('under 3 sessions: n is still reported, but avgBefore/avgAfter stay null ("not enough yet")', () => {
+    const sessions: CapacitySession[] = [
+      { date: '2026-08-05', capacityBefore: 4, capacityAfter: 6 },
+      { date: '2026-08-06', capacityBefore: 4, capacityAfter: 6 },
+    ];
+    const rows = buildPlainPhaseTable(sessions, HER_PERIODS);
+    const onPeriod = rows.find((r) => r.plainPhase === 'on-period')!;
+    expect(onPeriod.n).toBe(2);
+    expect(onPeriod.avgBefore).toBeNull();
+    expect(onPeriod.avgAfter).toBeNull();
+  });
+
+  test('mood shares the same bucketing, independently gated from capacity', () => {
+    const sessions: MoodSession[] = [
+      { date: '2026-08-05', moodBefore: 3, moodAfter: 8 },
+      { date: '2026-08-06', moodBefore: 4, moodAfter: 9 },
+      { date: '2026-08-07', moodBefore: 2, moodAfter: 7 },
+    ];
+    const rows = buildPlainMoodPhaseTable(sessions, HER_PERIODS);
+    const onPeriod = rows.find((r) => r.plainPhase === 'on-period')!;
+    expect(onPeriod.avgBefore).toBeCloseTo(3, 5);
+    expect(onPeriod.avgAfter).toBeCloseTo(8, 5);
+  });
+});
+
+test.describe('plainQuestionLine — the one optional line, in plain words', () => {
+  test('names the direction and workout counts, in words, and asks rather than tells', () => {
+    const sessions: CapacitySession[] = [
+      // week-before (Aug25-31, Sep1 cycle): 3 sessions, lower capacity.
+      { date: '2026-08-25', capacityBefore: 4, capacityAfter: 6 },
+      { date: '2026-08-27', capacityBefore: 4, capacityAfter: 6 },
+      { date: '2026-08-29', capacityBefore: 4, capacityAfter: 6 },
+      // rest of cycle, well clear of any pre-period window: 3 sessions, higher.
+      { date: '2026-07-10', capacityBefore: 6, capacityAfter: 8 },
+      { date: '2026-07-12', capacityBefore: 6, capacityAfter: 8 },
+      { date: '2026-07-14', capacityBefore: 6, capacityAfter: 8 },
+    ];
+    const line = plainQuestionLine(sessions, HER_PERIODS);
+    expect(line).not.toBeNull();
+    expect(line).toBe(
+      'Body before workouts runs about 2 points lower in the week before your period (3 vs 3 workouts). Does that match how it feels?'
+    );
+    // No jargon, no "n=", no raw decimal, and it's shaped as a question.
+    expect(line?.toLowerCase()).not.toMatch(/menstrual|follicular|ovulatory|luteal/);
+    expect(line).not.toContain('n=');
+    expect(line?.endsWith('?')).toBe(true);
+    expect(line?.toLowerCase()).not.toMatch(/should|must|need to/);
+  });
+
+  test('null when the gap is under 1 point, same gate as questionLine', () => {
+    const sessions: CapacitySession[] = [
+      { date: '2026-08-27', capacityBefore: 6, capacityAfter: 7 },
+      { date: '2026-08-28', capacityBefore: 6, capacityAfter: 7 },
+      { date: '2026-08-29', capacityBefore: 6.3, capacityAfter: 7 },
+      { date: '2026-07-10', capacityBefore: 6, capacityAfter: 7 },
+      { date: '2026-07-12', capacityBefore: 6, capacityAfter: 7 },
+      { date: '2026-07-14', capacityBefore: 6, capacityAfter: 7 },
+    ];
+    expect(plainQuestionLine(sessions, HER_PERIODS)).toBeNull();
+  });
+
+  test('null when n<3 on either side', () => {
+    const sessions: CapacitySession[] = [
+      { date: '2026-08-30', capacityBefore: 2, capacityAfter: 4 },
+      { date: '2026-07-10', capacityBefore: 6, capacityAfter: 8 },
+      { date: '2026-07-12', capacityBefore: 6, capacityAfter: 8 },
+      { date: '2026-07-14', capacityBefore: 6, capacityAfter: 8 },
+    ];
+    expect(plainQuestionLine(sessions, HER_PERIODS)).toBeNull();
+  });
 });
