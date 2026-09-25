@@ -8,12 +8,8 @@ import {
   phaseForDate,
   medianCycleLength,
   cycleLengths,
-  buildPhaseTable,
-  buildMoodPhaseTable,
   prePeriodVsRest,
-  questionLine,
   excludedUntouchedCount,
-  buildTimeline,
   honestBefore,
   honestAfter,
   MIN_PHASE_N,
@@ -31,11 +27,15 @@ import {
   PLAIN_PHASE_ORDER,
   PLAIN_PHASE_LABEL,
   PLAIN_PHASE_HEADER_LABEL,
+  // v51 · cycle page
+  isComparable,
+  cycleSummaryLine,
   type CyclePeriod,
   type CapacitySession,
   type MoodSession,
   type BackSession,
   type WristSession,
+  type PlainPhaseTableRow,
 } from '../cycle';
 
 // Her real logged period starts (self/health/reproductive.md), the exact
@@ -213,173 +213,7 @@ test.describe('honest readings — the pre-v48 untouched-5 exclusion', () => {
   });
 });
 
-test.describe('buildPhaseTable — the n<3 rule', () => {
-  test('a phase with 0-2 sessions shows notEnough, never an average', () => {
-    const sessions: CapacitySession[] = [
-      { date: '2026-08-05', capacityBefore: 4, capacityAfter: 6 }, // menstrual, day1
-      { date: '2026-08-06', capacityBefore: 3, capacityAfter: 5 }, // menstrual, day2
-    ];
-    const rows = buildPhaseTable(sessions, HER_PERIODS);
-    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
-    expect(menstrual.n).toBe(2);
-    expect(menstrual.notEnough).toBe(true);
-    expect(menstrual.avgBefore).toBeNull();
-    expect(menstrual.avgAfter).toBeNull();
-    expect(menstrual.avgChange).toBeNull();
-  });
-
-  test('3+ sessions in a phase produces real averages', () => {
-    const sessions: CapacitySession[] = [
-      { date: '2026-08-05', capacityBefore: 4, capacityAfter: 6 },
-      { date: '2026-08-06', capacityBefore: 2, capacityAfter: 4 },
-      { date: '2026-08-07', capacityBefore: 6, capacityAfter: 8 },
-    ];
-    const rows = buildPhaseTable(sessions, HER_PERIODS);
-    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
-    expect(menstrual.n).toBe(3);
-    expect(menstrual.notEnough).toBe(false);
-    expect(menstrual.avgBefore).toBeCloseTo(4, 5); // (4+2+6)/3
-    expect(menstrual.avgAfter).toBeCloseTo(6, 5); // (6+4+8)/3
-    expect(menstrual.avgChange).toBeCloseTo(2, 5); // avg of +2,+2,+2
-  });
-
-  test('pre-cutoff untouched 5s never count toward n', () => {
-    const sessions: CapacitySession[] = [
-      { date: '2026-08-05', capacityBefore: 5, capacityAfter: 5 }, // excluded entirely (both ambiguous)
-      { date: '2026-08-06', capacityBefore: 3, capacityAfter: 6 },
-    ];
-    const rows = buildPhaseTable(sessions, HER_PERIODS);
-    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
-    expect(menstrual.n).toBe(1); // only the second session has an honest reading
-    expect(menstrual.notEnough).toBe(true);
-  });
-
-  test('all 4 phases are always present, even with zero data', () => {
-    const rows = buildPhaseTable([], HER_PERIODS);
-    expect(rows.map((r) => r.phase)).toEqual(['menstrual', 'follicular', 'ovulatory', 'luteal']);
-    expect(rows.every((r) => r.notEnough)).toBe(true);
-  });
-
-  // v50 · fix (Sep 25 2026): Before/After/Δ each gated on their OWN count —
-  // n>=3 sessions in the phase isn't enough on its own when only 1-2 of them
-  // actually carry an "after" reading (a before-only quick-log day, say).
-  // Before this fix: 3 sessions with only 1 after-reading gave avgAfter an
-  // average of that ONE reading and notEnough false — exactly the "average
-  // of 1-2" the spec forbids.
-  test('n>=3 in the phase but only 1-2 after-readings: After (and Δ) still read "not enough", Before does not', () => {
-    const sessions: CapacitySession[] = [
-      { date: '2026-08-05', capacityBefore: 4, capacityAfter: null },
-      { date: '2026-08-06', capacityBefore: 6, capacityAfter: null },
-      { date: '2026-08-07', capacityBefore: 3, capacityAfter: 8 }, // the only after-reading
-    ];
-    const rows = buildPhaseTable(sessions, HER_PERIODS);
-    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
-    expect(menstrual.n).toBe(3);
-    expect(menstrual.notEnough).toBe(false); // the phase itself has 3 sessions
-    expect(menstrual.avgBefore).toBeCloseTo((4 + 6 + 3) / 3, 5); // 3 befores — enough
-    expect(menstrual.avgAfter).toBeNull(); // only 1 after — not enough, never averaged
-    expect(menstrual.avgChange).toBeNull(); // Δ needs both avgBefore and avgAfter
-  });
-
-  // Her named contradiction (evidence, live data): Before/After each averaged
-  // over a DIFFERENT subset used to let After read higher than Before while Δ
-  // read negative. Δ = avgAfter - avgBefore now, so that can't happen.
-  test('Δ is always avgAfter - avgBefore, never a separately-averaged per-session delta', () => {
-    const sessions: CapacitySession[] = [
-      { date: '2026-08-05', capacityBefore: 4, capacityAfter: 6 },
-      { date: '2026-08-06', capacityBefore: 4, capacityAfter: 6 },
-      { date: '2026-08-07', capacityBefore: 8, capacityAfter: 2 }, // one bad session, after < before
-    ];
-    const rows = buildPhaseTable(sessions, HER_PERIODS);
-    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
-    expect(menstrual.avgBefore).toBeCloseTo((4 + 4 + 8) / 3, 5);
-    expect(menstrual.avgAfter).toBeCloseTo((6 + 6 + 2) / 3, 5);
-    expect(menstrual.avgChange).toBeCloseTo(menstrual.avgAfter! - menstrual.avgBefore!, 10);
-  });
-});
-
-// v50 · mood (Sep 25 2026): her words (04:45) — "mood 1 being irritable to
-// being happy and or calm". Same gating as buildPhaseTable, but no
-// V48_CUTOFF_DATE exclusion: mood_before/mood_after didn't exist before v50,
-// so there's no ambiguous pre-v48 default to leave out.
-test.describe('buildMoodPhaseTable — the same n<3 rule, no cutoff exclusion', () => {
-  test('a phase with 0-2 sessions shows notEnough, never an average', () => {
-    const sessions: MoodSession[] = [
-      { date: '2026-08-05', moodBefore: 4, moodAfter: 6 },
-      { date: '2026-08-06', moodBefore: 3, moodAfter: 5 },
-    ];
-    const rows = buildMoodPhaseTable(sessions, HER_PERIODS);
-    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
-    expect(menstrual.n).toBe(2);
-    expect(menstrual.notEnough).toBe(true);
-    expect(menstrual.avgBefore).toBeNull();
-    expect(menstrual.avgAfter).toBeNull();
-    expect(menstrual.avgChange).toBeNull();
-  });
-
-  test('3+ sessions in a phase produces real averages', () => {
-    const sessions: MoodSession[] = [
-      { date: '2026-08-05', moodBefore: 4, moodAfter: 6 },
-      { date: '2026-08-06', moodBefore: 2, moodAfter: 4 },
-      { date: '2026-08-07', moodBefore: 6, moodAfter: 8 },
-    ];
-    const rows = buildMoodPhaseTable(sessions, HER_PERIODS);
-    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
-    expect(menstrual.n).toBe(3);
-    expect(menstrual.notEnough).toBe(false);
-    expect(menstrual.avgBefore).toBeCloseTo(4, 5);
-    expect(menstrual.avgAfter).toBeCloseTo(6, 5);
-    expect(menstrual.avgChange).toBeCloseTo(2, 5);
-  });
-
-  // The capacity table excludes a pre-cutoff exact-5 as an ambiguous
-  // untouched-slider default (honestReading). Mood has no such history —
-  // a logged 5 before V48_CUTOFF_DATE is a real chip tap, not a guess.
-  test('a pre-V48_CUTOFF_DATE exact 5 counts toward n (no cutoff exclusion for mood)', () => {
-    expect('2026-08-05' < V48_CUTOFF_DATE).toBe(true);
-    const sessions: MoodSession[] = [
-      { date: '2026-08-05', moodBefore: 5, moodAfter: 5 },
-      { date: '2026-08-06', moodBefore: 3, moodAfter: 6 },
-    ];
-    const rows = buildMoodPhaseTable(sessions, HER_PERIODS);
-    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
-    expect(menstrual.n).toBe(2); // both count — unlike buildPhaseTable's equivalent test
-  });
-
-  test('all 4 phases are always present, even with zero data', () => {
-    const rows = buildMoodPhaseTable([], HER_PERIODS);
-    expect(rows.map((r) => r.phase)).toEqual(['menstrual', 'follicular', 'ovulatory', 'luteal']);
-    expect(rows.every((r) => r.notEnough)).toBe(true);
-  });
-
-  test('Before and After are each gated on their OWN count', () => {
-    const sessions: MoodSession[] = [
-      { date: '2026-08-05', moodBefore: 4, moodAfter: null },
-      { date: '2026-08-06', moodBefore: 6, moodAfter: null },
-      { date: '2026-08-07', moodBefore: 3, moodAfter: 8 },
-    ];
-    const rows = buildMoodPhaseTable(sessions, HER_PERIODS);
-    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
-    expect(menstrual.n).toBe(3);
-    expect(menstrual.notEnough).toBe(false);
-    expect(menstrual.avgBefore).toBeCloseTo((4 + 6 + 3) / 3, 5);
-    expect(menstrual.avgAfter).toBeNull(); // only 1 after-reading — not enough
-    expect(menstrual.avgChange).toBeNull();
-  });
-
-  test('Δ is always avgAfter - avgBefore, never a separately-averaged per-session delta', () => {
-    const sessions: MoodSession[] = [
-      { date: '2026-08-05', moodBefore: 4, moodAfter: 6 },
-      { date: '2026-08-06', moodBefore: 4, moodAfter: 6 },
-      { date: '2026-08-07', moodBefore: 8, moodAfter: 2 },
-    ];
-    const rows = buildMoodPhaseTable(sessions, HER_PERIODS);
-    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
-    expect(menstrual.avgChange).toBeCloseTo(menstrual.avgAfter! - menstrual.avgBefore!, 10);
-  });
-});
-
-test.describe('prePeriodVsRest / questionLine', () => {
+test.describe('prePeriodVsRest', () => {
   // Both sets deliberately avoid the value 5 — every date here is before
   // V48_CUTOFF_DATE, where an exact 5 is the ambiguous untouched default
   // (see the honest-readings tests above) and would get excluded, not
@@ -434,16 +268,6 @@ test.describe('prePeriodVsRest / questionLine', () => {
     expect(cmp!.diff).toBeCloseTo(2, 5); // rest 6 - pre 4
   });
 
-  test('questionLine names the direction and n, and asks rather than tells', () => {
-    const line = questionLine(mkSessions(), HER_PERIODS);
-    expect(line).not.toBeNull();
-    expect(line).toContain('lower in the pre-period week');
-    expect(line).toContain('n=6 vs 18');
-    expect(line).toContain('~2.0');
-    expect(line).toContain('?');
-    expect(line?.toLowerCase()).not.toMatch(/should|must|need to/);
-  });
-
   test('null (no line) when n<3 on either side', () => {
     const sessions: CapacitySession[] = [
       { date: '2026-08-30', capacityBefore: 2, capacityAfter: 4 }, // pre-period, only 1
@@ -452,39 +276,6 @@ test.describe('prePeriodVsRest / questionLine', () => {
       { date: '2026-07-14', capacityBefore: 6, capacityAfter: 8 },
     ];
     expect(prePeriodVsRest(sessions, HER_PERIODS, 'before')).toBeNull();
-    expect(questionLine(sessions, HER_PERIODS)).toBeNull();
-  });
-
-  test('null when both sides qualify but the gap is under 1 point', () => {
-    const sessions: CapacitySession[] = [];
-    for (const d of ['2026-08-27', '2026-08-28', '2026-08-29']) {
-      sessions.push({ date: d, capacityBefore: 6, capacityAfter: 7 });
-    }
-    for (const d of ['2026-07-10', '2026-07-12', '2026-07-14']) {
-      sessions.push({ date: d, capacityBefore: 6.3, capacityAfter: 7 });
-    }
-    expect(questionLine(sessions, HER_PERIODS)).toBeNull();
-  });
-});
-
-test.describe('buildTimeline', () => {
-  test('chronological, one point per session with at least one honest reading', () => {
-    const sessions: CapacitySession[] = [
-      { date: '2026-08-06', capacityBefore: 4, capacityAfter: 6 },
-      { date: '2026-08-05', capacityBefore: 3, capacityAfter: 5 },
-      { date: '2026-08-01', capacityBefore: null, capacityAfter: null }, // dropped: nothing honest
-    ];
-    const tl = buildTimeline(sessions, HER_PERIODS);
-    expect(tl.map((p) => p.date)).toEqual(['2026-08-05', '2026-08-06']);
-    expect(tl[0]!.phase).toBe('menstrual');
-    expect(tl[0]!.estimated).toBe(false);
-  });
-
-  test('drops a pre-cutoff untouched-5 session entirely when both readings are the ambiguous default', () => {
-    const sessions: CapacitySession[] = [
-      { date: '2026-08-05', capacityBefore: 5, capacityAfter: 5 },
-    ];
-    expect(buildTimeline(sessions, HER_PERIODS)).toEqual([]);
   });
 });
 
@@ -737,7 +528,7 @@ test.describe('plainQuestionLine — the one optional line, in plain words', () 
     expect(line?.toLowerCase()).not.toMatch(/should|must|need to/);
   });
 
-  test('null when the gap is under 1 point, same gate as questionLine', () => {
+  test('null when the gap is under 1 point, same gate as prePeriodVsRest', () => {
     const sessions: CapacitySession[] = [
       { date: '2026-08-27', capacityBefore: 6, capacityAfter: 7 },
       { date: '2026-08-28', capacityBefore: 6, capacityAfter: 7 },
@@ -757,5 +548,123 @@ test.describe('plainQuestionLine — the one optional line, in plain words', () 
       { date: '2026-07-14', capacityBefore: 6, capacityAfter: 8 },
     ];
     expect(plainQuestionLine(sessions, HER_PERIODS)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v51 · the cycle page (Sep 25 2026) — SPEC-cycle-page.md §2.4, §5.
+// ---------------------------------------------------------------------------
+
+test.describe('cycleSummaryLine', () => {
+  // All 4 plain phases get 3 honest readings each, on/off her real Aug5->Sep1
+  // cycle (menstrual=on-period, follicular=week-after, ovulatory=mid-cycle,
+  // the last 7 days before Sep1=week-before) — the spec's own fixture:
+  // before 9.0/9.25/8.64/9.0, after 9.0/9.5/9.43/8.89 -> lo 8.6, hi 9.5.
+  function fixtureSessions(): CapacitySession[] {
+    return [
+      // on-period (Aug5-7): before 9,9,9 -> 9.0; after 9,9,9 -> 9.0.
+      { date: '2026-08-05', capacityBefore: 9, capacityAfter: 9 },
+      { date: '2026-08-06', capacityBefore: 9, capacityAfter: 9 },
+      { date: '2026-08-07', capacityBefore: 9, capacityAfter: 9 },
+      // week-after (Aug10-12): before 9,9,9.75 -> 9.25; after 9,9,10.5 -> 9.5.
+      { date: '2026-08-10', capacityBefore: 9, capacityAfter: 9 },
+      { date: '2026-08-11', capacityBefore: 9, capacityAfter: 9 },
+      { date: '2026-08-12', capacityBefore: 9.75, capacityAfter: 10.5 },
+      // mid-cycle (Aug17-19, ovulatory): before 8,9,8.92 -> 8.64; after 9,9,10.29 -> 9.43.
+      { date: '2026-08-17', capacityBefore: 8, capacityAfter: 9 },
+      { date: '2026-08-18', capacityBefore: 9, capacityAfter: 9 },
+      { date: '2026-08-19', capacityBefore: 8.92, capacityAfter: 10.29 },
+      // week-before (Aug25-27, the last 7 days before Sep1): before 9,9,9 ->
+      // 9.0; after 9,9,8.67 -> 8.89.
+      { date: '2026-08-25', capacityBefore: 9, capacityAfter: 9 },
+      { date: '2026-08-26', capacityBefore: 9, capacityAfter: 9 },
+      { date: '2026-08-27', capacityBefore: 9, capacityAfter: 8.67 },
+    ];
+  }
+
+  test('null if any phase is missing an average', () => {
+    // Only on-period has readings, and just 2 of them — every phase's
+    // avgBefore/avgAfter is null.
+    const sessions: CapacitySession[] = [
+      { date: '2026-08-05', capacityBefore: 9, capacityAfter: 9 },
+      { date: '2026-08-06', capacityBefore: 9, capacityAfter: 9 },
+    ];
+    expect(cycleSummaryLine(sessions, HER_PERIODS)).toBeNull();
+  });
+
+  test('the T1 string, with the correct lo/hi, once all 4 phases are ready and tight', () => {
+    const line = cycleSummaryLine(fixtureSessions(), HER_PERIODS);
+    expect(line).toBe(
+      'So far, body numbers look about the same in every phase — all between 8.6 and 9.5.'
+    );
+  });
+
+  test('null when a spread is >=1 and plainQuestionLine is null', () => {
+    // v51 · fix (Sep 25 2026, checker MUST 2): the original fixture used
+    // 5.0 for every "flat" value, which is UNTOUCHED_DEFAULT — on a pre-
+    // V48_CUTOFF_DATE date (these are all August), honestBefore/After nulls
+    // an exact 5 out. That dropped every "flat" reading, so no phase ever
+    // reached avgBefore/avgAfter, and the test passed via cycleSummaryLine's
+    // FIRST branch ("a phase is missing an average"), never reaching the
+    // spread check its name claims to cover. Non-5 values (7.0 flat, 8.2
+    // spike) keep every reading honest so the test exercises what it says.
+    const sessions: CapacitySession[] = [];
+    // week-after (Aug10-12) sits 1.2 points above the other 3 phases, but the
+    // pre-period-vs-rest gap (the only thing plainQuestionLine checks) stays
+    // under 1 point — the line has to be null for a reason plainQuestionLine
+    // wouldn't itself catch.
+    for (const d of ['2026-08-05', '2026-08-06', '2026-08-07']) {
+      sessions.push({ date: d, capacityBefore: 7.0, capacityAfter: 7.0 }); // on-period
+    }
+    for (const d of ['2026-08-10', '2026-08-11', '2026-08-12']) {
+      sessions.push({ date: d, capacityBefore: 8.2, capacityAfter: 7.0 }); // week-after
+    }
+    for (const d of ['2026-08-17', '2026-08-18', '2026-08-19']) {
+      sessions.push({ date: d, capacityBefore: 7.0, capacityAfter: 7.0 }); // mid-cycle
+    }
+    for (const d of ['2026-08-25', '2026-08-26', '2026-08-27']) {
+      sessions.push({ date: d, capacityBefore: 7.0, capacityAfter: 7.0 }); // week-before
+    }
+    // Assert first that all 4 plain rows actually cleared the gate — the
+    // point of this test is the spread check, not a missing-average bail.
+    const rows = buildPlainPhaseTable(sessions, HER_PERIODS);
+    expect(rows).toHaveLength(4);
+    for (const row of rows) {
+      expect(row.avgBefore).not.toBeNull();
+      expect(row.avgAfter).not.toBeNull();
+    }
+    expect(plainQuestionLine(sessions, HER_PERIODS)).toBeNull();
+    expect(cycleSummaryLine(sessions, HER_PERIODS)).toBeNull();
+  });
+
+  test('returns plainQuestionLine text verbatim when that line is non-null', () => {
+    const sessions: CapacitySession[] = [
+      { date: '2026-08-25', capacityBefore: 4, capacityAfter: 6 },
+      { date: '2026-08-27', capacityBefore: 4, capacityAfter: 6 },
+      { date: '2026-08-29', capacityBefore: 4, capacityAfter: 6 },
+      { date: '2026-07-10', capacityBefore: 6, capacityAfter: 8 },
+      { date: '2026-07-12', capacityBefore: 6, capacityAfter: 8 },
+      { date: '2026-07-14', capacityBefore: 6, capacityAfter: 8 },
+    ];
+    expect(cycleSummaryLine(sessions, HER_PERIODS)).toBe(plainQuestionLine(sessions, HER_PERIODS));
+    expect(cycleSummaryLine(sessions, HER_PERIODS)).toContain('Does that match how it feels?');
+  });
+});
+
+test.describe('isComparable', () => {
+  function row(avgBefore: number | null, avgAfter: number | null): PlainPhaseTableRow {
+    return { plainPhase: 'on-period', n: 3, avgBefore, avgAfter };
+  }
+
+  test('0 ready rows -> false', () => {
+    expect(isComparable([row(null, null), row(null, null)])).toBe(false);
+  });
+
+  test('1 ready row -> false', () => {
+    expect(isComparable([row(9, 9), row(null, null), row(null, null)])).toBe(false);
+  });
+
+  test('2 ready rows -> true', () => {
+    expect(isComparable([row(9, 9), row(8, 8), row(null, null)])).toBe(true);
   });
 });

@@ -2964,15 +2964,10 @@ input[type='number']:focus {
   line-height: 1.05;
 }
 
-/* "not enough yet" in the current-phase Body/Mood slot — text, not a
- * number, so it reads at a normal size instead of shouting/wrapping at the
- * display size real averages use. */
-.cc2-now-val-empty {
-  font-family: var(--font-family);
-  font-size: var(--font-small);
-  font-weight: 600;
-  color: var(--text-dim);
-}
+/* v51 (Sep 25 2026): the "not enough yet" digit-size mismatch this class
+ * fixed doesn't exist on the cycle page — Card B says the gap in words
+ * ("No workouts in this phase yet.") instead of an empty giant number, so
+ * there's no text sitting in the .cc2-now-val slot to need a quieter size. */
 
 .cc2-now-meta {
   font-size: var(--font-small);
@@ -2980,69 +2975,14 @@ input[type='number']:focus {
   margin-bottom: 10px;
 }
 
+/* v51: Card B's "This phase · before → after" and Card C's "Compare
+ * phases" — always the first line in its own card now (the cycle page's
+ * own page, not a divider inside a bigger card), so no border-top. */
 .cc2-compare-label {
   font-size: var(--font-small);
   font-weight: 600;
   color: var(--ink-2);
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-divider);
-  margin-bottom: 6px;
-}
-
-.cc2-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.cc2-row {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border-divider);
-}
-
-.cc2-list .cc2-row:last-child {
-  border-bottom: 0;
-  padding-bottom: 2px;
-}
-
-.cc2-row-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--font-small);
-  color: var(--text);
-  font-weight: 600;
-}
-
-/* Current phase marked by weight/ink, never colour (her spec). */
-.cc2-row-now .cc2-row-name {
-  font-weight: 700;
-}
-
-.cc2-now-tag {
-  font-size: var(--font-meta);
-  font-weight: 700;
-  color: var(--ink);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 1px 7px;
-  letter-spacing: 0.3px;
-}
-
-.cc2-row-body {
-  font-family: var(--font-numeric);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--font-small);
-  color: var(--text);
-  margin-top: 2px;
-}
-
-.cc2-row-meta,
-.cc2-row-mood,
-.cc2-row-back,
-.cc2-row-wrist {
-  font-size: var(--font-meta);
-  color: var(--text-dim-2);
+  margin-bottom: 10px;
 }
 
 .cc2-info {
@@ -3081,12 +3021,6 @@ input[type='number']:focus {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border-divider);
-}
-
-.cc-empty {
-  font-size: var(--font-small);
-  color: var(--text-dim-2);
-  font-style: italic;
 }
 
 /* "Period started today" — the Progress card's own tap + Settings' quiet row. */
@@ -3169,6 +3103,123 @@ input[type='number']:focus {
   color: var(--text);
   font-size: var(--font-small);
   padding: 0 8px;
+}
+
+/* v51 · "Your cycle" page (Sep 25 2026) — her words: "I think it should be
+ * on its own page not in this page". The Progress door row + the page's own
+ * Card C table/chips. Cards A/B/D reuse the existing .progress-card, .cc2-*
+ * and .cc-* selectors as-is. No sage anywhere in this block (spec §6 —
+ * navigation and a plain compare table, never the primary action). */
+.progress-card:has(.cycle-door) {
+  padding: 0;
+}
+
+.cycle-door .cycle-door-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* Inherits .door-row's own size/weight — same visual weight as every other
+ * door row's single line of text; only the sub-line under it is new. */
+.cycle-door-title {
+  display: block;
+}
+
+.cycle-door-sub {
+  display: block;
+  font-size: var(--font-small);
+  color: var(--text-dim);
+}
+
+/* Card A's own log row sits inside the page's first card, not a divider
+ * inside a bigger one — no top border, full-width button (spec §2.3). */
+.cycle-card-a .cc-log-row {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 12px;
+}
+
+.cycle-card-a .cc-log-btn {
+  width: 100%;
+}
+
+.cycle-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cycle-chip {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Selected = a bold ink border, never sage — sage means "the primary action
+ * right now"; picking which column to look at isn't that (spec §2.3). */
+.cycle-chip.cycle-chip-on {
+  border: 2px solid var(--text);
+  color: var(--text);
+}
+
+.cycle-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+  font-size: var(--font-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.cycle-table th,
+.cycle-table td {
+  padding: 7px 4px;
+  text-align: right;
+  color: var(--text);
+}
+
+.cycle-table th:first-child,
+.cycle-table td:first-child {
+  text-align: left;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.cycle-table thead th {
+  font-size: var(--font-meta);
+  font-weight: 600;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border-divider);
+}
+
+.cycle-table tbody tr {
+  border-bottom: 1px solid var(--border-divider);
+}
+
+.cycle-table tbody tr:last-child {
+  border-bottom: 0;
+}
+
+/* The current phase's row — bold, no colour, no tag (spec §2.3). */
+.cycle-now td {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* v51 · fix (Sep 25 2026, checker SHOULD 3): .cycle-table td:first-child
+ * (0,2,1) outweighs .cycle-now td (0,1,1), so the current phase's own LABEL
+ * cell stayed the dim, un-bold first-column style. This wins the tie back. */
+.cycle-table tr.cycle-now td:first-child {
+  font-weight: 700;
+  color: var(--ink);
 }
 
 /* --- Tablet bumps ------------------------------------------------------ */
@@ -5255,6 +5306,17 @@ input[type='number']:focus {
   margin: 0;
 }
 
+/* v51 · fix (Sep 25 2026): stacked fields in .body-card (Body, then Mood,
+ * then Back & wrist) had zero gap between them — .body-field's own
+ * margin:0 left the "Mood" label sitting flush under Body's anchor line
+ * ("1 empty · 5 ordinary · 10 strong"). Her screenshot (pre-log). Gives every
+ * field after the first the same breathing room the first one already gets
+ * from the card's own padding, so "Mood" (and Back & wrist below it) reads
+ * as its own field, not a runt of the one above. */
+.body-card > .field + .field {
+  margin-top: 20px;
+}
+
 .body-label {
   display: block;
   margin-bottom: 10px;
@@ -5370,9 +5432,13 @@ input[type='number']:focus {
   font-weight: 500;
 }
 
+/* v51 · fix (Sep 25 2026): 2 columns wrapped Wrist onto its own row at
+ * 412px (screenshot, both pre-log and post-log — they share this control
+ * via renderBackWristControl). Fine / Back / Wrist is one row of 3 equal
+ * chips instead. */
 .back-choice {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-bottom: 8px;
 }

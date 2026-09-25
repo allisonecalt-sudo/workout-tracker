@@ -15,7 +15,8 @@ import {
   buildPlainMoodPhaseTable,
   buildPlainBackPhaseTable,
   buildPlainWristPhaseTable,
-  plainQuestionLine,
+  isComparable,
+  cycleSummaryLine,
   PLAIN_PHASE_LABEL,
   PLAIN_PHASE_HEADER_LABEL,
   MOOD_TRACKING_START_DATE,
@@ -26,6 +27,7 @@ import {
   type WristSession,
   type TodayCycleStatus,
   type PlainPhaseTableRow,
+  type CycleMetric,
 } from './cycle.js';
 import {
   flattenSteps,
@@ -188,7 +190,8 @@ type AppScreen =
   | 'history-detail'
   | 'weekly-review'
   | 'progress'
-  | 'settings';
+  | 'settings'
+  | 'cycle';
 
 type Phase = 'warmup' | 'main' | 'upperBack' | 'cooldown';
 
@@ -451,7 +454,7 @@ const SUPABASE_ANON_KEY =
 // page's "everything presentation" (combined elliptical line, compact
 // wall-sit sparkline).
 const APP_VERSION = 'v51';
-const BUILD_DATE = 'Sep 25, 2026 · 12:14';
+const BUILD_DATE = 'Sep 25, 2026 · 14:28';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -5705,7 +5708,13 @@ async function pullCyclePeriodsFromSupabase(): Promise<void> {
     if (res.ok && res.headers.get('X-SW-Cache') !== '1') {
       const remote: RemoteCyclePeriod[] = await res.json();
       writeCyclePeriods(mergeCyclePeriods(loadCyclePeriods(), remote));
-      if (state.screen === 'progress' || state.screen === 'settings') render();
+      if (
+        state.screen === 'progress' ||
+        state.screen === 'settings' ||
+        state.screen === 'cycle' ||
+        state.screen === 'home'
+      )
+        render();
     } else if (!res.ok) {
       console.warn('[sync] pull cycle_periods failed:', res.status);
     }
@@ -5823,6 +5832,16 @@ function undoPeriodStart(): void {
   void deleteCyclePeriod(dateISO);
   render();
 }
+
+// v51 · cycle page (Sep 25 2026) — see renderCycle's own comment for why.
+// `cycleReturnTo` says which door she came in by (the Progress row, or the
+// Home "Period started?" row — see SPEC-cycle-page.md §2.1, §3), so the back
+// button and its scroll restore match. `cycleCompareMetric` is Card C's own
+// selected chip; it resets to 'body' every time the page is (re-)opened
+// (§2.1).
+let cycleReturnTo: 'progress' | 'home' = 'progress';
+let cycleCompareMetric: CycleMetric = 'body';
+let progressScrollForCycle = 0;
 
 if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   const w = window as unknown as {
@@ -7090,6 +7109,16 @@ function renderDoneTodayCard(log: LogEntry, weekCount: number): string {
 
 function renderHome(): string {
   const logs = loadLogs();
+  // v51 · cycle page §3: a conditional door, first in the list, only in the
+  // ~20-day-a-month window around a predicted start — never logs anything
+  // itself (a mis-tap on Home must not write a period start; the sage
+  // button waits on the page).
+  const homeCycleDoorRow =
+    periodLogUrgency(cyclePeriodsForLogic(), localIsoDate(new Date())) === 'primary'
+      ? `<button class="door-row" id="home-open-cycle" type="button">
+           <span>🌙 Period started?</span><span class="door-chev" aria-hidden="true">›</span>
+         </button>`
+      : '';
   const week = getProgramWeek();
   const weekRange = formatWeekRange(week.start, week.end);
   // v48 · P4: home always shows THIS week (the ‹ › arrows move to Weekly review
@@ -7214,6 +7243,7 @@ function renderHome(): string {
     <div class="card walk-card">${walkRow}</div>
 
     <div class="home-doors">
+      ${homeCycleDoorRow}
       <button class="door-row" id="open-progress-link" type="button">
         <span>📈 Progress</span><span class="door-chev" aria-hidden="true">›</span>
       </button>
@@ -8542,14 +8572,6 @@ function formatMonthDay(iso: string): string {
   return `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
-// "May" — v51 · Your-cycle card ("15 workouts ... since May"): a month-only
-// stamp reads plainer than a full date for "since when has this phase's
-// data gone back".
-function formatMonthOnly(iso: string): string {
-  const d = new Date(iso);
-  return SHORT_MONTHS[d.getMonth()] ?? '';
-}
-
 // "18:31" — the 24-hour clock she reads (the old locale time could come out as
 // "06:31 PM" on one phone and "18:31" on another).
 function formatClock(iso: string): string {
@@ -9618,212 +9640,294 @@ function cyclePeriodsForLogic(): CyclePeriod[] {
   }));
 }
 
-// "day 25 · next one ~Sep 29" / "due any day" / "day 2 of your period" — the
-// header's sub-line. app.ts owns date formatting (cycle.ts stays DOM/format-
-// free), so this reads the raw fields todayCycleStatus() hands back.
-function cycleSubLine(status: TodayCycleStatus): string {
-  if (status.plainPhase === 'on-period') return `day ${status.cycleDay} of your period`;
-  if (status.overdue) return 'due any day';
-  return `day ${status.cycleDay} · next one ~${formatMonthDay(status.nextStart)}`;
+// ---------- v51 · "Your cycle" page (Sep 25 2026) — its own screen ----------
+//
+// See renderCycle's own comment for her words on why. Was the "Capacity &
+// cycle" Progress card (jargon 4-phase table + dot/slope chart) -> the
+// v51-progress-plain "Your cycle" card (Gemini's review, plain phases, still
+// one dense card) -> now its own page, reached by a single door row on
+// Progress. Full spec:
+// second-brain/self/health/workout-app-audit-2026-09-24/cycle-page-v51/
+// SPEC-cycle-page.md. Same underlying math throughout (cycle.ts's honest
+// readings, MIN_PHASE_N gate) — only the picture keeps getting plainer.
+
+// Progress's own door row sub-line (spec §1) — checked in the order the spec
+// lists: the two no-data states first, then the predicted-window states,
+// then the two normal-phase states.
+function cycleDoorSub(periods: CyclePeriod[], todayISO: string): string {
+  if (periods.length === 0) return 'No period logged yet';
+  const status = todayCycleStatus(periods, todayISO);
+  if (!status) return 'Needs one more logged period';
+  if (periodLogUrgency(periods, todayISO) === 'primary') {
+    return status.overdue
+      ? 'Period due any day · started?'
+      : `Period expected around ${formatMonthDay(status.nextStart)} · started?`;
+  }
+  if (status.plainPhase === 'on-period') return `On your period · day ${status.cycleDay}`;
+  return `${PLAIN_PHASE_HEADER_LABEL[status.plainPhase]} · day ${status.cycleDay}`;
 }
 
-// "8.7 → 8.9" / "not enough yet" — the current phase's own body-capacity
-// line (section 2, big numbers) and each Compare row share this formatting.
-function bodyAvgLine(row: PlainPhaseTableRow): string {
-  if (row.avgBefore === null || row.avgAfter === null) return 'not enough yet';
-  return `${row.avgBefore.toFixed(1)} → ${row.avgAfter.toFixed(1)}`;
-}
-
-// "10 workouts since May · before → after" — the current phase's dim meta
-// line under the big Body numbers. `sessions` is already chronological
-// (capacitySessionsFrom preserves getChronologicalLogs()'s order), so
-// sessions[0] is the earliest honest-or-not session on record — the same
-// "since" anchor Start → Now uses.
-// v51 · fix (Sep 25 2026, look-check sev 3): dropped the phase phrase
-// ("in the week before your period") — the header right above this line
-// already names the phase, so repeating it here put the phase name on the
-// card 3x against her "nothing repeated, one message" rule (fix option a,
-// smallest change). v51 · fix (sev 4): added "before → after" so the big
-// Body arrow above reads as one session's before/after pair, not a
-// dropping trend — the words "before"/"after" appeared nowhere on the
-// card until now.
-function nowMetaLine(n: number, sessions: CapacitySession[]): string {
-  const since = sessions[0]?.date;
-  const sinceClause = since ? ` since ${formatMonthOnly(since)}` : '';
-  return `${n} workout${n === 1 ? '' : 's'}${sinceClause} · before → after`;
-}
-
-// "line label" -> "<div class="cc2-row-X">label V → V</div>", or '' when
-// that phase hasn't cleared MIN_PHASE_N for this metric — the v51 back/wrist
-// rows share this with the mood line below instead of repeating the same
-// null-check three times.
-function compareSubLine(cls: string, label: string, row: PlainPhaseTableRow | undefined): string {
-  if (!row || row.avgBefore === null || row.avgAfter === null) return '';
-  return `<div class="${cls}">${label} ${row.avgBefore.toFixed(1)} → ${row.avgAfter.toFixed(1)}</div>`;
-}
-
-// One row of the "Compare" list — name (+ a weight/ink "now" tag, never
-// colour, on the current phase), the body avg-or-"not enough yet" line, the
-// workout count in words (never "n="), and a mood/back/wrist line only when
-// that phase's OWN pairs clear MIN_PHASE_N (cycle.ts gate) — v51: back and
-// wrist join mood here, same rule, "otherwise nothing" (her spec — never a
-// row of "not enough yet"s).
-function renderCompareRow(
-  row: PlainPhaseTableRow,
-  moodRow: PlainPhaseTableRow | undefined,
-  backRow: PlainPhaseTableRow | undefined,
-  wristRow: PlainPhaseTableRow | undefined,
-  isCurrent: boolean
-): string {
-  const moodLine = compareSubLine('cc2-row-mood', 'mood', moodRow);
-  const backLine = compareSubLine('cc2-row-back', 'back', backRow);
-  const wristLine = compareSubLine('cc2-row-wrist', 'wrist', wristRow);
+// The one row that replaces the whole old card on Progress — navigation,
+// never sage (sage marks the primary action; this is a door). Same position
+// in both the empty and normal Progress states (spec §1).
+function renderCycleDoorRow(): string {
+  const periods = cyclePeriodsForLogic();
+  const todayISO = localIsoDate(new Date());
   return `
-    <div class="cc2-row${isCurrent ? ' cc2-row-now' : ''}">
-      <div class="cc2-row-name">${escapeHtml(PLAIN_PHASE_LABEL[row.plainPhase])}${isCurrent ? '<span class="cc2-now-tag">now</span>' : ''}</div>
-      <div class="cc2-row-body">body ${bodyAvgLine(row)}</div>
-      <div class="cc2-row-meta">${row.n} workout${row.n === 1 ? '' : 's'}</div>
-      ${moodLine}
-      ${backLine}
-      ${wristLine}
+    <div class="card progress-card">
+      <button class="door-row cycle-door" id="open-cycle" type="button">
+        <span class="cycle-door-text">
+          <span class="cycle-door-title">🌙 Your cycle</span>
+          <span class="cycle-door-sub">${escapeHtml(cycleDoorSub(periods, todayISO))}</span>
+        </span>
+        <span class="door-chev" aria-hidden="true">›</span>
+      </button>
     </div>`;
 }
 
-// ---------- v51 · "Your cycle" card (Sep 25 2026) — plain words ----------
-//
-// Her words: "the period part is so confusing" -> "show gemini get some
-// help". Replaces the v50 "Capacity & cycle" card (jargon 4-phase table +
-// dot/slope chart + legend + hatch key + "17 pre-Sep-24 5s left out"
-// footnote — Gemini's review of that card is
-// self/health/workout-app-audit-2026-09-24/screens-v50/capacity-cycle-card-
-// v50.png; Claude decided what to take). Same underlying math (cycle.ts's
-// honest readings, MIN_PHASE_N gate) — only the vocabulary and the picture
-// change: 4 plain phase names, no chart, one collapsed "how these are
-// counted" row instead of a footnote sitting on the face.
-function renderCapacityCycleCard(logs: LogEntry[]): string {
+// Card A's subline once today is placed in a phase (spec §2.3) — no "~", no
+// "next one"; the header right above already names the phase in words.
+function cycleCardASubline(status: TodayCycleStatus): string {
+  if (status.plainPhase === 'on-period') return `day ${status.cycleDay} of your period`;
+  if (status.overdue) return `day ${status.cycleDay} · period due any day`;
+  return `day ${status.cycleDay} · period expected around ${formatMonthDay(status.nextStart)}`;
+}
+
+// Card A — Today (always shown). The two non-normal states (§2.5) share its
+// shell; the normal state's header/subline come from today's real phase.
+function renderCycleCardA(
+  periods: CyclePeriod[],
+  todayISO: string,
+  status: TodayCycleStatus | null
+): string {
+  let header: string;
+  let subline: string;
+  if (periods.length === 0) {
+    header = 'No period logged yet';
+    subline = 'Phases show here once a start is logged.';
+  } else if (!status) {
+    header = 'Not placed yet';
+    subline = 'Phases show once 2 period starts are logged.';
+  } else {
+    header = PLAIN_PHASE_HEADER_LABEL[status.plainPhase];
+    subline = cycleCardASubline(status);
+  }
+  return `
+    <div class="card progress-card cycle-card-a">
+      <div class="cc2-header">${escapeHtml(header)}</div>
+      <div class="cc2-subline">${escapeHtml(subline)}</div>
+      ${renderCycleLogRow(periods, todayISO)}
+    </div>`;
+}
+
+// One "This phase" / "Compare phases" number row — Body, Mood, Back pain or
+// Wrist pain, shared by Card B and Card C's chip-less styling (§2.3).
+function cycleNowRow(label: string, row: PlainPhaseTableRow | undefined): string {
+  if (!row || row.avgBefore === null || row.avgAfter === null) return '';
+  return `
+    <div class="cc2-now">
+      <span class="cc2-now-lbl">${escapeHtml(label)}</span>
+      <span class="cc2-now-val">${row.avgBefore.toFixed(1)} → ${row.avgAfter.toFixed(1)}</span>
+    </div>`;
+}
+
+// Card B — This phase (shown only when `status` is non-null; the caller
+// gates that). Body ready unlocks Mood/Back/Wrist; not ready says the gap
+// once and stops (spec §2.3 — "never four 'not enough yet's").
+function renderCycleCardB(
+  currentBody: PlainPhaseTableRow,
+  currentMood: PlainPhaseTableRow | undefined,
+  currentBack: PlainPhaseTableRow | undefined,
+  currentWrist: PlainPhaseTableRow | undefined
+): string {
+  const bodyReady = currentBody.avgBefore !== null && currentBody.avgAfter !== null;
+  let body: string;
+  if (!bodyReady) {
+    const n = currentBody.n;
+    body =
+      n === 0
+        ? `<div class="cc-quiet">No workouts in this phase yet.</div>`
+        : `<div class="cc-quiet">No body numbers for this phase yet — ${n} workout${n === 1 ? '' : 's'} so far, needs 3.</div>`;
+  } else {
+    const moodReady =
+      currentMood && currentMood.avgBefore !== null && currentMood.avgAfter !== null;
+    const moodLine = moodReady
+      ? cycleNowRow('Mood', currentMood)
+      : `<div class="cc-quiet">Mood: started ${formatMonthDay(MOOD_TRACKING_START_DATE)} — shows here after 3 workouts in this phase.</div>`;
+    body = `
+      <div class="cc2-now">
+        <span class="cc2-now-lbl">Body</span>
+        <span class="cc2-now-val">${currentBody.avgBefore!.toFixed(1)} → ${currentBody.avgAfter!.toFixed(1)}</span>
+      </div>
+      <div class="cc2-now-meta">${currentBody.n} workout${currentBody.n === 1 ? '' : 's'}</div>
+      ${moodLine}
+      ${cycleNowRow('Back pain', currentBack)}
+      ${cycleNowRow('Wrist pain', currentWrist)}`;
+  }
+  return `
+    <div class="card progress-card">
+      <div class="cc2-compare-label">This phase · before → after</div>
+      ${body}
+    </div>`;
+}
+
+// Card C — Compare phases (shown only when `status` is non-null). The chip
+// row only appears once a metric other than Body clears `isComparable`;
+// otherwise the table just shows Body (spec §2.3).
+function renderCycleCardC(
+  status: TodayCycleStatus,
+  bodyRows: PlainPhaseTableRow[],
+  moodRows: PlainPhaseTableRow[],
+  backRows: PlainPhaseTableRow[],
+  wristRows: PlainPhaseTableRow[],
+  sessions: CapacitySession[],
+  periods: CyclePeriod[]
+): string {
+  const metricRows: Record<CycleMetric, PlainPhaseTableRow[]> = {
+    body: bodyRows,
+    mood: moodRows,
+    back: backRows,
+    wrist: wristRows,
+  };
+  const metricLabel: Record<CycleMetric, string> = {
+    body: 'Body',
+    mood: 'Mood',
+    back: 'Back pain',
+    wrist: 'Wrist pain',
+  };
+  // Fixed order (spec): Body always, then whichever of Mood/Back/Wrist is
+  // comparable — never a chip for a metric with fewer than 2 ready phases.
+  const comparableMetrics = (['mood', 'back', 'wrist'] as CycleMetric[]).filter((m) =>
+    isComparable(metricRows[m])
+  );
+  const showChips = comparableMetrics.length > 0;
+  const chipMetrics: CycleMetric[] = ['body', ...comparableMetrics];
+  const selectedMetric: CycleMetric =
+    showChips && chipMetrics.includes(cycleCompareMetric) ? cycleCompareMetric : 'body';
+
+  const chipsHtml = showChips
+    ? `<div id="cycle-metric-chips" class="cycle-chips">${chipMetrics
+        .map(
+          (m) =>
+            `<button class="cycle-chip${m === selectedMetric ? ' cycle-chip-on' : ''}" data-cycle-metric="${m}" type="button">${escapeHtml(metricLabel[m])}</button>`
+        )
+        .join('')}</div>`
+    : '';
+
+  const rows = metricRows[selectedMetric];
+  const hasDash = rows.some((r) => r.avgBefore === null || r.avgAfter === null);
+  const tableRows = rows
+    .map((r) => {
+      const isNow = r.plainPhase === status.plainPhase;
+      const before = r.avgBefore !== null ? r.avgBefore.toFixed(1) : '—';
+      const after = r.avgAfter !== null ? r.avgAfter.toFixed(1) : '—';
+      return `
+        <tr${isNow ? ' class="cycle-now" aria-current="true"' : ''}>
+          <td>${escapeHtml(PLAIN_PHASE_LABEL[r.plainPhase])}</td>
+          <td>${before}</td>
+          <td>${after}</td>
+          <td>${r.n}</td>
+        </tr>`;
+    })
+    .join('');
+
+  const footnote = hasDash
+    ? `<div class="cc-quiet">— means fewer than 3 workouts with a reading so far.</div>`
+    : '';
+  const summary = selectedMetric === 'body' ? cycleSummaryLine(sessions, periods) : null;
+  const summaryHtml = summary ? `<div class="cc-question">${escapeHtml(summary)}</div>` : '';
+
+  // v51 · fix (Sep 25 2026, checker NICE 7): with no chip row, the table only
+  // ever shows Body, but the label alone never said so — a tired reader had
+  // to infer it from the numbers. Say it once, right in the label.
+  const compareLabel = showChips ? 'Compare phases' : 'Compare phases · Body';
+
+  return `
+    <div class="card progress-card">
+      <div class="cc2-compare-label">${compareLabel}</div>
+      ${chipsHtml}
+      <table id="cycle-compare" class="cycle-table">
+        <thead><tr><th></th><th>Before</th><th>After</th><th>Workouts</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+      ${footnote}
+      ${summaryHtml}
+    </div>`;
+}
+
+// Fold D — "ⓘ How these are counted" (shown only when `status` is
+// non-null). Fail-loud rule, folded quiet instead of sitting on the face.
+function renderCycleInfoFold(excluded: number): string {
+  return `
+    <details class="cc2-info">
+      <summary>ⓘ How these are counted</summary>
+      <p>Before → after = the 1–10 you pick before a workout and after it. Each workout counts in the phase of the day you did it, from your logged period dates. On your period = days 1–5. Week before period = the 7 days before the next expected start (a late period stays here). Mid-cycle = the days before that, around ovulation. Week after period = the days in between. The next start is estimated from your usual cycle length (the middle of your last 6). A number shows once a phase has 3 or more workouts with that reading. Untouched sliders don't count${
+        excluded > 0
+          ? `, and ${excluded} old "5" reading${excluded === 1 ? '' : 's'} from before Sep 24 ${excluded === 1 ? 'is' : 'are'} left out for the same reason.`
+          : '.'
+      }</p>
+    </details>`;
+}
+
+// The page itself (spec §2) — her words (Fri Sep 25 2026, 11:56): "Okay
+// whatever this is is still insanely confusing and I think it should be on
+// its own page not in this page". `cycleReturnTo`/`cycleCompareMetric` are
+// set by the doors that open it (attachCycleHandlers) before `state.screen`
+// flips.
+function renderCycle(): string {
+  const logs = getChronologicalLogs();
   const periods = cyclePeriodsForLogic();
   const todayISO = localIsoDate(new Date());
+  const status = todayCycleStatus(periods, todayISO);
 
-  if (periods.length === 0) {
-    // No cycle data yet — the card still offers the one tap that starts it,
-    // rather than staying invisible (fail-loud rule: say what's missing).
-    return `
-      <div class="card progress-card cc2-card">
-        <div class="progress-card-label">Your cycle</div>
-        <p class="cc-empty">No period starts logged yet.</p>
-        ${renderCycleLogRow(periods, todayISO)}
-      </div>`;
+  const backLabel = cycleReturnTo === 'progress' ? '‹ Progress' : '‹ Home';
+  const header = `
+    <div class="screen-header">
+      <h2>Your cycle</h2>
+      <button class="quit-link" id="back-from-cycle" type="button">${backLabel}</button>
+    </div>`;
+
+  const cardA = renderCycleCardA(periods, todayISO, status);
+
+  // §2.5: B, C and D stay hidden until today is placed in a phase.
+  if (!status) {
+    return `${header}<div class="progress-screen">${cardA}</div>`;
   }
 
   const sessions = capacitySessionsFrom(logs);
   const moodSessions = moodSessionsFrom(logs);
-  // v51: back & wrist before -> after, same bucketing, same MIN_PHASE_N gate.
   const backSessions = backSessionsFrom(logs);
   const wristSessions = wristSessionsFrom(logs);
-  const status = todayCycleStatus(periods, todayISO);
-  const rows = buildPlainPhaseTable(sessions, periods);
+  const bodyRows = buildPlainPhaseTable(sessions, periods);
   const moodRows = buildPlainMoodPhaseTable(moodSessions, periods);
   const backRows = buildPlainBackPhaseTable(backSessions, periods);
   const wristRows = buildPlainWristPhaseTable(wristSessions, periods);
-  const question = plainQuestionLine(sessions, periods);
   const excluded = excludedUntouchedCount(sessions);
 
-  const header = status
-    ? `
-      <div class="cc2-header">${escapeHtml(PLAIN_PHASE_HEADER_LABEL[status.plainPhase])}</div>
-      <div class="cc2-subline">${escapeHtml(cycleSubLine(status))}</div>`
-    : `<p class="cc-empty">Not enough logged yet to place today in a phase.</p>`;
+  const currentBody = bodyRows.find((r) => r.plainPhase === status.plainPhase)!;
+  const currentMood = moodRows.find((r) => r.plainPhase === status.plainPhase);
+  const currentBack = backRows.find((r) => r.plainPhase === status.plainPhase);
+  const currentWrist = wristRows.find((r) => r.plainPhase === status.plainPhase);
 
-  const currentRow = status ? rows.find((r) => r.plainPhase === status.plainPhase) : undefined;
-  const currentMoodRow = status
-    ? moodRows.find((r) => r.plainPhase === status.plainPhase)
-    : undefined;
-  const currentMoodReady =
-    currentMoodRow && currentMoodRow.avgBefore !== null && currentMoodRow.avgAfter !== null;
-  // v51: back & wrist join the "now" section the same way mood does, but
-  // with NO quiet placeholder when not ready — mood has a fixed start date to
-  // point to ("tracking started …"); back/wrist-before never existed until
-  // today, so there's nothing to name and the line simply doesn't appear
-  // (her spec: "never four 'not enough yet's ... they simply don't appear").
-  const currentBackRow = status
-    ? backRows.find((r) => r.plainPhase === status.plainPhase)
-    : undefined;
-  const currentWristRow = status
-    ? wristRows.find((r) => r.plainPhase === status.plainPhase)
-    : undefined;
-  const nowMetricLine = (label: string, row: PlainPhaseTableRow | undefined): string =>
-    row && row.avgBefore !== null && row.avgAfter !== null
-      ? `<div class="cc2-now">
-           <span class="cc2-now-lbl">${label}</span>
-           <span class="cc2-now-val">${row.avgBefore.toFixed(1)} → ${row.avgAfter.toFixed(1)}</span>
-         </div>`
-      : '';
-  const currentBackLine = nowMetricLine('Back', currentBackRow);
-  const currentWristLine = nowMetricLine('Wrist', currentWristRow);
-
-  // Section 2: the phase she's in now, big numbers. Mood joins in the same
-  // style only once THIS phase clears 3 mood pairs; until then one quiet
-  // line for the whole card (her spec) instead of a per-phase "not enough".
-  // v51 · fix: "not enough yet" at the same giant digit size as a real
-  // average wrapped to 2 lines and shouted — a quieter, smaller style for
-  // the text case only (numbers stay big, per her spec).
-  const currentBodyEmpty = currentRow && currentRow.avgBefore === null;
-  const nowSection =
-    status && currentRow
-      ? `
-      <div class="cc2-now">
-        <span class="cc2-now-lbl">Body</span>
-        <span class="cc2-now-val${currentBodyEmpty ? ' cc2-now-val-empty' : ''}">${bodyAvgLine(currentRow)}</span>
-      </div>
-      <div class="cc2-now-meta">${escapeHtml(nowMetaLine(currentRow.n, sessions))}</div>
-      ${
-        currentMoodReady
-          ? `<div class="cc2-now">
-               <span class="cc2-now-lbl">Mood</span>
-               <span class="cc2-now-val">${currentMoodRow!.avgBefore!.toFixed(1)} → ${currentMoodRow!.avgAfter!.toFixed(1)}</span>
-             </div>`
-          : `<div class="cc-quiet">Mood: tracking started ${formatMonthDay(MOOD_TRACKING_START_DATE)} — it shows here after a few workouts in each phase.</div>`
-      }
-      ${currentBackLine}
-      ${currentWristLine}`
-      : '';
-
-  const compareRows = rows
-    .map((r) =>
-      renderCompareRow(
-        r,
-        moodRows.find((m) => m.plainPhase === r.plainPhase),
-        backRows.find((b) => b.plainPhase === r.plainPhase),
-        wristRows.find((w) => w.plainPhase === r.plainPhase),
-        status?.plainPhase === r.plainPhase
-      )
-    )
-    .join('');
-
-  // Fail-loud rule, folded quiet instead of sitting on the face (her spec
-  // point 5): untouched sliders, the pre-Sep-24 "5" exclusion, and the 3+
-  // gate, in one or two sentences.
-  const infoRow = `
-    <details class="cc2-info">
-      <summary>ⓘ How these are counted</summary>
-      <p>Body = your 1–10 before a workout → after it. An untouched Body slider isn't counted as a real reading.${
-        excluded > 0
-          ? ` ${excluded} old "5" reading${excluded === 1 ? '' : 's'} from before Sep 24 ${excluded === 1 ? 'is' : 'are'} left out for the same reason.`
-          : ''
-      } An average only shows once a phase has 3 or more workouts with a reading.</p>
-    </details>`;
+  const cardB = renderCycleCardB(currentBody, currentMood, currentBack, currentWrist);
+  const cardC = renderCycleCardC(
+    status,
+    bodyRows,
+    moodRows,
+    backRows,
+    wristRows,
+    sessions,
+    periods
+  );
 
   return `
-    <div class="card progress-card cc2-card">
-      <div class="progress-card-label">Your cycle</div>
-      ${header}
-      ${nowSection}
-      <div class="cc2-compare-label">Compare</div>
-      <div class="cc2-list">${compareRows}</div>
-      ${question ? `<div class="cc-question">${escapeHtml(question)}</div>` : ''}
-      ${infoRow}
-      ${renderCycleLogRow(periods, todayISO)}
-    </div>`;
+    ${header}
+    <div class="progress-screen">
+      ${cardA}
+      ${cardB}
+      ${cardC}
+    </div>
+    ${renderCycleInfoFold(excluded)}`;
 }
 
 // "Period started today" tap — hers, one tap, undo-able for CYCLE_UNDO_MS.
@@ -9848,15 +9952,15 @@ function renderCycleLogRow(periods: CyclePeriod[], todayISO: string): string {
   }
   // v51 · her spec: quiet (outline) most of the month, sage PRIMARY only in
   // the window around a predicted start (periodLogUrgency, cycle.ts).
-  // "Another day?" stays folded — no date box sitting on the card — until
-  // tapped open.
+  // "Started on a different day?" stays folded — no date box sitting on the
+  // card — until tapped open.
   const urgent = periodLogUrgency(periods, todayISO) === 'primary';
   return `
     <div class="cc-log-row">
       <button class="cc-log-btn${urgent ? ' cc-log-btn-primary' : ''}" id="cc-log-today" type="button">Period started today</button>
     </div>
     <details class="cc-date-reveal">
-      <summary class="cc-quiet">Another day?</summary>
+      <summary class="cc-quiet">Started on a different day?</summary>
       <div class="cc-date-row">
         <input class="cc-date-input" type="date" id="cc-log-date" max="${todayISO}" />
       </div>
@@ -9888,7 +9992,7 @@ function renderCycleSettingsRow(): string {
     <div class="settings-row">
       <div class="settings-row-text">
         <div class="settings-row-title">Period started today</div>
-        <div class="settings-row-caption">Logs today to cycle tracking (Progress card).</div>
+        <div class="settings-row-caption">Logs today's date. More in Progress › Your cycle.</div>
       </div>
       <button class="settings-inline-btn" id="settings-cycle-today" type="button">Log</button>
     </div>`;
@@ -9915,31 +10019,30 @@ function renderProgress(): string {
       <button class="quit-link" id="back-home" type="button">× Back</button>
     </div>`;
 
-  // Empty state — fewer than 2 sessions. v50 · cycle: the capacity & cycle
-  // card still shows (it can start from just a logged period, no sessions
-  // needed for the "Period started today" tap itself).
+  // Empty state — fewer than 2 sessions. v51: the door to "Your cycle" still
+  // shows (it can start from just a logged period, no sessions needed for
+  // the "Period started today" tap itself).
   if (count < 2) {
     return `
       ${header}
       ${subtitle}
       <p class="progress-empty">Progress shows once you have 2+ sessions logged.</p>
-      ${renderCapacityCycleCard(logs)}
+      ${renderCycleDoorRow()}
       ${renderProgramArchive()}
     `;
   }
 
   // v48 · P6: the OLD capacity chart is gone — it charted untouched defaults
   // (6 of 8 Round-2 after-readings were the invented 5; the real mean change
-  // was 0.00 over 24 pairs). DECISIONS §2 #6. v50 · cycle brings capacity
-  // back honestly: cycle.ts's honestBefore/honestAfter drop that same class
-  // of ambiguous reading before this card ever sees it (see the card's own
-  // header comment above renderCapacityCycleCard).
+  // was 0.00 over 24 pairs). DECISIONS §2 #6. v51: "Your cycle" moved off
+  // this screen onto its own page (renderCycle) — this is just the one door
+  // row to it now (spec §1).
   return `
     ${header}
     ${subtitle}
     <div class="progress-screen">
       ${renderStartNowCard(logs)}
-      ${renderCapacityCycleCard(logs)}
+      ${renderCycleDoorRow()}
       ${renderWallSitTrendCard(logs)}
       ${renderBackPainTrendCard(logs)}
       ${renderSessionsPerWeekCard(logs)}
@@ -10360,6 +10463,9 @@ function render(): void {
       break;
     case 'settings':
       html = renderSettings();
+      break;
+    case 'cycle':
+      html = renderCycle();
       break;
   }
   // Pause affordance — the Pause button sits in each workout sub-view's header
@@ -11142,6 +11248,41 @@ function attachCycleHandlers(): void {
       dateInput.value = '';
     });
   }
+
+  // v51 · cycle page: the two doors that open it (Progress's row, Home's
+  // conditional row — spec §2.1, §3), its own back button (§2.2), and Card
+  // C's metric chips (§2.3).
+  bindClick('open-cycle', () => {
+    cycleReturnTo = 'progress';
+    progressScrollForCycle = window.scrollY;
+    cycleCompareMetric = 'body';
+    state.screen = 'cycle';
+    render();
+  });
+  bindClick('home-open-cycle', () => {
+    cycleReturnTo = 'home';
+    cycleCompareMetric = 'body';
+    state.screen = 'cycle';
+    render();
+  });
+  bindClick('back-from-cycle', () => {
+    if (cycleReturnTo === 'progress') {
+      pendingScrollRestore = progressScrollForCycle;
+      state.screen = 'progress';
+    } else {
+      state.screen = 'home';
+    }
+    render();
+  });
+  document.querySelectorAll<HTMLButtonElement>('button[data-cycle-metric]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset['cycleMetric'] as CycleMetric | undefined;
+      if (m) {
+        cycleCompareMetric = m;
+        render();
+      }
+    });
+  });
 }
 
 function bindClick(id: string, fn: () => void): void {

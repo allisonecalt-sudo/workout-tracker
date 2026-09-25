@@ -1,12 +1,13 @@
-// tests/cycle-ui.spec.ts — "Your cycle" Progress card (v51, Sep 25 2026) +
-// the "Period started today" tap. The phase math itself (n<3 rule, pre-v48-5
-// exclusion, estimate math, the plain-words remap) is exercised without a
-// browser in tests/cycle.test.ts — this file covers only what needs a real
-// DOM: the card renders in her plain vocabulary, the tap writes a local row
-// + the right payload under automation (sync is off — see app.ts
-// syncDisabled()), the quiet/primary window on the button, "Another day?"
-// folds/unfolds the date input, undo removes it, and the card never causes
-// sideways scroll at phone width.
+// tests/cycle-ui.spec.ts — "Your cycle" page (v51, Sep 25 2026) + the
+// "Period started today" tap. The phase math itself (n<3 rule, pre-v48-5
+// exclusion, estimate math, the plain-words remap, cycleSummaryLine,
+// isComparable) is exercised without a browser in tests/cycle.test.ts — this
+// file covers only what needs a real DOM: Progress keeps one door row, the
+// page it opens (SPEC-cycle-page.md), the tap writes a local row + the right
+// payload under automation (sync is off — see app.ts syncDisabled()), the
+// quiet/primary window on the button and the Home door, "Started on a
+// different day?" folds/unfolds the date input, undo removes it, and the
+// page never causes sideways scroll at phone width.
 
 import { test, expect, type Page } from '@playwright/test';
 
@@ -102,74 +103,149 @@ async function openProgress(page: Page): Promise<void> {
   await expect(page.locator('.screen-header h2')).toHaveText('Progress');
 }
 
-function cycleCard(page: Page) {
-  return page.locator('.progress-card', { hasText: 'Your cycle' });
+// v51 · the page opens from Progress's own door row.
+async function openCycle(page: Page): Promise<void> {
+  await openProgress(page);
+  await page.locator('#open-cycle').click();
+  await expect(page.locator('.screen-header h2')).toHaveText('Your cycle');
 }
 
-test.describe('"Your cycle" card — plain words', () => {
-  test("the header names today's phase in plain words, with a day + next-one subline", async ({
-    page,
-  }) => {
+test.describe('Progress: one door row, nothing else (spec §1)', () => {
+  test("the row names the page and today's phase, in plain words", async ({ page }) => {
     await seedCyclePeriods(page, HER_PERIODS);
-    // 2026-08-06 = day 2 of the Aug5 period.
-    await mockDate(page, '2026-08-06T10:00:00.000Z');
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
     await page.goto('/');
     await openProgress(page);
 
-    const card = cycleCard(page);
-    await expect(card).toBeVisible();
-    await expect(card).toContainText('On your period');
-    await expect(card).toContainText('day 2 of your period');
-  });
+    const row = page.locator('#open-cycle');
+    await expect(row).toBeVisible();
+    await expect(row).toContainText('Your cycle');
+    await expect(row).toContainText('Week before your period · day 25');
 
-  test('the week before her period reads "Week before your period" with a next-one estimate', async ({
+    // v51 · fix (Sep 25 2026, checker MUST 1): a malformed CSS comment ("*/"
+    // mid-text) used to drop `.progress-card:has(.cycle-door) { padding: 0 }`
+    // entirely, double-padding and misaligning the door card. Pin the
+    // computed value so a regression here fails loud, not just visually.
+    const doorCard = page.locator('.progress-card:has(#open-cycle)');
+    await expect(doorCard).toHaveCSS('padding-top', '0px');
+
+    // Nothing else cycle-related stays on Progress.
+    await expect(page.locator('.cc2-card')).toHaveCount(0);
+    await expect(page.locator('#cc-log-today')).toHaveCount(0);
+    await expect(page.locator('.progress-card', { hasText: 'Compare' })).toHaveCount(0);
+  });
+});
+
+test.describe('open and back (spec §2.2)', () => {
+  test('opens to "Your cycle", and back returns to Progress at the same scroll spot', async ({
     page,
   }) => {
+    // v51 · fix (Sep 25 2026, checker SHOULD 5): the original test never left
+    // scrollY 0, so "#open-cycle is in the viewport" after back proved
+    // nothing about restore — it would have passed even if restore did
+    // nothing at all. Phone width + a real pre-tap offset makes the
+    // assertion mean something.
+    await page.setViewportSize({ width: 412, height: 892 });
     await seedCyclePeriods(page, HER_PERIODS);
-    await mockDate(page, '2026-09-25T10:00:00.000Z'); // open cycle, estimated next start Sep29
+    // Progress renders its short (count < 2) empty state below 2 sessions —
+    // too short to scroll at all at phone height. A few real sessions push
+    // it into the full layout (Start Now, cycle door, trend cards, program
+    // archive) so there is an actual offset to leave and come back to.
+    await seedLogs(page, [
+      log('sl1', '2026-08-25T10:00:00.000Z', 7, 7),
+      log('sl2', '2026-08-26T10:00:00.000Z', 7, 7),
+      log('sl3', '2026-08-27T10:00:00.000Z', 7, 7),
+    ]);
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
     await page.goto('/');
     await openProgress(page);
 
-    const card = cycleCard(page);
-    await expect(card).toContainText('Week before your period');
-    await expect(card).toContainText('next one ~Sep 29');
-  });
+    // window.scrollTo, not a simulated mouse wheel: this only needs a real,
+    // reproducible offset to leave and come back to — not to prove wheel
+    // input itself scrolls the page.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    expect(scrollBefore).toBeGreaterThan(50);
 
-  test('a late period (predicted date passed, nothing new logged) reads "due any day"', async ({
-    page,
-  }) => {
+    // dispatchEvent, not .click(): a real .click() auto-scrolls the target
+    // into view first, which would silently overwrite the very scrollY the
+    // app is about to capture and defeat the point of scrolling first.
+    await page.locator('#open-cycle').dispatchEvent('click');
+    await expect(page.locator('.screen-header h2')).toHaveText('Your cycle');
+    await expect(page.locator('#back-from-cycle')).toHaveText('‹ Progress');
+
+    await page.locator('#back-from-cycle').click();
+    await expect(page.locator('.screen-header h2')).toHaveText('Progress');
+    await expect(page.locator('#open-cycle')).toBeInViewport();
+    const scrollAfter = await page.evaluate(() => window.scrollY);
+    expect(Math.abs(scrollAfter - scrollBefore)).toBeLessThanOrEqual(5);
+  });
+});
+
+test.describe('the predicted window (spec §3, §2.3)', () => {
+  test('inside the window: Progress sub, the sage button, and the Home door', async ({ page }) => {
     await seedCyclePeriods(page, HER_PERIODS);
-    await mockDate(page, '2026-10-15T10:00:00.000Z'); // well past the ~Sep29 estimate
+    await mockDate(page, '2026-09-27T10:00:00.000Z'); // 2 days before the ~Sep29 estimate
     await page.goto('/');
     await openProgress(page);
+    await expect(page.locator('#open-cycle')).toContainText(
+      'Period expected around Sep 29 · started?'
+    );
 
-    const card = cycleCard(page);
-    await expect(card).toContainText('due any day');
+    await page.locator('#open-cycle').click();
+    await expect(page.locator('#cc-log-today')).toHaveClass(/cc-log-btn-primary/);
+    await page.locator('#back-from-cycle').click();
+
+    await page.locator('#back-home').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    const homeRow = page.locator('#home-open-cycle');
+    await expect(homeRow).toBeVisible();
+
+    await homeRow.click();
+    await expect(page.locator('.screen-header h2')).toHaveText('Your cycle');
+    await expect(page.locator('#back-from-cycle')).toHaveText('‹ Home');
+    await page.locator('#back-from-cycle').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
   });
 
-  test('the Compare list shows all 4 plain phase names, the current one tagged "now"', async ({
-    page,
-  }) => {
+  test('overdue: the Progress sub reads "due any day"', async ({ page }) => {
     await seedCyclePeriods(page, HER_PERIODS);
-    await mockDate(page, '2026-08-06T10:00:00.000Z'); // on her period
+    await mockDate(page, '2026-10-01T10:00:00.000Z');
     await page.goto('/');
     await openProgress(page);
-
-    const card = cycleCard(page);
-    await expect(card).toContainText('On your period');
-    await expect(card).toContainText('Week after period');
-    await expect(card).toContainText('Mid-cycle');
-    await expect(card).toContainText('Week before period');
-
-    const rows = card.locator('.cc2-row');
-    await expect(rows).toHaveCount(4);
-    const nowRow = card.locator('.cc2-row-now');
-    await expect(nowRow).toHaveCount(1);
-    await expect(nowRow).toContainText('now');
-    await expect(nowRow).toContainText('On your period');
+    await expect(page.locator('#open-cycle')).toContainText('Period due any day · started?');
   });
 
-  test('a phase under 3 body readings shows "not enough yet", never a fake average', async ({
+  test('outside the window: no Home door, and the page button is quiet', async ({ page }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await mockDate(page, '2026-09-15T10:00:00.000Z'); // well clear of the ~Sep29 estimate
+    await page.goto('/');
+    await expect(page.locator('#home-open-cycle')).toHaveCount(0);
+    await openCycle(page);
+    await expect(page.locator('#cc-log-today')).not.toHaveClass(/cc-log-btn-primary/);
+  });
+});
+
+test.describe('empty states (spec §2.5)', () => {
+  test('no periods logged: Card A says so, and there is no compare table', async ({ page }) => {
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await openCycle(page);
+    await expect(page.locator('.cc2-header')).toHaveText('No period logged yet');
+    await expect(page.locator('#cycle-compare')).toHaveCount(0);
+  });
+
+  test('one period logged: "Not placed yet"', async ({ page }) => {
+    await seedCyclePeriods(page, [{ startDate: '2026-09-01', source: 'app', synced: true }]);
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await openCycle(page);
+    await expect(page.locator('.cc2-header')).toHaveText('Not placed yet');
+  });
+});
+
+test.describe('a small phase (spec §4.3)', () => {
+  test('a phase under 3 workouts shows — and the real count, and the footnote appears once', async ({
     page,
   }) => {
     await seedCyclePeriods(page, HER_PERIODS);
@@ -179,407 +255,248 @@ test.describe('"Your cycle" card — plain words', () => {
     ]);
     await mockDate(page, '2026-09-25T10:00:00.000Z');
     await page.goto('/');
-    await openProgress(page);
-    await expect(cycleCard(page)).toContainText('not enough yet');
-    // "not enough yet" is text, not a number — a quieter/smaller style than
-    // a real average, never the giant display-size digits (would wrap to 2
-    // lines and shout).
-    await expect(cycleCard(page).locator('.cc2-now-val-empty')).toBeVisible();
-  });
+    await openCycle(page);
 
-  test('3+ readings in a phase show a real "body X → Y" average and the workout count in words', async ({
-    page,
-  }) => {
+    const onPeriodRow = page.locator('#cycle-compare tr', { hasText: 'On your period' });
+    await expect(onPeriodRow).toContainText('—');
+    await expect(onPeriodRow.locator('td').nth(3)).toHaveText('2');
+
+    await expect(page.locator('.cc-quiet', { hasText: 'fewer than 3 workouts' })).toHaveCount(1);
+
+    const text = await page.locator('#app').innerText();
+    expect(text).not.toContain('not enough yet');
+  });
+});
+
+test.describe('Card B: the current phase (spec §2.3)', () => {
+  test('0 workouts in the current phase: one line, no Mood line', async ({ page }) => {
     await seedCyclePeriods(page, HER_PERIODS);
-    await seedLogs(page, [
-      log('m1', '2026-08-05T10:00:00.000Z', 4, 6),
-      log('m2', '2026-08-06T10:00:00.000Z', 2, 4),
-      log('m3', '2026-08-07T10:00:00.000Z', 6, 8),
-    ]);
-    await mockDate(page, '2026-08-06T10:00:00.000Z'); // "now" = on her period
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
     await page.goto('/');
-    await openProgress(page);
+    await openCycle(page);
 
-    const card = cycleCard(page);
-    // avg before = (4+2+6)/3 = 4.0, avg after = (6+4+8)/3 = 6.0 — both the
-    // current-phase big numbers and the Compare row read the same average.
-    await expect(card.locator('.cc2-now-val').first()).toContainText('4.0 → 6.0');
-    await expect(card).toContainText('body 4.0 → 6.0');
-    await expect(card).toContainText('3 workouts');
+    const cardB = page.locator('.card', { hasText: 'This phase · before → after' });
+    await expect(cardB).toContainText('No workouts in this phase yet.');
+    await expect(cardB).not.toContainText('Mood:');
   });
+});
 
-  // v51 · fix (Sep 25 2026, look-check): the big Body arrow needs to read as
-  // one session's before/after pair, not a dropping trend (sev 4) — and the
-  // current phase's own meta line must not repeat the phase name the header
-  // right above it already said (sev 3, "shown 3x" — DECISIONS/look-check).
-  test('the meta line under the big Body numbers says "before → after", not the phase name again', async ({
-    page,
-  }) => {
+test.describe('mood (spec §2.3, §2.4)', () => {
+  test('0 mood readings: the quiet line shows once, no chip row', async ({ page }) => {
     await seedCyclePeriods(page, HER_PERIODS);
     await seedLogs(page, [
-      log('m1', '2026-08-05T10:00:00.000Z', 4, 6),
-      log('m2', '2026-08-06T10:00:00.000Z', 2, 4),
-      log('m3', '2026-08-07T10:00:00.000Z', 6, 8),
-    ]);
-    await mockDate(page, '2026-08-06T10:00:00.000Z'); // "now" = on her period
-    await page.goto('/');
-    await openProgress(page);
-
-    const card = cycleCard(page);
-    const meta = card.locator('.cc2-now-meta');
-    await expect(meta).toHaveText('3 workouts since Aug · before → after');
-    // The header already named the phase ("On your period") — the meta line
-    // must not say it a second time.
-    await expect(meta).not.toContainText('on your period');
-  });
-
-  test('"How these are counted" defines the Body arrow as before a workout → after it', async ({
-    page,
-  }) => {
-    await seedCyclePeriods(page, HER_PERIODS);
-    await seedLogs(page, [
-      log('m1', '2026-09-20T10:00:00.000Z', 5, 5), // post-cutoff so it's a trusted reading
+      log('w1', '2026-08-25T10:00:00.000Z', 4, 6),
+      log('w2', '2026-08-26T10:00:00.000Z', 4, 6),
+      log('w3', '2026-08-27T10:00:00.000Z', 4, 6),
     ]);
     await mockDate(page, '2026-09-25T10:00:00.000Z');
     await page.goto('/');
-    await openProgress(page);
+    await openCycle(page);
 
-    const card = cycleCard(page);
-    const info = card.locator('.cc2-info');
-    await info.locator('summary').click();
-    // Was "capacity slider" — mismatched the card's own "Body" label
-    // (look-check sev 4).
-    await expect(info.locator('p')).toContainText('Body = your 1–10 before a workout → after it.');
-    await expect(info.locator('p')).not.toContainText('capacity slider');
+    await expect(page.locator('.cc-quiet', { hasText: 'Mood: started' })).toHaveCount(1);
+    await expect(page.locator('#cycle-metric-chips')).toHaveCount(0);
   });
 
-  test('mood joins the current-phase numbers only once that phase clears 3 pairs; until then, one quiet card-level line', async ({
+  test('mood ready in 2 phases: the chips appear, and Mood swaps the table + drops the summary', async ({
     page,
   }) => {
     await seedCyclePeriods(page, HER_PERIODS);
+    // v51 · fix (Sep 25 2026, checker SHOULD 4): the original fixture only
+    // logged 2 of the 4 phases, so Card C's Body summary sentence was ALREADY
+    // absent before the Mood click (missing-average bail, not the metric
+    // gate) — "drops the summary" passed even if the metric switch never
+    // hid anything. Body is now seeded in all 4 phases (same tight fixture
+    // as the "about the same" test above, so the T1 line is present first),
+    // with mood pairs layered onto 2 of them.
     await seedLogs(page, [
-      log('m1', '2026-08-05T10:00:00.000Z', 4, 6, { before: 3, after: 8 }),
-      log('m2', '2026-08-06T10:00:00.000Z', 2, 4, { before: 4, after: 9 }),
+      log('op1', '2026-08-05T10:00:00.000Z', 9, 9, { before: 3, after: 8 }),
+      log('op2', '2026-08-06T10:00:00.000Z', 9, 9, { before: 4, after: 9 }),
+      log('op3', '2026-08-07T10:00:00.000Z', 9, 9, { before: 2, after: 7 }),
+      log('wa1', '2026-08-10T10:00:00.000Z', 9, 9, { before: 5, after: 8 }),
+      log('wa2', '2026-08-11T10:00:00.000Z', 9, 9, { before: 5, after: 8 }),
+      log('wa3', '2026-08-12T10:00:00.000Z', 9.75, 10.5, { before: 5, after: 8 }),
+      log('mc1', '2026-08-17T10:00:00.000Z', 8, 9),
+      log('mc2', '2026-08-18T10:00:00.000Z', 9, 9),
+      log('mc3', '2026-08-19T10:00:00.000Z', 8.92, 10.29),
+      log('wb1', '2026-08-25T10:00:00.000Z', 9, 9),
+      log('wb2', '2026-08-26T10:00:00.000Z', 9, 9),
+      log('wb3', '2026-08-27T10:00:00.000Z', 9, 8.67),
     ]);
-    await mockDate(page, '2026-08-06T10:00:00.000Z');
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
     await page.goto('/');
-    await openProgress(page);
+    await openCycle(page);
 
-    const card = cycleCard(page);
-    // Only 2 mood pairs on her period — under 3, so no mood row yet, and the
-    // one quiet whole-card line explains why.
-    await expect(card).toContainText('Mood: tracking started');
-    await expect(card).toContainText('it shows here after a few workouts in each phase');
+    // Before the click: Body is selected, all 4 phases are tight -> the T1
+    // summary sentence is showing (the thing the click has to make go away).
+    await expect(page.locator('.cc-question')).toHaveCount(1);
+
+    const chips = page.locator('#cycle-metric-chips');
+    await expect(chips).toBeVisible();
+    await chips.locator('[data-cycle-metric="mood"]').click();
+
+    const onPeriodRow = page.locator('#cycle-compare tr', { hasText: 'On your period' });
+    // avg mood before = (3+4+2)/3 = 3.0, after = (8+9+7)/3 = 8.0.
+    await expect(onPeriodRow).toContainText('3.0');
+    await expect(onPeriodRow).toContainText('8.0');
+    await expect(page.locator('.cc-question')).toHaveCount(0);
   });
+});
 
-  test('mood shows once the current phase clears 3 pairs', async ({ page }) => {
+test.describe('back & wrist in Card B (spec §2.3)', () => {
+  test('2 readings: no Back pain row', async ({ page }) => {
     await seedCyclePeriods(page, HER_PERIODS);
     await seedLogs(page, [
-      log('m1', '2026-08-05T10:00:00.000Z', 4, 6, { before: 3, after: 8 }),
-      log('m2', '2026-08-06T10:00:00.000Z', 2, 4, { before: 4, after: 9 }),
-      log('m3', '2026-08-07T10:00:00.000Z', 6, 8, { before: 2, after: 7 }),
-    ]);
-    await mockDate(page, '2026-08-06T10:00:00.000Z');
-    await page.goto('/');
-    await openProgress(page);
-
-    const card = cycleCard(page);
-    // avg mood before = (3+4+2)/3 = 3.0, avg mood after = (8+9+7)/3 = 8.0.
-    const moodNow = card.locator('.cc2-now', { hasText: 'Mood' });
-    await expect(moodNow).toContainText('3.0 → 8.0');
-    await expect(card).not.toContainText('tracking started');
-  });
-
-  // v51 (Sep 25 2026): back & wrist before -> after join the card the same
-  // way mood does — same MIN_PHASE_N gate, but NO quiet placeholder when not
-  // ready (her spec: "never four 'not enough yet's ... they simply don't
-  // appear" — unlike mood, which has a fixed tracking-start date to point to).
-  test('back & wrist stay off the card entirely under 3 readings — no placeholder line', async ({
-    page,
-  }) => {
-    await seedCyclePeriods(page, HER_PERIODS);
-    await seedLogs(page, [
-      log('bw1', '2026-08-05T10:00:00.000Z', 4, 6, undefined, {
+      log('bw1', '2026-08-25T10:00:00.000Z', 4, 6, undefined, {
         backBefore: 2,
         backAfter: 0,
         wristBefore: 1,
         wristAfter: 0,
       }),
-      log('bw2', '2026-08-06T10:00:00.000Z', 2, 4, undefined, {
+      log('bw2', '2026-08-26T10:00:00.000Z', 4, 6, undefined, {
         backBefore: 3,
         backAfter: 1,
         wristBefore: 2,
         wristAfter: 1,
       }),
     ]);
-    await mockDate(page, '2026-08-06T10:00:00.000Z');
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
     await page.goto('/');
-    await openProgress(page);
-
-    const card = cycleCard(page);
-    // No "now" section back/wrist line, and no per-row "back …"/"wrist …"
-    // sub-line either — compareSubLine returns '' when a phase isn't ready
-    // (never a written-out "not enough yet" for back/wrist specifically;
-    // that wording is Body's own, and Body legitimately shows it here too
-    // since the same 2 sessions are under its own n>=3 gate).
-    await expect(card.locator('.cc2-now', { hasText: 'Back' })).toHaveCount(0);
-    await expect(card.locator('.cc2-now', { hasText: 'Wrist' })).toHaveCount(0);
-    await expect(card.locator('.cc2-row-back')).toHaveCount(0);
-    await expect(card.locator('.cc2-row-wrist')).toHaveCount(0);
+    await openCycle(page);
+    const cardB = page.locator('.card', { hasText: 'This phase · before → after' });
+    await expect(cardB).not.toContainText('Back pain');
   });
 
-  test('back & wrist show once the current phase clears 3 readings', async ({ page }) => {
+  test('3+ readings: the Back pain row appears with the real average', async ({ page }) => {
     await seedCyclePeriods(page, HER_PERIODS);
     await seedLogs(page, [
-      log('bw1', '2026-08-05T10:00:00.000Z', 4, 6, undefined, {
+      log('bw1', '2026-08-25T10:00:00.000Z', 4, 6, undefined, {
         backBefore: 2,
         backAfter: 0,
         wristBefore: 1,
         wristAfter: 0,
       }),
-      log('bw2', '2026-08-06T10:00:00.000Z', 2, 4, undefined, {
+      log('bw2', '2026-08-26T10:00:00.000Z', 4, 6, undefined, {
         backBefore: 4,
         backAfter: 1,
         wristBefore: 3,
         wristAfter: 1,
       }),
-      log('bw3', '2026-08-07T10:00:00.000Z', 6, 8, undefined, {
+      log('bw3', '2026-08-27T10:00:00.000Z', 4, 6, undefined, {
         backBefore: 3,
         backAfter: 2,
         wristBefore: 2,
         wristAfter: 2,
       }),
     ]);
-    await mockDate(page, '2026-08-06T10:00:00.000Z');
-    await page.goto('/');
-    await openProgress(page);
-
-    const card = cycleCard(page);
-    // avg back before = (2+4+3)/3 = 3.0, avg back after = (0+1+2)/3 = 1.0.
-    const backNow = card.locator('.cc2-now', { hasText: 'Back' });
-    await expect(backNow).toContainText('3.0 → 1.0');
-    // avg wrist before = (1+3+2)/3 = 2.0, avg wrist after = (0+1+2)/3 = 1.0.
-    const wristNow = card.locator('.cc2-now', { hasText: 'Wrist' });
-    await expect(wristNow).toContainText('2.0 → 1.0');
-  });
-
-  test('the question line reads in plain words, once the gap clears the gate', async ({ page }) => {
-    await seedCyclePeriods(page, HER_PERIODS);
-    const rows: Row[] = [];
-    for (const d of ['2026-08-25', '2026-08-27', '2026-08-29']) {
-      rows.push(log(`pre-${d}`, `${d}T10:00:00.000Z`, 4, 6));
-    }
-    for (const d of ['2026-07-10', '2026-07-12', '2026-07-14']) {
-      rows.push(log(`rest-${d}`, `${d}T10:00:00.000Z`, 6, 8));
-    }
-    await seedLogs(page, rows);
     await mockDate(page, '2026-09-25T10:00:00.000Z');
     await page.goto('/');
-    await openProgress(page);
-
-    const card = cycleCard(page);
-    await expect(card).toContainText(
-      'Body before workouts runs about 2 points lower in the week before your period'
-    );
-    await expect(card).toContainText('Does that match how it feels?');
-  });
-
-  test('no jargon words, no "n=", no Δ anywhere on the card', async ({ page }) => {
-    await seedCyclePeriods(page, HER_PERIODS);
-    await seedLogs(page, [
-      log('m1', '2026-08-05T10:00:00.000Z', 4, 6),
-      log('m2', '2026-08-06T10:00:00.000Z', 3, 5),
-      log('m3', '2026-08-07T10:00:00.000Z', 6, 8),
-      log('f1', '2026-08-10T10:00:00.000Z', 6, 7),
-      log('f2', '2026-08-12T10:00:00.000Z', 6, 7),
-      log('f3', '2026-08-14T10:00:00.000Z', 6, 7),
-      log('l1', '2026-08-27T10:00:00.000Z', 4, 6),
-      log('l2', '2026-08-28T10:00:00.000Z', 4, 6),
-      log('l3', '2026-08-29T10:00:00.000Z', 4, 6),
-    ]);
-    await mockDate(page, '2026-09-25T10:00:00.000Z');
-    await page.goto('/');
-    await openProgress(page);
-
-    const text = (await cycleCard(page).innerText()).toLowerCase();
-    for (const word of ['menstrual', 'follicular', 'ovulatory', 'luteal']) {
-      expect(text).not.toContain(word);
-    }
-    expect(text).not.toMatch(/\bn=/);
-    expect(text).not.toContain('δ');
-  });
-
-  test('the fail-loud footer folds under "How these are counted", not on the face', async ({
-    page,
-  }) => {
-    await seedCyclePeriods(page, HER_PERIODS);
-    await seedLogs(page, [
-      log('m1', '2026-09-20T10:00:00.000Z', 5, 5), // pre-cutoff-style value but post-cutoff date — trusted
-    ]);
-    await mockDate(page, '2026-09-25T10:00:00.000Z');
-    await page.goto('/');
-    await openProgress(page);
-
-    const card = cycleCard(page);
-    const info = card.locator('.cc2-info');
-    await expect(info).toBeVisible();
-    await expect(info.locator('summary')).toHaveText('ⓘ How these are counted');
-    // Collapsed by default — the explanatory sentence isn't visible on the face.
-    await expect(info.locator('p')).not.toBeVisible();
-    await info.locator('summary').click();
-    await expect(info.locator('p')).toBeVisible();
-    await expect(info.locator('p')).toContainText('3 or more workouts');
-  });
-
-  test('with no cycle data yet, the card still offers the one tap', async ({ page }) => {
-    await mockDate(page, '2026-09-25T10:00:00.000Z');
-    await page.goto('/');
-    await openProgress(page);
-    const card = cycleCard(page);
-    await expect(card).toContainText('No period starts logged yet');
-    await expect(card.locator('#cc-log-today')).toBeVisible();
+    await openCycle(page);
+    const cardB = page.locator('.card', { hasText: 'This phase · before → after' });
+    await expect(cardB).toContainText('Back pain');
+    // avg back before = (2+4+3)/3 = 3.0, after = (0+1+2)/3 = 1.0.
+    await expect(cardB).toContainText('3.0 → 1.0');
   });
 });
 
-test.describe('"Period started today" — quiet vs primary, and the tap', () => {
-  test('quiet (outline) button outside the predicted window', async ({ page }) => {
+test.describe('the summary sentence under Card C (spec §2.3)', () => {
+  test('all 4 phases ready and tight: the "about the same" line', async ({ page }) => {
     await seedCyclePeriods(page, HER_PERIODS);
-    await mockDate(page, '2026-09-10T10:00:00.000Z'); // well clear of the ~Sep29 estimate
-    await page.goto('/');
-    await openProgress(page);
-    const btn = page.locator('#cc-log-today');
-    await expect(btn).toBeVisible();
-    await expect(btn).not.toHaveClass(/cc-log-btn-primary/);
-  });
-
-  test('sage primary button inside the predicted window (3 days before through 7 days after)', async ({
-    page,
-  }) => {
-    await seedCyclePeriods(page, HER_PERIODS);
-    await mockDate(page, '2026-09-26T10:00:00.000Z'); // 3 days before the ~Sep29 estimate
-    await page.goto('/');
-    await openProgress(page);
-    const btn = page.locator('#cc-log-today');
-    await expect(btn).toHaveClass(/cc-log-btn-primary/);
-  });
-
-  test('"Another day?" reveals the date input only when tapped', async ({ page }) => {
+    // Same fixture as tests/cycle.test.ts's cycleSummaryLine T1 case: before
+    // 9.0/9.25/8.64/9.0, after 9.0/9.5/9.43/8.89 -> lo 8.6, hi 9.5.
+    await seedLogs(page, [
+      log('op1', '2026-08-05T10:00:00.000Z', 9, 9),
+      log('op2', '2026-08-06T10:00:00.000Z', 9, 9),
+      log('op3', '2026-08-07T10:00:00.000Z', 9, 9),
+      log('wa1', '2026-08-10T10:00:00.000Z', 9, 9),
+      log('wa2', '2026-08-11T10:00:00.000Z', 9, 9),
+      log('wa3', '2026-08-12T10:00:00.000Z', 9.75, 10.5),
+      log('mc1', '2026-08-17T10:00:00.000Z', 8, 9),
+      log('mc2', '2026-08-18T10:00:00.000Z', 9, 9),
+      log('mc3', '2026-08-19T10:00:00.000Z', 8.92, 10.29),
+      log('wb1', '2026-08-25T10:00:00.000Z', 9, 9),
+      log('wb2', '2026-08-26T10:00:00.000Z', 9, 9),
+      log('wb3', '2026-08-27T10:00:00.000Z', 9, 8.67),
+    ]);
     await mockDate(page, '2026-09-25T10:00:00.000Z');
     await page.goto('/');
-    await openProgress(page);
+    await openCycle(page);
+    await expect(page.locator('.cc-question')).toHaveText(
+      'So far, body numbers look about the same in every phase — all between 8.6 and 9.5.'
+    );
+  });
 
-    const summary = page.locator('.cc-date-reveal summary');
-    const input = page.locator('#cc-log-date');
-    await expect(summary).toHaveText('Another day?');
-    await expect(input).not.toBeVisible();
+  test('the pre-period question line, when it applies', async ({ page }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await seedLogs(page, [
+      log('pre1', '2026-08-25T10:00:00.000Z', 4, 6),
+      log('pre2', '2026-08-27T10:00:00.000Z', 4, 6),
+      log('pre3', '2026-08-29T10:00:00.000Z', 4, 6),
+      log('rest1', '2026-07-10T10:00:00.000Z', 6, 8),
+      log('rest2', '2026-07-12T10:00:00.000Z', 6, 8),
+      log('rest3', '2026-07-14T10:00:00.000Z', 6, 8),
+    ]);
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await openCycle(page);
+    await expect(page.locator('.cc-question')).toContainText('Does that match how it feels?');
+  });
+});
 
-    await summary.click();
-    await expect(input).toBeVisible();
+test.describe('logging from the page (spec §2.6)', () => {
+  test('logs today, confirms with Undo, and the date-picker path', async ({ page }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await openCycle(page);
 
-    await input.fill('2026-09-20');
-    await input.dispatchEvent('change');
-
+    await page.locator('#cc-log-today').click();
+    await expect(page.locator('.cc-log-undo')).toContainText('Logged · Sep 25 ✓');
+    await expect(page.locator('#cc-undo')).toBeVisible();
     const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:cycle-periods'));
     const rows = JSON.parse(raw ?? '[]') as { startDate: string }[];
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.startDate).toBe('2026-09-20');
-  });
-
-  test('writes a local row and the right payload, under automation (sync off)', async ({
-    page,
-  }) => {
-    await mockDate(page, '2026-09-25T10:00:00.000Z');
-    await page.goto('/');
-    await openProgress(page);
-
-    await page.locator('#cc-log-today').click();
-
-    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:cycle-periods'));
-    const rows = JSON.parse(raw ?? '[]') as { startDate: string; source: string | null }[];
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.startDate).toBe('2026-09-25');
-    expect(rows[0]!.source).toBe('app');
-
-    const payload = await page.evaluate((row) => {
-      const w = window as unknown as { __wtCyclePeriodPayload: (x: unknown) => Row };
-      return w.__wtCyclePeriodPayload(row);
-    }, rows[0]);
-    expect(payload['start_date']).toBe('2026-09-25');
-    expect(payload['source']).toBe('app');
-    expect(payload['note']).toBeNull();
-
-    // The card switches to the "Logged · <date> ✓ Undo" row — no second tap
-    // re-adds a duplicate.
-    await expect(page.locator('#cc-log-today')).toHaveCount(0);
-    const undoRow = page.locator('.cc-log-undo');
-    await expect(undoRow).toContainText('Logged · Sep 25 ✓');
-    await expect(page.locator('#cc-undo')).toBeVisible();
-  });
-
-  test('Undo removes the row it just logged', async ({ page }) => {
-    await mockDate(page, '2026-09-25T10:00:00.000Z');
-    await page.goto('/');
-    await openProgress(page);
-    await page.locator('#cc-log-today').click();
-    await expect(page.locator('#cc-undo')).toBeVisible();
+    expect(rows.some((r) => r.startDate === '2026-09-25')).toBe(true);
+    await expect(page.locator('.cc2-header')).toHaveText('On your period');
 
     await page.locator('#cc-undo').click();
+    const raw2 = await page.evaluate(() => localStorage.getItem('workout-tracker:cycle-periods'));
+    const rows2 = JSON.parse(raw2 ?? '[]') as { startDate: string }[];
+    expect(rows2.some((r) => r.startDate === '2026-09-25')).toBe(false);
+    await expect(page.locator('.cc2-header')).toHaveText('Week before your period');
 
-    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:cycle-periods'));
-    const rows = JSON.parse(raw ?? '[]') as unknown[];
-    expect(rows).toHaveLength(0);
-    await expect(page.locator('#cc-log-today')).toBeVisible();
-  });
-
-  // v50 · fix (Sep 25 2026, severity 5), still true in v51: re-logging an
-  // already-logged date and then tapping Undo was deleting the ORIGINAL row.
-  // Seed a real logged date, re-log it, confirm no Undo is offered, and
-  // confirm the row survives. Driven via the __wtLogPeriodStart hook, same
-  // reasoning as the v50 spec this replaces (the real tap's 10s undo timer
-  // is real wall-clock time and would race this test).
-  test('re-logging an already-logged date: no Undo, and the original row survives', async ({
-    page,
-  }) => {
-    await seedCyclePeriods(page, HER_PERIODS); // includes 2026-09-01, source 'reproductive.md'
-    await mockDate(page, '2026-09-25T10:00:00.000Z');
-    await page.goto('/');
-    await openProgress(page);
-
-    await page.evaluate(() => {
-      const w = window as unknown as { __wtLogPeriodStart: (d: string) => void };
-      w.__wtLogPeriodStart('2026-09-01');
-    });
-
-    await expect(page.locator('#cc-undo')).toHaveCount(0);
-    await expect(cycleCard(page)).toContainText('Already logged');
-
-    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:cycle-periods'));
-    const rows = JSON.parse(raw ?? '[]') as { startDate: string; source: string | null }[];
-    expect(rows).toHaveLength(HER_PERIODS.length);
-    const sep1 = rows.find((r) => r.startDate === '2026-09-01');
-    expect(sep1).toBeTruthy();
-    expect(sep1!.source).toBe('reproductive.md'); // NOT silently overwritten to 'app'
-  });
-
-  test('the same tap also lives as a quiet row in Settings', async ({ page }) => {
-    await mockDate(page, '2026-09-25T10:00:00.000Z');
-    await page.goto('/');
-    await page.locator('#open-settings').click();
-    await expect(page.locator('.settings-section-label', { hasText: 'Cycle' })).toBeVisible();
-    await page.locator('#settings-cycle-today').click();
-
-    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:cycle-periods'));
-    const rows = JSON.parse(raw ?? '[]') as { startDate: string }[];
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.startDate).toBe('2026-09-25');
-    await expect(page.locator('#settings-cycle-undo')).toBeVisible();
+    await page.locator('.cc-date-reveal summary').click();
+    await expect(page.locator('.cc-date-reveal summary')).toHaveText('Started on a different day?');
+    await page.locator('#cc-log-date').fill('2026-09-24');
+    await page.locator('#cc-log-date').dispatchEvent('change');
+    const raw3 = await page.evaluate(() => localStorage.getItem('workout-tracker:cycle-periods'));
+    const rows3 = JSON.parse(raw3 ?? '[]') as { startDate: string }[];
+    expect(rows3.some((r) => r.startDate === '2026-09-24')).toBe(true);
   });
 });
 
-test.describe('at phone size (412x915)', () => {
-  test.use({ viewport: { width: 412, height: 915 } });
+test.describe('no jargon (spec §4)', () => {
+  test('no technical phase words, no "n=", no Δ, no "est." anywhere on the page', async ({
+    page,
+  }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await seedLogs(page, [
+      log('m1', '2026-08-05T10:00:00.000Z', 4, 6),
+      log('m2', '2026-08-06T10:00:00.000Z', 3, 5),
+      log('m3', '2026-08-07T10:00:00.000Z', 6, 8),
+    ]);
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await openCycle(page);
+    const text = await page.locator('#app').innerText();
+    expect(text).not.toMatch(/luteal|follicular|ovulatory|menstrual|\bn=|Δ|\best\./i);
+  });
+});
 
-  test('the "Your cycle" card causes no sideways scroll', async ({ page }) => {
+test.describe('at phone size (412x892)', () => {
+  test.use({ viewport: { width: 412, height: 892 } });
+
+  test('the cycle page causes no sideways scroll, and the table fits the viewport', async ({
+    page,
+  }) => {
     await seedCyclePeriods(page, HER_PERIODS);
     await seedLogs(page, [
       log('m1', '2026-08-05T10:00:00.000Z', 4, 6),
@@ -594,13 +511,35 @@ test.describe('at phone size (412x915)', () => {
     ]);
     await mockDate(page, '2026-09-25T10:00:00.000Z');
     await page.goto('/');
-    await openProgress(page);
-    await expect(cycleCard(page)).toBeVisible();
+    await openCycle(page);
 
     const overflow = await page.evaluate(() => {
       const doc = document.documentElement;
       return doc.scrollWidth - doc.clientWidth;
     });
     expect(overflow).toBeLessThanOrEqual(0);
+
+    const box = await page.locator('#cycle-compare').boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(412);
+  });
+});
+
+test.describe('Settings (spec §3)', () => {
+  test('the quiet row still logs, with the updated caption', async ({ page }) => {
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await page.locator('#open-settings').click();
+    await expect(page.locator('.settings-section-label', { hasText: 'Cycle' })).toBeVisible();
+    await expect(
+      page.locator('.settings-row-caption', { hasText: "Logs today's date" })
+    ).toContainText('More in Progress › Your cycle.');
+
+    await page.locator('#settings-cycle-today').click();
+    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:cycle-periods'));
+    const rows = JSON.parse(raw ?? '[]') as { startDate: string }[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.startDate).toBe('2026-09-25');
+    await expect(page.locator('#settings-cycle-undo')).toBeVisible();
   });
 });

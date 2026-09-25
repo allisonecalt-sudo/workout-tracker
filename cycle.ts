@@ -251,74 +251,6 @@ function avg(nums: number[]): number {
 
 export const MIN_PHASE_N = 3;
 
-export type PhaseTableRow = {
-  phase: CyclePhase;
-  n: number; // sessions in this phase with at least one honest reading
-  avgBefore: number | null;
-  avgAfter: number | null;
-  avgChange: number | null; // avgAfter - avgBefore (never a separately-averaged per-session delta — see below)
-  notEnough: boolean; // n < MIN_PHASE_N (the phase as a whole) — the row is shown but every column can still independently read "-"
-};
-
-const PHASE_ORDER: CyclePhase[] = ['menstrual', 'follicular', 'ovulatory', 'luteal'];
-
-/** Shared table-builder: n / avg before / avg after / avg change, one row per
- *  phase. Generic over the session shape so capacity (honest readings, pre-
- *  v48-cutoff exclusion) and mood (no cutoff — the field didn't exist before
- *  v50, so there's no ambiguous default to exclude) share the exact same
- *  gating instead of two hand-written copies drifting apart.
- *
- *  v50 · fix (Sep 25 2026): the phase-level n>=MIN_PHASE_N gate used to be
- *  the ONLY gate — Before, After and Δ were then each averaged over
- *  whatever subset of that n happened to have a before/after/paired
- *  reading, so After or Δ could still be an average of 1-2 (her spec
- *  forbids this), and because Δ was its own separately-averaged
- *  per-session change (not avgAfter-avgBefore), a row could show "after is
- *  higher" while Δ read negative — self-contradictory. Now: Before and
- *  After are each gated on their OWN count (>= MIN_PHASE_N honest readings
- *  of that kind), and Δ is always avgAfter-avgBefore, so the row can never
- *  contradict itself and never quietly averages 1-2. */
-function buildPhaseTableGeneric<S extends { date: string }>(
-  sessions: S[],
-  periods: CyclePeriod[],
-  before: (s: S) => number | null,
-  after: (s: S) => number | null
-): PhaseTableRow[] {
-  const byPhase = new Map<CyclePhase, S[]>();
-  for (const phase of PHASE_ORDER) byPhase.set(phase, []);
-  for (const s of sessions) {
-    const info = phaseForDate(s.date, periods);
-    if (!info) continue;
-    if (before(s) === null && after(s) === null) continue;
-    byPhase.get(info.phase)!.push(s);
-  }
-  return PHASE_ORDER.map((phase) => {
-    const inPhase = byPhase.get(phase)!;
-    const n = inPhase.length;
-    const befores = inPhase.map(before).filter((v): v is number => v !== null);
-    const afters = inPhase.map(after).filter((v): v is number => v !== null);
-    const avgBefore = befores.length >= MIN_PHASE_N ? avg(befores) : null;
-    const avgAfter = afters.length >= MIN_PHASE_N ? avg(afters) : null;
-    return {
-      phase,
-      n,
-      avgBefore,
-      avgAfter,
-      avgChange: avgBefore !== null && avgAfter !== null ? avgAfter - avgBefore : null,
-      notEnough: n < MIN_PHASE_N,
-    };
-  });
-}
-
-/** The Progress card's small table: n / avg before / avg after / avg change,
- *  one row per phase. */
-export function buildPhaseTable(
-  sessions: CapacitySession[],
-  periods: CyclePeriod[]
-): PhaseTableRow[] {
-  return buildPhaseTableGeneric(sessions, periods, honestBefore, honestAfter);
-}
-
 // ---------------------------------------------------------------------------
 // Mood (v50, Sep 25 2026) — her words (04:45): "and then another 1-10 thing I
 // can do is mood 1 being irritable to being happy and or calm". Same phase
@@ -333,18 +265,6 @@ export type MoodSession = {
   moodBefore: number | null;
   moodAfter: number | null;
 };
-
-export function buildMoodPhaseTable(
-  sessions: MoodSession[],
-  periods: CyclePeriod[]
-): PhaseTableRow[] {
-  return buildPhaseTableGeneric(
-    sessions,
-    periods,
-    (s) => s.moodBefore,
-    (s) => s.moodAfter
-  );
-}
 
 // ---------------------------------------------------------------------------
 // The one optional question line
@@ -388,55 +308,6 @@ export function prePeriodVsRest(
     restAvg,
     diff: restAvg - prePeriodAvg,
   };
-}
-
-/** At most one line, only when the gap is >= 1 point with n>=3 both sides —
- *  a question, never a verdict (her ask: "ask/suggest never tell"). Checked
- *  before-capacity first (her named example), then after. */
-export function questionLine(sessions: CapacitySession[], periods: CyclePeriod[]): string | null {
-  for (const metric of ['before', 'after'] as const) {
-    const cmp = prePeriodVsRest(sessions, periods, metric);
-    if (cmp && Math.abs(cmp.diff) >= 1) {
-      const label = metric === 'before' ? 'Before-workout capacity' : 'After-workout capacity';
-      const direction = cmp.diff > 0 ? 'lower' : 'higher';
-      const amount = Math.abs(cmp.diff).toFixed(1);
-      return `${label} runs ~${amount} ${direction} in the pre-period week (n=${cmp.prePeriodN} vs ${cmp.restN}). Does that match how it feels?`;
-    }
-  }
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Timeline (the dot/slope chart's data — app.ts turns this into SVG)
-// ---------------------------------------------------------------------------
-
-export type TimelinePoint = {
-  date: string;
-  before: number | null; // honest
-  after: number | null; // honest
-  phase: CyclePhase | null;
-  estimated: boolean;
-};
-
-/** Oldest -> newest, one point per session that has at least one honest
- *  reading. app.ts draws the phase bands from consecutive points' `phase`. */
-export function buildTimeline(
-  sessions: CapacitySession[],
-  periods: CyclePeriod[]
-): TimelinePoint[] {
-  return [...sessions]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((s) => {
-      const info = phaseForDate(s.date, periods);
-      return {
-        date: s.date,
-        before: honestBefore(s),
-        after: honestAfter(s),
-        phase: info?.phase ?? null,
-        estimated: info?.estimated ?? false,
-      };
-    })
-    .filter((p) => p.before !== null || p.after !== null);
 }
 
 // ---------------------------------------------------------------------------
@@ -557,9 +428,10 @@ export type PlainPhaseTableRow = {
   avgAfter: number | null; // null unless >= MIN_PHASE_N honest after-readings
 };
 
-/** Same shared-generic pattern as buildPhaseTableGeneric above (capacity and
- *  mood share it there too) — bucketed into the 4 PLAIN phases instead of
- *  the 4 technical ones, same MIN_PHASE_N gate per column. */
+/** Same shared-generic pattern the back/wrist/mood plain builders below all
+ *  call into — bucketed into the 4 PLAIN phases, same MIN_PHASE_N gate per
+ *  column (v51 · fix Sep 25 2026: this used to point at buildPhaseTableGeneric,
+ *  the technical-bucket version, which §6 of the cycle-page spec deleted). */
 function buildPlainPhaseTableGeneric<S extends { date: string }>(
   sessions: S[],
   periods: CyclePeriod[],
@@ -656,10 +528,8 @@ export function buildPlainWristPhaseTable(
 }
 
 /** The one optional question line, in plain words — same gate as
- *  questionLine above (>=1 point, n>=3 both sides, before checked first),
- *  reusing prePeriodVsRest exactly (its "pre-period" window IS "the week
- *  before period" — see PhaseResult.prePeriod). Only the wording changes:
- *  no "n=", no decimal, no "luteal" anywhere. */
+ *  prePeriodVsRest's own (>=1 point, n>=3 both sides, before checked first).
+ *  Only the wording changes: no "n=", no decimal, no "luteal" anywhere. */
 export function plainQuestionLine(
   sessions: CapacitySession[],
   periods: CyclePeriod[]
@@ -675,4 +545,51 @@ export function plainQuestionLine(
     }
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// The cycle page (v51, Sep 25 2026) — her ask moved "Your cycle" onto its own
+// screen; app.ts's renderCycle carries her words on why. Card C on the new
+// page ("Compare phases") lets her switch which metric the table shows;
+// `isComparable` decides whether a metric earns a chip (>=2 phases with both
+// averages), and `cycleSummaryLine` is the one sentence under the table when
+// Body is selected — see SPEC-cycle-page.md §2.3 and §2.4.
+// ---------------------------------------------------------------------------
+
+export type CycleMetric = 'body' | 'mood' | 'back' | 'wrist';
+
+/** A metric is worth its own chip once at least 2 phases have both a before
+ *  and an after average (MIN_PHASE_N already gates each average itself —
+ *  this only asks "how many of the 4 rows cleared that gate"). */
+export function isComparable(rows: PlainPhaseTableRow[]): boolean {
+  return rows.filter((r) => r.avgBefore !== null && r.avgAfter !== null).length >= 2;
+}
+
+/** The one sentence under Card C's table, shown only when Body is the
+ *  selected metric (app.ts's job to gate on that — this stays metric-blind,
+ *  always reading capacity). Checked in order: her existing pre-period
+ *  question line first (it's a real, felt gap); otherwise, once all 4
+ *  phases have both averages, a plain "looks about the same" line IF every
+ *  before and every after sits within 1 point of each other — never a
+ *  verdict, and never spoken at all when the picture is mixed. */
+export function cycleSummaryLine(
+  sessions: CapacitySession[],
+  periods: CyclePeriod[]
+): string | null {
+  const question = plainQuestionLine(sessions, periods);
+  if (question !== null) return question;
+
+  const rows = buildPlainPhaseTable(sessions, periods);
+  if (rows.some((r) => r.avgBefore === null || r.avgAfter === null)) return null;
+
+  const befores = rows.map((r) => r.avgBefore as number);
+  const afters = rows.map((r) => r.avgAfter as number);
+  const beforeSpread = Math.max(...befores) - Math.min(...befores);
+  const afterSpread = Math.max(...afters) - Math.min(...afters);
+  if (beforeSpread >= 1 || afterSpread >= 1) return null;
+
+  const all = [...befores, ...afters];
+  const lo = Math.min(...all).toFixed(1);
+  const hi = Math.max(...all).toFixed(1);
+  return `So far, body numbers look about the same in every phase — all between ${lo} and ${hi}.`;
 }

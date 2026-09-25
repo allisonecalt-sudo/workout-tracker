@@ -2431,8 +2431,11 @@ test('ship 5: back-pain bars render only for sessions with backPain > 0', async 
   // v51 · fix (Sep 25 2026, look-check sev 3): was 140px against a yMax of
   // 10 — mostly empty dark space above near-zero values, uneven next to the
   // wall-sit card's compact treatment. Same ≤64px cap now.
+  // v51 · fix (Sep 25 2026): boundingBox() returns sub-pixel float heights
+  // (64.00003...px seen locally) that are real layout, not a regression —
+  // 0.5px of headroom keeps the cap honest without chasing browser rounding.
   const wrapBox = await page.locator('.progress-chart-wrap-bar').boundingBox();
-  expect(wrapBox?.height).toBeLessThanOrEqual(64);
+  expect(wrapBox?.height).toBeLessThanOrEqual(64.5);
 });
 
 // ============================================================================
@@ -6193,14 +6196,13 @@ test.describe('v48 P6 mirror', () => {
     const app = page.locator('#app');
     await expect(app).not.toContainText('Exercise breakdown');
     // v50 · cycle (Sep 25 2026): the OLD capacity chart (charting untouched
-    // slider defaults) is still gone — DECISIONS §2 #6 below still holds —
-    // but a "Your cycle" card now exists, honest this time (cycle.ts's
-    // honestBefore/honestAfter). v51 renamed it from "Capacity & cycle" and
-    // dropped the dot/slope chart entirely (plain words instead). No
-    // cycle_periods are seeded in this test, so it renders its own empty
-    // state, not a chart.
+    // slider defaults) is still gone — DECISIONS §2 #6 below still holds.
+    // v51 (Sep 25 2026, 11:56): "Your cycle" moved off Progress onto its own
+    // page (her words: "it should be on its own page not in this page") —
+    // Progress keeps one door row that opens it. No cycle_periods are
+    // seeded in this test, so the door's own sub-line reads the empty state.
     const cc = page.locator('.progress-card', { hasText: 'Your cycle' });
-    await expect(cc).toContainText('No period starts logged yet');
+    await expect(cc).toContainText('No period logged yet');
     await expect(cc.locator('svg')).toHaveCount(0);
     const cards = page.locator('.progress-screen > .progress-card');
     await expect(cards.first()).toHaveClass(/start-now-card/);
