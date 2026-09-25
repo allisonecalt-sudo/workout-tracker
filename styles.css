@@ -4817,14 +4817,30 @@ input[type='number']:focus {
   line-height: 1.3;
 }
 
-/* After the ride: one card, level → km → kcal → time → pulse ("From the
- * machine, before STOP"). */
+/* v51 (Sep 25 2026): the ride-numbers screen's one card — time → distance →
+ * calories → level → pulse, the order she reads them off the console. */
 .ell-after-card .ell-readings-title {
   color: var(--ink);
   font-weight: 600;
   font-size: var(--t-body);
   text-align: left;
-  margin-bottom: 12px;
+  margin-bottom: 4px;
+}
+
+/* Quiet instruction line under the title ("Read them before you press STOP"). */
+.ell-numbers-note {
+  color: var(--ink-3);
+  font-size: var(--t-caption);
+  text-align: left;
+  margin: 0 0 8px;
+}
+
+/* "Skip — no numbers today" — a plain quiet text link under the card, not a
+ * second sage (that stays Save · Next in the pinned bar). */
+.ell-numbers-skip {
+  display: block;
+  text-align: center;
+  margin: 10px auto 4px;
 }
 
 .ell-field-level {

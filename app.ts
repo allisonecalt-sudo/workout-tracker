@@ -334,6 +334,14 @@ type AppState = {
   // mid-workout doesn't lose her place. Her words (Sep 25 2026): "I dont
   // always do the workouts in [order]".
   completedSteps: Record<string, boolean>;
+  // v51 (Sep 25 2026) — the ride-numbers sub-screen: Done · Next on the
+  // elliptical step opens it instead of advancing (her words: "I click the
+  // next button and then I fill in information"). A flag on THIS step, not a
+  // new step — the "N of M" count and the jump list are untouched. Cleared on
+  // advancing/reset/leaving the step by any route (advanceExercise, goBack,
+  // jumpToStep, beginExercises, resetState); persisted in the resume snapshot
+  // so a reload on the screen restores it.
+  rideNumbersOpen: boolean;
 };
 
 type ArmFeel = 'easy' | 'right' | 'hard';
@@ -454,7 +462,7 @@ const SUPABASE_ANON_KEY =
 // page's "everything presentation" (combined elliptical line, compact
 // wall-sit sparkline).
 const APP_VERSION = 'v51';
-const BUILD_DATE = 'Sep 25, 2026 · 14:28';
+const BUILD_DATE = 'Sep 25, 2026 · 15:07';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2768,6 +2776,7 @@ const state: AppState = {
   backSomethingOpen: false,
   stretchTicks: {},
   completedSteps: {},
+  rideNumbersOpen: false,
 };
 
 // v50 · jump list (Sep 25 2026): whether the "List" sheet is open. Transient
@@ -3595,7 +3604,12 @@ function ellipticalTimeSec(): number | null {
 
 function ellipticalKcal(): number | null {
   const n = Number(localStorage.getItem(WW_ELLIPTICAL_KCAL_KEY) ?? '');
-  return Number.isFinite(n) && n >= 0 && n < 5000 ? Math.round(n * 10) / 10 : null;
+  // v51 (Sep 25 2026) fix: was `n >= 0`, so an untouched field (empty string →
+  // Number('') === 0) read back as a real zero instead of null — the one
+  // reading on this screen that broke "Skip — no numbers today" leaves every
+  // field null (same rule as km/pulse above, and the "Blank = not recorded,
+  // never a zero" contract already documented on this block).
+  return Number.isFinite(n) && n > 0 && n < 5000 ? Math.round(n * 10) / 10 : null;
 }
 
 // "10:02" → 602. Bare 1-2 digits are a plain second count ("45" → 45).
@@ -3694,6 +3708,21 @@ function captureLaneMinutesIfLeaving(): void {
 function stopLaneTimer(): void {
   captureLaneMinutesIfLeaving();
   stopTimer();
+  render();
+}
+
+// v51 (Sep 25 2026) — her words: "I click the next button and then I fill in
+// information. That's how simple it is." Done · Next on the elliptical step
+// used to advance straight past the after-ride readings card, which only
+// showed once she'd already stopped/finished — she tapped Done · Next mid- or
+// post-ride and never saw it ("it didn't show up for me... I don't know what
+// I was supposed to see or where"). Now the tap opens this screen instead, in
+// ANY ride state: a live timer is stopped and its real minutes kept first,
+// same as the quiet Stop (stopLaneTimer above) — nothing is lost either way.
+function openRideNumbers(): void {
+  captureLaneMinutesIfLeaving();
+  stopTimer();
+  state.rideNumbersOpen = true;
   render();
 }
 
@@ -4139,6 +4168,7 @@ function beginExercises(): void {
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
   state.stretchTicks = {}; // v48 · P7: ticks belong to one session
   state.completedSteps = {}; // v50 · jump list: done-marks belong to one session
+  state.rideNumbersOpen = false; // v51: the ride-numbers sub-screen belongs to one session
   // v46: the post-log sliders haven't been seen yet (capacity-before was just
   // set on pre-log, so its flag stays as it is).
   state.capacityAfterTouched = false;
@@ -4205,6 +4235,7 @@ function advanceExercise(): void {
   // before the timer ran out, capture actual held duration.
   captureWallSitIfPending();
   captureLaneMinutesIfLeaving(); // v45: minutes actually done on the elliptical/apartment
+  state.rideNumbersOpen = false; // v51: the ride-numbers sub-screen belongs to one visit
 
   stopTimer();
   state.isResting = false;
@@ -4336,6 +4367,7 @@ function goBack(): void {
   stopTimer();
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
+  state.rideNumbersOpen = false; // v51: leaving the elliptical step by any route closes it
   // v48: Back from the "Round 1 done ✓" screen = round 1's last move, which is
   // where the state already points (the break sits on top of it).
   if (state.roundBreak) {
@@ -4425,6 +4457,7 @@ function jumpToStep(key: string): void {
   state.videoExpandedFor = null;
   state.isResting = false;
   state.roundBreak = false;
+  state.rideNumbersOpen = false; // v51: leaving the elliptical step by any route closes it
   state.currentPhase = parsed.phase;
   state.currentRound = parsed.round;
   state.currentExerciseIndex = parsed.index;
@@ -5090,6 +5123,8 @@ type ActiveSessionSnapshot = {
   // v50 · jump list: which steps she's already done survive an app close too
   // (the List sheet's ✓ marks and the "N of 23" count both read this).
   completedSteps: Record<string, boolean>;
+  // v51: an app close on the ride-numbers screen reopens on it.
+  rideNumbersOpen: boolean;
 };
 
 function saveActiveSession(): void {
@@ -5134,6 +5169,7 @@ function saveActiveSession(): void {
       armFeel: state.armFeel,
       stretchTicks: state.stretchTicks,
       completedSteps: state.completedSteps,
+      rideNumbersOpen: state.rideNumbersOpen,
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
   } catch {
@@ -5179,6 +5215,16 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       clearActiveSession();
       return null;
     }
+    // v51: is the snapshot's phase/index genuinely the elliptical step? PROGRAM
+    // always stores the cardio slot as 'Outdoor walk' — the elliptical swap is
+    // a runtime read of ellipticalMinutes() (see getCurrentExercise()), not a
+    // different program entry — so this mirrors that same swap rather than
+    // reading phaseList[idx].name directly (which would always say 'Outdoor
+    // walk' and silently drop the flag on every reload).
+    const rawStepEx = phase === 'cooldown' ? null : phaseList[idx];
+    const stepIsElliptical =
+      rawStepEx?.name === ELLIPTICAL_NAME ||
+      (rawStepEx?.name === 'Outdoor walk' && ellipticalMinutes() !== null);
     return {
       screen: snap.screen as AppScreen,
       selectedWorkout: snap.selectedWorkout,
@@ -5234,6 +5280,9 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       // v50 · jump list: a pre-v50 snapshot has no done-marks → {} (same
       // string→true shape as stretchTicks, so the same sanitizer applies).
       completedSteps: sanitizeStretchTicks(snap.completedSteps),
+      // v51: only meaningful on the elliptical step itself — a pre-v51
+      // snapshot has no flag → false, same as a fresh session.
+      rideNumbersOpen: snap.rideNumbersOpen === true && stepIsElliptical,
     };
   } catch {
     clearActiveSession();
@@ -5280,6 +5329,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.armFeel = snap.armFeel;
   state.stretchTicks = snap.stretchTicks;
   state.completedSteps = snap.completedSteps;
+  state.rideNumbersOpen = snap.rideNumbersOpen; // v51: a close on the screen reopens on it
   stepListOpen = false; // v50 · jump list: never reopen the sheet on resume
   state.backSomethingOpen = false;
   state.wristSomethingOpen = false;
@@ -5449,6 +5499,7 @@ function resetState(): void {
   state.stepFeel = null; // v49 · engine
   state.stretchTicks = {}; // v48 · P7
   state.completedSteps = {}; // v50 · jump list
+  state.rideNumbersOpen = false; // v51
   stepListOpen = false; // v50 · jump list: a closed session closes the sheet too
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
@@ -7934,14 +7985,14 @@ function renderApartmentRoutine(totalSec: number, remainingSec: number, running:
   `;
 }
 
-// v48 · P3 (Sep 24 2026) — the elliptical in RIDE ORDER: before (one line +
-// Start inside the fold + the setup, first ride only), during (the timer, a
-// quiet Stop, one live "Right now" line), after (one card: level, km, pulse —
-// "From the machine, before STOP"). Decision Q5: the stepper said 5 while the
-// steps said 3, and the readings sat 550 px from the level (uxui timed 2/5); the
-// ride ENDS on level 3, so a level set before it was a guess. Replaces v46's
-// renderEllipticalControls / renderEllipticalReadings.
-function renderEllipticalAfterCard(ex: Exercise): string {
+// v51 (Sep 25 2026) — the ride-numbers screen's one card: what she reads off
+// the machine BEFORE she presses STOP, in the order she reads them off the
+// console — Time, Distance, Calories, Level, Pulse (her lead's spec). Replaces
+// v49's renderEllipticalAfterCard, whose level-first order and inline
+// placement on the ride's after-face she never scrolled down to see ("it
+// didn't show up for me"). Decision Q5 still holds: the ride ENDS on level 3,
+// so a level set before it was a guess — the stepper still starts at "—".
+function renderRideNumbersCard(ex: Exercise): string {
   const level = ellipticalLevel();
   const last = lastEllipticalLevel();
   const km = localStorage.getItem(WW_ELLIPTICAL_KM_KEY) ?? '';
@@ -7979,7 +8030,13 @@ function renderEllipticalAfterCard(ex: Exercise): string {
       </label>`;
   return `
     <div class="card ell-after-card">
-      <div class="ell-readings-title">From the machine, before STOP</div>
+      <div class="ell-readings-title">Your ride — from the machine</div>
+      <p class="ell-numbers-note">Read them before you press STOP on the machine.</p>
+      <div class="ell-readings-row">
+        ${readingRow('ell-time', 'Time', time, '', { type: 'text', sub: timeFromApp ? 'app timer' : undefined })}
+        ${readingRow('ell-km', 'Distance', km, 'km', { step: '0.01', min: '0' })}
+        ${readingRow('ell-kcal', 'Calories', kcal, 'kcal', { step: '0.1', min: '0' })}
+      </div>
       <div class="ell-field ell-field-level">
         <span class="ell-field-label">Level you rode at</span>
         <div class="ell-level-controls">
@@ -7992,12 +8049,27 @@ function renderEllipticalAfterCard(ex: Exercise): string {
         </div>
       </div>
       <div class="ell-readings-row">
-        ${readingRow('ell-km', 'Distance', km, 'km', { step: '0.01', min: '0' })}
-        ${readingRow('ell-kcal', 'Calories', kcal, 'kcal', { step: '0.1', min: '0' })}
-        ${readingRow('ell-time', 'Time', time, '', { type: 'text', sub: timeFromApp ? 'app timer' : undefined })}
         ${readingRow('ell-pulse', 'Pulse', pulse, 'bpm', { step: '1', min: '30', max: '230' })}
       </div>
     </div>`;
+}
+
+// v51 — the sub-screen itself: the same workout header as every step, the
+// fields card, a quiet way out with no numbers, then the pinned pair. `‹
+// Back` here is LOCAL to this screen (just closes it, same step) — never the
+// global step-back, which would leave the elliptical step entirely.
+function renderRideNumbersScreen(ex: Exercise, header: string): string {
+  return `
+    ${header}
+    ${renderRideNumbersCard(ex)}
+    <button class="back-link ell-numbers-skip" id="ride-numbers-skip" type="button">Skip — no numbers today</button>
+    ${renderActionBar(`
+      <div class="step-nav">
+        <button class="btn-large btn-back" id="ride-numbers-back" type="button" aria-label="Back to the ride">‹ Back</button>
+        <button class="btn-large btn-primary" id="next" type="button">Save · Next</button>
+      </div>
+    `)}
+  `;
 }
 
 // Setup (v44, her ask: "make sure you tell me how to do it and how to set the
@@ -8072,8 +8144,16 @@ function renderLaneTimerCard(ex: Exercise, laneRan: boolean, under = ''): string
   return `<div class="card timer-card">${inner}</div>`;
 }
 
-// The elliptical step, in the order she rides it (see renderEllipticalAfterCard).
+// The elliptical step, in the order she rides it (see renderRideNumbersCard).
 function renderEllipticalStep(ex: Exercise, header: string): string {
+  // v51 (Sep 25 2026) — the ride-numbers sub-screen sits on top of whichever
+  // ride face she left (running/stopped/never-started). openRideNumbers()
+  // stops a running timer before setting this, so nothing below ever renders
+  // a live countdown once it's open — and reopening the app lands right back
+  // here too (the flag is in the resume snapshot).
+  if (state.rideNumbersOpen) {
+    return renderRideNumbersScreen(ex, header);
+  }
   const laneRan = localStorage.getItem(WW_LANE_STARTED_KEY) !== null;
   const running = state.timerSeconds > 0 || state.preCountdown > 0;
   const minutes = Math.round((ex.durationSec ?? 0) / 60);
@@ -8109,11 +8189,12 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
 
   if (laneRan) {
     // AFTER: v49 · look fix (Sep 25 2026) — the name card and the "Done ✓ N
-    // min done" card used to be two separate `.card` blocks; with Calories +
-    // Time added to the readings, that pushed Time/Pulse under the pinned
-    // bar — the fold check found scrollHeight 1170 in a 915 viewport (Opus
-    // check). One compact line replaces both; the readings stay their own
-    // card, then Done · Next (sage).
+    // min done" card used to be two separate `.card` blocks; one compact line
+    // replaces both. v51 (Sep 25 2026): the readings card that used to sit
+    // right here is gone — she tapped Done · Next and never scrolled down to
+    // it ("it didn't show up for me"). Done · Next now OPENS the numbers
+    // screen (see the rideNumbersOpen branch above) instead of sitting below
+    // one; this face is just the witness + the way there.
     const doneMins = laneDoneMinutes() ?? minutes;
     return `
       ${header}
@@ -8121,7 +8202,6 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
         <span class="exercise-name">${ELLIPTICAL_NAME}</span>
         <span class="timer-done timer-held">✓ ${doneMins} min done</span>
       </div>
-      ${renderEllipticalAfterCard(ex)}
       ${renderEllipticalGuide(false)}
       ${renderStepNav('Done · Next')}
     `;
@@ -10426,7 +10506,7 @@ let pendingScrollRestore: number | null = null;
 
 function navigationKey(): string {
   if (state.screen === 'workout') {
-    return `workout|${state.currentPhase}|${state.currentRound}|${state.currentExerciseIndex}|${state.isResting ? 'rest' : state.roundBreak ? 'break' : 'go'}`;
+    return `workout|${state.currentPhase}|${state.currentRound}|${state.currentExerciseIndex}|${state.isResting ? 'rest' : state.roundBreak ? 'break' : state.rideNumbersOpen ? 'ride-numbers' : 'go'}`;
   }
   if (state.screen === 'history-detail') return `history-detail|${state.historyDetailId ?? ''}`;
   return state.screen;
@@ -10708,6 +10788,22 @@ function attachHandlers(): void {
   });
 
   bindClick('next', () => {
+    // v51 (Sep 25 2026): Done · Next on the elliptical step opens the ride-
+    // numbers screen instead of advancing, in any ride state — her words:
+    // "I click the next button and then I fill in information." Once that
+    // screen is open this same button reads "Save · Next" and behaves like
+    // every other Done · Next (advanceExercise clears the flag on the way out).
+    const ex = getCurrentExercise();
+    if (
+      state.screen === 'workout' &&
+      !state.isResting &&
+      !state.roundBreak &&
+      ex?.name === ELLIPTICAL_NAME &&
+      !state.rideNumbersOpen
+    ) {
+      openRideNumbers();
+      return;
+    }
     advanceExercise();
   });
   // v47: one step back (her ask Sep 24: "i need to be able to go back").
@@ -10998,6 +11094,20 @@ function attachHandlers(): void {
     // typed over the prefill — this field saves per-keystroke with no
     // re-render (keeps focus), so the caption never got the chance to drop.
     document.getElementById('ell-time-sub')?.remove();
+  });
+
+  // v51 (Sep 25 2026): the ride-numbers screen's local Back — closes the
+  // screen and returns to whichever ride face she left (values kept, nothing
+  // cleared). Never the global step-back, which would leave the elliptical
+  // step entirely.
+  bindClick('ride-numbers-back', () => {
+    state.rideNumbersOpen = false;
+    render();
+  });
+  // v51: "no numbers today" — advances with whatever she filled; an untouched
+  // field stays null, same rule as every reading on this screen.
+  bindClick('ride-numbers-skip', () => {
+    advanceExercise();
   });
 
   // …and back out again to the three-way choice, in case she changes her mind.
