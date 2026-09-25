@@ -2947,12 +2947,24 @@ input[type='number']:focus {
   font-style: italic;
 }
 
+/* v50 · mood: the sub-label above the mood table — same table component as
+   capacity (renderCapacityCycleTable), a quiet divider so it doesn't read as
+   a continuation of the capacity table above it. */
+.cc-table-title {
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-divider);
+}
+
 .cc-table {
   display: grid;
   grid-template-columns: 60px 22px 1fr 1fr 1fr;
   column-gap: 6px;
   row-gap: 8px;
   font-size: var(--font-small);
+  margin-top: 8px;
 }
 
 .cc-table-head {

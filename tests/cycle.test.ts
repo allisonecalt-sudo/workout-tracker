@@ -9,6 +9,7 @@ import {
   medianCycleLength,
   cycleLengths,
   buildPhaseTable,
+  buildMoodPhaseTable,
   prePeriodVsRest,
   questionLine,
   excludedUntouchedCount,
@@ -19,6 +20,7 @@ import {
   V48_CUTOFF_DATE,
   type CyclePeriod,
   type CapacitySession,
+  type MoodSession,
 } from '../cycle';
 
 // Her real logged period starts (self/health/reproductive.md), the exact
@@ -277,6 +279,87 @@ test.describe('buildPhaseTable — the n<3 rule', () => {
     const menstrual = rows.find((r) => r.phase === 'menstrual')!;
     expect(menstrual.avgBefore).toBeCloseTo((4 + 4 + 8) / 3, 5);
     expect(menstrual.avgAfter).toBeCloseTo((6 + 6 + 2) / 3, 5);
+    expect(menstrual.avgChange).toBeCloseTo(menstrual.avgAfter! - menstrual.avgBefore!, 10);
+  });
+});
+
+// v50 · mood (Sep 25 2026): her words (04:45) — "mood 1 being irritable to
+// being happy and or calm". Same gating as buildPhaseTable, but no
+// V48_CUTOFF_DATE exclusion: mood_before/mood_after didn't exist before v50,
+// so there's no ambiguous pre-v48 default to leave out.
+test.describe('buildMoodPhaseTable — the same n<3 rule, no cutoff exclusion', () => {
+  test('a phase with 0-2 sessions shows notEnough, never an average', () => {
+    const sessions: MoodSession[] = [
+      { date: '2026-08-05', moodBefore: 4, moodAfter: 6 },
+      { date: '2026-08-06', moodBefore: 3, moodAfter: 5 },
+    ];
+    const rows = buildMoodPhaseTable(sessions, HER_PERIODS);
+    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
+    expect(menstrual.n).toBe(2);
+    expect(menstrual.notEnough).toBe(true);
+    expect(menstrual.avgBefore).toBeNull();
+    expect(menstrual.avgAfter).toBeNull();
+    expect(menstrual.avgChange).toBeNull();
+  });
+
+  test('3+ sessions in a phase produces real averages', () => {
+    const sessions: MoodSession[] = [
+      { date: '2026-08-05', moodBefore: 4, moodAfter: 6 },
+      { date: '2026-08-06', moodBefore: 2, moodAfter: 4 },
+      { date: '2026-08-07', moodBefore: 6, moodAfter: 8 },
+    ];
+    const rows = buildMoodPhaseTable(sessions, HER_PERIODS);
+    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
+    expect(menstrual.n).toBe(3);
+    expect(menstrual.notEnough).toBe(false);
+    expect(menstrual.avgBefore).toBeCloseTo(4, 5);
+    expect(menstrual.avgAfter).toBeCloseTo(6, 5);
+    expect(menstrual.avgChange).toBeCloseTo(2, 5);
+  });
+
+  // The capacity table excludes a pre-cutoff exact-5 as an ambiguous
+  // untouched-slider default (honestReading). Mood has no such history —
+  // a logged 5 before V48_CUTOFF_DATE is a real chip tap, not a guess.
+  test('a pre-V48_CUTOFF_DATE exact 5 counts toward n (no cutoff exclusion for mood)', () => {
+    expect('2026-08-05' < V48_CUTOFF_DATE).toBe(true);
+    const sessions: MoodSession[] = [
+      { date: '2026-08-05', moodBefore: 5, moodAfter: 5 },
+      { date: '2026-08-06', moodBefore: 3, moodAfter: 6 },
+    ];
+    const rows = buildMoodPhaseTable(sessions, HER_PERIODS);
+    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
+    expect(menstrual.n).toBe(2); // both count — unlike buildPhaseTable's equivalent test
+  });
+
+  test('all 4 phases are always present, even with zero data', () => {
+    const rows = buildMoodPhaseTable([], HER_PERIODS);
+    expect(rows.map((r) => r.phase)).toEqual(['menstrual', 'follicular', 'ovulatory', 'luteal']);
+    expect(rows.every((r) => r.notEnough)).toBe(true);
+  });
+
+  test('Before and After are each gated on their OWN count', () => {
+    const sessions: MoodSession[] = [
+      { date: '2026-08-05', moodBefore: 4, moodAfter: null },
+      { date: '2026-08-06', moodBefore: 6, moodAfter: null },
+      { date: '2026-08-07', moodBefore: 3, moodAfter: 8 },
+    ];
+    const rows = buildMoodPhaseTable(sessions, HER_PERIODS);
+    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
+    expect(menstrual.n).toBe(3);
+    expect(menstrual.notEnough).toBe(false);
+    expect(menstrual.avgBefore).toBeCloseTo((4 + 6 + 3) / 3, 5);
+    expect(menstrual.avgAfter).toBeNull(); // only 1 after-reading — not enough
+    expect(menstrual.avgChange).toBeNull();
+  });
+
+  test('Δ is always avgAfter - avgBefore, never a separately-averaged per-session delta', () => {
+    const sessions: MoodSession[] = [
+      { date: '2026-08-05', moodBefore: 4, moodAfter: 6 },
+      { date: '2026-08-06', moodBefore: 4, moodAfter: 6 },
+      { date: '2026-08-07', moodBefore: 8, moodAfter: 2 },
+    ];
+    const rows = buildMoodPhaseTable(sessions, HER_PERIODS);
+    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
     expect(menstrual.avgChange).toBeCloseTo(menstrual.avgAfter! - menstrual.avgBefore!, 10);
   });
 });

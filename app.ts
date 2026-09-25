@@ -9,11 +9,13 @@ import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
 import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
 import {
   buildPhaseTable,
+  buildMoodPhaseTable,
   buildTimeline,
   questionLine as cycleQuestionLine,
   excludedUntouchedCount,
   type CyclePeriod,
   type CapacitySession,
+  type MoodSession,
   type CyclePhase,
 } from './cycle.js';
 import {
@@ -101,6 +103,12 @@ type LogEntry = {
   // from a left-open snapshot has no post-log, so after-capacity and back pain
   // are unknown — shown as "—", never invented as 5/0.
   capacityAfter: number | null;
+  // v50 · mood (Sep 25 2026): a second 1-10 reading, separate from capacity on
+  // purpose — "your BODY, not your mood" stays true for capacity; this is the
+  // mood question itself. Optional AND nullable, same shape as wristPain: a
+  // session logged before v50 has no key at all, and null = not answered.
+  moodBefore?: number | null;
+  moodAfter?: number | null;
   wallSitSec: number;
   backPain: number | null;
   // v49 · engine (Sep 25 2026): the wrist half of the combined "Back & wrist:
@@ -180,6 +188,12 @@ type AppState = {
   selectedWorkout: WorkoutId | null;
   capacityBefore: number;
   capacityAfter: number;
+  // v50 · mood: same 1-10/touched shape as capacity, kept as a separate pair
+  // of fields — the two are two different questions (her spec §2).
+  moodBefore: number;
+  moodAfter: number;
+  moodBeforeTouched: boolean;
+  moodAfterTouched: boolean;
   wallSitSec: number;
   backPain: number;
   // v49 · engine: wrist half of the combined body tap, same shape as backPain.
@@ -402,9 +416,10 @@ const SUPABASE_ANON_KEY =
 // v49 (Sep 25 2026): the visual pass (SPEC-v49.md) + the two more machine
 // readings, calories and time ("every time put in").
 // v50 (Sep 25 2026): capacity & cycle (cycle.ts) + the jump list — the List
-// sheet, out-of-order Done, skip-count on the log.
+// sheet, out-of-order Done, skip-count on the log — + mood (a second 1-10
+// chip row, pre-log and post-log, and its own gated phase table on the card).
 const APP_VERSION = 'v50';
-const BUILD_DATE = 'Sep 25, 2026 · 06:44';
+const BUILD_DATE = 'Sep 25, 2026 · 09:46';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2668,6 +2683,11 @@ const state: AppState = {
   selectedWorkout: null,
   capacityBefore: 5,
   capacityAfter: 5,
+  // v50 · mood: blank by default (untouched), same as capacity's chips.
+  moodBefore: 5,
+  moodAfter: 5,
+  moodBeforeTouched: false,
+  moodAfterTouched: false,
   wallSitSec: 0,
   backPain: 0,
   wristPain: 0,
@@ -3820,6 +3840,9 @@ const V49_ENGINE_SESSION_COLUMNS = ['wrist_pain_0_10', 'step_feel'] as const;
 // (migrations/2026-09-25-v50-jump-list-steps-skipped.sql).
 const V50_SESSION_COLUMNS = ['steps_skipped'] as const;
 
+// The two columns added in v50 for mood (migrations/2026-09-25-v50-mood.sql).
+const V50_MOOD_SESSION_COLUMNS = ['mood_before', 'mood_after'] as const;
+
 // The workout_sessions row for a saved entry — pure, so it's testable without a
 // network (v48, Sep 24 2026). Every structured number has its own column now;
 // `notes` carries only system annotations.
@@ -3831,6 +3854,8 @@ function sessionPayload(entry: LogEntry): Record<string, unknown> {
     workout_type: entry.workout,
     capacity_before_1_10: entry.capacityBefore,
     capacity_after_1_10: entry.capacityAfter,
+    mood_before: entry.moodBefore ?? null,
+    mood_after: entry.moodAfter ?? null,
     wall_sit_seconds: hasWallSit ? entry.wallSitSec : null,
     pain_back_0_10: entry.backPain,
     wrist_pain_0_10: entry.wristPain,
@@ -3868,6 +3893,7 @@ function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
   for (const col of V49_SESSION_COLUMNS) delete payload[col];
   for (const col of V49_ENGINE_SESSION_COLUMNS) delete payload[col];
   for (const col of V50_SESSION_COLUMNS) delete payload[col];
+  for (const col of V50_MOOD_SESSION_COLUMNS) delete payload[col];
   const noteParts = [legacyCardioMarker(entry), entry.sessionNote, entry.notes].filter(
     (p): p is string => typeof p === 'string' && p.trim() !== ''
   );
@@ -4066,6 +4092,9 @@ function beginExercises(): void {
   // v46: the post-log sliders haven't been seen yet (capacity-before was just
   // set on pre-log, so its flag stays as it is).
   state.capacityAfterTouched = false;
+  // v50 · mood: same shape — mood-before was just set on pre-log, keep it;
+  // mood-after hasn't been seen yet.
+  state.moodAfterTouched = false;
   state.backPainTouched = false;
   state.backSomethingOpen = false;
   state.wristPainTouched = false;
@@ -4904,6 +4933,9 @@ async function saveCompletedSession(): Promise<void> {
     // v46: a slider she never moved is not a reading — null, shown as "—".
     capacityBefore: state.capacityBeforeTouched ? state.capacityBefore : null,
     capacityAfter: state.capacityAfterTouched ? state.capacityAfter : null,
+    // v50 · mood: a chip she never tapped is not a reading — null, same rule as capacity.
+    moodBefore: state.moodBeforeTouched ? state.moodBefore : null,
+    moodAfter: state.moodAfterTouched ? state.moodAfter : null,
     wallSitSec: state.wallSitSec,
     backPain: state.backPainTouched ? state.backPain : null,
     // v49 · engine: same null-means-not-answered shape as backPain.
@@ -4951,6 +4983,11 @@ type ActiveSessionSnapshot = {
   selectedWorkout: WorkoutId;
   capacityBefore: number;
   capacityAfter: number;
+  // v50 · mood: survives an app close the same way capacity does.
+  moodBefore: number;
+  moodAfter: number;
+  moodBeforeTouched: boolean;
+  moodAfterTouched: boolean;
   wallSitSec: number;
   backPain: number;
   // v49 · engine: survives an app close the same way backPain does.
@@ -4998,6 +5035,10 @@ function saveActiveSession(): void {
       selectedWorkout: state.selectedWorkout,
       capacityBefore: state.capacityBefore,
       capacityAfter: state.capacityAfter,
+      moodBefore: state.moodBefore,
+      moodAfter: state.moodAfter,
+      moodBeforeTouched: state.moodBeforeTouched,
+      moodAfterTouched: state.moodAfterTouched,
       wallSitSec: state.wallSitSec,
       backPain: state.backPain,
       wristPain: state.wristPain,
@@ -5073,6 +5114,11 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       selectedWorkout: snap.selectedWorkout,
       capacityBefore: snap.capacityBefore ?? 5,
       capacityAfter: snap.capacityAfter ?? 5,
+      // v50 · mood: a pre-v50 snapshot has neither → 5/false, same as a fresh session.
+      moodBefore: snap.moodBefore ?? 5,
+      moodAfter: snap.moodAfter ?? 5,
+      moodBeforeTouched: snap.moodBeforeTouched ?? false,
+      moodAfterTouched: snap.moodAfterTouched ?? false,
       wallSitSec: snap.wallSitSec ?? 0,
       backPain: snap.backPain ?? 0,
       // v49 · engine: a pre-engine snapshot has neither → 0/false/null, never a guess.
@@ -5130,6 +5176,10 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.currentRound = snap.currentRound;
   state.capacityBefore = snap.capacityBefore;
   state.capacityAfter = snap.capacityAfter;
+  state.moodBefore = snap.moodBefore;
+  state.moodAfter = snap.moodAfter;
+  state.moodBeforeTouched = snap.moodBeforeTouched;
+  state.moodAfterTouched = snap.moodAfterTouched;
   state.wallSitSec = snap.wallSitSec;
   state.backPain = snap.backPain;
   state.wristPain = snap.wristPain;
@@ -5200,6 +5250,9 @@ function logStaleSessionAsDone(): void {
     workout: snap.selectedWorkout,
     capacityBefore: snap.capacityBeforeTouched ? snap.capacityBefore : null, // v46: only if she moved it
     capacityAfter: null,
+    // v50 · mood: same rule as capacity — before survives if she moved it, after is unknown.
+    moodBefore: snap.moodBeforeTouched ? snap.moodBefore : null,
+    moodAfter: null,
     wallSitSec: snap.wallSitSec,
     backPain: null,
     word: snap.word,
@@ -5259,6 +5312,10 @@ function resetState(): void {
   state.selectedWorkout = null;
   state.capacityBefore = 5;
   state.capacityAfter = 5;
+  state.moodBefore = 5;
+  state.moodAfter = 5;
+  state.moodBeforeTouched = false;
+  state.moodAfterTouched = false;
   state.wallSitSec = 0;
   state.backPain = 0;
   state.wristPain = 0;
@@ -5322,6 +5379,10 @@ type RemoteSession = {
   // migration, or a pre-engine row, simply doesn't carry them.
   wrist_pain_0_10?: number | null;
   step_feel?: 'fine' | 'too_much' | null;
+  // v50 · mood (Sep 25 2026): optional — a server that hasn't run the
+  // migration, or a pre-v50 row, simply doesn't carry them.
+  mood_before?: number | null;
+  mood_after?: number | null;
   one_word: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -5395,6 +5456,9 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       capacityBefore: r.capacity_before_1_10,
       // null stays null (v32): a missing after-reading is "—", not 0.
       capacityAfter: r.capacity_after_1_10 ?? null,
+      // v50 · mood: round-trips the same way — a pre-v50 row has neither key.
+      moodBefore: r.mood_before ?? null,
+      moodAfter: r.mood_after ?? null,
       wallSitSec: r.wall_sit_seconds ?? 0,
       backPain: r.pain_back_0_10 ?? null,
       wristPain: r.wrist_pain_0_10 ?? null,
@@ -7159,12 +7223,20 @@ function renderChipRow(
   return `<div class="body-chips" role="radiogroup" aria-label="${escapeHtml(ariaLabel)}">${row(1)}${row(6)}</div>`;
 }
 
-function renderBodyChips(idPrefix: string, value: number, touched: boolean, label = ''): string {
+// v50 · mood: same component, a different anchor line — the default stays
+// the BODY wording so every other caller is untouched.
+function renderBodyChips(
+  idPrefix: string,
+  value: number,
+  touched: boolean,
+  label = '',
+  anchor = '1 empty · 5 ordinary · 10 strong'
+): string {
   return `
     <div class="field body-field">
       <span class="label-text body-label">${escapeHtml(label)}</span>
       ${renderChipRow(idPrefix, value, touched, label)}
-      <div class="body-anchor">1 empty · 5 ordinary · 10 strong</div>
+      <div class="body-anchor">${escapeHtml(anchor)}</div>
     </div>`;
 }
 
@@ -7239,6 +7311,7 @@ function renderPreLog(): string {
 
     <div class="card body-card">
       ${renderBodyChips('cap-before', state.capacityBefore, state.capacityBeforeTouched, 'Your BODY right now, not your mood')}
+      ${renderBodyChips('mood-before', state.moodBefore, state.moodBeforeTouched, 'Mood', '1 irritable · 10 happy / calm')}
     </div>
 
     ${liteChip}
@@ -8223,6 +8296,7 @@ function renderPostLog(): string {
 
     <div class="card postlog-card">
       ${renderBodyChips('cap-after', state.capacityAfter, state.capacityAfterTouched, 'Your BODY now, not your mood')}
+      ${renderBodyChips('mood-after', state.moodAfter, state.moodAfterTouched, 'Mood', '1 irritable · 10 happy / calm')}
 
       ${wallSitField}
 
@@ -9435,6 +9509,15 @@ function capacitySessionsFrom(logs: LogEntry[]): CapacitySession[] {
   }));
 }
 
+// v50 · mood: same normalization as capacitySessionsFrom above — same reason.
+function moodSessionsFrom(logs: LogEntry[]): MoodSession[] {
+  return logs.map((l) => ({
+    date: localIsoDate(new Date(l.date)),
+    moodBefore: l.moodBefore ?? null,
+    moodAfter: l.moodAfter ?? null,
+  }));
+}
+
 function cyclePeriodsForLogic(): CyclePeriod[] {
   return loadCyclePeriods().map((p) => ({
     startDate: p.startDate,
@@ -9556,7 +9639,14 @@ function renderCycleLegend(): string {
     </div>`;
 }
 
-function renderCapacityCycleTable(rows: ReturnType<typeof buildPhaseTable>): string {
+// v50 · mood: the same table shape (PhaseTableRow) serves both capacity and
+// mood — `title` (when given) prints a small sub-label above it and tags the
+// wrapper with a data attribute so the two tables are distinguishable in
+// tests/CSS without duplicating the render logic.
+function renderCapacityCycleTable(
+  rows: ReturnType<typeof buildPhaseTable>,
+  title?: string
+): string {
   const fmt = (v: number | null): string => (v === null ? '—' : v.toFixed(1));
   const fmtChange = (v: number | null): string => {
     if (v === null) return '—';
@@ -9577,7 +9667,8 @@ function renderCapacityCycleTable(rows: ReturnType<typeof buildPhaseTable>): str
     })
     .join('');
   return `
-    <div class="cc-table">
+    ${title ? `<div class="cc-table-title">${escapeHtml(title)}</div>` : ''}
+    <div class="cc-table" data-cc-table="${title ? title.toLowerCase() : 'capacity'}">
       <span class="cc-table-head" style="display:contents">
         <span>Phase</span><span>n</span><span>Before</span><span>After</span><span>Δ</span>
       </span>
@@ -9604,6 +9695,11 @@ function renderCapacityCycleCard(logs: LogEntry[]): string {
   const question = cycleQuestionLine(sessions, periods);
   const excluded = excludedUntouchedCount(sessions);
 
+  // v50 · mood: same phase math, no pre-v48-cutoff exclusion (mood didn't
+  // exist before v50 — there's no ambiguous default to leave a note about).
+  const moodSessions = moodSessionsFrom(logs);
+  const moodRows = buildMoodPhaseTable(moodSessions, periods);
+
   const chart =
     timeline.length > 0
       ? `<div class="cc-chart-wrap">${renderCapacityCycleChart(timeline)}</div>${renderCycleLegend()}`
@@ -9616,6 +9712,7 @@ function renderCapacityCycleCard(logs: LogEntry[]): string {
       ${renderCapacityCycleTable(rows)}
       ${excluded > 0 ? `<div class="cc-quiet">${excluded} pre-Sep-24 "5" reading${excluded === 1 ? '' : 's'} left out — some were the untouched slider.</div>` : ''}
       ${question ? `<div class="cc-question">${escapeHtml(question)}</div>` : ''}
+      ${renderCapacityCycleTable(moodRows, 'Mood')}
       ${renderCycleLogRow()}
     </div>`;
 }
@@ -9957,7 +10054,11 @@ function isValidLogEntry(x: unknown): x is LogEntry {
     (o['stepFeel'] === undefined ||
       o['stepFeel'] === null ||
       o['stepFeel'] === 'fine' ||
-      o['stepFeel'] === 'too_much')
+      o['stepFeel'] === 'too_much') &&
+    // v50 · mood: optional AND nullable, same shape — an export from before
+    // v50 has neither key and must still restore.
+    isOptionalOf(o['moodBefore'], 'number') &&
+    isOptionalOf(o['moodAfter'], 'number')
   );
 }
 
@@ -10451,6 +10552,12 @@ function attachHandlers(): void {
       } else if (group === 'cap-after') {
         state.capacityAfter = v;
         state.capacityAfterTouched = !again;
+      } else if (group === 'mood-before') {
+        state.moodBefore = v;
+        state.moodBeforeTouched = !again;
+      } else if (group === 'mood-after') {
+        state.moodAfter = v;
+        state.moodAfterTouched = !again;
       } else if (group === 'back') {
         state.backPain = v;
         state.backPainTouched = !again;

@@ -62,13 +62,22 @@ async function seedLogs(page: Page, rows: Row[]): Promise<void> {
   }, rows);
 }
 
-function log(id: string, date: string, before: number, after: number): Row {
+function log(
+  id: string,
+  date: string,
+  before: number,
+  after: number,
+  // v50 · mood: optional so every existing call site (capacity-only) is untouched.
+  mood?: { before: number; after: number }
+): Row {
   return {
     id,
     date,
     workout: 'A',
     capacityBefore: before,
     capacityAfter: after,
+    moodBefore: mood?.before ?? null,
+    moodAfter: mood?.after ?? null,
     wallSitSec: 0,
     backPain: 0,
     word: '',
@@ -158,6 +167,56 @@ test.describe('capacity & cycle card', () => {
     await openProgress(page);
     const card = page.locator('.progress-card', { hasText: 'Capacity & cycle' });
     await expect(card).toContainText('not enough yet');
+  });
+
+  // v50 · mood (Sep 25 2026): the same table component, a "Mood" sub-label,
+  // gated exactly like capacity (n<3 -> "not enough yet", each column on its
+  // own count). Dates deliberately avoid 5/5 for mood too, even though mood
+  // has no cutoff exclusion — keeps the averages unambiguous to assert on.
+  test('mood table renders under its own "Mood" label, with real averages once n>=3', async ({
+    page,
+  }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await seedLogs(page, [
+      log('m1', '2026-08-05T10:00:00.000Z', 4, 6, { before: 3, after: 8 }),
+      log('m2', '2026-08-06T10:00:00.000Z', 2, 4, { before: 4, after: 9 }),
+      log('m3', '2026-08-07T10:00:00.000Z', 6, 8, { before: 2, after: 7 }),
+    ]);
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await openProgress(page);
+
+    const card = page.locator('.progress-card', { hasText: 'Capacity & cycle' });
+    await expect(card).toContainText('Mood');
+    const moodTable = card.locator('[data-cc-table="mood"]');
+    await expect(moodTable).toBeVisible();
+    // avg mood before = (3+4+2)/3 = 3.0, avg mood after = (8+9+7)/3 = 8.0 —
+    // distinct from the capacity averages (4.0 / 6.0) above them.
+    await expect(moodTable).toContainText('3.0');
+    await expect(moodTable).toContainText('8.0');
+  });
+
+  test('mood table under 3 sessions shows "not enough yet", independent of capacity', async ({
+    page,
+  }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await seedLogs(page, [
+      // 3 capacity readings (clears capacity's n>=3) but only 2 carry mood —
+      // capacity's row must read real averages while mood's still says "not
+      // enough yet" (the two tables are gated independently).
+      log('m1', '2026-08-05T10:00:00.000Z', 4, 6, { before: 3, after: 8 }),
+      log('m2', '2026-08-06T10:00:00.000Z', 2, 4, { before: 4, after: 9 }),
+      log('m3', '2026-08-07T10:00:00.000Z', 6, 8),
+    ]);
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await openProgress(page);
+
+    const card = page.locator('.progress-card', { hasText: 'Capacity & cycle' });
+    const capacityTable = card.locator('[data-cc-table="capacity"]');
+    const moodTable = card.locator('[data-cc-table="mood"]');
+    await expect(capacityTable).toContainText('4.0'); // (4+2+6)/3, real average
+    await expect(moodTable).toContainText('not enough yet');
   });
 
   test('with no cycle data yet, the card still offers the one tap', async ({ page }) => {

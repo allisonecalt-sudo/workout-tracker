@@ -252,8 +252,11 @@ export type PhaseTableRow = {
 
 const PHASE_ORDER: CyclePhase[] = ['menstrual', 'follicular', 'ovulatory', 'luteal'];
 
-/** The Progress card's small table: n / avg before / avg after / avg change,
- *  one row per phase.
+/** Shared table-builder: n / avg before / avg after / avg change, one row per
+ *  phase. Generic over the session shape so capacity (honest readings, pre-
+ *  v48-cutoff exclusion) and mood (no cutoff — the field didn't exist before
+ *  v50, so there's no ambiguous default to exclude) share the exact same
+ *  gating instead of two hand-written copies drifting apart.
  *
  *  v50 · fix (Sep 25 2026): the phase-level n>=MIN_PHASE_N gate used to be
  *  the ONLY gate — Before, After and Δ were then each averaged over
@@ -265,23 +268,25 @@ const PHASE_ORDER: CyclePhase[] = ['menstrual', 'follicular', 'ovulatory', 'lute
  *  After are each gated on their OWN count (>= MIN_PHASE_N honest readings
  *  of that kind), and Δ is always avgAfter-avgBefore, so the row can never
  *  contradict itself and never quietly averages 1-2. */
-export function buildPhaseTable(
-  sessions: CapacitySession[],
-  periods: CyclePeriod[]
+function buildPhaseTableGeneric<S extends { date: string }>(
+  sessions: S[],
+  periods: CyclePeriod[],
+  before: (s: S) => number | null,
+  after: (s: S) => number | null
 ): PhaseTableRow[] {
-  const byPhase = new Map<CyclePhase, CapacitySession[]>();
+  const byPhase = new Map<CyclePhase, S[]>();
   for (const phase of PHASE_ORDER) byPhase.set(phase, []);
   for (const s of sessions) {
     const info = phaseForDate(s.date, periods);
     if (!info) continue;
-    if (honestBefore(s) === null && honestAfter(s) === null) continue;
+    if (before(s) === null && after(s) === null) continue;
     byPhase.get(info.phase)!.push(s);
   }
   return PHASE_ORDER.map((phase) => {
     const inPhase = byPhase.get(phase)!;
     const n = inPhase.length;
-    const befores = inPhase.map(honestBefore).filter((v): v is number => v !== null);
-    const afters = inPhase.map(honestAfter).filter((v): v is number => v !== null);
+    const befores = inPhase.map(before).filter((v): v is number => v !== null);
+    const afters = inPhase.map(after).filter((v): v is number => v !== null);
     const avgBefore = befores.length >= MIN_PHASE_N ? avg(befores) : null;
     const avgAfter = afters.length >= MIN_PHASE_N ? avg(afters) : null;
     return {
@@ -293,6 +298,42 @@ export function buildPhaseTable(
       notEnough: n < MIN_PHASE_N,
     };
   });
+}
+
+/** The Progress card's small table: n / avg before / avg after / avg change,
+ *  one row per phase. */
+export function buildPhaseTable(
+  sessions: CapacitySession[],
+  periods: CyclePeriod[]
+): PhaseTableRow[] {
+  return buildPhaseTableGeneric(sessions, periods, honestBefore, honestAfter);
+}
+
+// ---------------------------------------------------------------------------
+// Mood (v50, Sep 25 2026) — her words (04:45): "and then another 1-10 thing I
+// can do is mood 1 being irritable to being happy and or calm". Same phase
+// math, same n<3 gating, same per-column gating, same avgChange formula as
+// capacity — but no honest-reading cutoff: mood_before/mood_after didn't
+// exist before v50, so there's no pre-v48 ambiguous-default class of row to
+// exclude (there is no pre-v50 mood data at all).
+// ---------------------------------------------------------------------------
+
+export type MoodSession = {
+  date: string;
+  moodBefore: number | null;
+  moodAfter: number | null;
+};
+
+export function buildMoodPhaseTable(
+  sessions: MoodSession[],
+  periods: CyclePeriod[]
+): PhaseTableRow[] {
+  return buildPhaseTableGeneric(
+    sessions,
+    periods,
+    (s) => s.moodBefore,
+    (s) => s.moodAfter
+  );
 }
 
 // ---------------------------------------------------------------------------

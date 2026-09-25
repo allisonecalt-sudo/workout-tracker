@@ -365,6 +365,27 @@ test('body chip: tap selects the number, a second tap clears it', async ({ page 
   await expect(page.locator('[data-body-chip="cap-before"][aria-checked="true"]')).toHaveCount(0);
 });
 
+// v50 · mood (Sep 25 2026): the same chip component, a second row under BODY —
+// her words (04:45): "mood 1 being irritable to being happy and or calm".
+test('mood chip: tap selects the number, a second tap clears it — independent of the BODY row', async ({
+  page,
+}) => {
+  await page.locator('button[data-workout="A"]').click();
+  // Both rows present, blank by default.
+  await expect(page.locator('[data-body-chip="cap-before"]')).toHaveCount(10);
+  await expect(page.locator('[data-body-chip="mood-before"]')).toHaveCount(10);
+  await expect(page.locator('[data-body-chip][aria-checked="true"]')).toHaveCount(0);
+
+  await page.locator('#mood-before-9').click();
+  await expect(page.locator('#mood-before-9')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('[data-body-chip="mood-before"][aria-checked="true"]')).toHaveCount(1);
+  // The BODY row is untouched by the mood tap.
+  await expect(page.locator('[data-body-chip="cap-before"][aria-checked="true"]')).toHaveCount(0);
+
+  await page.locator('#mood-before-9').click();
+  await expect(page.locator('[data-body-chip="mood-before"][aria-checked="true"]')).toHaveCount(0);
+});
+
 // v46: a slider she never moved is not a reading. The three sliders start at
 // 5/5/0 and used to save as if she chose them — capacity-after was exactly 5 in
 // 6 of 8 sessions since Aug 30, a "decline" the mirror invented (UX audit
@@ -402,6 +423,9 @@ test('untouched sliders (v46): a workout with no slider moved saves null, not 5/
   expect(logs[0]?.['capacityBefore']).toBeNull();
   expect(logs[0]?.['capacityAfter']).toBeNull();
   expect(logs[0]?.['backPain']).toBeNull();
+  // v50 · mood: a mood chip never tapped is not a reading either — same rule.
+  expect(logs[0]?.['moodBefore']).toBeNull();
+  expect(logs[0]?.['moodAfter']).toBeNull();
   // And the row reads "—", never an invented number. (v48 · P4: the "Last: …
   // capacity" line left home; the same row reads it in Sessions.)
   await page.locator('#view-history').click();
@@ -425,6 +449,28 @@ test('untouched sliders (v46): a slider she DID move saves her number; the other
   expect(logs[0]?.['capacityBefore']).toBe(7);
   expect(logs[0]?.['capacityAfter']).toBeNull();
   expect(logs[0]?.['backPain']).toBe(2);
+});
+
+// v50 · mood: mood-before survives from pre-log, mood-after from post-log —
+// independently of capacity, the same way the two capacity chips are independent.
+test('mood chips (v50): a moved mood chip saves her number; the untouched half stays null', async ({
+  page,
+}) => {
+  await page.locator('button[data-workout="C"]').click();
+  await page.locator('#mood-before-8').click();
+  await page.locator('button:has-text("Start")').click();
+  await walkToPostLog(page);
+  await page.locator('#mood-after-3').click();
+  await page.locator('#save-log').click();
+  await expect(page.locator('.home-header h1')).toBeVisible();
+
+  const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+  const logs = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>;
+  expect(logs[0]?.['moodBefore']).toBe(8);
+  expect(logs[0]?.['moodAfter']).toBe(3);
+  // Capacity was never touched this session — still null.
+  expect(logs[0]?.['capacityBefore']).toBeNull();
+  expect(logs[0]?.['capacityAfter']).toBeNull();
 });
 
 // v46: every new screen / step lands at the top. Done·Next at the bottom of one
@@ -734,6 +780,58 @@ test('pull merge (v33): a row deleted on the server disappears; unsynced, out-of
   expect(result.windowedKept).toEqual(['older-than-window', 'unsynced-local']);
   expect(result.windowedCount).toBe(202); // 200-row window + older-than-window + unsynced-local
   expect(result.empty).toEqual(['keep-me']);
+});
+
+// v50 · mood (Sep 25 2026): mood_before/mood_after round-trip through the pull
+// merge the same way capacity does — present → her number, missing (a
+// pre-v50 server row) → null, never invented.
+test('pull merge (v50): mood_before/mood_after round-trip; a pre-v50 row (no mood keys) merges as null', async ({
+  page,
+}) => {
+  const result = await page.evaluate(() => {
+    type Row = { id: string; moodBefore?: number | null; moodAfter?: number | null };
+    type Merge = (local: unknown[], remote: unknown[]) => Row[];
+    const merge = (window as unknown as { __wtMergeRemoteSessions: Merge }).__wtMergeRemoteSessions;
+    const remoteBase = {
+      workout_type: 'A',
+      capacity_before_1_10: null,
+      capacity_after_1_10: null,
+      wall_sit_seconds: 0,
+      pain_back_0_10: null,
+      one_word: null,
+      started_at: null,
+      completed_at: null,
+      duration_seconds: null,
+      notes: null,
+    };
+    const merged = merge(
+      [],
+      [
+        {
+          ...remoteBase,
+          id: 'with-mood',
+          date: '2026-09-25T10:00:00+00:00',
+          mood_before: 9,
+          mood_after: 3,
+        },
+        {
+          ...remoteBase,
+          id: 'pre-v50',
+          date: '2026-09-20T10:00:00+00:00',
+          // no mood_before/mood_after keys at all — a server row from before v50
+        },
+      ]
+    );
+    return {
+      withMood: merged.find((r) => r.id === 'with-mood'),
+      preV50: merged.find((r) => r.id === 'pre-v50'),
+    };
+  });
+
+  expect(result.withMood?.moodBefore).toBe(9);
+  expect(result.withMood?.moodAfter).toBe(3);
+  expect(result.preV50?.moodBefore).toBeNull();
+  expect(result.preV50?.moodAfter).toBeNull();
 });
 
 // --- Round 2 Week 3: the band goes on the clamshells (v35, Sep 14 2026) ------
@@ -1548,6 +1646,35 @@ test('backup restore (v34): a row with null after-capacity / back pain survives 
     ];
   });
   expect(rejected).toEqual([false, false, false, false, false]);
+});
+
+// v50 · mood: optional AND nullable, same shape as wristPain — a pre-v50
+// export has neither key and must still restore; junk in either is rejected.
+test('isValidLogEntry (v50): moodBefore/moodAfter are optional, nullable, and typed', async ({
+  page,
+}) => {
+  const out = await page.evaluate(() => {
+    const fn = (window as unknown as { __wtIsValidLogEntry: (x: unknown) => boolean })
+      .__wtIsValidLogEntry;
+    const base = {
+      date: '2026-09-25',
+      workout: 'A',
+      capacityBefore: 5,
+      capacityAfter: 5,
+      wallSitSec: 0,
+      backPain: 0,
+    };
+    return {
+      noMoodKeysAtAll: fn(base), // pre-v50 export
+      nullMood: fn({ ...base, moodBefore: null, moodAfter: null }),
+      numberMood: fn({ ...base, moodBefore: 8, moodAfter: 3 }),
+      junkMood: fn({ ...base, moodBefore: 'happy', moodAfter: 3 }),
+    };
+  });
+  expect(out.noMoodKeysAtAll).toBe(true);
+  expect(out.nullMood).toBe(true);
+  expect(out.numberMood).toBe(true);
+  expect(out.junkMood).toBe(false);
 });
 
 test('weekly total (v34): a week with an unrecorded duration says how many sessions it counted', async ({
@@ -3526,6 +3653,27 @@ test.describe('v48 P1 data', () => {
     expect(c['wall_sit_seconds']).toBeNull();
   });
 
+  // v50 · mood (Sep 25 2026): mood_before/mood_after go out as their own
+  // columns, same shape as capacity — touched → her number, untouched → null.
+  test('(b2) mood_before/mood_after send her numbers, or null when untouched', async ({ page }) => {
+    const base = {
+      id: 'x',
+      date: '2026-09-24T14:00:00.000Z',
+      workout: 'A' as const,
+      capacityBefore: 6,
+      capacityAfter: 7,
+      wallSitSec: 45,
+      backPain: null,
+      word: '',
+    };
+    const touched = await payloadOf(page, { ...base, moodBefore: 9, moodAfter: 3 });
+    expect(touched['mood_before']).toBe(9);
+    expect(touched['mood_after']).toBe(3);
+    const untouched = await payloadOf(page, base); // no moodBefore/moodAfter key at all
+    expect(untouched['mood_before']).toBeNull();
+    expect(untouched['mood_after']).toBeNull();
+  });
+
   test('(c) the post-log note lands in session_note, never in notes', async ({ page }) => {
     await mockDate(page, '2026-09-24T14:00:00.000Z');
     await page.goto('/');
@@ -3794,6 +3942,9 @@ test.describe('v48 P1 data', () => {
         workout: 'A',
         capacityBefore: 6,
         capacityAfter: 7,
+        // v50 · mood: also stripped for a server that hasn't run the mood migration.
+        moodBefore: 5,
+        moodAfter: 3,
         wallSitSec: 45,
         backPain: 0,
         word: '',
@@ -3819,6 +3970,8 @@ test.describe('v48 P1 data', () => {
       'lite_day',
       'arm_feel',
       'voice_plays',
+      'mood_before',
+      'mood_after',
     ]) {
       expect(col in p).toBe(false);
     }
