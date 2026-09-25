@@ -401,8 +401,10 @@ const SUPABASE_ANON_KEY =
 // better i feel like its a bit all over the place".
 // v49 (Sep 25 2026): the visual pass (SPEC-v49.md) + the two more machine
 // readings, calories and time ("every time put in").
-const APP_VERSION = 'v49';
-const BUILD_DATE = 'Sep 25, 2026 · 03:42';
+// v50 (Sep 25 2026): capacity & cycle (cycle.ts) + the jump list — the List
+// sheet, out-of-order Done, skip-count on the log.
+const APP_VERSION = 'v50';
+const BUILD_DATE = 'Sep 25, 2026 · 05:47';
 
 function supabaseHeaders(): HeadersInit {
   return {

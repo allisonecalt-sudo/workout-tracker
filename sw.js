@@ -12,7 +12,8 @@
 // v48 (Sep 24 2026): the redesign — no new shell files in P1-P8 (the archive
 // and migration files are not shell), so only the cache name moves.
 // v49 (Sep 25 2026): the visual pass + the two more machine readings.
-const VERSION = 'workout-tracker-v49';
+// v50 (Sep 25 2026): capacity & cycle + the jump list (List sheet, step-list.js).
+const VERSION = 'workout-tracker-v50';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 

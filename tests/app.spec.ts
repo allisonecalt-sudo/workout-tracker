@@ -4899,7 +4899,9 @@ test.describe('v48 P4 home', () => {
 
     test('(g) the version tag is one line and carries the version + a time', async ({ page }) => {
       const tag = page.locator('.home-header .app-version');
-      await expect(tag).toContainText('v4');
+      // "v4" was v48/v49-specific; match any "v<digits>" so this doesn't need
+      // a hand-edit on every version bump.
+      await expect(tag).toHaveText(/^v\d+ ·/);
       await expect(tag).toHaveText(/\d{2}:\d{2}$/);
       await expect(tag).not.toContainText(/20\d\d/); // the year lives in Settings › About
       expect((await tag.boundingBox())!.height).toBeLessThan(24);
@@ -6333,21 +6335,21 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v49 · <date, no year>", Settings "Build v49 · <full date>", sw.js v49', async ({
+  test('(d) the version: home "v50 · <date, no year>", Settings "Build v50 · <full date>", sw.js v50', async ({
     page,
   }) => {
     const src = await (await page.request.get('/app.ts')).text();
     const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
     const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
-    expect(version).toBe('v49');
+    expect(version).toBe('v50');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
-      `v49 · ${built.replace(/,\s*\d{4}/, '')}`
+      `v50 · ${built.replace(/,\s*\d{4}/, '')}`
     );
     await page.locator('#open-settings').click();
-    await expect(page.locator('#app')).toContainText(`Build v49 · ${built}`);
+    await expect(page.locator('#app')).toContainText(`Build v50 · ${built}`);
     const sw = await (await page.request.get('/sw.js')).text();
-    expect(sw).toContain("'workout-tracker-v49'");
+    expect(sw).toContain("'workout-tracker-v50'");
   });
 });
 
