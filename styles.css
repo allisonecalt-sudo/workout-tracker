@@ -57,14 +57,28 @@
   --dot-b: #7088a0;
   --dot-c: #8a7a8e; /* Sessions / Progress / Weekly only */
 
-  /* v50 · cycle (Sep 25 2026): phase bands on the capacity & cycle chart —
-     ink-tone steps only, no new hues (her design rule: "one accent only if
-     there's an action - there isn't, so no sage"). Ordered lightest to
-     darkest by how much attention each phase earns on the chart. */
-  --phase-menstrual: rgba(240, 237, 229, 0.11);
-  --phase-follicular: rgba(240, 237, 229, 0.04);
-  --phase-ovulatory: rgba(240, 237, 229, 0.17);
-  --phase-luteal: rgba(240, 237, 229, 0.07);
+  /* v50 · fix (Sep 25 2026): the original ink-tone-only bands (alpha
+     .04/.07/.11/.17 of the same grey) were near-identical at 412px — Opus's
+     finding: "you can't read the chart... phase, the card's whole point,
+     can't be decoded from the picture." Reusing the already-established
+     muted, non-sage, non-red --dot-a/b/c hues (Sessions/Progress/Weekly
+     already use them for exactly this kind of calm decoration, not action)
+     plus one new one of the same family gives 4 bands you can tell apart by
+     HUE, not just by how see-through they are — same register, no new
+     accent, her "no sage unless there's an action" rule intact (this still
+     isn't sage). */
+  --dot-d: #a3915f; /* Capacity & cycle Luteal band only — a 4th muted hue in the --dot family */
+  --phase-menstrual: color-mix(in srgb, var(--dot-b) 24%, transparent);
+  --phase-follicular: color-mix(in srgb, var(--dot-a) 20%, transparent);
+  --phase-ovulatory: color-mix(in srgb, var(--dot-c) 26%, transparent);
+  --phase-luteal: color-mix(in srgb, var(--dot-d) 20%, transparent);
+
+  /* v50 · fix (Sep 25 2026): --accent-progress and --text-dim both alias to
+     --ink-2 below (Aliases block) — the before/after dots were drawing in
+     the literal same colour. Dedicated tokens, kept grayscale on purpose
+     (before/after is a data-reading distinction, not an action — no sage). */
+  --cc-before: var(--ink-3);
+  --cc-after: var(--ink);
 
   /* Type */
   --font: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -2912,6 +2926,25 @@ input[type='number']:focus {
   height: 7px;
   border-radius: 50%;
   display: inline-block;
+}
+
+/* v50 · fix (Sep 25 2026): before is now a hollow ring on the chart itself
+   (see renderCapacityCycleChart) — the legend swatch matches so "before"
+   reads as the same shape in both places, not just a colour she has to
+   memorize. */
+.cc-legend-dot-hollow {
+  background: transparent !important;
+  border: 1.5px solid var(--cc-before);
+  box-sizing: border-box;
+}
+
+/* v50 · fix (Sep 25 2026): the estimated (current, open) cycle's columns —
+   opacity alone was invisible at 0.55 on an already-faint band. A small
+   "est." tick sits above the band (drawn in the SVG); this just keeps the
+   legend note the same size/colour as the rest of the row. */
+.cc-legend-est {
+  color: var(--text-dim-2);
+  font-style: italic;
 }
 
 .cc-table {

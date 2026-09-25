@@ -4191,6 +4191,23 @@ test.describe('v48 P2 shell', () => {
     expect(log['liteDay']).toBe(true);
   });
 
+  // v50 · fix (Sep 25 2026): "Finish here" told her round 2 + upper-back
+  // "still counts" — the post-log must not then say "6 moves skipped" right
+  // underneath. She did every warm-up + round-1 move in order (toRoundBreak),
+  // so nothing the floor left in the count is actually skipped.
+  test('(fix) "Finish here" never counts the round-2/upper-back moves it deliberately dropped as skipped', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await toRoundBreak(page);
+    await page.locator('#finish-here').click();
+    await page.locator('#next').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await expect(page.locator('.postlog-skipped')).toHaveCount(0);
+  });
+
   test('(h) v49 · look fix: Lite toggled before Start on C (2 → 1 round) witnesses "1 round", never "both rounds"', async ({
     page,
   }) => {

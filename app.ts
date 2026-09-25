@@ -404,7 +404,7 @@ const SUPABASE_ANON_KEY =
 // v50 (Sep 25 2026): capacity & cycle (cycle.ts) + the jump list — the List
 // sheet, out-of-order Done, skip-count on the log.
 const APP_VERSION = 'v50';
-const BUILD_DATE = 'Sep 25, 2026 · 05:47';
+const BUILD_DATE = 'Sep 25, 2026 · 06:44';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -4153,13 +4153,23 @@ function advanceExercise(): void {
   const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
   const curPos = movable.findIndex((s) => s.key === curKey);
   const structuralNextKey = curPos >= 0 ? (movable[curPos + 1]?.key ?? null) : null;
+  // v50 · fix (Sep 25 2026): compute target BEFORE deciding the round-1 floor.
+  // Her bug — finish the last skipped move and Done marches her forward
+  // through every move she already did (the Round 1 done screen even came
+  // back) — was this floor firing unconditionally on the last main move of
+  // round 1, with no check for whether round 2+ actually still has anything
+  // undone. target === null means nextUndoneStep found nothing left ANYWHERE
+  // (the ordinary in-order case never hits null here — normally target is
+  // round 2's first move, same as structuralNextKey), so that's the one
+  // signal that answers "is round 2 actually undone yet".
+  const target = nextUndoneStep(movable, curKey, state.completedSteps);
   const isRoundOneFloor =
     state.currentPhase === 'main' &&
     state.currentRound === 1 &&
     state.currentExerciseIndex === w.main.length - 1 &&
-    effectiveRounds(w) > 1;
+    effectiveRounds(w) > 1 &&
+    target !== null;
   if (!isRoundOneFloor) {
-    const target = nextUndoneStep(movable, curKey, state.completedSteps);
     if (target && target.key !== structuralNextKey) {
       applyStepTarget(target);
       if (target.phase === 'main') {
@@ -4167,6 +4177,16 @@ function advanceExercise(): void {
       } else {
         render();
       }
+      return;
+    }
+    if (!target) {
+      // Nothing undone anywhere — she just finished the last thing that was
+      // still open (often the last of a run of previously-skipped moves).
+      // Go straight to cool-down instead of the plain in-order walk below,
+      // which would re-tour every move she's already ✓.
+      state.currentPhase = 'cooldown';
+      state.currentExerciseIndex = 0;
+      render();
       return;
     }
   }
@@ -4384,9 +4404,20 @@ function workoutStepPosition(w: Workout): { index: number; total: number } {
 // v50 · jump list (Sep 25 2026): how many warm-up/main/upper-back moves never
 // got a Done tap this session — the post-log's plain "N moves skipped" line
 // and the steps_skipped column (no verdict either place, just the count).
+//
+// v50 · fix (Sep 25 2026): "Finish here — it still counts" (finishAtRoundOne)
+// deliberately drops round 2+ AND the upper-back block — effectiveRounds()
+// above already takes round 2+ out of `movable`, but upper-back stayed in
+// it, so a floor the app itself just told her "still counts" logged "6 moves
+// skipped" right under "Nice. Workout A done." — a mixed message. Leave out
+// the same steps the floor removed on purpose, the same way Lite leaves out
+// round 2: when finishHereLitePrev is set (non-null = "Finish here" was
+// tapped this session), upper-back doesn't count as skipped either.
 function skippedStepsCount(w: Workout): number {
   const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
-  return movable.filter((s) => state.completedSteps[s.key] !== true).length;
+  const countable =
+    state.finishHereLitePrev !== null ? movable.filter((s) => s.phase !== 'upperBack') : movable;
+  return countable.filter((s) => state.completedSteps[s.key] !== true).length;
 }
 
 function phaseLabelFor(w: Workout): string {
@@ -5532,7 +5563,11 @@ function cyclePeriodPayload(p: StoredCyclePeriod): RemoteCyclePeriod {
 async function pushCyclePeriod(p: StoredCyclePeriod): Promise<void> {
   if (syncDisabled()) return;
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/cycle_periods`, {
+    // v50 · fix (Sep 25 2026): merge-duplicates alone targets the PRIMARY KEY
+    // (id), not start_date — a same-date repeat POST would 409 on the
+    // start_date unique index instead of upserting. on_conflict says which
+    // column the "duplicate" actually is.
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/cycle_periods?on_conflict=start_date`, {
       method: 'POST',
       // start_date is UNIQUE — merge-duplicates makes a repeat tap on the same
       // day an upsert, not a 409.
@@ -5573,20 +5608,43 @@ async function deleteCyclePeriod(startDate: string): Promise<void> {
 const CYCLE_UNDO_MS = 10_000;
 let cycleUndoTimer: ReturnType<typeof setTimeout> | null = null;
 let cycleUndoStartDate: string | null = null;
+// v50 · fix (Sep 25 2026): Undo must only ever delete a row THIS tap created.
+// Before this flag, re-logging an already-logged date (a second tap on a day
+// she'd logged earlier, or re-logging today) then tapping Undo deleted the
+// ORIGINAL row — it's gone from localStorage and a DELETE reaches Supabase
+// too. false = "the date already existed; nothing for Undo to remove."
+let cycleUndoCreated = false;
 
 function logPeriodStart(dateISO: string): void {
   const periods = loadCyclePeriods();
+  const existing = periods.find((p) => p.startDate === dateISO);
+  if (cycleUndoTimer) clearTimeout(cycleUndoTimer);
+  if (existing) {
+    // Already logged — leave the row exactly as it was (never overwrite an
+    // earlier 'reproductive.md' source with 'app', never re-push and risk a
+    // conflict). Show "Already logged" with no Undo, since there's nothing
+    // this tap created.
+    cycleUndoStartDate = dateISO;
+    cycleUndoCreated = false;
+    cycleUndoTimer = setTimeout(() => {
+      cycleUndoStartDate = null;
+      render();
+    }, CYCLE_UNDO_MS);
+    render();
+    return;
+  }
   const stored: StoredCyclePeriod = {
     startDate: dateISO,
     source: 'app',
     note: null,
     synced: syncDisabled(), // automation: mark synced so no network is attempted
   };
-  writeCyclePeriods([...periods.filter((p) => p.startDate !== dateISO), stored]);
+  writeCyclePeriods([...periods, stored]);
   cycleUndoStartDate = dateISO;
-  if (cycleUndoTimer) clearTimeout(cycleUndoTimer);
+  cycleUndoCreated = true;
   cycleUndoTimer = setTimeout(() => {
     cycleUndoStartDate = null;
+    cycleUndoCreated = false;
     render();
   }, CYCLE_UNDO_MS);
   void pushCyclePeriod(stored);
@@ -5594,11 +5652,12 @@ function logPeriodStart(dateISO: string): void {
 }
 
 function undoPeriodStart(): void {
-  if (!cycleUndoStartDate) return;
+  if (!cycleUndoStartDate || !cycleUndoCreated) return; // nothing this tap created — no-op
   const dateISO = cycleUndoStartDate;
   if (cycleUndoTimer) clearTimeout(cycleUndoTimer);
   cycleUndoTimer = null;
   cycleUndoStartDate = null;
+  cycleUndoCreated = false;
   writeCyclePeriods(loadCyclePeriods().filter((p) => p.startDate !== dateISO));
   void deleteCyclePeriod(dateISO);
   render();
@@ -5627,7 +5686,13 @@ async function flushPendingSyncs(): Promise<void> {
     return;
   }
   const pendingLogs = loadLogs().filter((l) => !l.synced && l.id);
-  if (pendingLogs.length === 0) {
+  // v50 · fix (Sep 25 2026): a "Period started today" tap made offline, or
+  // one whose POST failed, was staying synced:false forever — nothing ever
+  // retried it (flushPendingSyncs only looked at session logs). Fail-loud +
+  // tandem rule: an unsynced row that never reaches cycle_periods is a row I
+  // can't see either. Push those alongside pending session logs.
+  const pendingPeriods = loadCyclePeriods().filter((p) => !p.synced);
+  if (pendingLogs.length === 0 && pendingPeriods.length === 0) {
     state.syncStatus = 'synced';
     updateSyncIndicator();
     return;
@@ -5639,6 +5704,10 @@ async function flushPendingSyncs(): Promise<void> {
     const ok = await pushLogToSupabase(entry);
     if (!ok) allOk = false;
   }
+  for (const period of pendingPeriods) {
+    await pushCyclePeriod(period); // marks synced:true in localStorage on success
+  }
+  if (loadCyclePeriods().some((p) => !p.synced)) allOk = false;
   state.syncStatus = allOk ? 'synced' : 'offline';
   updateSyncIndicator();
 }
@@ -5651,7 +5720,10 @@ function updateSyncIndicator(): void {
 }
 
 function syncIndicatorText(): string {
-  const pending = loadLogs().filter((l) => !l.synced).length;
+  // v50 · fix (Sep 25 2026): pending cycle-period rows count toward the
+  // indicator too — see flushPendingSyncs above.
+  const pending =
+    loadLogs().filter((l) => !l.synced).length + loadCyclePeriods().filter((p) => !p.synced).length;
   if (state.syncStatus === 'syncing') return 'syncing…';
   if (pending > 0) return `offline · ${pending} pending`;
   // v48 · P4 (Sep 24 2026): "synced ✓" hides — it was a third status line above
@@ -9375,8 +9447,18 @@ function cyclePeriodsForLogic(): CyclePeriod[] {
 // (x = session order, not real time — sessions aren't evenly spaced, same
 // choice every other progress chart here already makes), a before-dot and an
 // after-dot, and a connecting slope when both readings exist for that
-// session. An estimated (current, open) cycle's columns sit at lower opacity
-// — a visible "this part is a guess", not a silent one.
+// session. An estimated (current, open) cycle's columns get a hatch overlay
+// AND an "est." tick, not just lower opacity — a visible "this part is a
+// guess", not a silent one.
+//
+// v50 · fix (Sep 25 2026): Opus's finding — the 4 phase bands were
+// near-identical greys, the before/after dots were the literal same colour
+// (--text-dim and --accent-progress both alias --ink-2), and the estimated
+// stretch's 0.55 opacity was invisible on an already-faint band. Distinct
+// hues per phase (PHASE_TOKEN, styles.css), a hollow ring for before vs a
+// filled dot for after (--cc-before/--cc-after), and a hatch + text tick for
+// "estimated" — phase, the card's whole point, has to be decodable from the
+// picture.
 function renderCapacityCycleChart(points: ReturnType<typeof buildTimeline>): string {
   if (points.length === 0) return '';
   const W = 320;
@@ -9397,23 +9479,46 @@ function renderCapacityCycleChart(points: ReturnType<typeof buildTimeline>): str
     .map((p, i) => {
       if (!p.phase) return '';
       const x = PAD_L + i * slot;
-      const opacity = p.estimated ? 0.55 : 1;
-      return `<rect x="${x.toFixed(1)}" y="${PAD_T}" width="${slot.toFixed(1)}" height="${innerH}" fill="${PHASE_TOKEN[p.phase]}" opacity="${opacity}" />`;
+      const rect = `<rect x="${x.toFixed(1)}" y="${PAD_T}" width="${slot.toFixed(1)}" height="${innerH}" fill="${PHASE_TOKEN[p.phase]}" />`;
+      // Estimated (the open, current cycle): a diagonal hatch on top, not
+      // just a dimmer fill — opacity alone at 412px read as "nothing here".
+      const hatch = p.estimated
+        ? `<rect x="${x.toFixed(1)}" y="${PAD_T}" width="${slot.toFixed(1)}" height="${innerH}" fill="url(#cc-hatch)" />`
+        : '';
+      return rect + hatch;
     })
     .join('');
+
+  // One "est." tick centred over the estimated run (it's always the trailing
+  // columns — the open cycle is always the most recent one).
+  const estIndices = points.reduce<number[]>((acc, p, i) => {
+    if (p.estimated) acc.push(i);
+    return acc;
+  }, []);
+  const estTick =
+    estIndices.length > 0
+      ? (() => {
+          const first = estIndices[0]!;
+          const span = estIndices.length;
+          const midX = PAD_L + (first + span / 2) * slot;
+          return `<text x="${midX.toFixed(1)}" y="${(PAD_T - 2).toFixed(1)}" text-anchor="middle" font-size="7" fill="var(--text-dim-2)">est.</text>`;
+        })()
+      : '';
 
   const marks = points
     .map((p, i) => {
       const cx = PAD_L + i * slot + slot / 2;
       let out = '';
       if (p.before !== null && p.after !== null) {
-        out += `<line x1="${cx.toFixed(1)}" y1="${yFor(p.before).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yFor(p.after).toFixed(1)}" stroke="var(--accent-progress)" stroke-width="1.5" stroke-linecap="round" />`;
+        out += `<line x1="${cx.toFixed(1)}" y1="${yFor(p.before).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yFor(p.after).toFixed(1)}" stroke="var(--cc-after)" stroke-width="1.5" stroke-linecap="round" opacity="0.6" />`;
       }
       if (p.before !== null) {
-        out += `<circle cx="${cx.toFixed(1)}" cy="${yFor(p.before).toFixed(1)}" r="2.6" fill="var(--text-dim)" />`;
+        // Hollow ring — a reading, not the one that "landed".
+        out += `<circle cx="${cx.toFixed(1)}" cy="${yFor(p.before).toFixed(1)}" r="3" fill="none" stroke="var(--cc-before)" stroke-width="1.5" />`;
       }
       if (p.after !== null) {
-        out += `<circle cx="${cx.toFixed(1)}" cy="${yFor(p.after).toFixed(1)}" r="3.2" fill="var(--accent-progress)" />`;
+        // Filled — the after reading is the one that reads brightest.
+        out += `<circle cx="${cx.toFixed(1)}" cy="${yFor(p.after).toFixed(1)}" r="3" fill="var(--cc-after)" />`;
       }
       return out;
     })
@@ -9421,10 +9526,16 @@ function renderCapacityCycleChart(points: ReturnType<typeof buildTimeline>): str
 
   return `
     <svg class="progress-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-         aria-label="Capacity before and after, ${n} session${n === 1 ? '' : 's'}, by cycle phase">
+         aria-label="Capacity before and after, ${n} session${n === 1 ? '' : 's'}, by cycle phase${estIndices.length > 0 ? ', the most recent stretch estimated' : ''}">
       <title>Capacity before and after, by cycle phase</title>
+      <defs>
+        <pattern id="cc-hatch" width="5" height="5" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="0" x2="0" y2="5" stroke="var(--ink)" stroke-width="1" opacity="0.3" />
+        </pattern>
+      </defs>
       ${bands}
       ${marks}
+      ${estTick}
     </svg>
   `;
 }
@@ -9439,8 +9550,9 @@ function renderCycleLegend(): string {
   return `
     <div class="cc-legend">
       ${phaseItems}
-      <span class="cc-legend-item"><span class="cc-legend-dot" style="background:var(--text-dim)"></span>before</span>
-      <span class="cc-legend-item"><span class="cc-legend-dot" style="background:var(--accent-progress)"></span>after</span>
+      <span class="cc-legend-item"><span class="cc-legend-dot cc-legend-dot-hollow"></span>before</span>
+      <span class="cc-legend-item"><span class="cc-legend-dot" style="background:var(--cc-after)"></span>after</span>
+      <span class="cc-legend-item cc-legend-est">hatched · est.</span>
     </div>`;
 }
 
@@ -9512,6 +9624,15 @@ function renderCapacityCycleCard(logs: LogEntry[]): string {
 // Also lives as a quiet row in Settings (renderCycleSettingsRow below).
 function renderCycleLogRow(): string {
   if (cycleUndoStartDate) {
+    // v50 · fix (Sep 25 2026): a re-log of an already-logged date has no
+    // Undo — there's no new row it created, so an Undo tap must not be able
+    // to delete the original.
+    if (!cycleUndoCreated) {
+      return `
+        <div class="cc-log-undo">
+          <span>Already logged ${formatMonthDay(cycleUndoStartDate)}.</span>
+        </div>`;
+    }
     return `
       <div class="cc-log-undo">
         <span>Logged ${formatMonthDay(cycleUndoStartDate)}.</span>
@@ -9533,6 +9654,14 @@ function renderCycleLogRow(): string {
 // screens' handlers can coexist without clashing.
 function renderCycleSettingsRow(): string {
   if (cycleUndoStartDate) {
+    if (!cycleUndoCreated) {
+      return `
+        <div class="settings-row">
+          <div class="settings-row-text">
+            <div class="settings-row-title">Already logged ${formatMonthDay(cycleUndoStartDate)}</div>
+          </div>
+        </div>`;
+    }
     return `
       <div class="settings-row">
         <div class="settings-row-text">

@@ -111,6 +111,40 @@ test.describe('capacity & cycle card', () => {
     await expect(card.locator('.cc-legend')).toBeVisible();
   });
 
+  // v50 · fix (Sep 25 2026): Opus's finding — the 4 phase bands were
+  // near-identical greys (you couldn't decode phase, the card's whole
+  // point, from the picture), and the before/after dots were the literal
+  // same colour (--text-dim and --accent-progress both aliased --ink-2).
+  // Assert the resolved colours are actually 4-way (band) and 2-way
+  // (dot) distinct, not just that the elements exist.
+  test('the 4 phase swatches resolve to 4 distinct colours, and before/after dots differ', async ({
+    page,
+  }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await seedLogs(page, [
+      log('m1', '2026-08-05T10:00:00.000Z', 4, 6),
+      log('m2', '2026-08-06T10:00:00.000Z', 2, 4),
+      log('m3', '2026-08-07T10:00:00.000Z', 6, 8),
+    ]);
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await openProgress(page);
+
+    const swatchColors = await page
+      .locator('.cc-legend-swatch')
+      .evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundColor));
+    expect(swatchColors).toHaveLength(4);
+    expect(new Set(swatchColors).size).toBe(4);
+
+    const beforeDot = page.locator('.cc-legend-dot-hollow');
+    const afterDot = page
+      .locator('.cc-legend-item', { hasText: 'after' })
+      .locator('.cc-legend-dot');
+    const beforeColor = await beforeDot.evaluate((el) => getComputedStyle(el).borderColor);
+    const afterColor = await afterDot.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(beforeColor).not.toBe(afterColor);
+  });
+
   test('a phase under 3 sessions shows "not enough yet", never a fake average', async ({
     page,
   }) => {
@@ -178,6 +212,44 @@ test.describe('"Period started today" — the tap', () => {
     const rows = JSON.parse(raw ?? '[]') as unknown[];
     expect(rows).toHaveLength(0);
     await expect(page.locator('#cc-log-today')).toBeVisible();
+  });
+
+  // v50 · fix (Sep 25 2026, severity 5): re-logging an already-logged date
+  // and then tapping Undo was deleting the ORIGINAL row — gone from
+  // localStorage, and a DELETE reached Supabase too. Seed a real logged
+  // date, re-log it, confirm no Undo is offered, and confirm the row
+  // survives. Driven via the __wtLogPeriodStart hook (same one the
+  // "under automation (sync off)" test above uses) rather than the real
+  // date-input tap: the real tap's 10s undo timer is real wall-clock time,
+  // and re-logging via the date input's `change` event blocks this test's
+  // dispatchEvent call until that timer actually fires and resets the
+  // "Already logged" state back — which would make the test race its own
+  // subject. The hook exercises the exact same logPeriodStart the tap calls.
+  test('re-logging an already-logged date: no Undo, and the original row survives', async ({
+    page,
+  }) => {
+    await seedCyclePeriods(page, HER_PERIODS); // includes 2026-09-01, source 'reproductive.md'
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await openProgress(page);
+
+    await page.evaluate(() => {
+      const w = window as unknown as { __wtLogPeriodStart: (d: string) => void };
+      w.__wtLogPeriodStart('2026-09-01');
+    });
+
+    // No Undo button — re-logging an existing date created nothing.
+    await expect(page.locator('#cc-undo')).toHaveCount(0);
+    const card = page.locator('.progress-card', { hasText: 'Capacity & cycle' });
+    await expect(card).toContainText('Already logged');
+
+    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:cycle-periods'));
+    const rows = JSON.parse(raw ?? '[]') as { startDate: string; source: string | null }[];
+    // Still exactly her 8 seeded rows — nothing added, nothing removed.
+    expect(rows).toHaveLength(HER_PERIODS.length);
+    const sep1 = rows.find((r) => r.startDate === '2026-09-01');
+    expect(sep1).toBeTruthy();
+    expect(sep1!.source).toBe('reproductive.md'); // NOT silently overwritten to 'app'
   });
 
   test('a different day, via the date input', async ({ page }) => {

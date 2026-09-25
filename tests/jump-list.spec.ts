@@ -240,6 +240,46 @@ test('skipped-count shows on the log and saves to the row', async ({ page }) => 
   expect(logs[0]?.stepsSkipped).toBe(expectedSkipped);
 });
 
+// v50 · fix (Sep 25 2026, severity 4): finishing the LAST of a run of
+// skipped moves used to fall through to the plain in-order walk instead of
+// the jump list (nextUndoneStep returns null once everything's done), which
+// marched her forward through every move she'd already finished — round-1
+// floor included — instead of going straight to cool-down.
+test('finishing the last of 2 skipped moves goes straight to cool-down, not back through finished moves', async ({
+  page,
+}) => {
+  await startWorkoutA(page);
+  await page.locator('#step-list-open').click();
+  const rows = await readMovableRows(page);
+  expect(rows.length).toBeGreaterThan(5);
+
+  // Skip the first 2 moves by jumping straight to the 3rd.
+  await page.locator(`[data-jump-key="${rows[2]!.key}"]`).click();
+
+  // Walk Done through everything else, including the round break — the jump
+  // list should wrap back to the 2 skipped moves on its own once everything
+  // else is done, and land on cool-down right after the 2nd one. Bounded
+  // loop: a regression here used to need ~21 EXTRA taps past this bound.
+  for (let i = 0; i < rows.length + 8; i++) {
+    if (await page.locator('.stretch-list').isVisible()) break;
+    if (await page.locator('#start-round-2').isVisible()) {
+      await page.locator('#start-round-2').click();
+      continue;
+    }
+    const btn = page.locator('button:has-text("Done ·"), #ww-skip').first();
+    if (await btn.isVisible()) {
+      await btn.click();
+      continue;
+    }
+    break;
+  }
+
+  await expect(page.locator('.stretch-list')).toBeVisible();
+  await page.locator('#step-list-open').click();
+  await expect(page.locator(`[data-jump-key="${rows[0]!.key}"] .step-list-check`)).toHaveText('✓');
+  await expect(page.locator(`[data-jump-key="${rows[1]!.key}"] .step-list-check`)).toHaveText('✓');
+});
+
 test('the round-1 floor still shows even with an earlier step skipped', async ({ page }) => {
   await startWorkoutA(page);
   await page.locator('#step-list-open').click();

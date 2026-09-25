@@ -119,11 +119,28 @@ test.describe('phaseForDate — past cycles (known next start)', () => {
 
 test.describe('phaseForDate — the current/open cycle (estimated)', () => {
   test('estimates the next start from the median of the last 6 cycle lengths', () => {
-    // last start Sep1 2026; median length 27.5 -> estimated next start = Sep1 + 27.5 (rounds via day math)
+    // last start Sep1 2026; median length 27.5 -> estimated next start rounds
+    // to a whole day (v50 · fix Sep 25 2026 — see cycle.ts addDays): Math.round(27.5)=28,
+    // Sep1 + 28 days = Sep29. cycleLength itself stays the raw 27.5 (unrounded).
     const r = phaseForDate('2026-09-10', HER_PERIODS); // day 10, into the open cycle
     expect(r?.estimated).toBe(true);
     expect(r?.cycleLength).toBe(27.5);
-    expect(r?.nextStart).toBe('2026-09-28'); // Sep1 + 27.5 days, floored by Date arithmetic
+    expect(r?.nextStart).toBe('2026-09-29');
+  });
+
+  // v50 · fix (Sep 25 2026): addDays used to parse at LOCAL midnight but read
+  // back via toISOString() (always UTC) — in a positive-offset timezone
+  // (Jerusalem, UTC+2/+3) a whole-number median came out ONE DAY EARLY. This
+  // pins the correct, timezone-independent output directly: 2 starts exactly
+  // 28 days apart (a whole-number median, the case that used to be silently
+  // wrong — it was masked before only because her real median happens to be
+  // the fractional 27.5, tested above).
+  test('a whole-number median estimates the next start correctly, independent of the runtime timezone', () => {
+    const periods: CyclePeriod[] = [{ startDate: '2026-01-01' }, { startDate: '2026-01-29' }];
+    expect(medianCycleLength(periods)).toBe(28);
+    const r = phaseForDate('2026-01-29', periods); // the open cycle's own start
+    expect(r?.estimated).toBe(true);
+    expect(r?.nextStart).toBe('2026-02-26'); // Jan29 + 28 days
   });
 
   test('a session logged today (open cycle) still gets a phase, marked estimated', () => {
@@ -224,6 +241,43 @@ test.describe('buildPhaseTable — the n<3 rule', () => {
     const rows = buildPhaseTable([], HER_PERIODS);
     expect(rows.map((r) => r.phase)).toEqual(['menstrual', 'follicular', 'ovulatory', 'luteal']);
     expect(rows.every((r) => r.notEnough)).toBe(true);
+  });
+
+  // v50 · fix (Sep 25 2026): Before/After/Δ each gated on their OWN count —
+  // n>=3 sessions in the phase isn't enough on its own when only 1-2 of them
+  // actually carry an "after" reading (a before-only quick-log day, say).
+  // Before this fix: 3 sessions with only 1 after-reading gave avgAfter an
+  // average of that ONE reading and notEnough false — exactly the "average
+  // of 1-2" the spec forbids.
+  test('n>=3 in the phase but only 1-2 after-readings: After (and Δ) still read "not enough", Before does not', () => {
+    const sessions: CapacitySession[] = [
+      { date: '2026-08-05', capacityBefore: 4, capacityAfter: null },
+      { date: '2026-08-06', capacityBefore: 6, capacityAfter: null },
+      { date: '2026-08-07', capacityBefore: 3, capacityAfter: 8 }, // the only after-reading
+    ];
+    const rows = buildPhaseTable(sessions, HER_PERIODS);
+    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
+    expect(menstrual.n).toBe(3);
+    expect(menstrual.notEnough).toBe(false); // the phase itself has 3 sessions
+    expect(menstrual.avgBefore).toBeCloseTo((4 + 6 + 3) / 3, 5); // 3 befores — enough
+    expect(menstrual.avgAfter).toBeNull(); // only 1 after — not enough, never averaged
+    expect(menstrual.avgChange).toBeNull(); // Δ needs both avgBefore and avgAfter
+  });
+
+  // Her named contradiction (evidence, live data): Before/After each averaged
+  // over a DIFFERENT subset used to let After read higher than Before while Δ
+  // read negative. Δ = avgAfter - avgBefore now, so that can't happen.
+  test('Δ is always avgAfter - avgBefore, never a separately-averaged per-session delta', () => {
+    const sessions: CapacitySession[] = [
+      { date: '2026-08-05', capacityBefore: 4, capacityAfter: 6 },
+      { date: '2026-08-06', capacityBefore: 4, capacityAfter: 6 },
+      { date: '2026-08-07', capacityBefore: 8, capacityAfter: 2 }, // one bad session, after < before
+    ];
+    const rows = buildPhaseTable(sessions, HER_PERIODS);
+    const menstrual = rows.find((r) => r.phase === 'menstrual')!;
+    expect(menstrual.avgBefore).toBeCloseTo((4 + 4 + 8) / 3, 5);
+    expect(menstrual.avgAfter).toBeCloseTo((6 + 6 + 2) / 3, 5);
+    expect(menstrual.avgChange).toBeCloseTo(menstrual.avgAfter! - menstrual.avgBefore!, 10);
   });
 });
 

@@ -83,9 +83,21 @@ function daysBetween(aISO: string, bISO: string): number {
   return Math.round((toMs(bISO) - toMs(aISO)) / MS_PER_DAY);
 }
 
+// v50 · fix (Sep 25 2026): the old version parsed `dateISO` at LOCAL midnight
+// (toMs, above — no 'Z' suffix, so JS reads it in the runtime's timezone) but
+// read the result back with toISOString(), which is always UTC. In Jerusalem
+// (UTC+2/+3) any whole-day offset came out ONE DAY EARLY — the estimated
+// next start, every estimated phase, and prePeriod all shifted a day early.
+// Fixed by never touching real (locale-dependent) time at all: treat
+// `dateISO` as a bare calendar date and do the whole add in one UTC frame,
+// so the function's output can't depend on the runtime's timezone. Also
+// rounds a fractional estimate (her median can be e.g. 27.5) to a whole day
+// first — a next start needs to land ON a day, not floor to whichever side
+// the leftover half-day's UTC conversion happened to fall on.
 function addDays(dateISO: string, days: number): string {
-  const d = new Date(toMs(dateISO) + days * MS_PER_DAY);
-  return d.toISOString().slice(0, 10);
+  const [y, m, d] = dateISO.split('-').map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d + Math.round(days)));
+  return dt.toISOString().slice(0, 10);
 }
 
 function sortStarts(periods: CyclePeriod[]): string[] {
@@ -234,15 +246,25 @@ export type PhaseTableRow = {
   n: number; // sessions in this phase with at least one honest reading
   avgBefore: number | null;
   avgAfter: number | null;
-  avgChange: number | null; // avg(after-before), over sessions with BOTH honest
-  notEnough: boolean; // n < MIN_PHASE_N — every average above is null and "-" is shown
+  avgChange: number | null; // avgAfter - avgBefore (never a separately-averaged per-session delta — see below)
+  notEnough: boolean; // n < MIN_PHASE_N (the phase as a whole) — the row is shown but every column can still independently read "-"
 };
 
 const PHASE_ORDER: CyclePhase[] = ['menstrual', 'follicular', 'ovulatory', 'luteal'];
 
 /** The Progress card's small table: n / avg before / avg after / avg change,
- *  one row per phase. A phase with fewer than MIN_PHASE_N sessions never
- *  gets an average — "not enough yet" (spec: "never an average of 1-2"). */
+ *  one row per phase.
+ *
+ *  v50 · fix (Sep 25 2026): the phase-level n>=MIN_PHASE_N gate used to be
+ *  the ONLY gate — Before, After and Δ were then each averaged over
+ *  whatever subset of that n happened to have a before/after/paired
+ *  reading, so After or Δ could still be an average of 1-2 (her spec
+ *  forbids this), and because Δ was its own separately-averaged
+ *  per-session change (not avgAfter-avgBefore), a row could show "after is
+ *  higher" while Δ read negative — self-contradictory. Now: Before and
+ *  After are each gated on their OWN count (>= MIN_PHASE_N honest readings
+ *  of that kind), and Δ is always avgAfter-avgBefore, so the row can never
+ *  contradict itself and never quietly averages 1-2. */
 export function buildPhaseTable(
   sessions: CapacitySession[],
   periods: CyclePeriod[]
@@ -258,21 +280,17 @@ export function buildPhaseTable(
   return PHASE_ORDER.map((phase) => {
     const inPhase = byPhase.get(phase)!;
     const n = inPhase.length;
-    if (n < MIN_PHASE_N) {
-      return { phase, n, avgBefore: null, avgAfter: null, avgChange: null, notEnough: true };
-    }
     const befores = inPhase.map(honestBefore).filter((v): v is number => v !== null);
     const afters = inPhase.map(honestAfter).filter((v): v is number => v !== null);
-    const changes = inPhase
-      .filter((s) => honestBefore(s) !== null && honestAfter(s) !== null)
-      .map((s) => honestAfter(s)! - honestBefore(s)!);
+    const avgBefore = befores.length >= MIN_PHASE_N ? avg(befores) : null;
+    const avgAfter = afters.length >= MIN_PHASE_N ? avg(afters) : null;
     return {
       phase,
       n,
-      avgBefore: befores.length ? avg(befores) : null,
-      avgAfter: afters.length ? avg(afters) : null,
-      avgChange: changes.length ? avg(changes) : null,
-      notEnough: false,
+      avgBefore,
+      avgAfter,
+      avgChange: avgBefore !== null && avgAfter !== null ? avgAfter - avgBefore : null,
+      notEnough: n < MIN_PHASE_N,
     };
   });
 }
