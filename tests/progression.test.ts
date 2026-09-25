@@ -53,6 +53,9 @@ function s(
     stoppedEarlyAt: null,
     backPain: 0,
     wristPain: 0,
+    // v51: defaults to "not answered", same as backPain/wristPain before them.
+    backPainBefore: null,
+    wristPainBefore: null,
     stepFeel: null,
     armFeel: null,
     wallSitSec: 60, // high enough to clear any wall-sit target used in these tests
@@ -960,6 +963,24 @@ test('back ≥3 then a week off: the flare is still caught, not lost behind the 
       priorWeeks: [R2W4_WEEK, flareWeek, emptyWeek('2026-10-03')],
       priorDecisions: [],
     })
+  );
+  expect(d.mode).toBe('STEP_BACK');
+  expect(d.stepBackReason).toBe('back');
+});
+
+test('v51: a before-reading of back ≥3 STEP_BACKs even when the after-reading was Fine', () => {
+  const w5 = decideWeek(baseInput());
+  const heavyWeek: WeekHistory = {
+    weekStart: '2026-10-03',
+    sessions: [
+      // backPain (after) is Fine — only the pre-log reading flared.
+      s('A', '2026-10-06', { backPain: 0, backPainBefore: 3 }),
+      s('B', '2026-10-07'),
+      s('C', '2026-10-08'),
+    ],
+  };
+  const d = decideWeek(
+    baseInput({ weekStart: '2026-10-10', priorWeeks: [R2W4_WEEK, heavyWeek], priorDecisions: [w5] })
   );
   expect(d.mode).toBe('STEP_BACK');
   expect(d.stepBackReason).toBe('back');

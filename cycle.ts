@@ -609,6 +609,52 @@ export function buildPlainMoodPhaseTable(
   );
 }
 
+// ---------------------------------------------------------------------------
+// Back & wrist before -> after (v51, Sep 25 2026) — her follow-up ask: "and
+// all metrics bf workout have after as well". Same shared generic + same
+// MIN_PHASE_N gate as capacity/mood — no honest-reading cutoff (the BEFORE
+// half of back/wrist didn't exist before v51, so there's no ambiguous
+// pre-cutoff default to exclude, same reasoning as mood above).
+// ---------------------------------------------------------------------------
+
+export type BackSession = {
+  date: string;
+  backBefore: number | null;
+  backAfter: number | null;
+};
+
+export type WristSession = {
+  date: string;
+  wristBefore: number | null;
+  wristAfter: number | null;
+};
+
+/** Same, for back pain before -> after. */
+export function buildPlainBackPhaseTable(
+  sessions: BackSession[],
+  periods: CyclePeriod[]
+): PlainPhaseTableRow[] {
+  return buildPlainPhaseTableGeneric(
+    sessions,
+    periods,
+    (s) => s.backBefore,
+    (s) => s.backAfter
+  );
+}
+
+/** Same, for wrist pain before -> after. */
+export function buildPlainWristPhaseTable(
+  sessions: WristSession[],
+  periods: CyclePeriod[]
+): PlainPhaseTableRow[] {
+  return buildPlainPhaseTableGeneric(
+    sessions,
+    periods,
+    (s) => s.wristBefore,
+    (s) => s.wristAfter
+  );
+}
+
 /** The one optional question line, in plain words — same gate as
  *  questionLine above (>=1 point, n>=3 both sides, before checked first),
  *  reusing prePeriodVsRest exactly (its "pre-period" window IS "the week

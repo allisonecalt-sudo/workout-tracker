@@ -25,6 +25,8 @@ import {
   todayCycleStatus,
   buildPlainPhaseTable,
   buildPlainMoodPhaseTable,
+  buildPlainBackPhaseTable,
+  buildPlainWristPhaseTable,
   plainQuestionLine,
   PLAIN_PHASE_ORDER,
   PLAIN_PHASE_LABEL,
@@ -32,6 +34,8 @@ import {
   type CyclePeriod,
   type CapacitySession,
   type MoodSession,
+  type BackSession,
+  type WristSession,
 } from '../cycle';
 
 // Her real logged period starts (self/health/reproductive.md), the exact
@@ -667,6 +671,45 @@ test.describe('buildPlainPhaseTable / buildPlainMoodPhaseTable — bucketed into
     const onPeriod = rows.find((r) => r.plainPhase === 'on-period')!;
     expect(onPeriod.avgBefore).toBeCloseTo(3, 5);
     expect(onPeriod.avgAfter).toBeCloseTo(8, 5);
+  });
+
+  // v51 (Sep 25 2026): back & wrist before -> after share the exact same
+  // generic + gate as mood — one n<3 check (nothing yet) and one n>=3 check
+  // (averages appear) is enough to prove the wiring, same as the mood test above.
+  test('back: under 3 readings stays null ("not enough yet"), same gate as mood', () => {
+    const sessions: BackSession[] = [
+      { date: '2026-08-05', backBefore: 0, backAfter: 0 },
+      { date: '2026-08-06', backBefore: 2, backAfter: 1 },
+    ];
+    const rows = buildPlainBackPhaseTable(sessions, HER_PERIODS);
+    const onPeriod = rows.find((r) => r.plainPhase === 'on-period')!;
+    expect(onPeriod.n).toBe(2);
+    expect(onPeriod.avgBefore).toBeNull();
+    expect(onPeriod.avgAfter).toBeNull();
+  });
+
+  test('back: 3+ readings averages before -> after, independently gated from capacity/mood', () => {
+    const sessions: BackSession[] = [
+      { date: '2026-08-05', backBefore: 2, backAfter: 0 },
+      { date: '2026-08-06', backBefore: 4, backAfter: 1 },
+      { date: '2026-08-07', backBefore: 3, backAfter: 2 },
+    ];
+    const rows = buildPlainBackPhaseTable(sessions, HER_PERIODS);
+    const onPeriod = rows.find((r) => r.plainPhase === 'on-period')!;
+    expect(onPeriod.avgBefore).toBeCloseTo(3, 5);
+    expect(onPeriod.avgAfter).toBeCloseTo(1, 5);
+  });
+
+  test('wrist: same shape as back, its own field names', () => {
+    const sessions: WristSession[] = [
+      { date: '2026-08-05', wristBefore: 1, wristAfter: 0 },
+      { date: '2026-08-06', wristBefore: 3, wristAfter: 1 },
+      { date: '2026-08-07', wristBefore: 2, wristAfter: 2 },
+    ];
+    const rows = buildPlainWristPhaseTable(sessions, HER_PERIODS);
+    const onPeriod = rows.find((r) => r.plainPhase === 'on-period')!;
+    expect(onPeriod.avgBefore).toBeCloseTo(2, 5);
+    expect(onPeriod.avgAfter).toBeCloseTo(1, 5);
   });
 });
 

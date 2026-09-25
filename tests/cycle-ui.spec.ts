@@ -75,7 +75,9 @@ function log(
   before: number,
   after: number,
   // v50 · mood: optional so every existing call site (capacity-only) is untouched.
-  mood?: { before: number; after: number }
+  mood?: { before: number; after: number },
+  // v51 · back & wrist before -> after: same optional shape as mood above.
+  backWrist?: { backBefore: number; backAfter: number; wristBefore: number; wristAfter: number }
 ): Row {
   return {
     id,
@@ -86,7 +88,10 @@ function log(
     moodBefore: mood?.before ?? null,
     moodAfter: mood?.after ?? null,
     wallSitSec: 0,
-    backPain: 0,
+    backPain: backWrist?.backAfter ?? 0,
+    backPainBefore: backWrist?.backBefore ?? null,
+    wristPain: backWrist?.wristAfter ?? null,
+    wristPainBefore: backWrist?.wristBefore ?? null,
     word: '',
     durationSec: 1800,
   };
@@ -283,6 +288,79 @@ test.describe('"Your cycle" card — plain words', () => {
     const moodNow = card.locator('.cc2-now', { hasText: 'Mood' });
     await expect(moodNow).toContainText('3.0 → 8.0');
     await expect(card).not.toContainText('tracking started');
+  });
+
+  // v51 (Sep 25 2026): back & wrist before -> after join the card the same
+  // way mood does — same MIN_PHASE_N gate, but NO quiet placeholder when not
+  // ready (her spec: "never four 'not enough yet's ... they simply don't
+  // appear" — unlike mood, which has a fixed tracking-start date to point to).
+  test('back & wrist stay off the card entirely under 3 readings — no placeholder line', async ({
+    page,
+  }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await seedLogs(page, [
+      log('bw1', '2026-08-05T10:00:00.000Z', 4, 6, undefined, {
+        backBefore: 2,
+        backAfter: 0,
+        wristBefore: 1,
+        wristAfter: 0,
+      }),
+      log('bw2', '2026-08-06T10:00:00.000Z', 2, 4, undefined, {
+        backBefore: 3,
+        backAfter: 1,
+        wristBefore: 2,
+        wristAfter: 1,
+      }),
+    ]);
+    await mockDate(page, '2026-08-06T10:00:00.000Z');
+    await page.goto('/');
+    await openProgress(page);
+
+    const card = cycleCard(page);
+    // No "now" section back/wrist line, and no per-row "back …"/"wrist …"
+    // sub-line either — compareSubLine returns '' when a phase isn't ready
+    // (never a written-out "not enough yet" for back/wrist specifically;
+    // that wording is Body's own, and Body legitimately shows it here too
+    // since the same 2 sessions are under its own n>=3 gate).
+    await expect(card.locator('.cc2-now', { hasText: 'Back' })).toHaveCount(0);
+    await expect(card.locator('.cc2-now', { hasText: 'Wrist' })).toHaveCount(0);
+    await expect(card.locator('.cc2-row-back')).toHaveCount(0);
+    await expect(card.locator('.cc2-row-wrist')).toHaveCount(0);
+  });
+
+  test('back & wrist show once the current phase clears 3 readings', async ({ page }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await seedLogs(page, [
+      log('bw1', '2026-08-05T10:00:00.000Z', 4, 6, undefined, {
+        backBefore: 2,
+        backAfter: 0,
+        wristBefore: 1,
+        wristAfter: 0,
+      }),
+      log('bw2', '2026-08-06T10:00:00.000Z', 2, 4, undefined, {
+        backBefore: 4,
+        backAfter: 1,
+        wristBefore: 3,
+        wristAfter: 1,
+      }),
+      log('bw3', '2026-08-07T10:00:00.000Z', 6, 8, undefined, {
+        backBefore: 3,
+        backAfter: 2,
+        wristBefore: 2,
+        wristAfter: 2,
+      }),
+    ]);
+    await mockDate(page, '2026-08-06T10:00:00.000Z');
+    await page.goto('/');
+    await openProgress(page);
+
+    const card = cycleCard(page);
+    // avg back before = (2+4+3)/3 = 3.0, avg back after = (0+1+2)/3 = 1.0.
+    const backNow = card.locator('.cc2-now', { hasText: 'Back' });
+    await expect(backNow).toContainText('3.0 → 1.0');
+    // avg wrist before = (1+3+2)/3 = 2.0, avg wrist after = (0+1+2)/3 = 1.0.
+    const wristNow = card.locator('.cc2-now', { hasText: 'Wrist' });
+    await expect(wristNow).toContainText('2.0 → 1.0');
   });
 
   test('the question line reads in plain words, once the gap clears the gate', async ({ page }) => {

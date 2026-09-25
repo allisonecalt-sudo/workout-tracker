@@ -834,6 +834,57 @@ test('pull merge (v50): mood_before/mood_after round-trip; a pre-v50 row (no moo
   expect(result.preV50?.moodAfter).toBeNull();
 });
 
+// v51 (Sep 25 2026): back_pain_before/wrist_pain_before round-trip the same
+// way — present → her number, missing (a pre-v51 server row) → null.
+test('pull merge (v51): back_pain_before/wrist_pain_before round-trip; a pre-v51 row (no keys) merges as null', async ({
+  page,
+}) => {
+  const result = await page.evaluate(() => {
+    type Row = { id: string; backPainBefore?: number | null; wristPainBefore?: number | null };
+    type Merge = (local: unknown[], remote: unknown[]) => Row[];
+    const merge = (window as unknown as { __wtMergeRemoteSessions: Merge }).__wtMergeRemoteSessions;
+    const remoteBase = {
+      workout_type: 'A',
+      capacity_before_1_10: null,
+      capacity_after_1_10: null,
+      wall_sit_seconds: 0,
+      pain_back_0_10: null,
+      one_word: null,
+      started_at: null,
+      completed_at: null,
+      duration_seconds: null,
+      notes: null,
+    };
+    const merged = merge(
+      [],
+      [
+        {
+          ...remoteBase,
+          id: 'with-before',
+          date: '2026-09-25T10:00:00+00:00',
+          back_pain_before: 3,
+          wrist_pain_before: 0,
+        },
+        {
+          ...remoteBase,
+          id: 'pre-v51',
+          date: '2026-09-20T10:00:00+00:00',
+          // no back_pain_before/wrist_pain_before keys at all — a server row from before v51
+        },
+      ]
+    );
+    return {
+      withBefore: merged.find((r) => r.id === 'with-before'),
+      preV51: merged.find((r) => r.id === 'pre-v51'),
+    };
+  });
+
+  expect(result.withBefore?.backPainBefore).toBe(3);
+  expect(result.withBefore?.wristPainBefore).toBe(0);
+  expect(result.preV51?.backPainBefore).toBeNull();
+  expect(result.preV51?.wristPainBefore).toBeNull();
+});
+
 // --- Round 2 Week 3: the band goes on the clamshells (v35, Sep 14 2026) ------
 // Her word: "build week 3". One change only — the yellow band, in B, looped.
 // These assert BOTH halves: the change landed, and nothing else moved.
@@ -1675,6 +1726,33 @@ test('isValidLogEntry (v50): moodBefore/moodAfter are optional, nullable, and ty
   expect(out.nullMood).toBe(true);
   expect(out.numberMood).toBe(true);
   expect(out.junkMood).toBe(false);
+});
+
+test('isValidLogEntry (v51): backPainBefore/wristPainBefore are optional, nullable, and typed', async ({
+  page,
+}) => {
+  const out = await page.evaluate(() => {
+    const fn = (window as unknown as { __wtIsValidLogEntry: (x: unknown) => boolean })
+      .__wtIsValidLogEntry;
+    const base = {
+      date: '2026-09-25',
+      workout: 'A',
+      capacityBefore: 5,
+      capacityAfter: 5,
+      wallSitSec: 0,
+      backPain: 0,
+    };
+    return {
+      noKeysAtAll: fn(base), // pre-v51 export
+      nullBefore: fn({ ...base, backPainBefore: null, wristPainBefore: null }),
+      numberBefore: fn({ ...base, backPainBefore: 4, wristPainBefore: 0 }),
+      junkBefore: fn({ ...base, backPainBefore: 'ouch', wristPainBefore: 0 }),
+    };
+  });
+  expect(out.noKeysAtAll).toBe(true);
+  expect(out.nullBefore).toBe(true);
+  expect(out.numberBefore).toBe(true);
+  expect(out.junkBefore).toBe(false);
 });
 
 test('weekly total (v34): a week with an unrecorded duration says how many sessions it counted', async ({
@@ -3681,6 +3759,29 @@ test.describe('v48 P1 data', () => {
     expect(untouched['mood_after']).toBeNull();
   });
 
+  // v51 (Sep 25 2026): back_pain_before/wrist_pain_before go out as their own
+  // columns, same shape as mood above — touched → her number, untouched → null.
+  test('(b3) back_pain_before/wrist_pain_before send her numbers, or null when untouched', async ({
+    page,
+  }) => {
+    const base = {
+      id: 'x',
+      date: '2026-09-24T14:00:00.000Z',
+      workout: 'A' as const,
+      capacityBefore: 6,
+      capacityAfter: 7,
+      wallSitSec: 45,
+      backPain: null,
+      word: '',
+    };
+    const touched = await payloadOf(page, { ...base, backPainBefore: 4, wristPainBefore: 0 });
+    expect(touched['back_pain_before']).toBe(4);
+    expect(touched['wrist_pain_before']).toBe(0);
+    const untouched = await payloadOf(page, base); // no backPainBefore/wristPainBefore key at all
+    expect(untouched['back_pain_before']).toBeNull();
+    expect(untouched['wrist_pain_before']).toBeNull();
+  });
+
   test('(c) the post-log note lands in session_note, never in notes', async ({ page }) => {
     await mockDate(page, '2026-09-24T14:00:00.000Z');
     await page.goto('/');
@@ -5570,8 +5671,101 @@ test.describe('v48 P5 logs', () => {
     expect(log['backPain']).toBeNull();
   });
 
+  // v51 (Sep 25 2026): the SAME control, pre-log instead of post-log — her
+  // words: "and all metrics bf workout have after as well". Same 4 cases as
+  // (d) above, "-pre" ids, backPainBefore/wristPainBefore instead of
+  // backPain/wristPain.
+  test('(d2) back & wrist BEFORE: "Fine" saves both 0', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await expect(page.locator('#back-before-1')).toHaveCount(0);
+    await page.locator('#back-fine-pre').click();
+    await expect(page.locator('#back-fine-pre')).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    expect(log['backPainBefore']).toBe(0);
+    expect(log['wristPainBefore']).toBe(0);
+  });
+
+  test('(d2) back & wrist BEFORE: untouched saves null; "Fine" tapped twice is untouched again', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    const blank = await saveAndRead(page);
+    expect(blank['backPainBefore']).toBeNull();
+    expect(blank['wristPainBefore']).toBeNull();
+
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#back-fine-pre').click();
+    await page.locator('#back-fine-pre').click();
+    await expect(page.locator('#back-fine-pre')).toHaveAttribute('aria-pressed', 'false');
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    const untouched = await saveAndRead(page);
+    expect(untouched['backPainBefore']).toBeNull();
+  });
+
+  test('(d2) back BEFORE: "Something" opens a blank 1-10 row; tapping 4 saves 4', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#back-some-pre').click();
+    await expect(page.locator('[data-body-chip="back-before"]')).toHaveCount(10);
+    await expect(page.locator('[data-body-chip="back-before"][aria-checked="true"]')).toHaveCount(
+      0
+    );
+    await page.locator('#back-before-4').click();
+    await expect(page.locator('#back-before-4')).toHaveAttribute('aria-checked', 'true');
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    expect(log['backPainBefore']).toBe(4);
+  });
+
+  test('(d2) wrist BEFORE: "Something" opens a blank 1-10 row; tapping 3 saves 3, back stays untouched', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('#wrist-some-pre').click();
+    await page.locator('#wrist-before-3').click();
+    await expect(page.locator('#wrist-before-3')).toHaveAttribute('aria-checked', 'true');
+    await page.locator('#begin').click();
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    expect(log['wristPainBefore']).toBe(3);
+    expect(log['backPainBefore']).toBeNull();
+  });
+
   test.describe('at phone size', () => {
     test.use({ viewport: { width: 412, height: 915 } });
+
+    // v51 (Sep 25 2026): the new pre-log Back & wrist control sits between
+    // Mood and the Lite chip — must not push Start off the first screen (her
+    // walk, uxui, kept alive since v48 P5: "Start is cut off at the bottom").
+    test('(d2) pre-log Start stays visible without scrolling on every workout', async ({
+      page,
+    }) => {
+      await mockDate(page, TUE_WEEK4);
+      for (const w of ['A', 'B', 'C']) {
+        await page.goto('/');
+        await page.locator(`button[data-workout="${w}"]`).click();
+        const begin = page.locator('.action-bar #begin');
+        await expect(begin).toBeVisible();
+        const box = (await begin.boundingBox())!;
+        expect(box.y + box.height).toBeLessThanOrEqual(915);
+      }
+    });
 
     test('(e) one note box: no #word, the note saves verbatim, Save stays in view while typing', async ({
       page,

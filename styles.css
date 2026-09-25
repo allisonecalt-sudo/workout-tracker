@@ -3038,7 +3038,9 @@ input[type='number']:focus {
 }
 
 .cc2-row-meta,
-.cc2-row-mood {
+.cc2-row-mood,
+.cc2-row-back,
+.cc2-row-wrist {
   font-size: var(--font-meta);
   color: var(--text-dim-2);
 }

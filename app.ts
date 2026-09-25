@@ -13,6 +13,8 @@ import {
   periodLogUrgency,
   buildPlainPhaseTable,
   buildPlainMoodPhaseTable,
+  buildPlainBackPhaseTable,
+  buildPlainWristPhaseTable,
   plainQuestionLine,
   PLAIN_PHASE_LABEL,
   PLAIN_PHASE_HEADER_LABEL,
@@ -20,6 +22,8 @@ import {
   type CyclePeriod,
   type CapacitySession,
   type MoodSession,
+  type BackSession,
+  type WristSession,
   type TodayCycleStatus,
   type PlainPhaseTableRow,
 } from './cycle.js';
@@ -122,6 +126,13 @@ type LogEntry = {
   // Optional (not just nullable): a session logged before v49 has no key at
   // all for either field, same as the other engine-era additions below.
   wristPain?: number | null;
+  // v51 (Sep 25 2026): the SAME Back & wrist control, asked pre-log instead of
+  // post-log. Her words: "and all metrics bf workout have after as well" —
+  // body and mood already had before + after; back/wrist only had after.
+  // Optional AND nullable, same shape as wristPain: a session logged before
+  // v51 has no key at all, and null = not answered.
+  backPainBefore?: number | null;
+  wristPainBefore?: number | null;
   // The one-tap read on a brand-new rung's first sessions: 'fine' | 'too_much'.
   // null/absent = not asked this session (most sessions — no rung changed recently).
   stepFeel?: 'fine' | 'too_much' | null;
@@ -207,6 +218,16 @@ type AppState = {
   // v48 · P5: post-log "Wrist: Something" was tapped — the 1-10 row is open but
   // no number is chosen yet. Transient, mirrors backSomethingOpen below.
   wristSomethingOpen: boolean;
+  // v51 (Sep 25 2026): the pre-log twin of backPain/wristPain above — same
+  // shape, same "Fine · Back · Wrist" component, asked before the workout
+  // instead of after (her words: "and all metrics bf workout have after as
+  // well").
+  backPainBefore: number;
+  backPainBeforeTouched: boolean;
+  backBeforeSomethingOpen: boolean;
+  wristPainBefore: number;
+  wristPainBeforeTouched: boolean;
+  wristBeforeSomethingOpen: boolean;
   // v49 · engine: the new-rung "Fine · Too much" tap. Transient, unset most
   // sessions (only offered when a rung changed recently — see
   // needsStepFeelPrompt()). Reset to null at the start of every session.
@@ -430,7 +451,7 @@ const SUPABASE_ANON_KEY =
 // page's "everything presentation" (combined elliptical line, compact
 // wall-sit sparkline).
 const APP_VERSION = 'v51';
-const BUILD_DATE = 'Sep 25, 2026 · 11:46';
+const BUILD_DATE = 'Sep 25, 2026 · 12:14';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2704,6 +2725,13 @@ const state: AppState = {
   wristPain: 0,
   wristPainTouched: false,
   wristSomethingOpen: false,
+  // v51: blank by default (untouched), same as backPain/wristPain above.
+  backPainBefore: 0,
+  backPainBeforeTouched: false,
+  backBeforeSomethingOpen: false,
+  wristPainBefore: 0,
+  wristPainBeforeTouched: false,
+  wristBeforeSomethingOpen: false,
   stepFeel: null,
   capacityBeforeTouched: false,
   capacityAfterTouched: false,
@@ -3847,6 +3875,10 @@ const V49_SESSION_COLUMNS = ['elliptical_time_sec', 'elliptical_kcal'] as const;
 // (migrations/2026-09-25-v49-progression-engine.sql).
 const V49_ENGINE_SESSION_COLUMNS = ['wrist_pain_0_10', 'step_feel'] as const;
 
+// The two columns added in v51 for the pre-log Back & wrist reading
+// (migrations/2026-09-25-v51-back-wrist-before.sql).
+const V51_BACK_WRIST_BEFORE_SESSION_COLUMNS = ['back_pain_before', 'wrist_pain_before'] as const;
+
 // The one column added in v50 for the jump list
 // (migrations/2026-09-25-v50-jump-list-steps-skipped.sql).
 const V50_SESSION_COLUMNS = ['steps_skipped'] as const;
@@ -3870,6 +3902,9 @@ function sessionPayload(entry: LogEntry): Record<string, unknown> {
     wall_sit_seconds: hasWallSit ? entry.wallSitSec : null,
     pain_back_0_10: entry.backPain,
     wrist_pain_0_10: entry.wristPain,
+    // v51: the pre-log BEFORE half of the same reading.
+    back_pain_before: entry.backPainBefore ?? null,
+    wrist_pain_before: entry.wristPainBefore ?? null,
     step_feel: entry.stepFeel,
     one_word: entry.word || null,
     started_at: entry.startedAt ?? null,
@@ -3905,6 +3940,7 @@ function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
   for (const col of V49_ENGINE_SESSION_COLUMNS) delete payload[col];
   for (const col of V50_SESSION_COLUMNS) delete payload[col];
   for (const col of V50_MOOD_SESSION_COLUMNS) delete payload[col];
+  for (const col of V51_BACK_WRIST_BEFORE_SESSION_COLUMNS) delete payload[col];
   const noteParts = [legacyCardioMarker(entry), entry.sessionNote, entry.notes].filter(
     (p): p is string => typeof p === 'string' && p.trim() !== ''
   );
@@ -4959,6 +4995,9 @@ async function saveCompletedSession(): Promise<void> {
     backPain: state.backPainTouched ? state.backPain : null,
     // v49 · engine: same null-means-not-answered shape as backPain.
     wristPain: state.wristPainTouched ? state.wristPain : null,
+    // v51: a chip she never tapped is not a reading — null, same rule as above.
+    backPainBefore: state.backPainBeforeTouched ? state.backPainBefore : null,
+    wristPainBefore: state.wristPainBeforeTouched ? state.wristPainBefore : null,
     stepFeel: state.stepFeel,
     word: state.word,
     startedAt,
@@ -5012,6 +5051,11 @@ type ActiveSessionSnapshot = {
   // v49 · engine: survives an app close the same way backPain does.
   wristPain: number;
   wristPainTouched: boolean;
+  // v51: the pre-log Back & wrist reading survives an app close the same way.
+  backPainBefore: number;
+  backPainBeforeTouched: boolean;
+  wristPainBefore: number;
+  wristPainBeforeTouched: boolean;
   stepFeel: 'fine' | 'too_much' | null;
   // v46: which sliders she actually moved (see AppState). A snapshot written
   // before v46 has no flags and is read as "chosen", the way v45 saved it.
@@ -5062,6 +5106,10 @@ function saveActiveSession(): void {
       backPain: state.backPain,
       wristPain: state.wristPain,
       wristPainTouched: state.wristPainTouched,
+      backPainBefore: state.backPainBefore,
+      backPainBeforeTouched: state.backPainBeforeTouched,
+      wristPainBefore: state.wristPainBefore,
+      wristPainBeforeTouched: state.wristPainBeforeTouched,
       stepFeel: state.stepFeel,
       capacityBeforeTouched: state.capacityBeforeTouched,
       capacityAfterTouched: state.capacityAfterTouched,
@@ -5143,6 +5191,11 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       // v49 · engine: a pre-engine snapshot has neither → 0/false/null, never a guess.
       wristPain: snap.wristPain ?? 0,
       wristPainTouched: snap.wristPainTouched ?? false,
+      // v51: a pre-v51 snapshot has none of these → 0/false, never a guess.
+      backPainBefore: snap.backPainBefore ?? 0,
+      backPainBeforeTouched: snap.backPainBeforeTouched ?? false,
+      wristPainBefore: snap.wristPainBefore ?? 0,
+      wristPainBeforeTouched: snap.wristPainBeforeTouched ?? false,
       stepFeel: snap.stepFeel === 'fine' || snap.stepFeel === 'too_much' ? snap.stepFeel : null,
       // Pre-v46 snapshot (no flags) → the numbers were saved as chosen then;
       // keep that reading rather than blank a session already under way.
@@ -5203,6 +5256,10 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.backPain = snap.backPain;
   state.wristPain = snap.wristPain;
   state.wristPainTouched = snap.wristPainTouched;
+  state.backPainBefore = snap.backPainBefore;
+  state.backPainBeforeTouched = snap.backPainBeforeTouched;
+  state.wristPainBefore = snap.wristPainBefore;
+  state.wristPainBeforeTouched = snap.wristPainBeforeTouched;
   state.stepFeel = snap.stepFeel;
   state.capacityBeforeTouched = snap.capacityBeforeTouched;
   state.capacityAfterTouched = snap.capacityAfterTouched;
@@ -5223,6 +5280,8 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   stepListOpen = false; // v50 · jump list: never reopen the sheet on resume
   state.backSomethingOpen = false;
   state.wristSomethingOpen = false;
+  state.backBeforeSomethingOpen = false;
+  state.wristBeforeSomethingOpen = false;
   // Preserve pause accounting across an app close. If she closed while paused,
   // she stays paused on reopen (the closed span counts as paused, so it's
   // subtracted from duration — faithful to "I stepped away").
@@ -5274,6 +5333,11 @@ function logStaleSessionAsDone(): void {
     moodAfter: null,
     wallSitSec: snap.wallSitSec,
     backPain: null,
+    // v51: same rule as capacity/mood above — the pre-log Back & wrist
+    // reading survives if she tapped it; the post-log (after) half never
+    // happened, so it stays null like backPain above.
+    backPainBefore: snap.backPainBeforeTouched ? snap.backPainBefore : null,
+    wristPainBefore: snap.wristPainBeforeTouched ? snap.wristPainBefore : null,
     word: snap.word,
     startedAt,
     notes:
@@ -5340,6 +5404,13 @@ function resetState(): void {
   state.wristPain = 0;
   state.wristPainTouched = false;
   state.wristSomethingOpen = false;
+  // v51: blank on begin/reset, same as backPain/wristPain above.
+  state.backPainBefore = 0;
+  state.backPainBeforeTouched = false;
+  state.backBeforeSomethingOpen = false;
+  state.wristPainBefore = 0;
+  state.wristPainBeforeTouched = false;
+  state.wristBeforeSomethingOpen = false;
   state.stepFeel = null;
   state.capacityBeforeTouched = false;
   state.capacityAfterTouched = false;
@@ -5398,6 +5469,10 @@ type RemoteSession = {
   // migration, or a pre-engine row, simply doesn't carry them.
   wrist_pain_0_10?: number | null;
   step_feel?: 'fine' | 'too_much' | null;
+  // v51 (Sep 25 2026): optional — a server that hasn't run the migration, or
+  // a pre-v51 row, simply doesn't carry them.
+  back_pain_before?: number | null;
+  wrist_pain_before?: number | null;
   // v50 · mood (Sep 25 2026): optional — a server that hasn't run the
   // migration, or a pre-v50 row, simply doesn't carry them.
   mood_before?: number | null;
@@ -5481,6 +5556,9 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       wallSitSec: r.wall_sit_seconds ?? 0,
       backPain: r.pain_back_0_10 ?? null,
       wristPain: r.wrist_pain_0_10 ?? null,
+      // v51: round-trips the same way — a pre-v51 row has neither key.
+      backPainBefore: r.back_pain_before ?? null,
+      wristPainBefore: r.wrist_pain_before ?? null,
       stepFeel: r.step_feel === 'fine' || r.step_feel === 'too_much' ? r.step_feel : null,
       word: r.one_word ?? '',
       startedAt: r.started_at ?? undefined,
@@ -7259,6 +7337,50 @@ function renderBodyChips(
     </div>`;
 }
 
+// v51 (Sep 25 2026): the Back & wrist combined control (Fine · Back · Wrist),
+// shared by post-log AND pre-log now — her words: "and all metrics bf
+// workout have after as well". Same component either place (one Fine tap for
+// a clean session; Back/Wrist each open their own 1-10 row) — only the ids
+// and which state fields feed it differ, passed in by the caller so post-
+// log's already-shipped ids (and tests) never move.
+function renderBackWristControl(opts: {
+  fineId: string;
+  backSomeId: string;
+  wristSomeId: string;
+  backChipGroup: string;
+  wristChipGroup: string;
+  backValue: number;
+  backTouched: boolean;
+  backOpen: boolean;
+  wristValue: number;
+  wristTouched: boolean;
+  wristOpen: boolean;
+}): string {
+  const bothFine =
+    opts.backTouched && opts.backValue === 0 && opts.wristTouched && opts.wristValue === 0;
+  const backRow = opts.backOpen
+    ? `<div class="label-text body-label">Back</div>
+       ${renderChipRow(opts.backChipGroup, opts.backValue, opts.backTouched && opts.backValue > 0, 'Back pain, 1 to 10')}
+       <div class="body-anchor">1 barely · 10 worst</div>`
+    : '';
+  const wristRow = opts.wristOpen
+    ? `<div class="label-text body-label">Wrist</div>
+       ${renderChipRow(opts.wristChipGroup, opts.wristValue, opts.wristTouched && opts.wristValue > 0, 'Wrist pain, 1 to 10')}
+       <div class="body-anchor">1 barely · 10 worst</div>`
+    : '';
+  return `
+    <div class="field back-field">
+      <span class="label-text">Back &amp; wrist</span>
+      <div class="back-choice">
+        <button class="back-chip${bothFine ? ' body-chip-on' : ''}" id="${opts.fineId}" type="button" aria-pressed="${bothFine ? 'true' : 'false'}">Fine</button>
+        <button class="back-chip${opts.backOpen ? ' back-chip-open' : ''}" id="${opts.backSomeId}" type="button" aria-pressed="${opts.backOpen ? 'true' : 'false'}">Back</button>
+        <button class="back-chip${opts.wristOpen ? ' back-chip-open' : ''}" id="${opts.wristSomeId}" type="button" aria-pressed="${opts.wristOpen ? 'true' : 'false'}">Wrist</button>
+      </div>
+      ${backRow}
+      ${wristRow}
+    </div>`;
+}
+
 // Moves that put pressure on the palms or the grip — where the one wrist + back
 // line belongs (DECISIONS §5: the amber box was 58 words, the same every
 // session, and shown on C too, where none of these moves exist).
@@ -7316,6 +7438,28 @@ function renderPreLog(): string {
   const liteChip = state.liteDay
     ? `<button class="lite-chip lite-toggle-on" id="lite-toggle" type="button" aria-pressed="true">✓ Lite · ${liteRounds} round${liteRounds === 1 ? '' : 's'} today · tap to undo</button>`
     : `<button class="lite-chip${suggestLite ? ' lite-suggest' : ''}" id="lite-toggle" type="button" aria-pressed="false">🪫 Hard day? Lite — ${liteWord}, still counts</button>`;
+  // v51 (Sep 25 2026): the pre-log Back & wrist reading — same "Fine · Back ·
+  // Wrist" combined control as post-log (renderBackWristControl), its own ids
+  // ("-pre" suffix) and its own state fields (backPainBefore/wristPainBefore)
+  // so post-log's ids stay untouched. Her words: "and all metrics bf workout
+  // have after as well".
+  const backBeforeSome =
+    state.backBeforeSomethingOpen || (state.backPainBeforeTouched && state.backPainBefore > 0);
+  const wristBeforeSome =
+    state.wristBeforeSomethingOpen || (state.wristPainBeforeTouched && state.wristPainBefore > 0);
+  const backWristBefore = renderBackWristControl({
+    fineId: 'back-fine-pre',
+    backSomeId: 'back-some-pre',
+    wristSomeId: 'wrist-some-pre',
+    backChipGroup: 'back-before',
+    wristChipGroup: 'wrist-before',
+    backValue: state.backPainBefore,
+    backTouched: state.backPainBeforeTouched,
+    backOpen: backBeforeSome,
+    wristValue: state.wristPainBefore,
+    wristTouched: state.wristPainBeforeTouched,
+    wristOpen: wristBeforeSome,
+  });
   return `
     <div class="screen-header prelog-header">
       <div class="prelog-title">
@@ -7331,6 +7475,7 @@ function renderPreLog(): string {
     <div class="card body-card">
       ${renderBodyChips('cap-before', state.capacityBefore, state.capacityBeforeTouched, 'Your BODY right now, not your mood')}
       ${renderBodyChips('mood-before', state.moodBefore, state.moodBeforeTouched, 'Mood', '1 irritable · 10 happy / calm')}
+      ${backWristBefore}
     </div>
 
     ${liteChip}
@@ -8266,21 +8411,24 @@ function renderPostLog(): string {
   // tap; Back/Wrist each open their own 1-10 row (2 taps), same as before.
   // #back-fine/#back-some/#wrist-some keep their ids so the already-shipped
   // tests (tests/app.spec.ts) still hold.
-  const backFine = state.backPainTouched && state.backPain === 0;
-  const wristFine = state.wristPainTouched && state.wristPain === 0;
-  const bothFine = backFine && wristFine;
+  // v51 (Sep 25 2026): markup now comes from the shared renderBackWristControl
+  // (same component the pre-log reading uses) — ids/groups passed in exactly
+  // as before, so the rendered HTML is unchanged.
   const backSome = state.backSomethingOpen || (state.backPainTouched && state.backPain > 0);
   const wristSome = state.wristSomethingOpen || (state.wristPainTouched && state.wristPain > 0);
-  const backRow = backSome
-    ? `<div class="label-text body-label">Back</div>
-       ${renderChipRow('back', state.backPain, state.backPainTouched && state.backPain > 0, 'Back pain, 1 to 10')}
-       <div class="body-anchor">1 barely · 10 worst</div>`
-    : '';
-  const wristRow = wristSome
-    ? `<div class="label-text body-label">Wrist</div>
-       ${renderChipRow('wrist', state.wristPain, state.wristPainTouched && state.wristPain > 0, 'Wrist pain, 1 to 10')}
-       <div class="body-anchor">1 barely · 10 worst</div>`
-    : '';
+  const backWristAfter = renderBackWristControl({
+    fineId: 'back-fine',
+    backSomeId: 'back-some',
+    wristSomeId: 'wrist-some',
+    backChipGroup: 'back',
+    wristChipGroup: 'wrist',
+    backValue: state.backPain,
+    backTouched: state.backPainTouched,
+    backOpen: backSome,
+    wristValue: state.wristPain,
+    wristTouched: state.wristPainTouched,
+    wristOpen: wristSome,
+  });
   // v48 · fix r1 (Sep 24 2026): a stopped session is not called "done", and its
   // Back goes to the step she stopped on, not to stretches she never reached.
   // Still counts, no verdict.
@@ -8319,16 +8467,7 @@ function renderPostLog(): string {
 
       ${wallSitField}
 
-      <div class="field back-field">
-        <span class="label-text">Back &amp; wrist</span>
-        <div class="back-choice">
-          <button class="back-chip${bothFine ? ' body-chip-on' : ''}" id="back-fine" type="button" aria-pressed="${bothFine ? 'true' : 'false'}">Fine</button>
-          <button class="back-chip${backSome ? ' back-chip-open' : ''}" id="back-some" type="button" aria-pressed="${backSome ? 'true' : 'false'}">Back</button>
-          <button class="back-chip${wristSome ? ' back-chip-open' : ''}" id="wrist-some" type="button" aria-pressed="${wristSome ? 'true' : 'false'}">Wrist</button>
-        </div>
-        ${backRow}
-        ${wristRow}
-      </div>
+      ${backWristAfter}
 
       <label class="field note-field">
         <span class="label-text">Anything about today? (optional)</span>
@@ -9454,6 +9593,23 @@ function moodSessionsFrom(logs: LogEntry[]): MoodSession[] {
   }));
 }
 
+// v51: same normalization, back & wrist before -> after.
+function backSessionsFrom(logs: LogEntry[]): BackSession[] {
+  return logs.map((l) => ({
+    date: localIsoDate(new Date(l.date)),
+    backBefore: l.backPainBefore ?? null,
+    backAfter: l.backPain,
+  }));
+}
+
+function wristSessionsFrom(logs: LogEntry[]): WristSession[] {
+  return logs.map((l) => ({
+    date: localIsoDate(new Date(l.date)),
+    wristBefore: l.wristPainBefore ?? null,
+    wristAfter: l.wristPain ?? null,
+  }));
+}
+
 function cyclePeriodsForLogic(): CyclePeriod[] {
   return loadCyclePeriods().map((p) => ({
     startDate: p.startDate,
@@ -9497,25 +9653,39 @@ function nowMetaLine(n: number, sessions: CapacitySession[]): string {
   return `${n} workout${n === 1 ? '' : 's'}${sinceClause} · before → after`;
 }
 
+// "line label" -> "<div class="cc2-row-X">label V → V</div>", or '' when
+// that phase hasn't cleared MIN_PHASE_N for this metric — the v51 back/wrist
+// rows share this with the mood line below instead of repeating the same
+// null-check three times.
+function compareSubLine(cls: string, label: string, row: PlainPhaseTableRow | undefined): string {
+  if (!row || row.avgBefore === null || row.avgAfter === null) return '';
+  return `<div class="${cls}">${label} ${row.avgBefore.toFixed(1)} → ${row.avgAfter.toFixed(1)}</div>`;
+}
+
 // One row of the "Compare" list — name (+ a weight/ink "now" tag, never
 // colour, on the current phase), the body avg-or-"not enough yet" line, the
-// workout count in words (never "n="), and a mood line only when that
-// phase's OWN mood pairs clear MIN_PHASE_N (cycle.ts gate).
+// workout count in words (never "n="), and a mood/back/wrist line only when
+// that phase's OWN pairs clear MIN_PHASE_N (cycle.ts gate) — v51: back and
+// wrist join mood here, same rule, "otherwise nothing" (her spec — never a
+// row of "not enough yet"s).
 function renderCompareRow(
   row: PlainPhaseTableRow,
   moodRow: PlainPhaseTableRow | undefined,
+  backRow: PlainPhaseTableRow | undefined,
+  wristRow: PlainPhaseTableRow | undefined,
   isCurrent: boolean
 ): string {
-  const moodLine =
-    moodRow && moodRow.avgBefore !== null && moodRow.avgAfter !== null
-      ? `<div class="cc2-row-mood">mood ${moodRow.avgBefore.toFixed(1)} → ${moodRow.avgAfter.toFixed(1)}</div>`
-      : '';
+  const moodLine = compareSubLine('cc2-row-mood', 'mood', moodRow);
+  const backLine = compareSubLine('cc2-row-back', 'back', backRow);
+  const wristLine = compareSubLine('cc2-row-wrist', 'wrist', wristRow);
   return `
     <div class="cc2-row${isCurrent ? ' cc2-row-now' : ''}">
       <div class="cc2-row-name">${escapeHtml(PLAIN_PHASE_LABEL[row.plainPhase])}${isCurrent ? '<span class="cc2-now-tag">now</span>' : ''}</div>
       <div class="cc2-row-body">body ${bodyAvgLine(row)}</div>
       <div class="cc2-row-meta">${row.n} workout${row.n === 1 ? '' : 's'}</div>
       ${moodLine}
+      ${backLine}
+      ${wristLine}
     </div>`;
 }
 
@@ -9547,9 +9717,14 @@ function renderCapacityCycleCard(logs: LogEntry[]): string {
 
   const sessions = capacitySessionsFrom(logs);
   const moodSessions = moodSessionsFrom(logs);
+  // v51: back & wrist before -> after, same bucketing, same MIN_PHASE_N gate.
+  const backSessions = backSessionsFrom(logs);
+  const wristSessions = wristSessionsFrom(logs);
   const status = todayCycleStatus(periods, todayISO);
   const rows = buildPlainPhaseTable(sessions, periods);
   const moodRows = buildPlainMoodPhaseTable(moodSessions, periods);
+  const backRows = buildPlainBackPhaseTable(backSessions, periods);
+  const wristRows = buildPlainWristPhaseTable(wristSessions, periods);
   const question = plainQuestionLine(sessions, periods);
   const excluded = excludedUntouchedCount(sessions);
 
@@ -9565,6 +9740,26 @@ function renderCapacityCycleCard(logs: LogEntry[]): string {
     : undefined;
   const currentMoodReady =
     currentMoodRow && currentMoodRow.avgBefore !== null && currentMoodRow.avgAfter !== null;
+  // v51: back & wrist join the "now" section the same way mood does, but
+  // with NO quiet placeholder when not ready — mood has a fixed start date to
+  // point to ("tracking started …"); back/wrist-before never existed until
+  // today, so there's nothing to name and the line simply doesn't appear
+  // (her spec: "never four 'not enough yet's ... they simply don't appear").
+  const currentBackRow = status
+    ? backRows.find((r) => r.plainPhase === status.plainPhase)
+    : undefined;
+  const currentWristRow = status
+    ? wristRows.find((r) => r.plainPhase === status.plainPhase)
+    : undefined;
+  const nowMetricLine = (label: string, row: PlainPhaseTableRow | undefined): string =>
+    row && row.avgBefore !== null && row.avgAfter !== null
+      ? `<div class="cc2-now">
+           <span class="cc2-now-lbl">${label}</span>
+           <span class="cc2-now-val">${row.avgBefore.toFixed(1)} → ${row.avgAfter.toFixed(1)}</span>
+         </div>`
+      : '';
+  const currentBackLine = nowMetricLine('Back', currentBackRow);
+  const currentWristLine = nowMetricLine('Wrist', currentWristRow);
 
   // Section 2: the phase she's in now, big numbers. Mood joins in the same
   // style only once THIS phase clears 3 mood pairs; until then one quiet
@@ -9588,7 +9783,9 @@ function renderCapacityCycleCard(logs: LogEntry[]): string {
                <span class="cc2-now-val">${currentMoodRow!.avgBefore!.toFixed(1)} → ${currentMoodRow!.avgAfter!.toFixed(1)}</span>
              </div>`
           : `<div class="cc-quiet">Mood: tracking started ${formatMonthDay(MOOD_TRACKING_START_DATE)} — it shows here after a few workouts in each phase.</div>`
-      }`
+      }
+      ${currentBackLine}
+      ${currentWristLine}`
       : '';
 
   const compareRows = rows
@@ -9596,6 +9793,8 @@ function renderCapacityCycleCard(logs: LogEntry[]): string {
       renderCompareRow(
         r,
         moodRows.find((m) => m.plainPhase === r.plainPhase),
+        backRows.find((b) => b.plainPhase === r.plainPhase),
+        wristRows.find((w) => w.plainPhase === r.plainPhase),
         status?.plainPhase === r.plainPhase
       )
     )
@@ -9976,7 +10175,11 @@ function isValidLogEntry(x: unknown): x is LogEntry {
     // v50 · mood: optional AND nullable, same shape — an export from before
     // v50 has neither key and must still restore.
     isOptionalOf(o['moodBefore'], 'number') &&
-    isOptionalOf(o['moodAfter'], 'number')
+    isOptionalOf(o['moodAfter'], 'number') &&
+    // v51: optional AND nullable, same shape — an export from before v51 has
+    // neither key and must still restore.
+    isOptionalOf(o['backPainBefore'], 'number') &&
+    isOptionalOf(o['wristPainBefore'], 'number')
   );
 }
 
@@ -10484,6 +10687,14 @@ function attachHandlers(): void {
         state.wristPain = v;
         state.wristPainTouched = !again;
         state.wristSomethingOpen = true;
+      } else if (group === 'back-before') {
+        state.backPainBefore = v;
+        state.backPainBeforeTouched = !again;
+        state.backBeforeSomethingOpen = true;
+      } else if (group === 'wrist-before') {
+        state.wristPainBefore = v;
+        state.wristPainBeforeTouched = !again;
+        state.wristBeforeSomethingOpen = true;
       }
       render();
     });
@@ -10528,6 +10739,46 @@ function attachHandlers(): void {
     } else {
       state.wristSomethingOpen = true;
       state.wristPainTouched = false;
+    }
+    render();
+  });
+  // v51 (Sep 25 2026): the pre-log twin of the three handlers above — same
+  // shape, its own "-pre" ids and its own (Before) state fields.
+  bindClick('back-fine-pre', () => {
+    const wasBothFine =
+      state.backPainBeforeTouched &&
+      state.backPainBefore === 0 &&
+      state.wristPainBeforeTouched &&
+      state.wristPainBefore === 0;
+    state.backPainBefore = 0;
+    state.backPainBeforeTouched = !wasBothFine;
+    state.backBeforeSomethingOpen = false;
+    state.wristPainBefore = 0;
+    state.wristPainBeforeTouched = !wasBothFine;
+    state.wristBeforeSomethingOpen = false;
+    render();
+  });
+  bindClick('back-some-pre', () => {
+    const open =
+      state.backBeforeSomethingOpen || (state.backPainBeforeTouched && state.backPainBefore > 0);
+    if (open) {
+      state.backBeforeSomethingOpen = false;
+      state.backPainBeforeTouched = false;
+    } else {
+      state.backBeforeSomethingOpen = true;
+      state.backPainBeforeTouched = false; // "Fine" is no longer the answer
+    }
+    render();
+  });
+  bindClick('wrist-some-pre', () => {
+    const open =
+      state.wristBeforeSomethingOpen || (state.wristPainBeforeTouched && state.wristPainBefore > 0);
+    if (open) {
+      state.wristBeforeSomethingOpen = false;
+      state.wristPainBeforeTouched = false;
+    } else {
+      state.wristBeforeSomethingOpen = true;
+      state.wristPainBeforeTouched = false;
     }
     render();
   });

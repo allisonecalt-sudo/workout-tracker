@@ -54,6 +54,15 @@ export type SessionSignal = {
   /** null = not answered. 0 = Fine. Never treat null as 0 (spec §9 readiness floor). */
   backPain: number | null;
   wristPain: number | null;
+  /** v51 · back & wrist BEFORE (Sep 25 2026): the same pre-log reading as
+   *  backPain/wristPain, taken before the workout instead of after. The
+   *  engine's safety gates keep reading the post-workout value the same way
+   *  they always did (findFlare below) — this is an ADDITIONAL signal: a
+   *  before-reading of 3+ on its own also counts as that session's flare,
+   *  even when the after-reading came back 0/null (spec follow-up, her
+   *  words: "and all metrics bf workout have after as well"). */
+  backPainBefore: number | null;
+  wristPainBefore: number | null;
   stepFeel: 'fine' | 'too_much' | null;
   /** "curl=easy;row=right" (v48 shape) — only read for the rowcurl ladder's V-rule. */
   armFeel: string | null;
@@ -340,17 +349,32 @@ function flareLookbackWindow(
   });
 }
 
-/** A week with one session ≥3, or ≥2 sessions ≥1 (spec §9.3/§9.4's "or 1+ in 2+ sessions"). */
+// v51 (Sep 25 2026): field -> its pre-log BEFORE-reading counterpart. Same
+// "signal" behind the two names — flareWeek's single-session ≥3 branch checks
+// both, so a session that flared going IN also counts, not just one that
+// flared coming out.
+const BEFORE_FIELD_OF: Record<'backPain' | 'wristPain', 'backPainBefore' | 'wristPainBefore'> = {
+  backPain: 'backPainBefore',
+  wristPain: 'wristPainBefore',
+};
+
+/** A week with one session ≥3, or ≥2 sessions ≥1 (spec §9.3/§9.4's "or 1+ in 2+ sessions").
+ *  v51: the ≥3 single-session check also fires on that session's BEFORE
+ *  reading (her follow-up ask — before now gets everything after already
+ *  had). The "≥1 twice in a week" branch stays post-workout only — that's
+ *  the field named in the original spec and unchanged here. */
 function flareWeek(
   priorWeeks: WeekHistory[],
   priorDecisions: WeekDecision[],
   reason: 'back' | 'wrist',
   field: 'backPain' | 'wristPain'
 ): WeekHistory | null {
+  const beforeField = BEFORE_FIELD_OF[field];
   const candidates = flareLookbackWindow(priorWeeks, priorDecisions, reason);
   for (let i = candidates.length - 1; i >= 0; i--) {
     const w = candidates[i]!;
-    if (w.sessions.some((sess) => (sess[field] ?? -1) >= 3)) return w;
+    if (w.sessions.some((sess) => (sess[field] ?? -1) >= 3 || (sess[beforeField] ?? -1) >= 3))
+      return w;
     if (w.sessions.filter((sess) => (sess[field] ?? -1) >= 1).length >= 2) return w;
   }
   return null;
