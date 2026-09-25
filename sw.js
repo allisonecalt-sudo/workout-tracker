@@ -27,6 +27,10 @@ const SHELL_ASSETS = [
   './dist/exercise-howto.js',
   './dist/exercise-visuals.js',
   './dist/exercise-detail.js',
+  // v49 · the progression engine (Sep 25 2026, shadow mode) — app.js imports
+  // these too, so they need the same offline treatment as the other modules.
+  './dist/ladders.js',
+  './dist/progression.js',
   './manifest.webmanifest',
   // v49 · look (Sep 25 2026): self-hosted DM Sans (spec §3 "Font loading") —
   // precached so it renders offline on the floor, never a runtime Google
@@ -186,6 +190,8 @@ function isCodeRequest(url, request) {
     url.pathname.endsWith('/dist/exercise-howto.js') ||
     url.pathname.endsWith('/dist/exercise-visuals.js') ||
     url.pathname.endsWith('/dist/exercise-detail.js') ||
+    url.pathname.endsWith('/dist/ladders.js') ||
+    url.pathname.endsWith('/dist/progression.js') ||
     url.pathname.endsWith('/index.html')
   );
 }
