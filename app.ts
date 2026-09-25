@@ -419,7 +419,7 @@ const SUPABASE_ANON_KEY =
 // sheet, out-of-order Done, skip-count on the log — + mood (a second 1-10
 // chip row, pre-log and post-log, and its own gated phase table on the card).
 const APP_VERSION = 'v50';
-const BUILD_DATE = 'Sep 25, 2026 · 09:46';
+const BUILD_DATE = 'Sep 25, 2026 · 10:08';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -4187,17 +4187,25 @@ function advanceExercise(): void {
   // through every move she already did (the Round 1 done screen even came
   // back) — was this floor firing unconditionally on the last main move of
   // round 1, with no check for whether round 2+ actually still has anything
-  // undone. target === null means nextUndoneStep found nothing left ANYWHERE
-  // (the ordinary in-order case never hits null here — normally target is
-  // round 2's first move, same as structuralNextKey), so that's the one
-  // signal that answers "is round 2 actually undone yet".
+  // undone.
   const target = nextUndoneStep(movable, curKey, state.completedSteps);
+  // v50 · fix 2 (Sep 25 2026): `target !== null` was "anything undone
+  // ANYWHERE" (nextUndoneStep wraps the whole list, warm-up included), not
+  // "round 2+ still has something undone". Her repro: jump to round 2 first,
+  // finish round 2 + upper back, then skip Cardio (warm-up) via the List
+  // sheet and walk round 1 last — round 1's last move still found Cardio
+  // undone and threw up "Round 1 done ✓ / Start round 2" even though round 2
+  // was already done, then landed the tap on an already-✓ move. The floor is
+  // about round 2+, so gate it on round 2+ specifically.
+  const roundTwoOpen = movable.some(
+    (s) => s.phase === 'main' && s.round > 1 && !state.completedSteps[s.key]
+  );
   const isRoundOneFloor =
     state.currentPhase === 'main' &&
     state.currentRound === 1 &&
     state.currentExerciseIndex === w.main.length - 1 &&
     effectiveRounds(w) > 1 &&
-    target !== null;
+    roundTwoOpen;
   if (!isRoundOneFloor) {
     if (target && target.key !== structuralNextKey) {
       applyStepTarget(target);
@@ -9494,6 +9502,19 @@ const PHASE_TOKEN: Record<CyclePhase, string> = {
   luteal: 'var(--phase-luteal)',
 };
 
+// v50 · fix 2 (Sep 25 2026): the legend swatches were drawn in the same
+// faint band fill as the chart — at 412px four dim squares read as
+// identical. The chart bands stay translucent on purpose (they sit behind
+// the dot/slope marks), but the legend swatch has nothing behind it, so it
+// borders in the phase's full-strength hue (same source each --phase-* is
+// mixed from, styles.css) instead of repeating the wash.
+const PHASE_BORDER: Record<CyclePhase, string> = {
+  menstrual: 'var(--dot-b)',
+  follicular: 'var(--dot-a)',
+  ovulatory: 'color-mix(in srgb, var(--dot-c) 60%, white 40%)',
+  luteal: 'var(--dot-d)',
+};
+
 // l.date is NOT reliably a plain 'YYYY-MM-DD': a just-saved, not-yet-synced
 // row holds the full ISO datetime it was saved with (`completedAt`), while a
 // row that's round-tripped through Supabase's `date` column comes back plain
@@ -9627,7 +9648,7 @@ function renderCycleLegend(): string {
   const phaseItems = (['menstrual', 'follicular', 'ovulatory', 'luteal'] as CyclePhase[])
     .map(
       (p) =>
-        `<span class="cc-legend-item"><span class="cc-legend-swatch" style="background:${PHASE_TOKEN[p]}"></span>${PHASE_LABEL[p]}</span>`
+        `<span class="cc-legend-item"><span class="cc-legend-swatch" style="background:${PHASE_TOKEN[p]};border:1px solid ${PHASE_BORDER[p]}"></span>${PHASE_LABEL[p]}</span>`
     )
     .join('');
   return `

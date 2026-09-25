@@ -280,6 +280,82 @@ test('finishing the last of 2 skipped moves goes straight to cool-down, not back
   await expect(page.locator(`[data-jump-key="${rows[1]!.key}"] .step-list-check`)).toHaveText('✓');
 });
 
+// v50 · fix 2 (Sep 25 2026, severity 3): the round-1 floor was gated on
+// "anything undone anywhere" (nextUndoneStep wraps the WHOLE list, warm-up
+// included) instead of "round 2+ still has something undone". Repro: do
+// round 2 + upper back FIRST, skip a warm-up move via the List sheet, then
+// walk warm-up + round 1 last — round 1's last move used to still throw up
+// "Round 1 done ✓ / Start round 2" (round 2 was already done, so tapping
+// Start round 2 would land on an already-✓ move) instead of going straight
+// back to the one thing still open.
+test('round 2 + upper back done first: finishing round 1 skips the floor and returns to the skipped warm-up move', async ({
+  page,
+}) => {
+  await startWorkoutA(page);
+  await page.locator('#step-list-open').click();
+  const rows = await readMovableRows(page);
+  const round2First = rows.find((r) => r.key.startsWith('main:2:'));
+  expect(round2First).toBeTruthy();
+
+  // Jump straight to round 2 and walk Done through round 2 + upper back to
+  // completion. Nothing here should ever show the round-1 floor — it's a
+  // round-1-only pause.
+  await page.locator(`[data-jump-key="${round2First!.key}"]`).click();
+  let sawRoundBreak = false;
+  // Bound: round 2 + upper back rows, plus slack for the auto-wrap Done at
+  // the very end (which lands back on the still-open warm-up row 0).
+  for (let i = 0; i < rows.length; i++) {
+    if (await page.locator('#start-round-2').isVisible()) {
+      sawRoundBreak = true;
+      break;
+    }
+    if (
+      await page
+        .locator('.exercise-name')
+        .first()
+        .textContent()
+        .then((t) => t === rows[0]!.name)
+    ) {
+      break; // auto-wrapped back to the still-open warm-up row 0 — round 2 + upper back are done
+    }
+    await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+  }
+  expect(sawRoundBreak).toBe(false);
+  await expect(page.locator('.exercise-name')).toHaveText(rows[0]!.name);
+
+  // Mimic "skip Cardio via the List sheet": jump past the still-open row 0
+  // to row 1, leaving row 0 the one gap in an otherwise-finished workout.
+  await page.locator('#step-list-open').click();
+  await page.locator(`[data-jump-key="${rows[1]!.key}"]`).click();
+
+  // Walk Done through the rest of warm-up + round 1. The round-1 floor must
+  // NOT appear — round 2 + upper back are already ✓ — and Done should land
+  // her back on the one still-open move (row 0) instead of a round break.
+  for (let i = 0; i < rows.length; i++) {
+    if (await page.locator('#start-round-2').isVisible()) {
+      sawRoundBreak = true;
+      break;
+    }
+    if (
+      await page
+        .locator('.exercise-name')
+        .first()
+        .textContent()
+        .then((t) => t === rows[0]!.name)
+    ) {
+      break; // landed back on the skipped move — round 1's last move handed off correctly
+    }
+    await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+  }
+  expect(sawRoundBreak).toBe(false);
+  await expect(page.locator('.exercise-name')).toHaveText(rows[0]!.name);
+
+  // Finish the last open move — everything's done now, so Done should go
+  // straight to cool-down, not back through anything already finished.
+  await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+  await expect(page.locator('.stretch-list')).toBeVisible();
+});
+
 test('the round-1 floor still shows even with an earlier step skipped', async ({ page }) => {
   await startWorkoutA(page);
   await page.locator('#step-list-open').click();

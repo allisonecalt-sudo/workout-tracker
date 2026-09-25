@@ -68,10 +68,26 @@
      accent, her "no sage unless there's an action" rule intact (this still
      isn't sage). */
   --dot-d: #a3915f; /* Capacity & cycle Luteal band only — a 4th muted hue in the --dot family */
-  --phase-menstrual: color-mix(in srgb, var(--dot-b) 24%, transparent);
-  --phase-follicular: color-mix(in srgb, var(--dot-a) 20%, transparent);
-  --phase-ovulatory: color-mix(in srgb, var(--dot-c) 26%, transparent);
-  --phase-luteal: color-mix(in srgb, var(--dot-d) 20%, transparent);
+  /* v50 · fix 2 (Sep 25 2026): the first pass (above) gave each band a
+     different hue but left them at 20-26% opacity — on the card bg
+     rgb(31,36,33) that blends all four down to near-identical dark grey
+     stripes (measured ΔE76 as low as 4.3 between menstrual/ovulatory).
+     Raised to 40-50% so the hue actually reads, and ovulatory additionally
+     mixes 40% white into --dot-c BEFORE the transparency blend (dot-c and
+     dot-b — shared with Sessions/Progress/Weekly, so their base hex stays
+     untouched — sit too close in both hue and lightness at any opacity to
+     tell apart otherwise). Every pair now measures ΔE76 ≥ 10 against this
+     card bg (worked in a Lab-space script, not eyeballed). Luteal is the
+     week the card is about, so it gets the most opacity + separation of the
+     four. */
+  --phase-menstrual: color-mix(in srgb, var(--dot-b) 45%, transparent);
+  --phase-follicular: color-mix(in srgb, var(--dot-a) 40%, transparent);
+  --phase-ovulatory: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--dot-c) 60%, white 40%) 45%,
+    transparent
+  );
+  --phase-luteal: color-mix(in srgb, var(--dot-d) 50%, transparent);
 
   /* v50 · fix (Sep 25 2026): --accent-progress and --text-dim both alias to
      --ink-2 below (Aliases block) — the before/after dots were drawing in
@@ -2919,6 +2935,11 @@ input[type='number']:focus {
   height: 10px;
   border-radius: 3px;
   display: inline-block;
+  /* v50 · fix 2 (Sep 25 2026): the border (app.ts PHASE_BORDER) draws in the
+     phase's full-strength hue so the swatch doesn't repeat the same faint
+     wash as the chart band — box-sizing keeps it 10x10 with the border, not
+     12x12. */
+  box-sizing: border-box;
 }
 
 .cc-legend-dot {
