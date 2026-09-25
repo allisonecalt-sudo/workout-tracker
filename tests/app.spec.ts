@@ -2350,6 +2350,11 @@ test('ship 5: back-pain bars render only for sessions with backPain > 0', async 
   await expect(page.locator('.progress-card').filter({ hasText: 'Back pain' })).toContainText(
     'Pain-free 2 of 4 · avg 2.0 when it hurt'
   );
+  // v51 · fix (Sep 25 2026, look-check sev 3): was 140px against a yMax of
+  // 10 — mostly empty dark space above near-zero values, uneven next to the
+  // wall-sit card's compact treatment. Same ≤64px cap now.
+  const wrapBox = await page.locator('.progress-chart-wrap-bar').boundingBox();
+  expect(wrapBox?.height).toBeLessThanOrEqual(64);
 });
 
 // ============================================================================

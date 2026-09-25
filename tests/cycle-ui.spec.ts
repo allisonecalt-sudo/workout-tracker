@@ -203,6 +203,51 @@ test.describe('"Your cycle" card — plain words', () => {
     await expect(card).toContainText('3 workouts');
   });
 
+  // v51 · fix (Sep 25 2026, look-check): the big Body arrow needs to read as
+  // one session's before/after pair, not a dropping trend (sev 4) — and the
+  // current phase's own meta line must not repeat the phase name the header
+  // right above it already said (sev 3, "shown 3x" — DECISIONS/look-check).
+  test('the meta line under the big Body numbers says "before → after", not the phase name again', async ({
+    page,
+  }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await seedLogs(page, [
+      log('m1', '2026-08-05T10:00:00.000Z', 4, 6),
+      log('m2', '2026-08-06T10:00:00.000Z', 2, 4),
+      log('m3', '2026-08-07T10:00:00.000Z', 6, 8),
+    ]);
+    await mockDate(page, '2026-08-06T10:00:00.000Z'); // "now" = on her period
+    await page.goto('/');
+    await openProgress(page);
+
+    const card = cycleCard(page);
+    const meta = card.locator('.cc2-now-meta');
+    await expect(meta).toHaveText('3 workouts since Aug · before → after');
+    // The header already named the phase ("On your period") — the meta line
+    // must not say it a second time.
+    await expect(meta).not.toContainText('on your period');
+  });
+
+  test('"How these are counted" defines the Body arrow as before a workout → after it', async ({
+    page,
+  }) => {
+    await seedCyclePeriods(page, HER_PERIODS);
+    await seedLogs(page, [
+      log('m1', '2026-09-20T10:00:00.000Z', 5, 5), // post-cutoff so it's a trusted reading
+    ]);
+    await mockDate(page, '2026-09-25T10:00:00.000Z');
+    await page.goto('/');
+    await openProgress(page);
+
+    const card = cycleCard(page);
+    const info = card.locator('.cc2-info');
+    await info.locator('summary').click();
+    // Was "capacity slider" — mismatched the card's own "Body" label
+    // (look-check sev 4).
+    await expect(info.locator('p')).toContainText('Body = your 1–10 before a workout → after it.');
+    await expect(info.locator('p')).not.toContainText('capacity slider');
+  });
+
   test('mood joins the current-phase numbers only once that phase clears 3 pairs; until then, one quiet card-level line', async ({
     page,
   }) => {

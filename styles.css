@@ -2871,8 +2871,11 @@ input[type='number']:focus {
   align-items: stretch;
 }
 
+/* v51 · fix (Sep 25 2026, look-check): matches the wall-sit sparkline's
+ * ≤64px cap — was 140px, mostly empty dark space above the (usually
+ * pain-free, near-zero) bars. */
 .progress-chart-wrap-bar {
-  height: 140px;
+  height: 64px;
 }
 
 .progress-chart {

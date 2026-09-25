@@ -20,7 +20,6 @@ import {
   type CyclePeriod,
   type CapacitySession,
   type MoodSession,
-  type PlainPhase,
   type TodayCycleStatus,
   type PlainPhaseTableRow,
 } from './cycle.js';
@@ -431,7 +430,7 @@ const SUPABASE_ANON_KEY =
 // page's "everything presentation" (combined elliptical line, compact
 // wall-sit sparkline).
 const APP_VERSION = 'v51';
-const BUILD_DATE = 'Sep 25, 2026 · 11:25';
+const BUILD_DATE = 'Sep 25, 2026 · 11:46';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -9042,17 +9041,23 @@ function getChronologicalLogs(): LogEntry[] {
 // v48 · P6 (Sep 24 2026): a pain-free session gets a faint tick instead of
 // nothing (the chart only witnessed the bad days — uxui progress 2/5), and a
 // bar is amber only at her 3/10 stop line.
+// v51 · fix (Sep 25 2026, look-check sev 3): H was 140 against a yMax of 10
+// while her real back-pain values sit mostly at 0-2 — about 100px of empty
+// dark space sat above a few short bars, uneven next to the wall-sit card's
+// compact ≤64px treatment (her "remove the big empty chart area" ask,
+// applied there in v51 already). Same cap here, same PAD as the wall-sit
+// sparkline, so both cards read at the same height.
 function renderProgressBarChart(
   values: number[],
   opts: { ariaLabel: string; yMax: number }
 ): string {
   if (values.length === 0) return '';
   const W = 320;
-  const H = 140;
+  const H = 64;
   const PAD_L = 8;
   const PAD_R = 8;
-  const PAD_T = 12;
-  const PAD_B = 12;
+  const PAD_T = 6;
+  const PAD_B = 6;
   const innerW = W - PAD_L - PAD_R;
   const innerH = H - PAD_T - PAD_B;
 
@@ -9457,15 +9462,6 @@ function cyclePeriodsForLogic(): CyclePeriod[] {
   }));
 }
 
-// v51 · plain-words phrasing pieces — her spec (Sep 25 2026): no
-// menstrual/follicular/ovulatory/luteal anywhere on screen, no "n=", no "Δ".
-const PLAIN_PHASE_META_PHRASE: Record<PlainPhase, string> = {
-  'on-period': 'on your period',
-  'week-after': 'in the week after your period',
-  'mid-cycle': 'in the middle of your cycle',
-  'week-before': 'in the week before your period',
-};
-
 // "day 25 · next one ~Sep 29" / "due any day" / "day 2 of your period" — the
 // header's sub-line. app.ts owns date formatting (cycle.ts stays DOM/format-
 // free), so this reads the raw fields todayCycleStatus() hands back.
@@ -9482,15 +9478,23 @@ function bodyAvgLine(row: PlainPhaseTableRow): string {
   return `${row.avgBefore.toFixed(1)} → ${row.avgAfter.toFixed(1)}`;
 }
 
-// "15 workouts in the week before your period since May" — the current
-// phase's dim meta line under the big Body numbers. `sessions` is already
-// chronological (capacitySessionsFrom preserves getChronologicalLogs()'s
-// order), so sessions[0] is the earliest honest-or-not session on record —
-// the same "since" anchor Start → Now uses.
-function nowMetaLine(plainPhase: PlainPhase, n: number, sessions: CapacitySession[]): string {
+// "10 workouts since May · before → after" — the current phase's dim meta
+// line under the big Body numbers. `sessions` is already chronological
+// (capacitySessionsFrom preserves getChronologicalLogs()'s order), so
+// sessions[0] is the earliest honest-or-not session on record — the same
+// "since" anchor Start → Now uses.
+// v51 · fix (Sep 25 2026, look-check sev 3): dropped the phase phrase
+// ("in the week before your period") — the header right above this line
+// already names the phase, so repeating it here put the phase name on the
+// card 3x against her "nothing repeated, one message" rule (fix option a,
+// smallest change). v51 · fix (sev 4): added "before → after" so the big
+// Body arrow above reads as one session's before/after pair, not a
+// dropping trend — the words "before"/"after" appeared nowhere on the
+// card until now.
+function nowMetaLine(n: number, sessions: CapacitySession[]): string {
   const since = sessions[0]?.date;
   const sinceClause = since ? ` since ${formatMonthOnly(since)}` : '';
-  return `${n} workout${n === 1 ? '' : 's'} ${PLAIN_PHASE_META_PHRASE[plainPhase]}${sinceClause}`;
+  return `${n} workout${n === 1 ? '' : 's'}${sinceClause} · before → after`;
 }
 
 // One row of the "Compare" list — name (+ a weight/ink "now" tag, never
@@ -9576,7 +9580,7 @@ function renderCapacityCycleCard(logs: LogEntry[]): string {
         <span class="cc2-now-lbl">Body</span>
         <span class="cc2-now-val${currentBodyEmpty ? ' cc2-now-val-empty' : ''}">${bodyAvgLine(currentRow)}</span>
       </div>
-      <div class="cc2-now-meta">${escapeHtml(nowMetaLine(status.plainPhase, currentRow.n, sessions))}</div>
+      <div class="cc2-now-meta">${escapeHtml(nowMetaLine(currentRow.n, sessions))}</div>
       ${
         currentMoodReady
           ? `<div class="cc2-now">
@@ -9603,7 +9607,7 @@ function renderCapacityCycleCard(logs: LogEntry[]): string {
   const infoRow = `
     <details class="cc2-info">
       <summary>ⓘ How these are counted</summary>
-      <p>An untouched capacity slider isn't counted as a real reading.${
+      <p>Body = your 1–10 before a workout → after it. An untouched Body slider isn't counted as a real reading.${
         excluded > 0
           ? ` ${excluded} old "5" reading${excluded === 1 ? '' : 's'} from before Sep 24 ${excluded === 1 ? 'is' : 'are'} left out for the same reason.`
           : ''
