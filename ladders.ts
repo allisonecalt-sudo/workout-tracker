@@ -117,8 +117,12 @@ const squat: Ladder = {
           {
             name: 'Supported split squat',
             reps: '6-8 each side · one set per round',
+            // PROGRAM (Sep 26 2026, Tips audit): this rung is IN for the squat
+            // slot in workout A specifically — C keeps its bodyweight 10 squats
+            // unchanged. Kept here for the ladder's own bookkeeping, not on her
+            // screen (that's a program fact, not a movement instruction).
             notes:
-              'In for the squats in A (C keeps its 10). Fingertips on the couch for balance only — no gripping, no weight through the hands. Front foot flat, back heel up, chest tall. Straight down, back knee toward the floor; push through the front heel to stand. Last set stop about 2 short. Knee pinches or you wobble? Smaller range — the right call.',
+              'Fingertips on the couch for balance only — no gripping, no weight through the hands. Front foot flat, back heel up, chest tall. Straight down, back knee toward the floor; push through the front heel to stand. Last set stop about 2 short. Knee pinches or you wobble? Smaller range — the right call.',
           },
         ],
         C: [{ name: 'Bodyweight squats', reps: '10 reps · 3-1-3 tempo' }],
@@ -193,7 +197,8 @@ const squat: Ladder = {
           {
             name: 'Supported split squat',
             reps: '6-8 each side',
-            notes: 'Same as A — fingertips on the couch for balance only, no gripping.',
+            // PROGRAM: reuses workout A's coaching for this same move.
+            notes: 'Fingertips on the couch for balance only, no gripping.',
           },
         ],
       },
@@ -249,8 +254,11 @@ const hinge: Ladder = {
             name: 'Bodyweight hip hinge',
             label: 'Hip hinge',
             reps: '12 reps · 2 sets each round · holding the 1 kg',
+            // PROGRAM: "anything heavier is a Lisa question" (clearance
+            // bookkeeping) dropped from the visible line — the 1 kg ceiling
+            // itself stays, since that's a real safety limit, not program talk.
             notes:
-              'Same hinge, now HOLDING the 1 kg the way you already do — it hangs from the hands, wrists neutral, light grip. Hinge at the hips, soft knees, flat/neutral spine. Do NOT round the low back. 1 kg is the ceiling for now; anything heavier is a Lisa question.',
+              'Same hinge, now HOLDING the 1 kg the way you already do — it hangs from the hands, wrists neutral, light grip. Hinge at the hips, soft knees, flat/neutral spine. Do NOT round the low back. 1 kg is the ceiling for now.',
           },
         ],
         B: [
@@ -469,8 +477,10 @@ const wallsit: Ladder = {
             reps: '45 sec hold',
             durationSec: 45,
             isTimed: true,
+            // PROGRAM: the "you held 42 on Sep 7, 43 on Sep 14" history that
+            // justified this rung's bump lives here, not on her screen.
             notes:
-              'You held 42 on Sep 7 and 43 on Sep 14. Keep the depth: knees toward 90°. Hands on thighs or hanging, no pushing on the wall. Graduate at a clean 60.',
+              'Keep the depth: knees toward 90°. Hands on thighs or hanging, no pushing on the wall. Graduate at a clean 60.',
           },
         ],
       },
@@ -546,7 +556,9 @@ const wallsit: Ladder = {
             reps: '45 sec hold · finisher, band at the knees',
             durationSec: 45,
             isTimed: true,
-            notes: 'Moved to the end of A as a finisher. Band looped just above the knees.',
+            // PROGRAM: this rung relocates the wall sit to the end of A as a
+            // finisher — the fact of the move isn't hers to read, the setup is.
+            notes: 'Band looped just above the knees.',
           },
         ],
       },
@@ -830,7 +842,8 @@ const plank: Ladder = {
             reps: '1 set · 20 sec hold',
             durationSec: 20,
             isTimed: true,
-            notes: 'Same as A — forearms only, posterior pelvic tilt, ribs down.',
+            // PROGRAM: reuses workout A's coaching for this same move.
+            notes: 'Forearms only, posterior pelvic tilt, ribs down.',
           },
         ],
       },
@@ -935,8 +948,8 @@ const sideplank: Ladder = {
           {
             name: 'Forearm side plank (knees bent)',
             reps: '2 × 15 sec/side',
-            notes:
-              'Takes over the plank slot in B — same time, a new position: on one forearm, knees bent, hips lifted.',
+            // PROGRAM: this rung takes over the plank slot in workout B.
+            notes: 'Same time, a new position: on one forearm, knees bent, hips lifted.',
           },
         ],
       },
@@ -1095,7 +1108,9 @@ const rowcurl: Ladder = {
             name: 'Prone row (bodyweight)',
             label: 'Prone row',
             reps: '2 sets · 20 reps each side · holding the 1 kg',
-            notes: 'Replaces the old 3×20 trigger, which the program could never reach.',
+            // PROGRAM: this rung replaces the old 3×20 trigger, which the
+            // engine could never reach — pure program bookkeeping, nothing
+            // for her to read (no movement guidance left once it's dropped).
           },
           { name: '1 kg biceps curl', reps: '2 sets · 20 reps' },
         ],

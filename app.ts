@@ -786,14 +786,18 @@ const UPPER_BACK_W7: Exercise[] = [
   {
     name: 'Prone row (bodyweight)',
     reps: '2 sets · 12 reps each side',
+    // PROGRAM: the "(Lisa, Jun 18: lifting strains the neck)" attribution is
+    // clinical bookkeeping — the instruction itself ("don't lift it") stays.
     notes:
-      'NO weight yet — building toward the 1 kg. Arm hanging, wrist NEUTRAL/straight. Keep your HEAD DOWN — do NOT lift it (Lisa, Jun 18: lifting strains the neck). Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal. Add the 1 kg only when you say you are ready.',
+      'NO weight yet — building toward the 1 kg. Arm hanging, wrist NEUTRAL/straight. Keep your HEAD DOWN — do NOT lift it. Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal. Add the 1 kg only when you say you are ready.',
   },
   {
     name: '1 kg biceps curl',
     reps: '2 sets · 12 reps',
+    // PROGRAM: the "(Lisa, Jun 18: ... caused that)" attribution dropped —
+    // the instruction ("hold lightly") stays.
     notes:
-      'Hold the weight LIGHTLY — keep wrist AND fingers neutral, never bending back / hyperextending (Lisa, Jun 18: too-heavy / over-gripping caused that — lighter is right). Elbow tucked at your side, forearm hanging. Curl the forearm up — only the forearm moves, elbow stays pinned. Lower slow. Stop on any wrist signal.',
+      'Hold the weight LIGHTLY — keep wrist AND fingers neutral, never bending back / hyperextending. Elbow tucked at your side, forearm hanging. Curl the forearm up — only the forearm moves, elbow stays pinned. Lower slow. Stop on any wrist signal.',
   },
 ];
 
@@ -1110,8 +1114,9 @@ const PROGRAM: WeekPlan[] = [
           {
             name: 'Forearm plank',
             reps: '1 set · 15 sec hold',
-            notes:
-              'On forearms only (NOT hands — wrists still off). Start small: day-1 of Lisa Cohen clearance. Bump to 2×15 in week 4 if quiet.',
+            // PROGRAM: day-1 of Lisa Cohen's clearance, next bump planned for
+            // week 4 — clearance/plan bookkeeping, not hers to read here.
+            notes: 'On forearms only (NOT hands — wrists still off).',
             durationSec: 15,
             isTimed: true,
           },
@@ -1207,8 +1212,10 @@ const PROGRAM: WeekPlan[] = [
           {
             name: 'Forearm plank',
             reps: '1 set · 15 sec hold',
-            notes:
-              "On forearms only (NOT hands — wrists still off; forearms-not-palms is Lisa Cohen's only constraint, it's a wrist call). HELD at 1×15s for Week 4 (not doubled): consolidate the new movement first. Stop if any wrist sensation. Hold length + a 2nd set follow the normal evidence/progression rule (climb 15→~30s, then add a set) — no extra sign-off needed.",
+            // PROGRAM: held (not doubled) for Week 4 to consolidate the new
+            // movement; the climb-then-add-a-set rule needs no extra Lisa
+            // sign-off — none of that is hers to read, just form + safety.
+            notes: 'On forearms only (NOT hands — wrists still off). Stop if any wrist sensation.',
             durationSec: 15,
             isTimed: true,
           },
@@ -1289,8 +1296,9 @@ const PROGRAM: WeekPlan[] = [
           {
             name: 'Wall sit',
             reps: '33 sec hold',
-            notes:
-              'Hands rest on thighs or hang. No pushing on wall. Bumped from 30s → 33s — formalizing what your body has already been doing (May 19 + May 26 both logged 33s).',
+            // PROGRAM: bumped 30s -> 33s to formalize what she'd already been
+            // holding (May 19 + May 26 both logged 33s) — history, not hers.
+            notes: 'Hands rest on thighs or hang. No pushing on wall.',
             durationSec: 33,
             isTimed: true,
           },
@@ -1307,8 +1315,9 @@ const PROGRAM: WeekPlan[] = [
           {
             name: 'Forearm plank',
             reps: '1 set · 15 sec hold',
-            notes:
-              "On forearms only (NOT hands — wrists still off; forearms-not-palms is Lisa Cohen's only constraint, a wrist call). HELD at 1×15s again for Week 5 to stay on the slow cadence. Hold length + a 2nd set follow the normal evidence/progression rule (climb 15→~30s, then add a set) — no extra sign-off needed. Stop if any wrist sensation.",
+            // PROGRAM: held again for Week 5 to stay on the slow cadence;
+            // climb-then-add-a-set needs no extra Lisa sign-off — bookkeeping.
+            notes: 'On forearms only (NOT hands — wrists still off). Stop if any wrist sensation.',
             durationSec: 15,
             isTimed: true,
           },
@@ -1396,8 +1405,9 @@ const PROGRAM: WeekPlan[] = [
           {
             name: 'Wall sit',
             reps: '33 sec hold',
-            notes:
-              'Hands rest on thighs or hang. No pushing on wall. Held at 33s from Week 5 — stabilization week before next decision.',
+            // PROGRAM: held at 33s from Week 5, a stabilization week before
+            // the next bump decision — that's program pacing, not hers.
+            notes: 'Hands rest on thighs or hang. No pushing on wall.',
             durationSec: 33,
             isTimed: true,
           },
@@ -1415,7 +1425,9 @@ const PROGRAM: WeekPlan[] = [
             name: 'Forearm plank',
             reps: '1 set · 15 sec hold',
             notes:
-              'On forearms only (NOT hands — wrists still off). HELD at 1×15s. Stop if any wrist sensation.',
+              // PROGRAM: "HELD at 1×15s" just restates the unchanged reps
+              // field — dropped as noise, not a movement instruction.
+              'On forearms only (NOT hands — wrists still off). Stop if any wrist sensation.',
             durationSec: 15,
             isTimed: true,
           },
@@ -1501,8 +1513,9 @@ const PROGRAM: WeekPlan[] = [
           {
             name: 'Wall sit',
             reps: '36 sec hold',
-            notes:
-              'Hands rest on thighs or hang. No pushing on wall. Bumped 33s → 36s (2026-06-18) — formalizing what your body has already been doing (Jun 9 + Jun 16 both logged 36s). Not asking for more, just matching the number to you.',
+            // PROGRAM: bumped 33s -> 36s to formalize what she'd already
+            // been holding (Jun 9 + Jun 16 both logged 36s) — history.
+            notes: 'Hands rest on thighs or hang. No pushing on wall.',
             durationSec: 36,
             isTimed: true,
           },
@@ -1520,7 +1533,9 @@ const PROGRAM: WeekPlan[] = [
             name: 'Forearm plank',
             reps: '1 set · 15 sec hold',
             notes:
-              'On forearms only (NOT hands — wrists still off). HELD at 1×15s. Stop if any wrist sensation.',
+              // PROGRAM: "HELD at 1×15s" just restates the unchanged reps
+              // field — dropped as noise, not a movement instruction.
+              'On forearms only (NOT hands — wrists still off). Stop if any wrist sensation.',
             durationSec: 15,
             isTimed: true,
           },
@@ -1598,7 +1613,9 @@ const PROGRAM: WeekPlan[] = [
             name: 'Bodyweight squats',
             reps: '14 reps · 3-1-3 tempo',
             notes:
-              'Arms crossed over chest. Wall behind shoulder if balance wobbly. Bumped 12 → 14 (held at 12 since Week 3; back 0/10 throughout).',
+              // PROGRAM: bumped 12 -> 14 (held at 12 since Week 3; back 0/10
+              // the whole time) — the green light that justified the bump.
+              'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
           },
           HIP_HINGE_W8,
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
@@ -1606,7 +1623,9 @@ const PROGRAM: WeekPlan[] = [
             name: 'Wall sit',
             reps: '36 sec hold',
             notes:
-              'Hands rest on thighs or hang. No pushing on wall. Held at 36s from Week 7 — 2-week window at this load before the next bump.',
+              // PROGRAM: held at 36s from Week 7 — a 2-week window at this
+              // load before the next bump decision.
+              'Hands rest on thighs or hang. No pushing on wall.',
             durationSec: 36,
             isTimed: true,
           },
@@ -1614,13 +1633,16 @@ const PROGRAM: WeekPlan[] = [
             name: 'Modified dead bug',
             reps: '8 each side',
             notes:
-              'Arms relaxed at sides on mat. Move only legs. Bumped 6 → 8 (stuck at 6 for 9 weeks).',
+              // PROGRAM: bumped 6 -> 8 (stuck at 6 for 9 weeks) — history.
+              'Arms relaxed at sides on mat. Move only legs.',
           },
           {
             name: 'Forearm plank',
             reps: '1 set · 20 sec hold',
             notes:
-              'On forearms only (NOT hands — wrists still off). Climbing 15 → 20s (Jun 18 — progression-rules said to climb it; back 0/10). Building toward 30s, then a 2nd set. Stop if any wrist sensation.',
+              // PROGRAM: climbing 15 -> 20s (Jun 18, progression-rules said
+              // to climb it, back 0/10) — the history behind the target.
+              'On forearms only (NOT hands — wrists still off). Building toward 30s, then a 2nd set. Stop if any wrist sensation.',
             durationSec: 20,
             isTimed: true,
           },
@@ -1700,7 +1722,8 @@ const PROGRAM: WeekPlan[] = [
             name: 'Bodyweight squats',
             reps: '14 reps · 3-1-3 tempo',
             notes:
-              'Arms crossed over chest. Wall behind shoulder if balance wobbly. Held at 14 from Week 8.',
+              // PROGRAM: held at 14 from Week 8.
+              'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
           },
           HIP_HINGE_W8,
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
@@ -1708,7 +1731,9 @@ const PROGRAM: WeekPlan[] = [
             name: 'Wall sit',
             reps: '40 sec hold',
             notes:
-              'Hands rest on thighs or hang. No pushing on wall. Bumped 36 → 40s (2026-06-29; held at 36 since Wk7 — cap is 45-60s per progression-rules.md).',
+              // PROGRAM: bumped 36 -> 40s (held at 36 since Wk7); cap
+              // 45-60s per progression-rules.md.
+              'Hands rest on thighs or hang. No pushing on wall.',
             durationSec: 40,
             isTimed: true,
           },
@@ -1716,13 +1741,16 @@ const PROGRAM: WeekPlan[] = [
             name: 'Modified dead bug',
             reps: '10 each side',
             notes:
-              'Arms relaxed at sides on mat. Move only legs. Bumped 8 → 10 (2026-06-29; was frozen at 8 — climbing toward the 12 cap).',
+              // PROGRAM: bumped 8 -> 10 (was frozen at 8) — climbing toward
+              // the 12 cap.
+              'Arms relaxed at sides on mat. Move only legs.',
           },
           {
             name: 'Forearm plank',
             reps: '1 set · 30 sec hold',
             notes:
-              'On forearms only (NOT hands — wrists still off). Climbing 25 → 30s (2026-06-29). At a clean 30s → add a 2nd set. Stop if any wrist sensation.',
+              // PROGRAM: climbing 25 -> 30s.
+              'On forearms only (NOT hands — wrists still off). At a clean 30s → add a 2nd set. Stop if any wrist sensation.',
             durationSec: 30,
             isTimed: true,
           },
@@ -1743,13 +1771,14 @@ const PROGRAM: WeekPlan[] = [
           {
             name: 'Single-leg glute bridges',
             reps: '12 each side',
-            notes: 'Bumped 10 → 12 (2026-06-29; toward the 15/side cap).',
+            // PROGRAM: bumped 10 -> 12, toward the 15/side cap. No movement
+            // guidance left once the bump history is dropped — no Tips row.
           },
           { name: 'Slow supine bicycle', reps: '8 each side' },
           {
             name: 'Modified dead bug',
             reps: '10 each side',
-            notes: 'Bumped 8 → 10 (2026-06-29; toward the 12 cap).',
+            // PROGRAM: bumped 8 -> 10, toward the 12 cap — same as above.
           },
           {
             name: 'Standing calf raises',
@@ -1770,28 +1799,33 @@ const PROGRAM: WeekPlan[] = [
           {
             name: 'Bodyweight squats',
             reps: '12 reps · 3-1-3 tempo',
-            notes:
-              "NEW 2026-06-29: C's biggest gap was zero standing leg strength — squats are the #1 muscle-preservation move. Start 12 (below A's 14 since C is the lighter day). Arms crossed; wall behind shoulder if wobbly.",
+            // PROGRAM: new Jun 29 2026 — C's biggest gap was zero standing
+            // leg strength; started at 12, below A's 14, since C is lighter.
+            notes: 'Arms crossed; wall behind shoulder if wobbly.',
           },
           { name: 'Glute bridges', reps: '18 reps · 2-sec hold' },
           {
             name: 'Single-leg glute bridges',
             reps: '8 each side',
-            notes:
-              "NEW 2026-06-29: single-leg glute work (the audit's 'best glute move'). Start 8/side (below B's 12 — fresh slot). Climb toward 15, then tempo / foot-elevated per progression-rules.md.",
+            // PROGRAM: new Jun 29 2026 (the audit's "best glute move"),
+            // started at 8/side, below B's 12 — a fresh slot for C.
+            notes: 'Climb toward 15, then tempo / foot-elevated.',
           },
           {
             name: 'Side-lying leg raises',
             reps: '12 each side',
+            // PROGRAM: added Jun 29 2026 (meatier-Friday) — lateral-hip work
+            // C never had before.
             notes:
-              'Added 2026-06-29 (meatier-Friday). Lateral-hip work C never had — back-gentle, no balance. Climb toward the 20/side cap, then ankle band / longer lever.',
+              'Back-gentle, no balance. Climb toward the 20/side cap, then ankle band / longer lever.',
           },
           { name: 'Modified dead bug', reps: '8 each side' },
           {
             name: 'Standing calf raises',
             reps: '18 reps',
+            // PROGRAM: the audit's one move meant to push genuinely hard.
             notes:
-              "Last set near failure (0-2 reps left) — the audit's one move to push genuinely hard. Fingertip touch on wall for balance only — NO grip.",
+              'Last set near failure (0-2 reps left). Fingertip touch on wall for balance only — NO grip.',
           },
         ],
         cooldown: STRETCH_COOLDOWN,
@@ -1827,34 +1861,40 @@ const PROGRAM: WeekPlan[] = [
             name: 'Bodyweight squats',
             reps: '14 reps · 3-1-3 tempo',
             notes:
-              'Arms crossed over chest. Wall behind shoulder if balance wobbly. Held at 14 from Week 8.',
+              // PROGRAM: held at 14 from Week 8.
+              'Arms crossed over chest. Wall behind shoulder if balance wobbly.',
           },
           HIP_HINGE_W8,
           {
             name: 'Eccentric step-down',
             reps: '2 sets · 5 each leg',
+            // PROGRAM: new from the Jun-20 research pass — the downhill-hiking move.
             notes:
-              "NEW (Jun-20 research): the downhill-hiking move. Stand on a low, sturdy step with your weight on ONE leg; let the other foot hang just off the edge. SLOWLY lower the hanging heel toward the floor over 3-4 seconds — control it, don't drop — then drive back up through the standing leg. Light fingertip touch on a wall/rail for balance ONLY — no grip, no weight on the hand (wrist stays out of it). Keep the standing knee tracking over the toes, not caving in. Start with a low step and small range; the slow lowering is the work. Stop the set if the knee pinches.",
+              "Stand on a low, sturdy step with your weight on ONE leg; let the other foot hang just off the edge. SLOWLY lower the hanging heel toward the floor over 3-4 seconds — control it, don't drop — then drive back up through the standing leg. Light fingertip touch on a wall/rail for balance ONLY — no grip, no weight on the hand (wrist stays out of it). Keep the standing knee tracking over the toes, not caving in. Start with a low step and small range; the slow lowering is the work. Stop the set if the knee pinches.",
           },
           { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
           {
             name: 'Wall sit',
             reps: '45 sec hold',
             notes:
-              'Hands rest on thighs or hang. No pushing on wall. Bumped 40→45s (Jul 3): you held 43s on Jul 1, so the plan catches up to you + a small nudge. Cap 45-60s — graduate at a clean 60s.',
+              // PROGRAM: bumped 40 -> 45s (Jul 3) — she'd already held 43s
+              // on Jul 1, so the plan caught up + a small nudge.
+              'Hands rest on thighs or hang. No pushing on wall. Cap 45-60s — graduate at a clean 60s.',
             durationSec: 45,
             isTimed: true,
           },
           {
             name: 'Modified dead bug',
             reps: '10 each side',
-            notes: 'Arms relaxed at sides on mat. Move only legs. Carried 10 from Week 9 (cap 12).',
+            // PROGRAM: carried 10 from Week 9 (cap 12).
+            notes: 'Arms relaxed at sides on mat. Move only legs.',
           },
           {
             name: 'Forearm plank',
             reps: '1 set · 30 sec hold',
+            // PROGRAM: carried 30s from Week 9.
             notes:
-              'On forearms only (NOT hands — wrists still off). Carried 30s from Week 9 — at a clean 30s add a 2nd set. Stop if any wrist sensation.',
+              'On forearms only (NOT hands — wrists still off). At a clean 30s add a 2nd set. Stop if any wrist sensation.',
             durationSec: 30,
             isTimed: true,
           },
@@ -1875,13 +1915,13 @@ const PROGRAM: WeekPlan[] = [
           {
             name: 'Single-leg glute bridges',
             reps: '12 each side',
-            notes: 'Carried 12 from Week 9 (toward the 15/side cap).',
+            // PROGRAM: carried 12 from Week 9, toward the 15/side cap.
           },
           { name: 'Slow supine bicycle', reps: '8 each side' },
           {
             name: 'Modified dead bug',
             reps: '10 each side',
-            notes: 'Carried 10 from Week 9 (toward the 12 cap).',
+            // PROGRAM: carried 10 from Week 9, toward the 12 cap.
           },
           {
             name: 'Standing calf raises',
@@ -1902,20 +1942,21 @@ const PROGRAM: WeekPlan[] = [
           {
             name: 'Bodyweight squats',
             reps: '12 reps · 3-1-3 tempo',
-            notes:
-              'Carried from Week 9. The standing compound C had lacked. Arms crossed; wall behind shoulder if wobbly.',
+            // PROGRAM: carried from Week 9 — the standing compound C had lacked.
+            notes: 'Arms crossed; wall behind shoulder if wobbly.',
           },
           { name: 'Glute bridges', reps: '18 reps · 2-sec hold' },
           {
             name: 'Single-leg glute bridges',
             reps: '8 each side',
-            notes: 'Carried from Week 9. Climb toward 15, then tempo / foot-elevated.',
+            // PROGRAM: carried from Week 9.
+            notes: 'Climb toward 15, then tempo / foot-elevated.',
           },
           {
             name: 'Side-lying leg raises',
             reps: '12 each side',
-            notes:
-              'Carried from Week 9. Climb toward the 20/side cap, then ankle band / longer lever.',
+            // PROGRAM: carried from Week 9.
+            notes: 'Climb toward the 20/side cap, then ankle band / longer lever.',
           },
           { name: 'Modified dead bug', reps: '8 each side' },
           {
@@ -1974,8 +2015,8 @@ PROGRAM.push({
         {
           name: 'Bodyweight squats',
           reps: '12 reps · 3-1-3 tempo',
-          notes:
-            'Restart at 12 (you were at 14 before the break). Arms crossed over chest; wall behind shoulder if balance wobbly.',
+          // PROGRAM: round-2 restart at 12 (she was at 14 before the break).
+          notes: 'Arms crossed over chest; wall behind shoulder if balance wobbly.',
         },
         HIP_HINGE_W8,
         { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
@@ -1984,21 +2025,23 @@ PROGRAM.push({
           reps: '35 sec hold',
           // Sep 24 2026, v48 P8: "streak" → "showing up" (DECISIONS §5: the word
           // is gone from the UI; there's no streak to break). Meaning unchanged.
-          notes:
-            "Restart at 35s (you held 45s pre-break — don't chase the old number; showing up is the asset). Hands rest on thighs or hang. No pushing on wall.",
+          // PROGRAM: round-2 restart at 35s (she held 45s pre-break) — don't
+          // chase the old number; showing up is the asset.
+          notes: 'Hands rest on thighs or hang. No pushing on wall.',
           durationSec: 35,
           isTimed: true,
         },
         {
           name: 'Modified dead bug',
           reps: '8 each side',
-          notes: 'Arms relaxed at sides on mat. Move only legs. Restart at 8 (was 10).',
+          // PROGRAM: round-2 restart at 8 (was 10).
+          notes: 'Arms relaxed at sides on mat. Move only legs.',
         },
         {
           name: 'Forearm plank',
           reps: '1 set · 20 sec hold',
-          notes:
-            'On forearms only (NOT hands — wrists still off). Restart at 20s (was 30). Stop if any wrist sensation.',
+          // PROGRAM: round-2 restart at 20s (was 30).
+          notes: 'On forearms only (NOT hands — wrists still off). Stop if any wrist sensation.',
           durationSec: 20,
           isTimed: true,
         },
@@ -2014,17 +2057,20 @@ PROGRAM.push({
       warmup: WALK_WARMUP_AB,
       main: [
         HIP_HINGE_W8,
-        { name: 'Side-lying leg raises', reps: '12 each side', notes: 'Restart at 12 (was 14).' },
-        { name: 'Side-lying clamshells', reps: '10 each side', notes: 'Restart at 10 (was 12).' },
+        // PROGRAM (both lines below): round-2 restart, back to the pre-break number.
+        { name: 'Side-lying leg raises', reps: '12 each side' },
+        { name: 'Side-lying clamshells', reps: '10 each side' },
         {
           name: 'Single-leg glute bridges',
           reps: '10 each side',
-          notes: 'Restart at 10 (was 12; toward the 15/side cap once sessions land clean).',
+          // PROGRAM: round-2 restart at 10 (was 12).
+          notes: 'Toward the 15/side cap once sessions land clean.',
         },
         {
           name: 'Modified dead bug',
           reps: '8 each side',
-          notes: 'Restart at 8 (was 10). Supine bicycle returns in a later week.',
+          // PROGRAM: round-2 restart at 8 (was 10).
+          notes: 'Supine bicycle returns in a later week.',
         },
         {
           name: 'Standing calf raises',
@@ -2045,25 +2091,31 @@ PROGRAM.push({
         {
           name: 'Bodyweight squats',
           reps: '10 reps · 3-1-3 tempo',
-          notes: 'Restart at 10 (was 12). Arms crossed; wall behind shoulder if wobbly.',
+          // PROGRAM: round-2 restart at 10 (was 12).
+          notes: 'Arms crossed; wall behind shoulder if wobbly.',
         },
-        { name: 'Glute bridges', reps: '15 reps · 2-sec hold', notes: 'Restart at 15 (was 18).' },
+        // PROGRAM: round-2 restart at 15 (was 18).
+        { name: 'Glute bridges', reps: '15 reps · 2-sec hold' },
         {
           name: 'Single-leg glute bridges',
           reps: '8 each side',
-          notes: 'Held at 8/side. Climb toward 15, then tempo / foot-elevated.',
+          // PROGRAM: held at 8/side (no restart needed here).
+          notes: 'Climb toward 15, then tempo / foot-elevated.',
         },
         {
           name: 'Side-lying leg raises',
           reps: '10 each side',
-          notes: 'Restart at 10 (was 12; the 20/side cap still stands).',
+          // PROGRAM: round-2 restart at 10 (was 12).
+          notes: 'The 20/side cap still stands.',
         },
         { name: 'Modified dead bug', reps: '8 each side' },
         {
           name: 'Standing calf raises',
           reps: '15 reps',
+          // PROGRAM: round-2 restart at 15 (was 18) — the one move meant to
+          // push genuinely hard.
           notes:
-            'Restart at 15 (was 18). Last set near failure (0-2 reps left) — the one move to push genuinely hard. Fingertip touch on wall for balance only — NO grip.',
+            'Last set near failure (0-2 reps left). Fingertip touch on wall for balance only — NO grip.',
         },
       ],
       cooldown: STRETCH_COOLDOWN,
@@ -2155,8 +2207,10 @@ PROGRAM.push({
         {
           name: 'Side-lying clamshells',
           reps: '10 each side',
-          notes:
-            'Bodyweight this week. The TheraBand kit IS home (you confirmed Sep 7) — the yellow band loops around the thighs starting WEEK 3, not now. Your words the same minute: "dont raise too fast."',
+          // PROGRAM: the TheraBand kit is confirmed home (Sep 7) — the band
+          // loops in starting Week 3, not this week. Her words the same
+          // minute: "dont raise too fast."
+          notes: 'Bodyweight this week.',
         },
         {
           name: 'Single-leg glute bridges',
@@ -2184,8 +2238,9 @@ PROGRAM.push({
         {
           name: 'Bodyweight squats',
           reps: '10 reps · 3-1-3 tempo',
+          // PROGRAM: C stays the lighter day (10, not 12 like A/B).
           notes:
-            'C stays the lighter day — 10, not 12. Last round: stop about 2 reps short, not 6. Arms crossed; wall behind shoulder if wobbly.',
+            'Last round: stop about 2 reps short, not 6. Arms crossed; wall behind shoulder if wobbly.',
         },
         { name: 'Glute bridges', reps: '15 reps · 2-sec hold' },
         {
@@ -2197,14 +2252,16 @@ PROGRAM.push({
         {
           name: 'Modified dead bug',
           reps: '8 each side',
-          notes:
-            'C stays MODIFIED on purpose (legs only, arms resting) — the full dead bug lives in A and B this week.',
+          // PROGRAM: C stays MODIFIED on purpose (legs only, arms resting) —
+          // the full dead bug lives in A and B this week.
+          notes: 'Legs only, arms resting.',
         },
         {
           name: 'Standing calf raises',
           reps: '15 reps',
+          // PROGRAM: the one move meant to push genuinely hard this week.
           notes:
-            'Last set near failure (0-2 reps left) — the one move to push genuinely hard. Fingertip touch on wall for balance only — NO grip.',
+            'Last set near failure (0-2 reps left). Fingertip touch on wall for balance only — NO grip.',
         },
       ],
       cooldown: STRETCH_COOLDOWN,
@@ -2299,7 +2356,7 @@ const R2W3_BAND_CLAMSHELL: Exercise = {
   // lives in `setup`. Measured on her phone Sep 14: the first draft of this
   // step ran 933 px on a 915 px screen — a wall of text she would not read.
   notes:
-    'NEW: the band goes on — tie it first (just below). Same movement as always. <strong>10 each side, not 15</strong> — the band is the increase. If your hips roll backward to get the knee higher, the band is too strong for now: slide it lower down your thighs, or take it off and finish bodyweight. That is the right call, not a failure.',
+    'The band goes on — tie it first (just below). Same movement as always. <strong>10 each side, not 15</strong> — the band is the increase. If your hips roll backward to get the knee higher, the band is too strong for now: slide it lower down your thighs, or take it off and finish bodyweight. That is the right call, not a failure.',
 };
 PROGRAM.push({
   round: 2,
@@ -2376,8 +2433,10 @@ const R2W4_SPLIT_SQUAT: Exercise = {
   reps: '6-8 each side · one set per round',
   // v46: halved — "NEW" is the week label's job. Safety lines kept: balance
   // only (no weight through the hands), smaller range on a pinch or wobble.
+  // PROGRAM (Tips audit, Sep 26 2026): "in for the squats in A (C keeps its
+  // 10)" is program bookkeeping — dropped from what she reads.
   notes:
-    'In for the squats in A (C keeps its 10). Fingertips on the couch for balance only — no gripping, no weight through the hands. Front foot flat, back heel up, chest tall. Straight down, back knee toward the floor; push through the front heel to stand. Last set stop about 2 short. Knee pinches or you wobble? Smaller range — the right call.',
+    'Fingertips on the couch for balance only — no gripping, no weight through the hands. Front foot flat, back heel up, chest tall. Straight down, back knee toward the floor; push through the front heel to stand. Last set stop about 2 short. Knee pinches or you wobble? Smaller range — the right call.',
 };
 
 // The Week-2 wall sit, re-read from the plan object so the depth cue and the
@@ -2389,8 +2448,10 @@ const R2W4_WALL_SIT: Exercise = (() => {
     ...found,
     reps: '45 sec hold',
     durationSec: 45,
+    // PROGRAM: bumped 40 -> 45 — she held 42 on Sep 7 and 43 on Sep 14, and
+    // two sessions over target is the rule for one nudge.
     notes:
-      '40 → 45. You held 42 on Sep 7 and 43 on Sep 14 — two sessions over target is the rule for one nudge. Keep the Week-2 depth: knees toward 90°. Hands on thighs or hanging, no pushing on the wall. Graduate at a clean 60.',
+      'Keep the depth: knees toward 90°. Hands on thighs or hanging, no pushing on the wall. Graduate at a clean 60.',
   };
 })();
 
@@ -2407,8 +2468,10 @@ const HIP_HINGE_R2W4: Exercise = {
   // reps" inside "Round 1/2" read as 2 in total (same class as the v45 split-
   // squat label). Label only — the prescription is unchanged.
   reps: '12 reps · 2 sets each round · holding the 1 kg',
+  // PROGRAM: "anything heavier is a Lisa question" (clearance bookkeeping)
+  // dropped — the 1 kg ceiling itself stays as a real safety limit.
   notes:
-    'Same hinge, now HOLDING the 1 kg the way you already do — it hangs from the hands, wrists neutral, light grip. Hinge at the hips, soft knees, flat/neutral spine; feel it in hamstrings + glutes. Do NOT round the low back. 1 kg is the ceiling for now; anything heavier is a Lisa question.',
+    'Same hinge, now HOLDING the 1 kg the way you already do — it hangs from the hands, wrists neutral, light grip. Hinge at the hips, soft knees, flat/neutral spine; feel it in hamstrings + glutes. Do NOT round the low back. 1 kg is the ceiling for now.',
 };
 
 // The Jun-18 loaded pair, pulled from UPPER_BACK_W7 by name so the cues are the
@@ -2434,8 +2497,10 @@ const R2W4_LOADED_ARMS: Exercise[] = (() => {
     },
     {
       ...curl,
+      // PROGRAM: the 2 kg progression trigger (easy at 3×20, two sessions
+      // running) is engine bookkeeping, not hers to read.
       notes:
-        'Hold the 1 kg lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging; only the forearm moves. Lower slow. Pain tells — stop on any wrist signal. 2 kg trigger unchanged: easy at 3×20, two sessions running.',
+        'Hold the 1 kg lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging; only the forearm moves. Lower slow. Pain tells — stop on any wrist signal.',
     },
   ];
 })();
@@ -8340,16 +8405,46 @@ function renderHoldTimerCard(ex: Exercise, showTempo: boolean): string {
     </div>`;
 }
 
-// v48: the full cue behind one closed "Cue ▸" (same toggle + openSections as
-// the detail-card dropdowns). The face keeps only the safety line.
-function renderCueExpander(ex: Exercise): string {
-  if (!ex.notes) return '';
+// v53 (Sep 26 2026): "Cue" → "Tips" — her words, "Cue in the app? It says to
+// cue something, that seems to do nothing." "Cue" read as an instruction to
+// perform, not a label for more reading, and it duplicated "Listen — how to
+// do it" + "Steps" underneath. Renamed + restyled to match the "Steps" row
+// exactly (icon + label + chevron, full-width tappable, same weight — see
+// renderDetailSection). Same toggle + openSections mechanism as before.
+//
+// tipsRedundant: every exercise notes string was hand-audited this pass to
+// strip PROGRAM bookkeeping (see the // PROGRAM comments beside each one in
+// PROGRAM/ladders.ts) down to form/feel/safety guidance only. This is the
+// runtime backstop for the rare leftover that only restates the safety line
+// or the Steps card word for word — her rule: nothing gets a Tips row that
+// has nothing left to say.
+function tipsRedundant(ex: Exercise, safety: string | undefined): boolean {
+  if (!ex.notes) return true;
+  const normalize = (s: string): string =>
+    s
+      .toLowerCase()
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const notesNorm = normalize(ex.notes);
+  if (notesNorm === '') return true;
+  if (safety && normalize(safety) === notesNorm) return true;
+  const detail = EXERCISE_DETAIL[ex.name];
+  if (detail && detail.steps.length > 0) {
+    const stepsNorm = normalize(detail.steps.join(' '));
+    if (stepsNorm.includes(notesNorm)) return true;
+  }
+  return false;
+}
+
+function renderTipsExpander(ex: Exercise, safety: string | undefined): string {
+  if (tipsRedundant(ex, safety)) return '';
   const key = `${ex.name}::cue`;
   const isOpen = !!state.openSections[key];
   return `
-    <div class="detail-section cue-section ${isOpen ? 'detail-section-open' : ''}">
-      <button class="detail-section-toggle cue-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${isOpen}">
-        <span class="detail-section-label">Cue</span>
+    <div class="detail-section tips-section ${isOpen ? 'detail-section-open' : ''}">
+      <button class="detail-section-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${isOpen}">
+        <span class="detail-section-label"><span class="detail-section-icon" aria-hidden="true">💡</span> Tips</span>
         <span class="detail-chev" aria-hidden="true">▸</span>
       </button>
       ${isOpen ? `<div class="detail-section-body"><p class="exercise-notes">${ex.notes}</p></div>` : ''}
@@ -8479,7 +8574,7 @@ function renderWorkout(): string {
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${renderArmFeel(ex.name)}
         ${safety ? `<p class="exercise-safety">${escapeHtml(safety)}</p>` : ''}
-        ${renderCueExpander(ex)}
+        ${renderTipsExpander(ex, safety)}
         ${renderExerciseSetup(ex)}
         ${
           ex.name === APARTMENT_CARDIO_NAME

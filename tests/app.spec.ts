@@ -7,14 +7,16 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-// v48 (Sep 24 2026): the full cue sits behind a closed "Cue ▸" — the card face
-// carries only the one safety line. Tests that read the cue open it first.
+// v48 (Sep 24 2026): the full note sits behind a closed toggle — the card face
+// carries only the one safety line. v53 (Sep 26 2026): that toggle is "Tips ▸"
+// now, was "Cue ▸" (her words: "it seems to do nothing"). Tests that read it
+// open it first.
 // v48 · P3 (Sep 24 2026): the cardio CHOICE step has no Done · Next — its way
 // on is the quiet "Skip cardio today" (#ww-skip). One tap forward on any step.
 const NEXT = 'button:has-text("Done ·"), #ww-skip';
 
 async function openCue(page: Page): Promise<void> {
-  const toggle = page.locator('.cue-toggle[aria-expanded="false"]');
+  const toggle = page.locator('.tips-section .detail-section-toggle[aria-expanded="false"]');
   if (await toggle.count()) await toggle.first().click();
 }
 
@@ -1355,7 +1357,12 @@ test('R2 W4: the wall sit step itself reads 45 sec (the earned nudge from 40)', 
     if (name.includes('Wall sit')) {
       await expect(page.locator('.exercise-reps')).toContainText('45 sec');
       await openCue(page);
-      await expect(page.locator('.exercise-notes').first()).toContainText('40 → 45');
+      // v53 Tips audit: "40 → 45" (the bump history) is PROGRAM bookkeeping,
+      // moved to a code comment — the movement guidance is what stays visible.
+      await expect(page.locator('.exercise-notes').first()).toContainText(
+        'Keep the depth: knees toward 90'
+      );
+      await expect(page.locator('.exercise-notes').first()).not.toContainText('40 → 45');
       return;
     }
     if (name.includes('Supported split squat')) {
@@ -2720,6 +2727,40 @@ test('home order: the workout sits first; the week-by-week list is collapsed in 
   const wrap = page.locator('.consistency-wrap');
   await expect(wrap).toHaveJSProperty('open', false);
   await expect(wrap.locator('.next-week-summary-label')).toHaveText('Week by week');
+});
+
+// v53 (Sep 26 2026) Tips audit: her words, "Cue in the app? It says to cue
+// something, that seems to do nothing" — the fold worked, the label and the
+// program bookkeeping leaking through it didn't. Scans every exercise `notes`
+// string the app can show (PROGRAM's every week/round in app.ts + every rung
+// in ladders.ts) and fails on the PROGRAM-not-movement tells: another
+// workout letter, "keeps its", a stale number ("was N"), a version tag, or a
+// week number. Reading straight from source, not a live page, so it covers
+// past/future weeks too — not just whatever week today happens to land on.
+test('Tips audit: no exercise notes string leaks PROGRAM bookkeeping instead of movement guidance', () => {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const bannedPatterns: [RegExp, string][] = [
+    [/\b(in|for) [ABC]\b/, 'references another workout (in/for A|B|C)'],
+    [/keeps its/i, '"keeps its" (program comparison)'],
+    [/\bwas \d/, '"was N" (stale-number bookkeeping)'],
+    [/\bv\d{2}\b/, 'a version tag (vNN)'],
+    [/week \d/i, 'a week number'],
+  ];
+  const noteRe = /notes:\s*\n?\s*(['"])((?:\\.|(?!\1).)*)\1/g;
+  const offenders: string[] = [];
+  for (const file of ['app.ts', 'ladders.ts']) {
+    const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+    let m: RegExpExecArray | null;
+    while ((m = noteRe.exec(src))) {
+      const text = m[2]!;
+      const line = src.slice(0, m.index).split(/\r?\n/).length;
+      for (const [re, why] of bannedPatterns) {
+        if (re.test(text)) offenders.push(`${file}:${line} — ${why} — "${text}"`);
+      }
+    }
+  }
+  expect(offenders).toEqual([]);
 });
 
 test('deploy hygiene: sw.js cache VERSION stays in sync with APP_VERSION', () => {
@@ -4313,7 +4354,9 @@ test.describe('v48 P2 shell', () => {
     );
   });
 
-  test('(c) the split squat face shows the safety line, and the full cue only behind "Cue ▸"', async ({
+  // v53 (Sep 26 2026): "Cue" → "Tips" — her words, "Cue in the app? It says
+  // to cue something, that seems to do nothing." Same fold, plain label.
+  test('(c) the split squat face shows the safety line, and the full tip only behind "Tips ▸"', async ({
     page,
   }) => {
     await mockDate(page, TUE_WEEK4);
@@ -4325,12 +4368,44 @@ test.describe('v48 P2 shell', () => {
     );
     await expect(page.locator('.exercise-notes')).toHaveCount(0);
     await expect(page.locator('body')).not.toContainText('Front foot flat, back heel up');
-    const cue = page.locator('.cue-toggle');
-    await expect(cue).toContainText('Cue');
-    await expect(cue).toHaveAttribute('aria-expanded', 'false');
-    await cue.click();
+    const tips = page.locator('.tips-section .detail-section-toggle');
+    await expect(tips).toContainText('Tips');
+    await expect(tips).toHaveAttribute('aria-expanded', 'false');
+    await tips.click();
     await expect(page.locator('.exercise-notes')).toContainText('Front foot flat, back heel up');
-    await expect(page.locator('.exercise-notes')).toContainText('In for the squats in A');
+    // v53 Tips audit: "in for the squats in A (C keeps its 10)" was program
+    // bookkeeping, not hers to read — dropped from the visible note.
+    await expect(page.locator('.exercise-notes')).not.toContainText('in for the squats in A');
+  });
+
+  // v53 (Sep 26 2026): "Cue" is gone everywhere — walk every step of A, B and
+  // C for the current week and confirm no visible "Cue" text survives, and
+  // that Tips (where an exercise has one) actually opens on tap.
+  test('(c2) no visible "Cue" on any A/B/C step; Tips opens where an exercise has one', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    for (const workout of ['A', 'B', 'C'] as const) {
+      await page.goto('/');
+      await page.locator(`button[data-workout="${workout}"]`).first().click();
+      await page.locator('button:has-text("Start")').click();
+      let sawATip = false;
+      for (let i = 0; i < 40; i++) {
+        if (await page.locator('text=Quick log').isVisible()) break;
+        const tips = page.locator('.tips-section .detail-section-toggle[aria-expanded="false"]');
+        if (await tips.count()) {
+          await expect(tips.first()).not.toContainText('Cue');
+          await tips.first().click();
+          await expect(page.locator('.exercise-notes').first()).toBeVisible();
+          sawATip = true;
+        }
+        await expect(page.locator('body')).not.toContainText('Cue');
+        const next = page.locator('#next, #ww-skip, #start-round-2').first();
+        if (await next.isVisible()) await next.click();
+        else break;
+      }
+      expect(sawATip, `workout ${workout} should show at least one Tips row`).toBe(true);
+    }
   });
 
   test('(d) "New tonight" on the split squat until an A is logged this plan week', async ({
@@ -4591,14 +4666,17 @@ test.describe('v48 P2 shell', () => {
     await goToStep(page, 'Supported split squat');
     // Round 1 too: a move with no still gets the row, not the black poster.
     await expect(page.locator('.visual-video-poster')).toHaveCount(0);
-    await page.locator('.cue-toggle').click(); // opened in round 1…
+    await page.locator('.tips-section .detail-section-toggle').click(); // opened in round 1…
     await expect(page.locator('.exercise-notes')).toBeVisible();
     await toRoundBreak(page);
     await page.locator('#start-round-2').click();
     await goToStep(page, 'Supported split squat');
     await expect(page.locator('.round-indicator')).toHaveText('Main · Round 2 of 2');
     // …closed again in round 2 ("Round 2 notes closed").
-    await expect(page.locator('.cue-toggle')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('.tips-section .detail-section-toggle')).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
     await expect(page.locator('.exercise-notes')).toHaveCount(0);
     const row = page.locator('.exercise-visual-compact .visual-video-toggle');
     await expect(row).toHaveText('▶ Watch how it looks');
@@ -6908,9 +6986,9 @@ test.describe('v48 P8 sweep', () => {
     await seed(page);
     await expectClean(page, 'home');
     await walkA(page, async (where) => {
-      // Open the cue and the video on each step, so the closed text is read too.
+      // Open Tips and the video on each step, so the closed text is read too.
       if (where.startsWith('step')) {
-        const cue = page.locator('.cue-toggle[aria-expanded="false"]');
+        const cue = page.locator('.tips-section .detail-section-toggle[aria-expanded="false"]');
         if (await cue.count()) await cue.first().click();
         const video = page.locator('.visual-video-toggle[aria-expanded="false"]');
         if (await video.count()) await video.first().click();

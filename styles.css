@@ -4579,7 +4579,7 @@ input[type='number']:focus {
 }
 
 /* The one safety line — readable ink, not dimmed (spec §5 frame 2: "17 --ink").
- * The full cue sits behind "Cue ▸". */
+ * The rest sits behind "Tips ▸", styled like the "Steps" row below it. */
 .exercise-safety {
   color: var(--ink);
   font-size: var(--t-body);
@@ -4588,25 +4588,20 @@ input[type='number']:focus {
   margin: 4px 0 4px;
 }
 
-.cue-section {
+/* v53 (Sep 26 2026): "Cue" → "Tips" — her words, "Cue in the app? It says to
+ * cue something, that seems to do nothing." Styled like the Steps row now
+ * (full-weight icon + label + chevron, no dimming) instead of its own quiet
+ * grey look, so it reads as tappable the same way Steps does. */
+.tips-section {
   text-align: left;
   margin-top: 6px;
 }
 
-.cue-section .detail-section-toggle {
-  padding: 10px 4px;
-  color: var(--text-dim);
-}
-
-.cue-section .detail-chev {
-  color: var(--text-dim);
-}
-
-.cue-section .detail-section-body {
+.tips-section .detail-section-body {
   padding: 0 4px 6px;
 }
 
-.cue-section .exercise-notes {
+.tips-section .exercise-notes {
   max-width: none;
   margin: 0;
 }
@@ -5575,9 +5570,9 @@ input[type='number']:focus {
 }
 
 /* Tap targets >= 44 px on home, the workout and Settings (her Pixel, one hand,
- * mid-set). Measured at 412x915 in P8: the "Cue ▸" row was 43, the arm-feel
- * chips 40, "‹ Back to the stretches" in the pinned bar 40. */
-.cue-section .detail-section-toggle,
+ * mid-set). Measured at 412x915 in P8: the "Cue ▸" (now "Tips ▸") row was 43,
+ * the arm-feel chips 40, "‹ Back to the stretches" in the pinned bar 40. */
+.tips-section .detail-section-toggle,
 .arm-chip,
 .action-bar .postlog-back {
   min-height: 44px;
