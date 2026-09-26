@@ -5343,6 +5343,47 @@ test.describe('v48 P4 home', () => {
     await expect(page.locator('button.home-hero[data-workout="B"]')).toContainText('Up next');
   });
 
+  // Sat Sep 26 2026 — her words, 21:21: "its saturday night i was supposed to
+  // be able to do workout b of last week tonight". Last week = A (Thu) + C (Fri),
+  // so Saturday's session swings back to it and Up next must be the missing B,
+  // not the rotation's A.
+  const swingLog = (id: string, date: string, workout: 'A' | 'B' | 'C') => ({
+    id,
+    date,
+    workout,
+    capacityBefore: 8,
+    capacityAfter: 8,
+    wallSitSec: 0,
+    backPain: 0,
+    word: '',
+    synced: true,
+  });
+
+  test('(e2) swing Saturday: Up next is the workout last week is still missing', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-26T18:20:00.000Z');
+    await seedLogs(page, [
+      swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+      swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+    ]);
+    await page.goto('/');
+    await expect(page.locator('button.home-hero[data-workout="B"]')).toContainText('Up next');
+  });
+
+  test('(e3) once Saturday completes last week, Up next starts the new week at A', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-27T09:00:00.000Z');
+    await seedLogs(page, [
+      swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+      swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+      swingLog('sat-b', '2026-09-26T19:30:00.000Z', 'B'),
+    ]);
+    await page.goto('/');
+    await expect(page.locator('button.home-hero[data-workout="A"]')).toContainText('Up next');
+  });
+
   test('(f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress', async ({
     page,
   }) => {
@@ -6712,21 +6753,21 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v51 · <date, no year>", Settings "Build v51 · <full date>", sw.js v51', async ({
+  test('(d) the version: home "v51.1 · <date, no year>", Settings "Build v51.1 · <full date>", sw.js v51.1', async ({
     page,
   }) => {
     const src = await (await page.request.get('/app.ts')).text();
     const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
     const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
-    expect(version).toBe('v51');
+    expect(version).toBe('v51.1');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
-      `v51 · ${built.replace(/,\s*\d{4}/, '')}`
+      `v51.1 · ${built.replace(/,\s*\d{4}/, '')}`
     );
     await page.locator('#open-settings').click();
-    await expect(page.locator('#app')).toContainText(`Build v51 · ${built}`);
+    await expect(page.locator('#app')).toContainText(`Build v51.1 · ${built}`);
     const sw = await (await page.request.get('/sw.js')).text();
-    expect(sw).toContain("'workout-tracker-v51'");
+    expect(sw).toContain("'workout-tracker-v51.1'");
   });
 });
 

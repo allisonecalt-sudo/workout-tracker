@@ -453,8 +453,8 @@ const SUPABASE_ANON_KEY =
 // these are counted" row, quiet/sage period-log button) + the rest of the
 // page's "everything presentation" (combined elliptical line, compact
 // wall-sit sparkline).
-const APP_VERSION = 'v51';
-const BUILD_DATE = 'Sep 25, 2026 · 14:28';
+const APP_VERSION = 'v51.1';
+const BUILD_DATE = 'Sep 26, 2026 · 21:26';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -6057,10 +6057,26 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#039;');
 }
 
-// Today's pick rotation (group 2I): A→B→C→A.
+// Today's pick (Sat Sep 26 2026): "Up next" = the first of A/B/C still missing
+// from the week the next session will COUNT toward — last week on a swing
+// Saturday (same rule as attributeSessionsToWeeks), else this week. Her words,
+// 21:21: "its saturday night i was supposed to be able to do workout b of last
+// week tonight" — home said A (rotation after Friday's C) while last week still
+// needed its B. Falls back to the old A→B→C rotation (group 2I) once that week
+// has all three.
 function getTodaysPick(): WorkoutId {
   const logs = loadLogs();
   if (logs.length === 0) return 'A';
+  const attribution = attributeSessionsToWeeks(logs);
+  const lastWeek = sessionsAttributedTo(logs, saturdayForOffset(1), attribution);
+  const swings =
+    new Date().getDay() === 6 && lastWeek.length > 0 && lastWeek.length < SESSIONS_PER_WEEK_TARGET;
+  const countsToward = swings
+    ? lastWeek
+    : sessionsAttributedTo(logs, saturdayForOffset(0), attribution);
+  const done = new Set(countsToward.map((l) => l.workout));
+  const missing = (['A', 'B', 'C'] as const).find((w) => !done.has(w));
+  if (missing) return missing;
   const last = logs[0];
   if (!last) return 'A';
   if (last.workout === 'A') return 'B';
