@@ -15,6 +15,13 @@ test.beforeEach(async ({ page }) => {
 // on is the quiet "Skip cardio today" (#ww-skip). One tap forward on any step.
 const NEXT = 'button:has-text("Done ·"), #ww-skip';
 
+// WK2 (Sep 27 2026): the completion-based week model's real launch instant —
+// week.ts's own COMPLETION_WEEKS_FROM.at, duplicated here (not imported —
+// this file mocks `window.Date`, and week.ts is a Node-side import in
+// week.test.ts, not loaded into the page) so tests that need a deterministic
+// "day 1" can mockDate to the exact same moment app.ts reads.
+const COMPLETION_WEEKS_FROM_ISO = '2026-09-26T22:30:00+03:00';
+
 async function openCue(page: Page): Promise<void> {
   const toggle = page.locator('.tips-section .detail-section-toggle[aria-expanded="false"]');
   if (await toggle.count()) await toggle.first().click();
@@ -29,7 +36,11 @@ test('home screen shows three workout options and zero sessions', async ({ page 
   await expect(page.locator('.home-hero')).toContainText('Lower Body + Core');
   await expect(page.locator('button.btn-chip[data-workout="B"]')).toHaveText('B · Glutes');
   await expect(page.locator('button.btn-chip[data-workout="C"]')).toHaveText('C · Cardio');
-  await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
+  // WK2 (Sep 27 2026): "now" (no mockDate here) is permanently past the real
+  // completion-model launch (Sep 26 2026 22:30) from here on, so a clean,
+  // zero-session fixture reads the completion model's own "nothing done yet"
+  // line (§2.4's #week-count table), not the old calendar "this week" line.
+  await expect(page.locator('.week-line')).toContainText('0 of 3 · A, B and C to go');
   // v49 · look (Sep 25 2026): the lifetime count moved off the week line and
   // onto the Start → Now card's "Sessions" row — which itself only appears
   // once there's at least one session (spec: "Only one count on Home").
@@ -43,7 +54,13 @@ test("today's pick highlights A when no history exists", async ({ page }) => {
 });
 
 test('week-dots row is rendered with 7 day labels', async ({ page }) => {
-  await expect(page.locator('.week-dots .week-dot')).toHaveCount(7);
+  // WK2 (Sep 27 2026): the strip is now exactly as long as the shown week
+  // (§2.4), not a fixed calendar 7 — pinned to the launch instant itself
+  // (day 1) for a deterministic single-column count; a real "now" days later
+  // would show more columns, capped at 10 (completionWeekDots).
+  await mockDate(page, COMPLETION_WEEKS_FROM_ISO);
+  await page.goto('/');
+  await expect(page.locator('.week-dots .week-dot')).toHaveCount(1);
 });
 
 test('selecting workout A goes to pre-log screen', async ({ page }) => {
@@ -272,7 +289,8 @@ test('quit during workout asks for confirmation and returns home', async ({ page
   }).toPass({ timeout: 3000 });
   await panel.locator('#quit-yes').click();
   await expect(page.locator('.home-header h1')).toBeVisible();
-  await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
+  // WK2 (Sep 27 2026): see the "zero sessions" test's own comment above.
+  await expect(page.locator('.week-line')).toContainText('0 of 3 · A, B and C to go');
   expect(dialogs).toEqual([]);
 });
 
@@ -666,7 +684,8 @@ test('left-open gate: "No, throw it away" discards it and clears the snapshot', 
   await reopened.goto('/');
   await reopened.locator('#stale-discard').click();
   await expect(reopened.locator('#stale-session-card')).toHaveCount(0);
-  await expect(reopened.locator('.week-line')).toContainText('0 of 3 this week');
+  // WK2 (Sep 27 2026): see the "zero sessions" test's own comment above.
+  await expect(reopened.locator('.week-line')).toContainText('0 of 3 · A, B and C to go');
   const active = await reopened.evaluate((key) => localStorage.getItem(key), ACTIVE_SESSION_KEY);
   expect(active).toBeNull();
   await reopened.close();
@@ -2733,7 +2752,8 @@ test('home order: the workout sits first; the week-by-week list is collapsed in 
   const heroBox = await page.locator('.home-hero').boundingBox();
   const weekBox = await page.locator('.week-card').boundingBox();
   expect(heroBox!.y).toBeLessThan(weekBox!.y);
-  await expect(page.locator('.week-line')).toContainText('of 3 this week');
+  // WK2 (Sep 27 2026): see the "zero sessions" test's own comment above.
+  await expect(page.locator('.week-line')).toContainText('of 3 · A, B and C to go');
   await page.locator('#open-weekly-review').click();
   const wrap = page.locator('.consistency-wrap');
   await expect(wrap).toHaveJSProperty('open', false);
@@ -6023,11 +6043,18 @@ test.describe('v48 P4 home', () => {
   test("(e2c) after Saturday's B the Done card reports Week 4, not the new week", async ({
     page,
   }) => {
-    await mockDate(page, '2026-09-26T19:40:00.000Z');
+    // WK2 (Sep 27 2026): kept strictly BEFORE the real completion-model launch
+    // (Sep 26 2026 22:30 = 19:30 UTC) so this still exercises the swing model
+    // it was written for — "now" at/after that instant reads the completion
+    // model instead (isNowAfterCompletionLaunch), which is a DIFFERENT,
+    // deliberately-covered scenario (see (swing-plan b) below). sat-b's own
+    // timestamp is her real Sep 26 2026 B session end (COMPLETION_WEEKS_FROM's
+    // own anchor), not the synthetic :30 this test used before.
+    await mockDate(page, '2026-09-26T19:20:00.000Z');
     await seedLogs(page, [
       swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
       swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
-      swingLog('sat-b', '2026-09-26T19:30:00.000Z', 'B'),
+      swingLog('sat-b', '2026-09-26T19:14:51.000Z', 'B'),
     ]);
     await page.goto('/');
     await expect(page.locator('.home-done-line')).toHaveText('3 of 3 in Week 4');
@@ -6079,9 +6106,18 @@ test.describe('v48 P4 home', () => {
     await expect(page.locator('.exercise-reps')).toHaveText('10 min'); // Week 4's ride, not Week 5's 12
   });
 
-  test("(swing-plan b) Sun Sep 27, the swing closed last week: A opens on Week 5's plan (12-min ride), header clean", async ({
+  test("(swing-plan b → WK2) Sun Sep 27, now past the real launch: A opens on Week 5's plan (12-min ride), header plain", async ({
     page,
   }) => {
+    // WK2 (Sep 27 2026): "now" here is at/after the real completion-model
+    // launch (Sep 26 2026 22:30), so this is no longer the swing model's
+    // territory (that's (swing-plan a) above, kept strictly before it) — it's
+    // the completion model's OWN "Week 5, nothing done yet but B" state. The
+    // ride-minutes behavior this test was really guarding (a session started
+    // now trains WEEK 5's plan, not Week 4's) still holds, under the new
+    // model's own plan lookup (planForWeekKey/completionWeekSyntheticDate) —
+    // only the header/meta TEXT changed ("Round 2 ·"/"R2 ·" left Home and
+    // pre-log, §2.4).
     await mockDate(page, '2026-09-27T09:00:00.000Z');
     await seedLogs(page, [
       swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
@@ -6089,14 +6125,147 @@ test.describe('v48 P4 home', () => {
       swingLog('sat-b', '2026-09-26T19:30:00.000Z', 'B'),
     ]);
     await page.goto('/');
-    // Home header: "Round 2 · Week 5", no "· Week 4's plan" suffix.
-    await expect(page.locator('.home-header h1')).toHaveText('Round 2 · Week 5');
+    await expect(page.locator('.home-header h1')).toHaveText('Week 5');
     await page.locator('button[data-workout="A"]').click();
-    await expect(page.locator('.prelog-meta')).toContainText('R2 · Week 5');
+    await expect(page.locator('.prelog-meta')).toContainText('Week 5');
     await expect(page.locator('.prelog-meta')).not.toContainText("'s plan");
     await page.locator('button:has-text("Start")').click();
     await expect(page.locator('.exercise-name')).toHaveText('Cardio');
     await expect(page.locator('.exercise-reps')).toHaveText('12 min'); // Week 5's ride
+  });
+
+  test.describe('WK2 (Sep 27 2026): the completion-based week model', () => {
+    // Her words that drove this: 21:32 "it says week 5 on top … I'm in week 4",
+    // 22:18 "I need b back for 5", 23:08 "how do I see week four?".
+
+    test('Home on Week 5 day 3, one session (A) done: sub-line, count, Up next = B, one chip (C)', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-09-28T10:00:00.000Z'); // day 3 (opened Sat Sep 26)
+      await seedLogs(page, [swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A')]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 5');
+      await expect(page.locator('.week-sub-line').first()).toHaveText('since Sat Sep 26 · day 3');
+      await expect(page.locator('.week-line')).toHaveText('1 of 3 · B and C left');
+      await expect(page.locator('.week-card .week-dot')).toHaveCount(3);
+      await expect(page.locator('.week-card .dot-A')).toHaveCount(1);
+      await expect(page.locator('button.home-hero[data-workout="B"]')).toContainText('Up next');
+      await expect(page.locator('.home-chips .home-chip')).toHaveCount(1);
+      await expect(page.locator('.home-chips .home-chip')).toHaveText('C · Cardio');
+      // No "‹ Week 4" yet — she hasn't tapped it (that's its own test below).
+    });
+
+    test('post-log line: "2 of 3 in Week 5" mid-workout, then the Done card after Save', async ({
+      page,
+    }) => {
+      await movableClock(page, '2026-09-28T08:00:00.000Z'); // Mon, day 3
+      await seedLogs(page, [swingLog('wk5-b', '2026-09-27T15:00:00.000Z', 'B')]);
+      await page.goto('/');
+      await page.locator('button[data-workout="A"]').click();
+      await page.locator('#begin').click();
+      await page.locator('#ww-elliptical').click();
+      await page.locator('#start-timed').click();
+      await advanceClock(page, 10 * 60_000 + 2_000);
+      await page.locator('#next').click();
+      await page.locator('#ell-km').fill('1.4');
+      for (let i = 0; i < 60; i++) {
+        if (await page.locator('text=Quick log').isVisible()) break;
+        if (!(await tapForward(page))) break;
+      }
+      await expect(page.locator('.postlog-witness')).toContainText('2 of 3 in Week 5');
+      await page.locator('#save-log').click();
+      await expect(page.locator('.home-done-line')).toHaveText('2 of 3 in Week 5 · C left');
+    });
+
+    test('a closing save mid-week (Tue): "Week 5 done · 3 of 3 ✓" then "Week 6 opens" the next Sat/Sun', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-09-29T16:00:00.000Z'); // Tue Sep 29 — not a Sat/Sun
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-09-29T15:00:00.000Z', 'C'), // today — the closing save
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-done-line')).toHaveText([
+        'Week 5 done · 3 of 3 ✓',
+        'Week 6 opens Sat Oct 3',
+      ]);
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6');
+      await expect(page.locator('.week-sub-line').first()).toHaveText('opens Sat Oct 3');
+      await expect(page.locator('.week-line')).toHaveText('0 of 3 · A, B and C to go');
+      await expect(page.locator('.home-chips-lead')).toHaveText('Week 6 ·');
+      await expect(page.locator('.home-chips .home-chip')).toHaveCount(3);
+    });
+
+    test('a closing save that lands ON a Sat/Sun: "Week 6 starts now", not a gap', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-10-03T16:00:00.000Z'); // Sat Oct 3 — an anchor day itself
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-10-03T15:00:00.000Z', 'C'), // today, Saturday — closes AND opens
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-done-line')).toHaveText([
+        'Week 5 done · 3 of 3 ✓',
+        'Week 6 starts now',
+      ]);
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6');
+      await expect(page.locator('.week-sub-line').first()).toHaveText('since Sat Oct 3 · day 1');
+      await expect(page.locator('.week-line')).toHaveText('0 of 3 · A, B and C to go');
+    });
+
+    test('"‹ Week 4" peeks at the OLD model\'s last week (nothing has closed under the new one yet); "Week 5 ›" returns', async ({
+      page,
+    }) => {
+      // The very first thing the new model can show her — her literal 23:08
+      // ask ("how do I see week four?") was made on exactly this state.
+      await mockDate(page, '2026-09-27T10:00:00.000Z'); // Sun, day 2 — Week 5 still empty
+      await seedLogs(page, [
+        swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+        swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+        swingLog('sat-b', '2026-09-26T19:14:51.000Z', 'B'), // her real Week 4 close
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 5');
+      const back = page.locator('#week-nav-back');
+      await expect(back).toHaveText('‹ Week 4');
+      await back.click();
+      await expect(page.locator('.home-header h1')).toHaveText('Week 4');
+      await expect(page.locator('.week-line')).toHaveText('3 of 3 ✓');
+      await expect(page.locator('.week-card .week-dot')).toHaveCount(8);
+      const forward = page.locator('#week-nav-forward');
+      await expect(forward).toHaveText('Week 5 ›');
+      await forward.click();
+      await expect(page.locator('.home-header h1')).toHaveText('Week 5');
+      await expect(page.locator('#week-nav-back')).toHaveText('‹ Week 4');
+    });
+
+    test('once a NEW week has closed, "‹ Week 4" becomes "‹ Week 5" (the completion model\'s own, not the legacy fallback)', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-09-30T10:00:00.000Z'); // Wed — no log today, Up next hero shows
+      await seedLogs(page, [
+        // Her real pre-launch Week 4 (kept, so the fallback is available too —
+        // it must NOT win once Week 5 itself has closed).
+        swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+        swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+        swingLog('sat-b', '2026-09-26T19:14:51.000Z', 'B'),
+        // Week 5, closed under the new model.
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-09-29T15:00:00.000Z', 'C'),
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6');
+      const back = page.locator('#week-nav-back');
+      await expect(back).toHaveText('‹ Week 5');
+      await back.click();
+      await expect(page.locator('.home-header h1')).toHaveText('Week 5');
+      await expect(page.locator('.week-line')).toHaveText('3 of 3 ✓');
+    });
   });
 
   test('(f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress', async ({

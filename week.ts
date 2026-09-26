@@ -132,8 +132,8 @@ function isWeekendAnchorDay(iso: string): boolean {
   return day === 0 || day === 6;
 }
 
-function afterLaunch(iso: string): boolean {
-  return new Date(iso).getTime() >= new Date(COMPLETION_WEEKS_FROM.at).getTime();
+function afterLaunch(iso: string, launchAt: string): boolean {
+  return new Date(iso).getTime() >= new Date(launchAt).getTime();
 }
 
 // Sep 27 2026 · WK1 fix r1 (checker must #1, spec 8d.5): "the next week ...
@@ -256,33 +256,40 @@ export type PendingWeek = { key: WeekKey; opensAt: string };
  * caller (WK2) reads the boundary from here instead of re-deriving it and
  * risking disagreement once the first session actually lands.
  */
+// WK2 (Sep 27 2026): `launch` defaults to COMPLETION_WEEKS_FROM — every real
+// caller (the app) always gets that. It's a parameter (not a hard-coded
+// read) so a test can replay REAL session dates through this exact code path
+// anchored at an EARLIER real launch point (e.g. the true Aug 29 2026 Round-2
+// start) and check the result against known real history — the "real parity"
+// check PLAN-2026-09-26.md's WK2 GATE 2 asks for, without faking dates
+// (tests/week.test.ts, "REAL parity"). The app itself never passes this.
 export function walkWeeks(
   sessionsIn: SessionLite[],
   movesIn: MoveOn[],
-  roundsIn: RoundStart[]
+  roundsIn: RoundStart[],
+  launch: { round: number; week: number; at: string } = COMPLETION_WEEKS_FROM
 ): {
   spans: WeekSpan[];
   open: WeekSpan | null;
   pending: PendingWeek | null;
   weekOf: Map<string, WeekKey>;
 } {
-  const sessions = sessionsIn.filter((s) => afterLaunch(s.date));
-  const moves = movesIn.filter((m) => afterLaunch(m.at));
-  const rounds = roundsIn.filter((r) => afterLaunch(r.at));
+  const sessions = sessionsIn.filter((s) => afterLaunch(s.date, launch.at));
+  const moves = movesIn.filter((m) => afterLaunch(m.at, launch.at));
+  const rounds = roundsIn.filter((r) => afterLaunch(r.at, launch.at));
   const events = timeline(sessions, moves, rounds);
 
   const spans: WeekSpan[] = [];
   const weekOf = new Map<string, WeekKey>();
 
-  let roundNow = COMPLETION_WEEKS_FROM.round;
-  let weekNow = COMPLETION_WEEKS_FROM.week;
+  let roundNow = launch.round;
+  let weekNow = launch.week;
 
-  // The instant COMPLETION_WEEKS_FROM.at falls on IS a Saturday, so the very
-  // first week never has to wait for an anchor day — it just starts open.
-  let open: WeekSpan | null = freshSpan(
-    { round: roundNow, week: weekNow },
-    COMPLETION_WEEKS_FROM.at
-  );
+  // The instant `launch.at` falls on IS a Saturday for the real
+  // COMPLETION_WEEKS_FROM (so the very first week never has to wait for an
+  // anchor day — it just starts open). A test-supplied launch must keep that
+  // same property to stay meaningful (asserted by the test itself, not here).
+  let open: WeekSpan | null = freshSpan({ round: roundNow, week: weekNow }, launch.at);
   let openDone = new Set<Letter>();
 
   // The most recently CLOSED span — a gap session (rule 3) counts backward

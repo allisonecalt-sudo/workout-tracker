@@ -85,6 +85,11 @@ const HER_42_REAL_ROWS: SessionLite[] = [
   { id: 'S42', date: '2026-09-26T19:14:51.421+00:00', workout: 'B' },
 ];
 
+// Her real Round 2 rows only (S31-S42, Aug 30 - Sep 26 2026) — 4 real 3/3
+// weeks, module-scoped so both #2c (shifted) and the REAL-parity test below
+// (unshifted) can reuse the exact same fixture.
+const HER_REAL_ROUND2_ROWS: SessionLite[] = HER_42_REAL_ROWS.slice(30); // S31..S42
+
 test.describe('#1 — pre-launch rows predate the launch and are filtered out (NOT a full parity test)', () => {
   // Sep 27 2026 · WK1 fix r1 (checker should #3): this test's old name
   // ("same counts per week as today's attributeSessionsToWeeks") over-promised
@@ -204,10 +209,8 @@ test.describe('#2c — replaying her real Round 2 rows, shifted after launch, ke
     return d.toISOString();
   }
 
-  const REAL_FOUR_WEEKS: SessionLite[] = HER_42_REAL_ROWS.slice(30); // S31..S42
-
   test('4 real 3/3 weeks, shifted +28 days, are still 4 closed weeks at 3/3 (not 2)', () => {
-    const shifted = REAL_FOUR_WEEKS.map((s) => ({ ...s, date: shiftDays(s.date, 28) }));
+    const shifted = HER_REAL_ROUND2_ROWS.map((s) => ({ ...s, date: shiftDays(s.date, 28) }));
     const { spans, open } = walkWeeks(shifted, [], []);
 
     expect(spans).toHaveLength(4);
@@ -221,6 +224,53 @@ test.describe('#2c — replaying her real Round 2 rows, shifted after launch, ke
     // The 4th week's close (Sat, shifted from her real Sep 26 close) opens
     // Week 9 immediately (no boundary to wait for) — empty until she logs.
     expect(open?.key).toEqual({ round: 2, week: 9 });
+    expect(open?.sessions).toEqual([]);
+  });
+});
+
+test.describe('REAL parity (WK2 GATE 2) — her actual Round 2 dates, UNSHIFTED, anchored at the real Aug 29 launch', () => {
+  // Sep 27 2026 · WK2. #1's own comment (above) says this is "WK2's job, the
+  // moment counting switches over" — #2c already proves the SHAPE holds on a
+  // shifted copy of these rows; this test is the real thing the GATE actually
+  // asks for: her REAL, unshifted S31-S42 timestamps, replayed through this
+  // exact walkWeeks() code path but anchored at Round 2's own real start
+  // (2026-08-29, a Saturday) via the `launch` param (week.ts's own escape
+  // hatch for exactly this — see its comment). The result is checked against
+  // KNOWN real history, not against a re-derivation of attributeSessionsToWeeks
+  // (app.ts is not Node-importable — it's full of DOM/localStorage reads) —
+  // her real Sep 26 2026 B session is independently on record (COMPLETION_
+  // WEEKS_FROM's own comment) as the session that "closed Week 4 at 3 of 3",
+  // i.e. Round 2 Weeks 1-4 are four real, complete 3/3 weeks. If walkWeeks
+  // disagreed with that on her real dates, the switch-over would NOT be
+  // lossless and WK2 must not ship.
+  const REAL_ROUND2_LAUNCH = { round: 2, week: 1, at: '2026-08-29T00:00:00+03:00' };
+
+  test('her real S31-S42 timestamps resolve to exactly 4 closed 3/3 weeks (1-4), then an empty Week 5 open', () => {
+    const { spans, open } = walkWeeks(HER_REAL_ROUND2_ROWS, [], [], REAL_ROUND2_LAUNCH);
+
+    expect(spans.map((s) => s.key.week)).toEqual([1, 2, 3, 4]);
+    for (const span of spans) {
+      expect(span.key.round).toBe(2);
+      expect(span.how).toBe('three');
+      expect(span.done).toEqual(['A', 'B', 'C']);
+      expect(span.missing).toEqual([]);
+      expect(span.sessions).toHaveLength(3);
+    }
+    // Her real per-week grouping (read straight off HER_42_REAL_ROWS' own
+    // dates, S31-S42): Week 1 = Aug 30/Sep 3/Sep 4; Week 2 = Sep 7/11/11;
+    // Week 3 = Sep 12(anchor)/14/18/19; Week 4 = 19(open)/24/25/26.
+    expect(spans[0]?.sessions.map((s) => s.id)).toEqual(['S31', 'S32', 'S33']);
+    expect(spans[1]?.sessions.map((s) => s.id)).toEqual(['S34', 'S35', 'S36']);
+    expect(spans[2]?.sessions.map((s) => s.id)).toEqual(['S37', 'S38', 'S39']);
+    expect(spans[3]?.sessions.map((s) => s.id)).toEqual(['S40', 'S41', 'S42']);
+
+    // Week 4 closed on her real Sep 26 2026 B session (S42) — the exact
+    // instant the real COMPLETION_WEEKS_FROM is anchored right after.
+    expect(spans[3]?.closedAt).toBe('2026-09-26T19:14:51.421+00:00');
+
+    // Week 5 opens immediately (S42's close landed on a Saturday) — empty,
+    // exactly matching what COMPLETION_WEEKS_FROM.week (5) already assumes.
+    expect(open?.key).toEqual({ round: 2, week: 5 });
     expect(open?.sessions).toEqual([]);
   });
 });

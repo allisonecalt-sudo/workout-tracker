@@ -5297,6 +5297,34 @@ textarea:focus {
   color: var(--text-dim);
 }
 
+/* WK2 (Sep 27 2026): "since Sat Sep 26 · day 3" / "opens Sat Oct 3" — the
+ * completion-model week header's own sub-line, under the h1. Same quiet
+ * treatment as .app-version, one row down. */
+.week-sub-line {
+  font-size: var(--t-meta);
+  color: var(--ink-3);
+  margin: -8px 0 12px;
+}
+
+.week-sub-line.week-sub-repeat {
+  margin-top: 0;
+}
+
+/* "‹ Week 4" / "Week 5 ›" — a plain, visible peek at the last closed week
+ * (§8c amendment). Quiet, like the swing-note above it, but a real 44px tap
+ * target since it's a button, not a caption. */
+.week-nav-link {
+  display: block;
+  margin-top: 8px;
+  padding: 10px 0 0;
+  min-height: 44px;
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  text-align: center;
+  background: none;
+  border: 0;
+}
+
 /* The walk row: one quiet button + the trailing count. No paragraph. */
 .walk-card {
   padding: 10px 12px;

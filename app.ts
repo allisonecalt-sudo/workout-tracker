@@ -38,6 +38,19 @@ import {
   type WorkoutStep,
   type WorkoutSteps,
 } from './step-list.js';
+import {
+  walkWeeks,
+  dayOfWeek as weekDayOfWeek,
+  // canMoveOn (week.ts) isn't wired in yet — WK3 ("Move on without it") is
+  // its own item, schema-gated (her yes first). Re-add this import there.
+  COMPLETION_WEEKS_FROM,
+  type SessionLite as WeekSessionLite,
+  type MoveOn as WeekMoveOn,
+  type RoundStart as WeekRoundStart,
+  type WeekSpan,
+  type WeekKey,
+  type PendingWeek,
+} from './week.js';
 
 type WorkoutId = 'A' | 'B' | 'C';
 
@@ -218,6 +231,15 @@ type SyncStatus = 'syncing' | 'synced' | 'offline';
 type AppState = {
   screen: AppScreen;
   selectedWorkout: WorkoutId | null;
+  // WK2 (Sep 27 2026), PLAN-2026-09-26.md §2.3 "pin the plan for a session in
+  // progress": the plan a session trains follows the week it's PICKED in, not
+  // whatever week.ts says "now" is on every later render — otherwise a
+  // session that straddles a week's own Sat/Sun open boundary (started right
+  // before midnight, still running after) could switch which week's moves
+  // it's showing mid-workout. Set once in startWorkout(); null = no session
+  // chosen yet (Home reads live). ISO date string, not a WeekKey — it feeds
+  // straight into getWeekPlan(date)'s existing lookup (see planDateNow()).
+  pinnedPlanDateIso: string | null;
   capacityBefore: number;
   capacityAfter: number;
   // v50 · mood: same 1-10/touched shape as capacity, kept as a separate pair
@@ -485,7 +507,7 @@ const SUPABASE_ANON_KEY =
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
 const APP_VERSION = 'v53';
-const BUILD_DATE = 'Sep 26, 2026 · 23:38';
+const BUILD_DATE = 'Sep 27, 2026 · 02:24';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -2915,6 +2937,7 @@ const SAFETY_LINE: Record<string, string> = {
 const state: AppState = {
   screen: 'home',
   selectedWorkout: null,
+  pinnedPlanDateIso: null,
   capacityBefore: 5,
   capacityAfter: 5,
   // v50 · mood: blank by default (untouched), same as capacity's chips.
@@ -4438,7 +4461,11 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
 // ---------- state machine ----------
 
 function getCurrentWorkout(): Workout | null {
-  return state.selectedWorkout ? getWorkoutById(state.selectedWorkout) : null;
+  if (!state.selectedWorkout) return null;
+  // WK2 (Sep 27 2026): a pinned date (set at startWorkout()) wins over the
+  // live "now" — see the pin's own comment there.
+  const date = state.pinnedPlanDateIso ? new Date(state.pinnedPlanDateIso) : planDateNow();
+  return getWorkoutById(state.selectedWorkout, date);
 }
 
 // The step exactly as PROGRAM has it — no substitutions. Use this whenever the
@@ -4472,6 +4499,12 @@ function effectiveRounds(w: Workout): number {
 
 function startWorkout(id: WorkoutId): void {
   state.selectedWorkout = id;
+  // WK2 (Sep 27 2026), §2.3 "pin the plan for a session in progress": fixed
+  // the instant she picks it, so a session that straddles the open week's own
+  // Sat/Sun boundary (started right before it, still running after) keeps
+  // training the moves she was shown at pre-log, not whatever week.ts says
+  // "now" is by the time she reaches the workout screen.
+  state.pinnedPlanDateIso = planDateNow().toISOString();
   state.screen = 'pre-log';
   state.liteDay = false; // fresh pick, full program until she says otherwise
   render();
@@ -5521,6 +5554,10 @@ type ActiveSessionSnapshot = {
   completedSteps: Record<string, boolean>;
   // v51: an app close on the ride-numbers screen reopens on it.
   rideNumbersOpen: boolean;
+  // WK2 (Sep 27 2026): the plan pinned at startWorkout() — see its comment.
+  // null on a pre-WK2 snapshot (nothing to pin then); getCurrentWorkout()
+  // falls back to planDateNow() when it's absent, same as a fresh session.
+  pinnedPlanDateIso: string | null;
 };
 
 function saveActiveSession(): void {
@@ -5566,6 +5603,7 @@ function saveActiveSession(): void {
       stretchTicks: state.stretchTicks,
       completedSteps: state.completedSteps,
       rideNumbersOpen: state.rideNumbersOpen,
+      pinnedPlanDateIso: state.pinnedPlanDateIso,
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
   } catch {
@@ -5679,6 +5717,13 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       // v51: only meaningful on the elliptical step itself — a pre-v51
       // snapshot has no flag → false, same as a fresh session.
       rideNumbersOpen: snap.rideNumbersOpen === true && stepIsElliptical,
+      // WK2: a pre-WK2 snapshot (or a corrupt string) has none → null, which
+      // getCurrentWorkout() already treats as "fall back to planDateNow()".
+      pinnedPlanDateIso:
+        typeof snap.pinnedPlanDateIso === 'string' &&
+        !Number.isNaN(new Date(snap.pinnedPlanDateIso).getTime())
+          ? snap.pinnedPlanDateIso
+          : null,
     };
   } catch {
     clearActiveSession();
@@ -5691,6 +5736,7 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
 function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.screen = snap.screen;
   state.selectedWorkout = snap.selectedWorkout;
+  state.pinnedPlanDateIso = snap.pinnedPlanDateIso;
   state.currentPhase = snap.currentPhase;
   state.currentExerciseIndex = snap.currentExerciseIndex;
   state.currentRound = snap.currentRound;
@@ -5841,7 +5887,11 @@ function resetState(): void {
   state.screen = 'home';
   // Reset viewed week to current when returning to home from a session.
   viewedWeekOffset = 0;
+  // WK2 (Sep 27 2026): a "‹ Week 4" peek never survives past the session she
+  // takes next — Home always opens back on the true current week.
+  viewingLastClosedWeek = false;
   state.selectedWorkout = null;
+  state.pinnedPlanDateIso = null;
   state.capacityBefore = 5;
   state.capacityAfter = 5;
   state.moodBefore = 5;
@@ -6397,6 +6447,15 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+// WK2 (Sep 27 2026): "Sat Sep 26" — the week card's #week-sub needs the
+// weekday named (it's the whole point of the Sat/Sun-anchor line), which
+// plain formatDate() doesn't carry and formatDateLong() buries under a full
+// "Sat, Sep 26, 2026".
+function formatWeekdayDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString(undefined, { weekday: 'short' })} ${formatDate(iso)}`;
+}
+
 function formatDateLong(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, {
@@ -6669,21 +6728,31 @@ function homeWeekOffset(): number {
   return lastWeek > 0 && lastWeek < SESSIONS_PER_WEEK_TARGET ? 1 : 0;
 }
 
-// THE SWING FIX (Sep 26 2026). The problem: `getWeekPlan(date)` was a pure
-// calendar lookup, but a swing-Saturday session COUNTS toward last week
-// (attributeSessionsToWeeks). Once the next PROGRAM row starts that same
-// Saturday (R2W5 starts 2026-09-26), the calendar lookup would hand a
-// Saturday-night swing session the NEW week's moves — a session that counts
-// for Week 4 would train Week 5's plan. The fix: the plan a session uses
-// follows the week the session COUNTS toward, same rule as
-// attributeSessionsToWeeks / homeWeekOffset. This is also the one seam for her
-// "dont go to next week till i approve" gate: when that ships, planDateNow()
-// returns the unapproved week's Saturday.
+// THE SWING FIX (Sep 26 2026), SUPERSEDED for "now" by WK2 (Sep 27 2026).
+// The original problem: `getWeekPlan(date)` was a pure calendar lookup, but a
+// swing-Saturday session COUNTED toward last week (attributeSessionsToWeeks).
+// That swing rule only ever existed to patch the calendar-week model's three-
+// meanings-of-week confusion (PLAN-2026-09-26.md §2) — the completion-based
+// model (week.ts) replaces it outright for "now": there IS no swing concept
+// once a week only closes on its 3rd distinct letter. `homeWeekOffset` /
+// `attributeSessionsToWeeks` / the swing itself stay defined and correct for
+// every date BEFORE the launch (weekly review, Progress, Settings — WK4's
+// job, untouched here); "now" is always after it, so this always resolves
+// through the new model instead.
 // second-brain/self/health/workout-app-audit-2026-09-24/next-level-2026-09-26/WEEK5-PROPOSAL-2026-09-26.md §e
 
-/** The date whose plan applies to a session starting NOW. */
+/** The date whose plan applies to a session starting NOW — WK2: the
+ * completion-based week model's current (or pending) key, translated to a
+ * calendar date via completionWeekSyntheticDate() so it flows straight into
+ * getWeekPlan(date)'s existing "highest startsOn <= date" scan (see that
+ * function's own comment on why this is also the repeat/fallback rule).
+ * Pre-launch (or a test mocking an earlier date) keeps the original swing
+ * rule untouched — see isNowAfterCompletionLaunch's own comment. */
 function planDateNow(): Date {
-  return homeWeekOffset() === 1 ? saturdayForOffset(1) : new Date();
+  if (!isNowAfterCompletionLaunch()) {
+    return homeWeekOffset() === 1 ? saturdayForOffset(1) : new Date();
+  }
+  return completionWeekSyntheticDate(shownWeek().key);
 }
 
 /** The date whose plan applied to a SAVED session: the Saturday of the week it counts toward. */
@@ -6738,6 +6807,27 @@ function getWeekCount(offset = 0): number {
   return sessionsAttributedTo(loadLogs(), saturdayForOffset(offset)).length;
 }
 
+// WK2 (Sep 27 2026): factored out of renderHome's pre-launch branch so the
+// "‹ Week 4" peek (§8c amendment) can reuse the exact same OLD-model dots
+// when there's no COMPLETION-model week closed yet to peek at (see
+// lastClosedWeekForPeek below) — the very first time she'd ever tap it.
+function renderLegacyWeekDots(weekDots: WeekDotInfo[]): string {
+  return weekDots
+    .map((d) => {
+      const isToday = localIsoDate(d.date) === localIsoDate(new Date());
+      const cls =
+        (d.workout ? `dot dot-${d.workout}` : 'dot dot-empty') + (isToday ? ' is-today' : '');
+      const clickAttr = d.logId ? `data-detail="${escapeHtml(d.logId)}"` : '';
+      return `
+        <button class="week-dot ${cls}" ${clickAttr} type="button" ${d.logId ? '' : 'tabindex="-1"'} aria-label="${d.letter} ${formatDate(d.date.toISOString())}${d.workout ? ` workout ${d.workout}` : ' no workout'}">
+          <span class="week-dot-label">${d.letter}</span>
+          <span class="week-dot-bubble">${d.workout ?? ''}</span>
+        </button>
+      `;
+    })
+    .join('');
+}
+
 // Program week info anchored on the Saturday of the viewed Sat-Fri week.
 function getViewedProgramWeek(offset = 0): {
   num: number;
@@ -6747,6 +6837,254 @@ function getViewedProgramWeek(offset = 0): {
   skippedLabel: string | null;
 } {
   return getProgramWeek(saturdayForOffset(offset));
+}
+
+// ---------------------------------------------------------------------------
+// THE COMPLETION-BASED WEEK MODEL (WK2, Sep 27 2026) — week.ts, wired in.
+// PLAN-2026-09-26.md §2: "once all three are done then it can go to the next
+// week" (her 21:28), amended 23:14-23:16 to anchor a week's start to a
+// Saturday/Sunday. WK1 built week.ts as a pure, tested module; this is the
+// UI seam (Home, pre-log, post-log only — WK2's scope). Everything BEFORE
+// COMPLETION_WEEKS_FROM keeps reading through attributeSessionsToWeeks /
+// homeWeekOffset exactly as it always has (untouched, on purpose — the
+// weekly-review pager, Progress weeks, Settings and the saved-session plan
+// lookup are WK4's job, not this one's). "Now" is always after the launch
+// instant (2026-09-26T22:30, already past), so Home/pre-log/post-log — which
+// only ever show the CURRENT moment — read the new model exclusively.
+// ---------------------------------------------------------------------------
+
+/** logs -> week.ts's SessionLite shape. saveLog() assigns a local id (genId())
+ * the instant a session is saved, offline or not, so in practice every real
+ * log has one by the time it reaches here; the filter is a fail-loud guard
+ * against a malformed/legacy row, not a live gap — an id-less log is dropped
+ * rather than silently miscounted (week.ts's weekOf keys by id). */
+function sessionsForWeekModel(logs: LogEntry[]): WeekSessionLite[] {
+  return logs
+    .filter((l): l is LogEntry & { id: string } => typeof l.id === 'string' && l.id.length > 0)
+    .map((l) => ({ id: l.id, date: l.date, workout: l.workout }));
+}
+
+/** ROUNDS -> week.ts's RoundStart events. walkWeeks filters out anything
+ * before its launch itself, so passing every round (not just future ones) is
+ * harmless — and means a future Round 3 entry in ROUNDS needs no separate
+ * wiring here. */
+function roundStartsForWeekModel(): WeekRoundStart[] {
+  return ROUNDS.map((r) => ({ round: r.num, at: `${r.start}T00:00:00+03:00` }));
+}
+
+/** WK3 ("Move on without it" + the week_moves table) hasn't shipped — no
+ * table, no sync — so this is always []. One seam here means WK3 only has to
+ * fill in this one function, not every call site below. */
+function movesForWeekModel(): WeekMoveOn[] {
+  return [];
+}
+
+/** Is "now" (or a caller-supplied instant — tests mock the clock) at/after
+ * the real launch? Dozens of existing Playwright tests mockDate() to dates
+ * well before Sep 26 2026 to exercise the OLD calendar/swing model on
+ * purpose (Round 1, skipped weeks, the Aug 30 restart, …) — every Home/
+ * pre-log/post-log function below branches on this FIRST, so those tests
+ * keep seeing exactly the old behavior, and only genuinely-current (or
+ * later-mocked) "now" ever reads the completion model. */
+function isNowAfterCompletionLaunch(now: Date = new Date()): boolean {
+  return now.getTime() >= new Date(COMPLETION_WEEKS_FROM.at).getTime();
+}
+
+/** The completion-based week model, recomputed fresh from the live session
+ * list on every call. Pure + cheap (week.ts is a plain array walk over at
+ * most a few dozen post-launch sessions) — cheaper than caching it wrong
+ * across a save. See week.ts's own file header for the one known open edge
+ * (a closing session can't yet be deleted from any UI, so it's a flagged
+ * risk, not a live bug — WK3's schema decision is what actually closes it). */
+function weekModel(): ReturnType<typeof walkWeeks> {
+  return walkWeeks(
+    sessionsForWeekModel(loadLogs()),
+    movesForWeekModel(),
+    roundStartsForWeekModel()
+  );
+}
+
+/** The week to show RIGHT NOW: the open span if one exists, or (mid-gap,
+ * waiting for the next Sat/Sun) the pending key with no span yet. Falls back
+ * to the launch key itself only in the "shouldn't happen" case week.ts's own
+ * comment names (the launch instant always opens Week 1 immediately). */
+function shownWeek(): { key: WeekKey; span: WeekSpan | null; pending: PendingWeek | null } {
+  const { open, pending } = weekModel();
+  if (open) return { key: open.key, span: open, pending: null };
+  if (pending) return { key: pending.key, span: null, pending };
+  return {
+    key: { round: COMPLETION_WEEKS_FROM.round, week: COMPLETION_WEEKS_FROM.week },
+    span: null,
+    pending: null,
+  };
+}
+
+/** What "‹ Week 4" (§8c amendment) peeks at: a plain weekNum + rendered dots
+ * + count line, from WHICHEVER model actually closed that week. */
+type WeekPeek = { weekNum: number; dotsHtml: string; countText: string };
+
+/** The most recently CLOSED week to peek at — the completion model's own
+ * last closed span once one exists, OR (the very first time she'd ever tap
+ * this — her literal ask, 23:08, was made on exactly this state: Week 5 just
+ * opened, nothing of Week 5's has closed yet) the OLD calendar/swing model's
+ * last completed week, i.e. Week 4, closed the night before the real launch.
+ * That fallback only ever matters until the FIRST new week closes; after
+ * that, spans is never empty again and this always reads the new model. */
+function lastClosedWeekForPeek(): WeekPeek | null {
+  const { spans } = weekModel();
+  const lastSpan = spans.length ? (spans[spans.length - 1] ?? null) : null;
+  if (lastSpan) {
+    return {
+      weekNum: lastSpan.key.week,
+      dotsHtml: renderCompletionWeekDots(completionWeekDots(lastSpan)),
+      countText: weekCountLine({ span: lastSpan }),
+    };
+  }
+  const legacyWeek = getViewedProgramWeek(1);
+  // A break/sick week isn't a "Week N" worth peeking at this way — Sessions/
+  // Progress (WK4) are where those already live.
+  if (legacyWeek.skippedLabel) return null;
+  const legacyCount = getWeekCount(1);
+  return {
+    weekNum: legacyWeek.num,
+    dotsHtml: renderLegacyWeekDots(getWeekDots(1, true, true)),
+    countText: `${legacyCount} of 3${legacyCount >= SESSIONS_PER_WEEK_TARGET ? ' ✓' : ''}`,
+  };
+}
+
+// Module-level UI state: is Home showing the last CLOSED week instead of the
+// current open/pending one? Set by tapping "‹ Week 4"; cleared by "Week 5 ›"
+// (§8c: "the same link becomes 'Week 5 ›' to return"). Purely a view toggle —
+// never changes what week a new session counts toward or trains.
+let viewingLastClosedWeek = false;
+
+/** "since Sat Sep 26 · day 3" (open) / "opens Sat Oct 3" (pending gap) —
+ * §2.4's #week-sub, generalised for the Sat/Sun-anchor amendment (the
+ * original spec's exact string predates it; open/gap are the two real
+ * states week.ts can report "now" in). */
+function weekSubLabel(shown: { span: WeekSpan | null; pending: PendingWeek | null }): string {
+  if (shown.span) {
+    return `since ${formatWeekdayDate(shown.span.openedAt)} · day ${weekDayOfWeek(shown.span, new Date())}`;
+  }
+  if (shown.pending) {
+    return `opens ${formatWeekdayDate(shown.pending.opensAt)}`;
+  }
+  return '';
+}
+
+/** §2.4's #week-count: "0 of 3 · A, B and C to go" / "1 of 3 · B and C left" /
+ * "2 of 3 · B left" — the missing letters in A→B→C order, or (mid-gap, no
+ * span yet) "0 of 3 · A, B and C to go" since nothing can be done yet.
+ * A CLOSED span (all 3 done — never the LIVE "shown" week, which always
+ * closes itself at 3, but real for a "‹ Week N" peek at a past one) reads
+ * "3 of 3 ✓" instead, same style as the legacy-peek fallback's own text. */
+function weekCountLine(shown: { span: WeekSpan | null }): string {
+  const missing = shown.span ? shown.span.missing : (['A', 'B', 'C'] as const);
+  const done = shown.span ? shown.span.done.length : 0;
+  if (missing.length === 0) return `${done} of 3 ✓`;
+  const missingWords =
+    missing.length === 1
+      ? (missing[0] as string)
+      : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
+  const tail = missing.length === 3 ? `${missingWords} to go` : `${missingWords} left`;
+  return `${done} of 3 · ${tail}`;
+}
+
+/** The PROGRAM row for a completion-model week key: an exact round+weekNum
+ * match if PROGRAM has one, else the highest weekNum below it in the SAME
+ * round (§2.3 planFor's "repeats" fallback) — "Same moves as Week N" until
+ * she writes the next row. Fails loud in the one case that should never
+ * happen (an empty round) rather than silently defaulting to Week 1. */
+function planForWeekKey(key: WeekKey): { plan: WeekPlan; repeatsWeek: number | null } {
+  const sameRound = PROGRAM.filter((wp) => (wp.round ?? 1) === key.round);
+  const exact = sameRound.find((wp) => wp.weekNum === key.week);
+  if (exact) return { plan: exact, repeatsWeek: null };
+  const below = sameRound.filter((wp) => wp.weekNum < key.week);
+  const highest = below[below.length - 1];
+  if (highest) return { plan: highest, repeatsWeek: highest.weekNum };
+  console.warn(`[week] no PROGRAM row at all for round ${key.round} — falling back to PROGRAM[0]`);
+  const fallback = PROGRAM[0]!;
+  return { plan: fallback, repeatsWeek: fallback.weekNum };
+}
+
+/** The calendar date getWeekPlan(date)'s existing "highest startsOn <= date"
+ * scan needs to land on the SAME row planForWeekKey would pick — reusing
+ * that scan (rather than returning a WeekPlan directly) keeps every one of
+ * the ~15 getWeekPlan/getWorkoutById call sites (§2.6) working unchanged. A
+ * key with no exact PROGRAM row resolves past the highest row it has in the
+ * SAME round, which is exactly what the fallback-to-latest scan already
+ * does — so this only has to place the round correctly, at the round's own
+ * start plus 7 days per elapsed week. */
+function completionWeekSyntheticDate(key: WeekKey): Date {
+  const round = ROUNDS.find((r) => r.num === key.round) ?? ROUNDS[ROUNDS.length - 1]!;
+  const d = new Date(round.start + 'T00:00:00');
+  d.setDate(d.getDate() + (key.week - 1) * 7);
+  return d;
+}
+
+type CompletionWeekDot = {
+  date: Date;
+  workout: WorkoutId | null;
+  logId: string | null;
+  isToday: boolean;
+};
+
+/** One column per day since the shown week opened (§2.4's week strip,
+ * generalised for the Sat/Sun-anchor amendment — her own "show 8 days" ask
+ * becomes "exactly as long as the week"). Capped at the last 10 days when a
+ * short week runs long: the full "keep every session day + fold the empty
+ * middle into one … column" shape from §2.4 is deferred (a noted gap, not
+ * silently dropped) — canMoveOn already offers her an exit at day 8+, so a
+ * week reaching 10+ days is already a rare, WK3-handled tail case. */
+function completionWeekDots(span: WeekSpan): CompletionWeekDot[] {
+  const opened = new Date(span.openedAt);
+  const openedMid = new Date(opened.getFullYear(), opened.getMonth(), opened.getDate());
+  const today = new Date();
+  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const totalDays = Math.max(
+    1,
+    Math.round((todayMid.getTime() - openedMid.getTime()) / 86_400_000) + 1
+  );
+  const startIdx = Math.max(0, totalDays - 10);
+  const cols: CompletionWeekDot[] = [];
+  for (let i = startIdx; i < totalDays; i++) {
+    const d = new Date(openedMid);
+    d.setDate(d.getDate() + i);
+    const hit = span.sessions.find((s) => {
+      const sd = new Date(s.date);
+      return (
+        sd.getFullYear() === d.getFullYear() &&
+        sd.getMonth() === d.getMonth() &&
+        sd.getDate() === d.getDate()
+      );
+    });
+    cols.push({
+      date: d,
+      workout: hit?.workout ?? null,
+      logId: hit?.id ?? null,
+      isToday: d.getTime() === todayMid.getTime(),
+    });
+  }
+  return cols;
+}
+
+const COMPLETION_DOT_WEEKDAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
+
+function renderCompletionWeekDots(cols: CompletionWeekDot[]): string {
+  return cols
+    .map((c) => {
+      const letter = COMPLETION_DOT_WEEKDAY_LETTERS[c.date.getDay()];
+      const cls =
+        (c.workout ? `dot dot-${c.workout}` : 'dot dot-empty') + (c.isToday ? ' is-today' : '');
+      const clickAttr = c.logId ? `data-detail="${escapeHtml(c.logId)}"` : '';
+      return `
+        <button class="week-dot ${cls}" ${clickAttr} type="button" ${c.logId ? '' : 'tabindex="-1"'} aria-label="${letter} ${formatDate(c.date.toISOString())}${c.workout ? ` workout ${c.workout}` : ' no workout'}">
+          <span class="week-dot-label">${letter}</span>
+          <span class="week-dot-bubble">${c.workout ?? ''}</span>
+        </button>
+      `;
+    })
+    .join('');
 }
 
 // ---------- visual layer (group 3) ----------
@@ -7535,15 +7873,28 @@ function renderGearCard(): string {
 // on a genuinely un-encoded week, or (via planDateNow) a swing Saturday whose
 // NEXT week exists but hasn't been approved yet. Returns HTML: the plan note
 // is a smaller span so the title stays on one line.
+// WK2 (Sep 27 2026), §2.4 "Home header": plain "Week N" — no "Round 2 ·" (it
+// moves to Sessions/Progress/Settings, WK4's job) and no "· Week N's plan"
+// fail-loud suffix (a repeat now gets its own quiet second line, see
+// weekSubLabel/planForWeekKey below — the title itself never lies about which
+// week she's in, which was her whole complaint: 21:32 "it says week 5 on top
+// … I'm in week 4"). Honors the "‹ Week 4" peek (lastClosedWeekForPeek).
 function homeWeekTitle(): string {
-  const week = homeWeekOffset() === 1 ? getViewedProgramWeek(1) : getProgramWeek();
-  if (week.skippedLabel) return `${week.skippedLabel} week`;
-  const title = `${week.round > 1 ? `Round ${week.round} · ` : ''}Week ${week.num}`;
-  const plan = getWeekPlan();
-  const planRound = plan.round ?? 1;
-  if (plan.weekNum === week.num && planRound === week.round) return title;
-  const planName = `${planRound !== week.round && planRound > 1 ? `R${planRound} · ` : ''}Week ${plan.weekNum}`;
-  return `${title}<span class="h1-plan"> · ${planName}'s plan</span>`;
+  if (!isNowAfterCompletionLaunch()) {
+    // Pre-launch (or a test mocking an earlier date): the original calendar
+    // + swing logic, byte-for-byte, so every existing mockDate() test before
+    // Sep 26 2026 22:30 still sees exactly what it always has.
+    const week = homeWeekOffset() === 1 ? getViewedProgramWeek(1) : getProgramWeek();
+    if (week.skippedLabel) return `${week.skippedLabel} week`;
+    const title = `${week.round > 1 ? `Round ${week.round} · ` : ''}Week ${week.num}`;
+    const plan = getWeekPlan();
+    const planRound = plan.round ?? 1;
+    if (plan.weekNum === week.num && planRound === week.round) return title;
+    const planName = `${planRound !== week.round && planRound > 1 ? `R${planRound} · ` : ''}Week ${plan.weekNum}`;
+    return `${title}<span class="h1-plan"> · ${planName}'s plan</span>`;
+  }
+  const peek = viewingLastClosedWeek ? lastClosedWeekForPeek() : null;
+  return `Week ${peek ? peek.weekNum : shownWeek().key.week}`;
 }
 
 // "v48 · Sep 24 · 21:40" — the year stays in Settings › About (DECISIONS Q1:
@@ -7596,8 +7947,20 @@ function workoutChipLabel(w: Workout): string {
 }
 
 function renderWorkoutChips(exclude: WorkoutId | null, lead = 'or do'): string {
-  const chips = (['A', 'B', 'C'] as WorkoutId[])
-    .filter((id) => id !== exclude)
+  return renderWorkoutChipsFor(
+    (['A', 'B', 'C'] as WorkoutId[]).filter((id) => id !== exclude),
+    lead
+  );
+}
+
+// WK2 (Sep 27 2026), §2.4 "the chips = the OTHER MISSING letters" — an
+// explicit id list, not an exclude-one-letter filter: with 2 of 3 already
+// done, the chips must show NOTHING (not re-offer an already-done letter),
+// which renderWorkoutChips(exclude) can't express. Empty list = no row at
+// all, not an empty lead.
+function renderWorkoutChipsFor(ids: WorkoutId[], lead = 'or do'): string {
+  if (ids.length === 0) return '';
+  const chips = ids
     .map((id) => {
       const w = getWorkoutById(id);
       return `<button class="btn-chip home-chip" data-workout="${id}" type="button" aria-label="Start Workout ${id} · ${escapeHtml(w.name)}">${escapeHtml(workoutChipLabel(w))}</button>`;
@@ -7629,7 +7992,10 @@ function renderUpNextHero(id: WorkoutId): string {
 
 // After Save, until midnight: the win is witnessed instead of the next workout
 // lighting up minutes later (uxui post-log 4/5). Not sage — nothing to do here.
-function renderDoneTodayCard(log: LogEntry, weekCount: number, weekLabel = 'this week'): string {
+// WK2 (Sep 27 2026): `weekLines` replaces the old single weekCount/weekLabel
+// pair — the completion model's closing save needs TWO lines ("Week 5 done ·
+// 3 of 3 ✓" then "Week 6 starts now", §2.4's Done card spec), not one.
+function renderDoneTodayCard(log: LogEntry, weekLines: string[]): string {
   const lastDone = loadLastDone();
   const firsts = lastDone && lastDone.id === log.id ? lastDone.firsts : [];
   const km =
@@ -7652,13 +8018,25 @@ function renderDoneTodayCard(log: LogEntry, weekCount: number, weekLabel = 'this
   const detailAttrs = log.id
     ? ` data-detail="${escapeHtml(log.id)}" role="button" tabindex="0" aria-label="Open today's session"`
     : '';
+  const weekLinesHtml = weekLines
+    .map((l) => `<div class="home-done-line">${escapeHtml(l)}</div>`)
+    .join('');
   return `
     <div class="card home-done-card" id="home-done-card"${detailAttrs}>
       <div class="home-done-title">Done ✓ · Workout ${log.workout}</div>
-      <div class="home-done-line">${weekCount} of 3 ${weekLabel}</div>
+      ${weekLinesHtml}
       ${firstsLine ? `<div class="home-done-firsts" dir="auto">${escapeHtml(firstsLine)}</div>` : ''}
       ${backLine ? `<div class="home-done-back" dir="auto">${escapeHtml(backLine)}</div>` : ''}
     </div>`;
+}
+
+// WK2 (Sep 27 2026), §2.4 Done card + post-log's missing-letters phrasing:
+// "B and C left" / "C left" / "" (nothing missing). Shared by weekCountLine
+// and the Done-card lines below so the join rule (comma + "and") lives once.
+function joinMissingLetters(missing: readonly string[]): string {
+  if (missing.length === 0) return '';
+  if (missing.length === 1) return missing[0] as string;
+  return `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
 }
 
 function renderHome(): string {
@@ -7673,92 +8051,178 @@ function renderHome(): string {
            <span>🌙 Period started?</span><span class="door-chev" aria-hidden="true">›</span>
          </button>`
       : '';
-  // Sep 26 2026: on a swing Saturday home shows LAST week (see homeWeekOffset) —
-  // its number, its 8 days (Sat → tonight), its count.
-  const homeOffset = homeWeekOffset();
-  const week = homeOffset === 1 ? getViewedProgramWeek(1) : getProgramWeek();
-  const weekRange = formatWeekRange(week.start, homeOffset === 1 ? new Date() : week.end);
-  // v48 · P4: home always shows THIS week (the ‹ › arrows move to Weekly review
-  // in P6; viewedWeekOffset stays for that screen).
-  const weekCount = getWeekCount(homeOffset);
   // Newest by DATE (writeLogs keeps unsynced rows first, not newest first).
   const lastLog = [...logs].sort((a, b) => b.date.localeCompare(a.date))[0];
   const doneToday =
     lastLog && localIsoDate(new Date(lastLog.date)) === localIsoDate(new Date()) ? lastLog : null;
-  // The auto-suggest setting no longer switches the hero off (DECISIONS §5:
-  // the hero is always today's rotation; B/C are one chip away).
-  const pick = getTodaysPick();
   const weekWalks = walksThisWeek();
   const walkStartedAt = activeWalkStart();
-  // Sep 26 2026: the strip shows only sessions that COUNT for the shown week —
-  // her screenshot had Saturday's B in Week 5's strip while the line said it
-  // went to Week 4.
-  const weekDots = getWeekDots(homeOffset, homeOffset === 1, true);
 
-  // DECISIONS Q2 — the Saturday swing in WORDS, every day (not only on
-  // Saturdays): "0 of 3 this week · Sat's C went to Week 3 · 39 total".
-  const thisSaturday = saturdayForOffset(0);
-  const attribution = attributeSessionsToWeeks(logs);
-  const swungLogs = logs
-    .filter(
-      (l) =>
-        calendarSaturdayMs(l.date) === thisSaturday.getTime() &&
-        attribution.get(l) !== thisSaturday.getTime()
-    )
-    .sort((a, b) => a.date.localeCompare(b.date));
-  const lastWeek = getViewedProgramWeek(1);
-  const lastWeekCount = getWeekCount(1);
-  const lastWeekTitle = lastWeek.skippedLabel
-    ? `the ${lastWeek.skippedLabel.toLowerCase()} week`
-    : `Week ${lastWeek.num}`;
-  const swingWords =
-    swungLogs.length > 0
-      ? ` · Sat's ${swungLogs.map((l) => l.workout).join(' + ')} went to ${lastWeekTitle}`
-      : '';
-  // v49 · look (Sep 25 2026): the lifetime count moves to the Start → Now
-  // card's own "Sessions" row — spec §5 frame 1, "Only one count on Home."
-  const swingMissing =
-    homeOffset === 1
-      ? (['A', 'B', 'C'] as const).filter(
-          (w) =>
-            !sessionsAttributedTo(logs, saturdayForOffset(1), attribution).some(
-              (l) => l.workout === w
-            )
-        )
+  // WK2 (Sep 27 2026): everything week-shaped branches ONCE, here, on
+  // whether "now" is at/after the real completion-model launch (see
+  // isNowAfterCompletionLaunch's own comment — pre-launch keeps the
+  // original calendar+swing model byte-for-byte, still exercised by dozens
+  // of mockDate() tests). Both branches fill the SAME handful of variables
+  // the template below reads, so the markup itself never forks.
+  let pick: WorkoutId;
+  let subLineHtml: string;
+  let weekCardHeadText: string;
+  let dotsHtml: string;
+  let weekLineText: string;
+  let saturdayNote: string;
+  let doneCardLines: string[];
+  let chipsHtml: string;
+  let weekNavLinkHtml: string;
+
+  if (!isNowAfterCompletionLaunch()) {
+    // ---- PRE-LAUNCH: the original calendar + Saturday-swing model, untouched ----
+    // Sep 26 2026: on a swing Saturday home shows LAST week (see homeWeekOffset) —
+    // its number, its 8 days (Sat → tonight), its count.
+    const homeOffset = homeWeekOffset();
+    const week = homeOffset === 1 ? getViewedProgramWeek(1) : getProgramWeek();
+    const weekRange = formatWeekRange(week.start, homeOffset === 1 ? new Date() : week.end);
+    const weekCount = getWeekCount(homeOffset);
+    pick = getTodaysPick();
+    const weekDots = getWeekDots(homeOffset, homeOffset === 1, true);
+
+    // DECISIONS Q2 — the Saturday swing in WORDS, every day (not only on
+    // Saturdays): "0 of 3 this week · Sat's C went to Week 3 · 39 total".
+    const thisSaturday = saturdayForOffset(0);
+    const attribution = attributeSessionsToWeeks(logs);
+    const swungLogs = logs
+      .filter(
+        (l) =>
+          calendarSaturdayMs(l.date) === thisSaturday.getTime() &&
+          attribution.get(l) !== thisSaturday.getTime()
+      )
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const lastWeek = getViewedProgramWeek(1);
+    const lastWeekCount = getWeekCount(1);
+    const lastWeekTitle = lastWeek.skippedLabel
+      ? `the ${lastWeek.skippedLabel.toLowerCase()} week`
+      : `Week ${lastWeek.num}`;
+    const swingWords =
+      swungLogs.length > 0
+        ? ` · Sat's ${swungLogs.map((l) => l.workout).join(' + ')} went to ${lastWeekTitle}`
+        : '';
+    const swingMissing =
+      homeOffset === 1
+        ? (['A', 'B', 'C'] as const).filter(
+            (w) =>
+              !sessionsAttributedTo(logs, saturdayForOffset(1), attribution).some(
+                (l) => l.workout === w
+              )
+          )
+        : [];
+    weekLineText =
+      homeOffset === 1
+        ? `${weekCount} of 3 · ${swingMissing.join(' + ')} left — tonight counts for Week ${week.num}`
+        : `${weekCount} of 3 this week${swingWords}`;
+    saturdayNote =
+      homeOffset === 0 &&
+      new Date().getDay() === 6 &&
+      swungLogs.length === 0 &&
+      weekCount === 0 &&
+      lastWeekCount > 0 &&
+      lastWeekCount < SESSIONS_PER_WEEK_TARGET
+        ? `<p class="swing-note">Last week's at ${lastWeekCount} — today's session will count for it.</p>`
+        : '';
+    subLineHtml = '';
+    weekCardHeadText = escapeHtml(
+      `${homeOffset === 1 ? `Week ${week.num}` : 'This week'} · ${weekRange}`
+    );
+    dotsHtml = renderLegacyWeekDots(weekDots);
+    doneCardLines = doneToday
+      ? attribution.get(doneToday) === saturdayForOffset(1).getTime()
+        ? [`${getWeekCount(1)} of 3 in Week ${lastWeek.num}`]
+        : [`${weekCount} of 3 this week`]
       : [];
-  const weekLine =
-    homeOffset === 1
-      ? `${weekCount} of 3 · ${swingMissing.join(' + ')} left — tonight counts for Week ${week.num}`
-      : `${weekCount} of 3 this week${swingWords}`;
-  // Saturday morning, last week still at 1-2: one quiet line says today will
-  // count for it (v46, kept).
-  const saturdayNote =
-    homeOffset === 0 &&
-    new Date().getDay() === 6 &&
-    swungLogs.length === 0 &&
-    weekCount === 0 &&
-    lastWeekCount > 0 &&
-    lastWeekCount < SESSIONS_PER_WEEK_TARGET
-      ? `<p class="swing-note">Last week's at ${lastWeekCount} — today's session will count for it.</p>`
-      : '';
+    chipsHtml = doneToday
+      ? attribution.get(doneToday) !== saturdayForOffset(0).getTime()
+        ? renderWorkoutChips(null, `Week ${week.num}`)
+        : renderWorkoutChips(doneToday.workout)
+      : renderWorkoutChips(pick);
+    weekNavLinkHtml = '';
+  } else {
+    // ---- WK2: the completion-based week model ----
+    const model = weekModel();
+    const shown = shownWeek();
+    const planInfo = planForWeekKey(shown.key);
+    const peek = viewingLastClosedWeek ? lastClosedWeekForPeek() : null;
 
-  const dotsHtml = weekDots
-    .map((d) => {
-      // v49 · look (Sep 25 2026): today gets its own ring + bold label (spec
-      // §5 frame 1, §6 "is-today") — the strip otherwise has no way to say
-      // "you are here".
-      const isToday = localIsoDate(d.date) === localIsoDate(new Date());
-      const cls =
-        (d.workout ? `dot dot-${d.workout}` : 'dot dot-empty') + (isToday ? ' is-today' : '');
-      const clickAttr = d.logId ? `data-detail="${escapeHtml(d.logId)}"` : '';
-      return `
-        <button class="week-dot ${cls}" ${clickAttr} type="button" ${d.logId ? '' : 'tabindex="-1"'} aria-label="${d.letter} ${formatDate(d.date.toISOString())}${d.workout ? ` workout ${d.workout}` : ' no workout'}">
-          <span class="week-dot-label">${d.letter}</span>
-          <span class="week-dot-bubble">${d.workout ?? ''}</span>
-        </button>
-      `;
-    })
-    .join('');
+    pick = shown.span ? (shown.span.missing[0] as WorkoutId) : 'A';
+
+    if (peek) {
+      // Peeking at "‹ Week N" — a read-only look, so no "since/opens" or
+      // repeat sub-line (those describe the LIVE week, not a closed one).
+      subLineHtml = '';
+      weekCardHeadText = escapeHtml(`Week ${peek.weekNum}`);
+      dotsHtml = peek.dotsHtml;
+      weekLineText = peek.countText;
+    } else {
+      subLineHtml =
+        `<div class="week-sub-line">${escapeHtml(weekSubLabel(shown))}</div>` +
+        (planInfo.repeatsWeek !== null
+          ? `<div class="week-sub-line week-sub-repeat">Same moves as Week ${planInfo.repeatsWeek}</div>`
+          : '');
+      weekCardHeadText = escapeHtml(`Week ${shown.key.week}`);
+      dotsHtml = shown.span ? renderCompletionWeekDots(completionWeekDots(shown.span)) : '';
+      weekLineText = weekCountLine(shown);
+    }
+    saturdayNote = '';
+
+    // Did TODAY'S save close its own week? (its week resolves to a CLOSED
+    // span, not the currently open/pending one.)
+    const doneTodayWeekKey = doneToday?.id ? (model.weekOf.get(doneToday.id) ?? null) : null;
+    const doneTodayClosedSpan = doneTodayWeekKey
+      ? (model.spans.find(
+          (s) => s.key.round === doneTodayWeekKey.round && s.key.week === doneTodayWeekKey.week
+        ) ?? null)
+      : null;
+
+    if (!doneToday) {
+      doneCardLines = [];
+    } else if (doneTodayClosedSpan) {
+      const nextLine = shown.span
+        ? `Week ${shown.key.week} starts now`
+        : shown.pending
+          ? `Week ${shown.key.week} opens ${formatWeekdayDate(shown.pending.opensAt)}`
+          : '';
+      doneCardLines = [
+        `Week ${doneTodayClosedSpan.key.week} done · 3 of 3 ✓`,
+        ...(nextLine ? [nextLine] : []),
+      ];
+    } else {
+      const done = shown.span?.done.length ?? 0;
+      const missingWords = joinMissingLetters(shown.span?.missing ?? []);
+      doneCardLines = [
+        `${done} of 3 in Week ${shown.key.week}${missingWords ? ` · ${missingWords} left` : ''}`,
+      ];
+    }
+
+    // §2.4: "the chips = the other missing letters" — not "the other two
+    // letters" (renderWorkoutChips' old exclude-one-letter shape would
+    // re-offer an already-done letter once only 1 remains). Her words 21:18
+    // "I need b back for 5": once a save CLOSES a week, the next one's chips
+    // lead with its number and offer all three instead.
+    const missingForChips: WorkoutId[] = shown.span
+      ? [...shown.span.missing]
+      : (['A', 'B', 'C'] as WorkoutId[]);
+    chipsHtml = doneToday
+      ? doneTodayClosedSpan
+        ? renderWorkoutChips(null, `Week ${shown.key.week} ·`)
+        : renderWorkoutChipsFor(missingForChips) // no letter singled out as hero right now
+      : renderWorkoutChipsFor(missingForChips.slice(1)); // pick (missing[0]) is the hero already
+
+    // §8c amendment: "‹ Week 4" / "Week 5 ›" — a plain, visible peek at the
+    // last closed week, never touching what a session counts toward or trains.
+    const peekTarget = viewingLastClosedWeek ? peek : lastClosedWeekForPeek();
+    weekNavLinkHtml = peekTarget
+      ? viewingLastClosedWeek
+        ? `<button class="week-nav-link" id="week-nav-forward" type="button">Week ${shown.key.week} ›</button>`
+        : `<button class="week-nav-link" id="week-nav-back" type="button">‹ Week ${peekTarget.weekNum}</button>`
+      : '';
+  }
 
   // The walk row (DECISIONS §4, slow walking): one row, no paragraph.
   const walkTrail = [
@@ -7790,26 +8254,12 @@ function renderHome(): string {
         <span class="settings-icon-glyph" aria-hidden="true">⚙</span>
       </button>
     </div>
+    ${subLineHtml}
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
     ${staleSnapshot ? renderStaleSessionCard(staleSnapshot) : ''}
 
-    ${
-      doneToday
-        ? // Sep 26 2026: a Saturday session that swung back reports on the week
-          // it COUNTED for ("3 of 3 in Week 4"), not the new week's 0.
-          attribution.get(doneToday) === saturdayForOffset(1).getTime()
-          ? renderDoneTodayCard(doneToday, getWeekCount(1), `in Week ${lastWeek.num}`)
-          : renderDoneTodayCard(doneToday, weekCount)
-        : renderUpNextHero(pick)
-    }
-    ${
-      // Sep 26 2026, her words "I need b back for 5": a Saturday session that
-      // counted for LAST week leaves the new week at 0 of 3, so all three
-      // workouts stay on offer (the swung one included).
-      doneToday && attribution.get(doneToday) !== saturdayForOffset(0).getTime()
-        ? renderWorkoutChips(null, `Week ${week.num}`)
-        : renderWorkoutChips(doneToday ? doneToday.workout : pick)
-    }
+    ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : renderUpNextHero(pick)}
+    ${chipsHtml}
     ${
       // v48 · P5: the 2 kg question sits right under the hero + its chips (the
       // chips read as part of the hero, so the card goes after them).
@@ -7818,12 +8268,13 @@ function renderHome(): string {
 
     <div class="card week-card" id="open-weekly-review" role="button" tabindex="0" aria-label="Open weekly review for this week">
       <div class="week-card-head">
-        <span class="week-card-range">${homeOffset === 1 ? `Week ${week.num}` : 'This week'} · ${weekRange}</span>
+        <span class="week-card-range">${weekCardHeadText}</span>
         <span class="week-card-chev" aria-hidden="true">›</span>
       </div>
       <div class="week-dots">${dotsHtml}</div>
-      <div class="week-line">${weekLine}</div>
+      <div class="week-line">${weekLineText}</div>
       ${saturdayNote}
+      ${weekNavLinkHtml}
     </div>
 
     ${renderHomeStartNowCard(logs)}
@@ -8030,12 +8481,22 @@ function workoutNeedsWristLine(w: Workout): boolean {
 // §5). Swing fix (Sep 26 2026): mirrors homeWeekTitle's viewed-week choice, so
 // a swing-Saturday pre-log reads last week's label, not the calendar's.
 function preLogWeekLabel(): string {
-  const week = homeWeekOffset() === 1 ? getViewedProgramWeek(1) : getProgramWeek();
-  const plan = getWeekPlan();
-  const planRound = plan.round ?? 1;
-  const round = week.round > 1 ? `R${week.round} · ` : '';
-  if (plan.weekNum === week.num && planRound === week.round) return `${round}Week ${week.num}`;
-  return `${planRound > 1 ? `R${planRound} · ` : ''}Week ${plan.weekNum}'s plan`;
+  if (!isNowAfterCompletionLaunch()) {
+    // Pre-launch — original logic, untouched (see homeWeekTitle's comment).
+    const week = homeWeekOffset() === 1 ? getViewedProgramWeek(1) : getProgramWeek();
+    const plan = getWeekPlan();
+    const planRound = plan.round ?? 1;
+    const round = week.round > 1 ? `R${week.round} · ` : '';
+    if (plan.weekNum === week.num && planRound === week.round) return `${round}Week ${week.num}`;
+    return `${planRound > 1 ? `R${planRound} · ` : ''}Week ${plan.weekNum}'s plan`;
+  }
+  // WK2 (Sep 27 2026), §2.4 "Pre-log meta line": "Week 5" plain, or
+  // "Week 6 · same moves as Week 5" when PROGRAM has no row for it yet.
+  const shown = shownWeek();
+  const planInfo = planForWeekKey(shown.key);
+  return planInfo.repeatsWeek === null
+    ? `Week ${shown.key.week}`
+    : `Week ${shown.key.week} · same moves as Week ${planInfo.repeatsWeek}`;
 }
 
 function renderPreLog(): string {
@@ -9140,7 +9601,17 @@ function postLogWitnessLine(w: Workout): string {
   if (rounds === 2) parts.push(state.currentRound >= 2 ? 'both rounds' : '1 round');
   else if (rounds > 2) parts.push(`${state.currentRound} of ${rounds} rounds`);
   else parts.push('1 round'); // effectiveRounds 1 — e.g. Lite on a 2-round day (C)
-  parts.push(`${getWeekCount(0) + 1} of 3 this week`);
+  // WK2 (Sep 27 2026): post-launch, "this week" becomes "in Week N" — the
+  // completion model's own week, not the calendar's (§2.4 "Post-log line":
+  // "1 round · 2 of 3 in Week 5"). Pre-launch (or a mocked earlier date)
+  // keeps the original calendar count untouched.
+  if (!isNowAfterCompletionLaunch()) {
+    parts.push(`${getWeekCount(0) + 1} of 3 this week`);
+  } else {
+    const shown = shownWeek();
+    const doneSoFar = (shown.span?.done.length ?? 0) + 1;
+    parts.push(`${doneSoFar} of 3 in Week ${shown.key.week}`);
+  }
   return parts.join(' · ');
 }
 
@@ -11535,6 +12006,23 @@ function attachHandlers(): void {
       e.preventDefault();
       openWeeklyReview();
     }
+  });
+
+  // WK2 (Sep 27 2026), §8c amendment: "‹ Week 4" peeks at the last closed
+  // week on Home's own week card; "Week 5 ›" returns. A plain view toggle —
+  // never touches what a session counts toward or trains. Raw listener (not
+  // bindClick), same reason as the [data-detail] dots just above: this sits
+  // INSIDE .week-card, whose own click opens Weekly review — without
+  // stopPropagation a tap here would fire both.
+  document.getElementById('week-nav-back')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    viewingLastClosedWeek = true;
+    render();
+  });
+  document.getElementById('week-nav-forward')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    viewingLastClosedWeek = false;
+    render();
   });
 
   // Ship 5: Progress screen — full-history longitudinal view, from home's door.
