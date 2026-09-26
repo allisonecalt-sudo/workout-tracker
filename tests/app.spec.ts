@@ -5408,6 +5408,15 @@ test.describe('v48 P4 home', () => {
     ]);
     await page.goto('/');
     await expect(page.locator('.home-done-line')).toHaveText('3 of 3 in Week 4');
+    // "I need b back for 5" (22:18): the new week is at 0 of 3, so all three
+    // workouts stay on offer, led by the week's name; the swung B gets no dot
+    // in the new week's strip (the line already says where it went).
+    await expect(page.locator('.home-chips .home-chip')).toHaveCount(3);
+    await expect(page.locator('.home-chips-lead')).toHaveText('Week 5');
+    await expect(page.locator('.week-card .dot-B')).toHaveCount(0);
+    await expect(page.locator('.week-line')).toHaveText(
+      "0 of 3 this week · Sat's B went to Week 4"
+    );
   });
 
   test('(e3) once Saturday completes last week, Up next starts the new week at A', async ({
@@ -6792,21 +6801,21 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v52 · <date, no year>", Settings "Build v52 · <full date>", sw.js v52', async ({
+  test('(d) the version: home "v52.1 · <date, no year>", Settings "Build v52.1 · <full date>", sw.js v52.1', async ({
     page,
   }) => {
     const src = await (await page.request.get('/app.ts')).text();
     const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
     const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
-    expect(version).toBe('v52');
+    expect(version).toBe('v52.1');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
-      `v52 · ${built.replace(/,\s*\d{4}/, '')}`
+      `v52.1 · ${built.replace(/,\s*\d{4}/, '')}`
     );
     await page.locator('#open-settings').click();
-    await expect(page.locator('#app')).toContainText(`Build v52 · ${built}`);
+    await expect(page.locator('#app')).toContainText(`Build v52.1 · ${built}`);
     const sw = await (await page.request.get('/sw.js')).text();
-    expect(sw).toContain("'workout-tracker-v52'");
+    expect(sw).toContain("'workout-tracker-v52.1'");
   });
 });
 

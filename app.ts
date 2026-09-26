@@ -453,8 +453,8 @@ const SUPABASE_ANON_KEY =
 // these are counted" row, quiet/sage period-log button) + the rest of the
 // page's "everything presentation" (combined elliptical line, compact
 // wall-sit sparkline).
-const APP_VERSION = 'v52';
-const BUILD_DATE = 'Sep 26, 2026 · 21:38';
+const APP_VERSION = 'v52.1';
+const BUILD_DATE = 'Sep 26, 2026 · 22:20';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -6191,7 +6191,7 @@ function homeWeekOffset(): number {
   return lastWeek > 0 && lastWeek < SESSIONS_PER_WEEK_TARGET ? 1 : 0;
 }
 
-function getWeekDots(offset = 0, withSwingSaturday = false): WeekDotInfo[] {
+function getWeekDots(offset = 0, withSwingSaturday = false, attributed = false): WeekDotInfo[] {
   const logs = loadLogs();
   // Allison's week = Sat..Fri (Shabbat-anchored). See memory
   // `reference_week_definition.md`. Saturday is index 0; Friday is index 6.
@@ -6202,7 +6202,7 @@ function getWeekDots(offset = 0, withSwingSaturday = false): WeekDotInfo[] {
   // before it).
   if (withSwingSaturday) dotLabels.push('S');
   const saturday = saturdayForOffset(offset);
-  const attribution = withSwingSaturday ? attributeSessionsToWeeks(logs) : null;
+  const attribution = withSwingSaturday || attributed ? attributeSessionsToWeeks(logs) : null;
 
   return dotLabels.map((label, i) => {
     const d = new Date(saturday);
@@ -7085,7 +7085,7 @@ function workoutChipLabel(w: Workout): string {
   return `${w.id} · ${w.name.split(/[\s+]+/)[0] ?? ''}`;
 }
 
-function renderWorkoutChips(exclude: WorkoutId): string {
+function renderWorkoutChips(exclude: WorkoutId | null, lead = 'or do'): string {
   const chips = (['A', 'B', 'C'] as WorkoutId[])
     .filter((id) => id !== exclude)
     .map((id) => {
@@ -7093,7 +7093,7 @@ function renderWorkoutChips(exclude: WorkoutId): string {
       return `<button class="btn-chip home-chip" data-workout="${id}" type="button" aria-label="Start Workout ${id} · ${escapeHtml(w.name)}">${escapeHtml(workoutChipLabel(w))}</button>`;
     })
     .join('');
-  return `<div class="home-chips"><span class="home-chips-lead">or do</span>${chips}</div>`;
+  return `<div class="home-chips"><span class="home-chips-lead">${escapeHtml(lead)}</span>${chips}</div>`;
 }
 
 // The "Up next" hero — the ONE sage thing on home. The whole card is the tap
@@ -7173,7 +7173,10 @@ function renderHome(): string {
   const pick = getTodaysPick();
   const weekWalks = walksThisWeek();
   const walkStartedAt = activeWalkStart();
-  const weekDots = getWeekDots(homeOffset, homeOffset === 1);
+  // Sep 26 2026: the strip shows only sessions that COUNT for the shown week —
+  // her screenshot had Saturday's B in Week 5's strip while the line said it
+  // went to Week 4.
+  const weekDots = getWeekDots(homeOffset, homeOffset === 1, true);
 
   // DECISIONS Q2 — the Saturday swing in WORDS, every day (not only on
   // Saturdays): "0 of 3 this week · Sat's C went to Week 3 · 39 total".
@@ -7282,7 +7285,14 @@ function renderHome(): string {
           : renderDoneTodayCard(doneToday, weekCount)
         : renderUpNextHero(pick)
     }
-    ${renderWorkoutChips(doneToday ? doneToday.workout : pick)}
+    ${
+      // Sep 26 2026, her words "I need b back for 5": a Saturday session that
+      // counted for LAST week leaves the new week at 0 of 3, so all three
+      // workouts stay on offer (the swung one included).
+      doneToday && attribution.get(doneToday) !== saturdayForOffset(0).getTime()
+        ? renderWorkoutChips(null, `Week ${week.num}`)
+        : renderWorkoutChips(doneToday ? doneToday.workout : pick)
+    }
     ${
       // v48 · P5: the 2 kg question sits right under the hero + its chips (the
       // chips read as part of the hero, so the card goes after them).

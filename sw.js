@@ -15,7 +15,7 @@
 // v50 (Sep 25 2026): capacity & cycle + the jump list (List sheet, step-list.js).
 // v51 (Sep 25 2026): the Progress page in plain words — no new shell files, so
 // only the cache name moves.
-const VERSION = 'workout-tracker-v52';
+const VERSION = 'workout-tracker-v52.1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
