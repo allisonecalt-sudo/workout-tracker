@@ -453,8 +453,8 @@ const SUPABASE_ANON_KEY =
 // these are counted" row, quiet/sage period-log button) + the rest of the
 // page's "everything presentation" (combined elliptical line, compact
 // wall-sit sparkline).
-const APP_VERSION = 'v51.1';
-const BUILD_DATE = 'Sep 26, 2026 · 21:26';
+const APP_VERSION = 'v52';
+const BUILD_DATE = 'Sep 26, 2026 · 21:38';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -6177,12 +6177,32 @@ function sessionsAttributedTo(
 // "Sat counted for last week" note on the Week-by-week summary, is gone; home's
 // week line names the swing in words.)
 
-function getWeekDots(offset = 0): WeekDotInfo[] {
+// A swing Saturday: today is Saturday and last week still needs 1-2 sessions,
+// so tonight's session counts for LAST week. Home then shows last week — its
+// number, its dots, its count. Her words, Sat Sep 26 2026 21:32: "I want to be
+// very clear that I'm in week 4 right now like it says week 5 on top" / "I also
+// would like to see workout A and c done so I feel good about that" / "if I'm on
+// week 4 … I don't want to see five yet". Same condition as
+// attributeSessionsToWeeks' swing, so the screen and the count always agree.
+function homeWeekOffset(): number {
+  if (new Date().getDay() !== 6) return 0;
+  const logs = loadLogs();
+  const lastWeek = sessionsAttributedTo(logs, saturdayForOffset(1)).length;
+  return lastWeek > 0 && lastWeek < SESSIONS_PER_WEEK_TARGET ? 1 : 0;
+}
+
+function getWeekDots(offset = 0, withSwingSaturday = false): WeekDotInfo[] {
   const logs = loadLogs();
   // Allison's week = Sat..Fri (Shabbat-anchored). See memory
   // `reference_week_definition.md`. Saturday is index 0; Friday is index 6.
   const dotLabels = ['S', 'S', 'M', 'T', 'W', 'T', 'F'];
+  // Her idea (Sep 26): "show 8 days … like two Saturday" — on a swing Saturday
+  // the week gets its 8th day, tonight, and only sessions that COUNT for that
+  // week get a dot (the first Saturday's session may have swung to the week
+  // before it).
+  if (withSwingSaturday) dotLabels.push('S');
   const saturday = saturdayForOffset(offset);
+  const attribution = withSwingSaturday ? attributeSessionsToWeeks(logs) : null;
 
   return dotLabels.map((label, i) => {
     const d = new Date(saturday);
@@ -6193,6 +6213,7 @@ function getWeekDots(offset = 0): WeekDotInfo[] {
     end.setHours(23, 59, 59, 999);
     const hit = logs.find((l) => {
       const t = new Date(l.date).getTime();
+      if (attribution && attribution.get(l) !== saturday.getTime()) return false;
       return t >= start.getTime() && t <= end.getTime();
     });
     return {
@@ -7005,7 +7026,7 @@ function renderGearCard(): string {
 // (ux.md #10: the banner said Week 5 while pre-log said Week 4). Returns HTML:
 // the plan note is a smaller span so the title stays on one line.
 function homeWeekTitle(): string {
-  const week = getProgramWeek();
+  const week = homeWeekOffset() === 1 ? getViewedProgramWeek(1) : getProgramWeek();
   if (week.skippedLabel) return `${week.skippedLabel} week`;
   const title = `${week.round > 1 ? `Round ${week.round} · ` : ''}Week ${week.num}`;
   const plan = getWeekPlan();
@@ -7098,7 +7119,7 @@ function renderUpNextHero(id: WorkoutId): string {
 
 // After Save, until midnight: the win is witnessed instead of the next workout
 // lighting up minutes later (uxui post-log 4/5). Not sage — nothing to do here.
-function renderDoneTodayCard(log: LogEntry, weekCount: number): string {
+function renderDoneTodayCard(log: LogEntry, weekCount: number, weekLabel = 'this week'): string {
   const lastDone = loadLastDone();
   const firsts = lastDone && lastDone.id === log.id ? lastDone.firsts : [];
   const km =
@@ -7117,7 +7138,7 @@ function renderDoneTodayCard(log: LogEntry, weekCount: number): string {
   return `
     <div class="card home-done-card" id="home-done-card">
       <div class="home-done-title">Done ✓ · Workout ${log.workout}</div>
-      <div class="home-done-line">${weekCount} of 3 this week</div>
+      <div class="home-done-line">${weekCount} of 3 ${weekLabel}</div>
       ${firstsLine ? `<div class="home-done-firsts" dir="auto">${escapeHtml(firstsLine)}</div>` : ''}
       ${backLine ? `<div class="home-done-back" dir="auto">${escapeHtml(backLine)}</div>` : ''}
     </div>`;
@@ -7135,11 +7156,14 @@ function renderHome(): string {
            <span>🌙 Period started?</span><span class="door-chev" aria-hidden="true">›</span>
          </button>`
       : '';
-  const week = getProgramWeek();
-  const weekRange = formatWeekRange(week.start, week.end);
+  // Sep 26 2026: on a swing Saturday home shows LAST week (see homeWeekOffset) —
+  // its number, its 8 days (Sat → tonight), its count.
+  const homeOffset = homeWeekOffset();
+  const week = homeOffset === 1 ? getViewedProgramWeek(1) : getProgramWeek();
+  const weekRange = formatWeekRange(week.start, homeOffset === 1 ? new Date() : week.end);
   // v48 · P4: home always shows THIS week (the ‹ › arrows move to Weekly review
   // in P6; viewedWeekOffset stays for that screen).
-  const weekCount = getWeekCount(0);
+  const weekCount = getWeekCount(homeOffset);
   // Newest by DATE (writeLogs keeps unsynced rows first, not newest first).
   const lastLog = [...logs].sort((a, b) => b.date.localeCompare(a.date))[0];
   const doneToday =
@@ -7149,7 +7173,7 @@ function renderHome(): string {
   const pick = getTodaysPick();
   const weekWalks = walksThisWeek();
   const walkStartedAt = activeWalkStart();
-  const weekDots = getWeekDots(0);
+  const weekDots = getWeekDots(homeOffset, homeOffset === 1);
 
   // DECISIONS Q2 — the Saturday swing in WORDS, every day (not only on
   // Saturdays): "0 of 3 this week · Sat's C went to Week 3 · 39 total".
@@ -7173,10 +7197,23 @@ function renderHome(): string {
       : '';
   // v49 · look (Sep 25 2026): the lifetime count moves to the Start → Now
   // card's own "Sessions" row — spec §5 frame 1, "Only one count on Home."
-  const weekLine = `${weekCount} of 3 this week${swingWords}`;
+  const swingMissing =
+    homeOffset === 1
+      ? (['A', 'B', 'C'] as const).filter(
+          (w) =>
+            !sessionsAttributedTo(logs, saturdayForOffset(1), attribution).some(
+              (l) => l.workout === w
+            )
+        )
+      : [];
+  const weekLine =
+    homeOffset === 1
+      ? `${weekCount} of 3 · ${swingMissing.join(' + ')} left — tonight counts for Week ${week.num}`
+      : `${weekCount} of 3 this week${swingWords}`;
   // Saturday morning, last week still at 1-2: one quiet line says today will
   // count for it (v46, kept).
   const saturdayNote =
+    homeOffset === 0 &&
     new Date().getDay() === 6 &&
     swungLogs.length === 0 &&
     weekCount === 0 &&
@@ -7236,7 +7273,15 @@ function renderHome(): string {
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
     ${staleSnapshot ? renderStaleSessionCard(staleSnapshot) : ''}
 
-    ${doneToday ? renderDoneTodayCard(doneToday, weekCount) : renderUpNextHero(pick)}
+    ${
+      doneToday
+        ? // Sep 26 2026: a Saturday session that swung back reports on the week
+          // it COUNTED for ("3 of 3 in Week 4"), not the new week's 0.
+          attribution.get(doneToday) === saturdayForOffset(1).getTime()
+          ? renderDoneTodayCard(doneToday, getWeekCount(1), `in Week ${lastWeek.num}`)
+          : renderDoneTodayCard(doneToday, weekCount)
+        : renderUpNextHero(pick)
+    }
     ${renderWorkoutChips(doneToday ? doneToday.workout : pick)}
     ${
       // v48 · P5: the 2 kg question sits right under the hero + its chips (the
@@ -7246,7 +7291,7 @@ function renderHome(): string {
 
     <div class="card week-card" id="open-weekly-review" role="button" tabindex="0" aria-label="Open weekly review for this week">
       <div class="week-card-head">
-        <span class="week-card-range">This week · ${weekRange}</span>
+        <span class="week-card-range">${homeOffset === 1 ? `Week ${week.num}` : 'This week'} · ${weekRange}</span>
         <span class="week-card-chev" aria-hidden="true">›</span>
       </div>
       <div class="week-dots">${dotsHtml}</div>

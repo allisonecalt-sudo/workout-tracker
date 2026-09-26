@@ -5371,6 +5371,41 @@ test.describe('v48 P4 home', () => {
     await expect(page.locator('button.home-hero[data-workout="B"]')).toContainText('Up next');
   });
 
+  test('(e2b) swing Saturday: home shows LAST week — Week 4 on top, its 8 days, A + C done, B left', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-26T18:20:00.000Z');
+    await seedLogs(page, [
+      swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+      swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+    ]);
+    await page.goto('/');
+    const h1 = page.locator('.home-header h1');
+    await expect(h1).toContainText('Week 4');
+    await expect(h1).not.toContainText('Week 5');
+    await expect(page.locator('.week-card .week-dot')).toHaveCount(8);
+    await expect(page.locator('.week-card .dot-A')).toHaveCount(1);
+    await expect(page.locator('.week-card .dot-C')).toHaveCount(1);
+    await expect(page.locator('.week-card .week-card-range')).toContainText('Week 4');
+    await expect(page.locator('.week-line')).toHaveText(
+      '2 of 3 · B left — tonight counts for Week 4'
+    );
+    await expect(page.locator('.swing-note')).toHaveCount(0);
+  });
+
+  test("(e2c) after Saturday's B the Done card reports Week 4, not the new week", async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-26T19:40:00.000Z');
+    await seedLogs(page, [
+      swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+      swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+      swingLog('sat-b', '2026-09-26T19:30:00.000Z', 'B'),
+    ]);
+    await page.goto('/');
+    await expect(page.locator('.home-done-line')).toHaveText('3 of 3 in Week 4');
+  });
+
   test('(e3) once Saturday completes last week, Up next starts the new week at A', async ({
     page,
   }) => {
@@ -6753,21 +6788,21 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v51.1 · <date, no year>", Settings "Build v51.1 · <full date>", sw.js v51.1', async ({
+  test('(d) the version: home "v52 · <date, no year>", Settings "Build v52 · <full date>", sw.js v52', async ({
     page,
   }) => {
     const src = await (await page.request.get('/app.ts')).text();
     const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
     const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
-    expect(version).toBe('v51.1');
+    expect(version).toBe('v52');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
-      `v51.1 · ${built.replace(/,\s*\d{4}/, '')}`
+      `v52 · ${built.replace(/,\s*\d{4}/, '')}`
     );
     await page.locator('#open-settings').click();
-    await expect(page.locator('#app')).toContainText(`Build v51.1 · ${built}`);
+    await expect(page.locator('#app')).toContainText(`Build v52 · ${built}`);
     const sw = await (await page.request.get('/sw.js')).text();
-    expect(sw).toContain("'workout-tracker-v51.1'");
+    expect(sw).toContain("'workout-tracker-v52'");
   });
 });
 
