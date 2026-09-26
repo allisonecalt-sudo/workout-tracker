@@ -1,5 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Sep 26 2026: PW_PORT lets two checkouts (a hotfix worktree + the main
+// checkout's builders) run the suite at once without one reusing the other's
+// server — that served STALE code to the wrong suite twice tonight.
+const PORT = process.env.PW_PORT ?? '3100';
+
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
@@ -20,7 +25,7 @@ export default defineConfig({
   // webServer wait times out. 3100 is free locally and in CI. (food-log hit the
   // same conflict and moved to 4321.)
   use: {
-    baseURL: 'http://localhost:3100',
+    baseURL: `http://localhost:${PORT}`,
     trace: 'on-first-retry',
   },
   projects: [
@@ -30,8 +35,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npx serve -l 3100 .',
-    url: 'http://localhost:3100',
+    command: `npx serve -l ${PORT} .`,
+    url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

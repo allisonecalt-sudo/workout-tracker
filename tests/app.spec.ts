@@ -1255,10 +1255,14 @@ test('swing (v46): Saturday morning with last week at 2 says today will count fo
   );
   await mockDate(page, '2026-09-19T06:00:00.000Z'); // Sat Sep 19, 09:00 Jerusalem — nothing done yet
   await page.goto('/');
-  await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
-  await expect(page.locator('.swing-note')).toHaveText(
-    "Last week's at 2 — today's session will count for it."
+  // v52 (Sep 26 2026): a swing Saturday now SHOWS last week (her "I want to be
+  // very clear that I'm in week 4 right now"), so the count is last week's
+  // and the old "today will count for it" note is replaced by the week line.
+  await expect(page.locator('.week-line')).toHaveText(
+    '2 of 3 · C left — tonight counts for Week 3'
   );
+  await expect(page.locator('.home-header h1')).toContainText('Week 3');
+  await expect(page.locator('.swing-note')).toHaveCount(0);
 });
 
 // v46: only completed program weeks are judged. Break + sick weeks and the week
