@@ -1244,7 +1244,10 @@ test('swing (v46): on the Saturday itself the week card carries the week it clos
   await expect(page.locator('.week-line')).toHaveText("0 of 3 this week · Sat's C went to Week 3");
 });
 
-test('swing (v46): Saturday morning with last week at 2 says today will count for it', async ({
+// v52 (Sep 26 2026, main): the standalone ".swing-note" line was folded into
+// ".week-line" itself ("N of 3 · <workout> left — tonight counts for Week N")
+// so the count and the swing explanation read as one sentence, not two.
+test('swing (v52, was v46): Saturday morning with last week at 2 says today will count for it', async ({
   page,
 }) => {
   await page.addInitScript(
@@ -1255,10 +1258,10 @@ test('swing (v46): Saturday morning with last week at 2 says today will count fo
   );
   await mockDate(page, '2026-09-19T06:00:00.000Z'); // Sat Sep 19, 09:00 Jerusalem — nothing done yet
   await page.goto('/');
-  await expect(page.locator('.week-line')).toContainText('0 of 3 this week');
-  await expect(page.locator('.swing-note')).toHaveText(
-    "Last week's at 2 — today's session will count for it."
+  await expect(page.locator('.week-line')).toHaveText(
+    '2 of 3 · C left — tonight counts for Week 3'
   );
+  await expect(page.locator('.swing-note')).toHaveCount(0);
 });
 
 // v46: only completed program weeks are judged. Break + sick weeks and the week
@@ -5586,6 +5589,82 @@ test.describe('v48 P4 home', () => {
     await expect(page.locator('button.home-hero[data-workout="B"]')).toContainText('Up next');
   });
 
+  // Sat Sep 26 2026 — her words, 21:21: "its saturday night i was supposed to
+  // be able to do workout b of last week tonight". Last week = A (Thu) + C (Fri),
+  // so Saturday's session swings back to it and Up next must be the missing B,
+  // not the rotation's A.
+  const swingLog = (id: string, date: string, workout: 'A' | 'B' | 'C') => ({
+    id,
+    date,
+    workout,
+    capacityBefore: 8,
+    capacityAfter: 8,
+    wallSitSec: 0,
+    backPain: 0,
+    word: '',
+    synced: true,
+  });
+
+  test('(e2) swing Saturday: Up next is the workout last week is still missing', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-26T18:20:00.000Z');
+    await seedLogs(page, [
+      swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+      swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+    ]);
+    await page.goto('/');
+    await expect(page.locator('button.home-hero[data-workout="B"]')).toContainText('Up next');
+  });
+
+  test('(e2b) swing Saturday: home shows LAST week — Week 4 on top, its 8 days, A + C done, B left', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-26T18:20:00.000Z');
+    await seedLogs(page, [
+      swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+      swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+    ]);
+    await page.goto('/');
+    const h1 = page.locator('.home-header h1');
+    await expect(h1).toContainText('Week 4');
+    await expect(h1).not.toContainText('Week 5');
+    await expect(page.locator('.week-card .week-dot')).toHaveCount(8);
+    await expect(page.locator('.week-card .dot-A')).toHaveCount(1);
+    await expect(page.locator('.week-card .dot-C')).toHaveCount(1);
+    await expect(page.locator('.week-card .week-card-range')).toContainText('Week 4');
+    await expect(page.locator('.week-line')).toHaveText(
+      '2 of 3 · B left — tonight counts for Week 4'
+    );
+    await expect(page.locator('.swing-note')).toHaveCount(0);
+  });
+
+  test("(e2c) after Saturday's B the Done card reports Week 4, not the new week", async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-26T19:40:00.000Z');
+    await seedLogs(page, [
+      swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+      swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+      swingLog('sat-b', '2026-09-26T19:30:00.000Z', 'B'),
+    ]);
+    await page.goto('/');
+    await expect(page.locator('.home-done-line')).toHaveText('3 of 3 in Week 4');
+  });
+
+  test('(e3) once Saturday completes last week, Up next starts the new week at A', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-27T09:00:00.000Z');
+    await seedLogs(page, [
+      swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+      swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+      swingLog('sat-b', '2026-09-26T19:30:00.000Z', 'B'),
+    ]);
+    await page.goto('/');
+    await expect(page.locator('button.home-hero[data-workout="A"]')).toContainText('Up next');
+  });
+
   test('(f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress', async ({
     page,
   }) => {
@@ -6955,21 +7034,21 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v51 · <date, no year>", Settings "Build v51 · <full date>", sw.js v51', async ({
+  test('(d) the version: home "v53 · <date, no year>", Settings "Build v53 · <full date>", sw.js v53', async ({
     page,
   }) => {
     const src = await (await page.request.get('/app.ts')).text();
     const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
     const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
-    expect(version).toBe('v51');
+    expect(version).toBe('v53');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
-      `v51 · ${built.replace(/,\s*\d{4}/, '')}`
+      `v53 · ${built.replace(/,\s*\d{4}/, '')}`
     );
     await page.locator('#open-settings').click();
-    await expect(page.locator('#app')).toContainText(`Build v51 · ${built}`);
+    await expect(page.locator('#app')).toContainText(`Build v53 · ${built}`);
     const sw = await (await page.request.get('/sw.js')).text();
-    expect(sw).toContain("'workout-tracker-v51'");
+    expect(sw).toContain("'workout-tracker-v53'");
   });
 });
 
