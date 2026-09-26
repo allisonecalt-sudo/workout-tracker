@@ -154,9 +154,13 @@ test.describe('#2b — a weekday session AFTER the boundary has passed still ope
   // only opened the next week when a session literally fell on a Sat/Sun, so
   // a plain Mon/Thu/Fri week after a close counted ALL THREE back into the
   // closed week and the next week never opened (open stayed null forever).
-  // The fix: once the boundary Saturday has passed, the FIRST session after
-  // it opens the next week on its own day, whatever weekday that is.
-  test('Mon A / Thu B / Fri C after a Wed close = Week 6 at 3 of 3, not folded into Week 5', () => {
+  // r1's fix opened the next week on the FIRST session's own day, whatever
+  // weekday that was — but that broke her actual rule (r2, checker must #1):
+  // "a week always has to be start sat or sun not just mid week." r2's fix:
+  // the week still opens on the first post-boundary session (so it isn't
+  // folded into the closed week), but its `openedAt` is the anchor Saturday
+  // itself, not the weekday the session happened to land on.
+  test('Mon A / Thu B / Fri C after a Wed close = Week 6 at 3 of 3, opened on the anchor Saturday', () => {
     const sessions: SessionLite[] = [
       { id: 'A1', date: '2026-09-27T10:00:00+03:00', workout: 'A' }, // Sun
       { id: 'B1', date: '2026-09-28T10:00:00+03:00', workout: 'B' }, // Mon
@@ -175,7 +179,9 @@ test.describe('#2b — a weekday session AFTER the boundary has passed still ope
 
     expect(wk6.key).toEqual({ round: 2, week: 6 });
     expect(wk6.how).toBe('three');
-    expect(wk6.openedAt).toBe('2026-10-05T10:00:00+03:00'); // D1's own date — the Monday, not a Saturday
+    // The anchor Saturday right after the Wed close — frozen at 00:00 local,
+    // NOT D1's own Monday (that was r1's bug; her rule always anchors Sat/Sun).
+    expect(wk6.openedAt).toBe('2026-10-03T00:00:00+03:00');
     expect(wk6.done).toEqual(['A', 'B', 'C']);
     expect(wk6.missing).toEqual([]);
     expect(wk6.sessions.map((s) => s.id)).toEqual(['D1', 'E1', 'F1']);
@@ -467,5 +473,100 @@ test.describe('#12 — dayOfWeek: today counts as day 1', () => {
     };
     expect(dayOfWeek(wk5, new Date('2026-09-26T23:59:00+03:00'))).toBe(1);
     expect(dayOfWeek(wk5, new Date('2026-09-27T00:05:00+03:00'))).toBe(2);
+  });
+});
+
+test.describe('#13 — invariant: a span never opens on a weekday, except the launch instant or a Round start', () => {
+  // Sep 27 2026 · WK1 fix r2 (checker must #1's own ask: "add a test that no
+  // span's openedAt ever falls Mon-Fri, except the launch instant and round
+  // starts"). Chains a Wed close → weekday-after-boundary open (like #2b),
+  // then a SECOND gap that skips THREE weekends with no session at all
+  // (checker must #1's "later weekend" case) — proving the anchor stays
+  // frozen at the FIRST boundary rather than drifting to "whichever Saturday
+  // is closest to the session" — then a Round start (which correctly opens
+  // mid-week, on her own restart moment, and must be excluded).
+  test('every non-launch, non-round-start openedAt falls on Saturday or Sunday', () => {
+    const sessions: SessionLite[] = [
+      { id: 'A1', date: '2026-09-27T10:00:00+03:00', workout: 'A' }, // Sun
+      { id: 'B1', date: '2026-09-28T10:00:00+03:00', workout: 'B' }, // Mon
+      { id: 'C1', date: '2026-09-30T10:00:00+03:00', workout: 'C' }, // Wed — closes Wk5
+      { id: 'D1', date: '2026-10-05T10:00:00+03:00', workout: 'A' }, // Mon — boundary Sat Oct 3 passed
+      { id: 'E1', date: '2026-10-08T10:00:00+03:00', workout: 'B' }, // Thu
+      { id: 'F1', date: '2026-10-09T10:00:00+03:00', workout: 'C' }, // Fri — closes Wk6
+      // Wk7 gets no session for THREE weekends (Oct 10/11, 17/18, 24/25) —
+      // the "later weekend" case must #1 flags.
+      { id: 'G1', date: '2026-10-28T10:00:00+03:00', workout: 'A' }, // Wed, 3 weekends after the Wk6 close
+    ];
+    const rounds: RoundStart[] = [{ round: 3, at: '2026-11-02T09:00:00+03:00' }]; // Monday — her own restart
+
+    const { spans, open } = walkWeeks(sessions, [], rounds);
+
+    expect(spans).toHaveLength(3);
+    const [wk5, wk6, wk7] = spans as [WeekSpan, WeekSpan, WeekSpan];
+    expect(wk5.key).toEqual({ round: 2, week: 5 });
+    expect(wk6.key).toEqual({ round: 2, week: 6 });
+    expect(wk6.openedAt).toBe('2026-10-03T00:00:00+03:00');
+    expect(wk7.key).toEqual({ round: 2, week: 7 });
+    expect(wk7.how).toBe('round_ended');
+    // Frozen at the FIRST boundary (Sat Oct 10, right after the Wk6 close on
+    // Fri Oct 9) — not "the Saturday nearest G1's Oct 28", which would be
+    // Oct 24. Her rule (8d.3) is "the next Saturday or Sunday", singular.
+    expect(wk7.openedAt).toBe('2026-10-10T00:00:00+03:00');
+    expect(wk7.done).toEqual(['A']);
+    expect(wk7.closedAt).toBe('2026-11-02T09:00:00+03:00');
+
+    expect(open).not.toBeNull();
+    expect(open?.key).toEqual({ round: 3, week: 1 });
+    expect(open?.openedAt).toBe('2026-11-02T09:00:00+03:00'); // her own restart — a Monday, and that's fine
+
+    const roundStartOpens = new Set(rounds.map((r) => r.at));
+    for (const span of spans) {
+      if (span.openedAt === COMPLETION_WEEKS_FROM.at || roundStartOpens.has(span.openedAt))
+        continue;
+      expect([0, 6]).toContain(new Date(span.openedAt).getDay());
+    }
+    if (open && open.openedAt !== COMPLETION_WEEKS_FROM.at && !roundStartOpens.has(open.openedAt)) {
+      expect([0, 6]).toContain(new Date(open.openedAt).getDay());
+    }
+  });
+});
+
+test.describe('#14 — pending: the gap is visible to callers even with 0 sessions', () => {
+  // Sep 27 2026 · WK1 fix r2 (checker must #2). Without this, WK2 would have
+  // to re-derive the boundary itself while querying mid-gap, and disagree
+  // with what week.ts reports once the first session actually lands.
+  test('Fri close, then a query on Sat with no session yet: Week 6 pending, opening that Saturday', () => {
+    const sessions: SessionLite[] = [
+      { id: 'A1', date: '2026-09-27T10:00:00+03:00', workout: 'A' }, // Sun
+      { id: 'B1', date: '2026-09-28T10:00:00+03:00', workout: 'B' }, // Mon
+      { id: 'C1', date: '2026-10-02T10:00:00+03:00', workout: 'C' }, // Fri — closes Wk5
+    ];
+    const { spans, open, pending } = walkWeeks(sessions, [], []);
+
+    expect(spans).toHaveLength(1);
+    expect(open).toBeNull();
+    expect(pending).not.toBeNull();
+    expect(pending?.key).toEqual({ round: 2, week: 6 });
+    expect(pending?.opensAt).toBe('2026-10-03T00:00:00+03:00'); // the Saturday right after the Fri close
+
+    // What a caller reading `pending` mid-gap would show (day count from
+    // opensAt) must match what week.ts itself will report once a session
+    // finally lands — must #1's fix uses this exact same frozen value.
+    const asOpenSpan: WeekSpan = {
+      key: pending!.key,
+      openedAt: pending!.opensAt,
+      closedAt: null,
+      how: null,
+      sessions: [],
+      done: [],
+      missing: ['A', 'B', 'C'],
+    };
+    expect(dayOfWeek(asOpenSpan, new Date('2026-10-03T12:00:00+03:00'))).toBe(1);
+  });
+
+  test('pending is null once a week is actually open (no gap)', () => {
+    const { open, pending } = walkWeeks([], [], []);
+    expect(open).not.toBeNull(); // the launch instant, open immediately
+    expect(pending).toBeNull();
   });
 });

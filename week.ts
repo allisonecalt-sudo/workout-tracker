@@ -69,7 +69,19 @@
 // PLAN-2026-09-26.md §2.2's optional `counted_round`/`counted_week` audit
 // columns are for. That's a schema decision (her yes first), not a WK1 patch.
 // The app still has no UI path to delete a closing session, so this stays a
-// flagged edge, not a live bug.
+// flagged edge, not a live bug. WK1 fix r2 (Sep 27 2026): carried forward as
+// an explicit GATE on WK2 in PLAN-2026-09-26.md — the counting switch-over
+// must not go live until a closed week survives a deleted session.
+//
+// ALSO STILL OPEN, "nice", deferred by choice (checker's "nice" #3): weekday
+// math here (isWeekendAnchorDay, nextSaturdayBoundary) reads the DEVICE's
+// local time (getDay/getDate), same convention as app.ts's
+// calendarSaturdayMs. Tests pin TZ=Asia/Jerusalem so they're exact; a real
+// phone traveling outside it could see its Sat/Sun boundary shift by a few
+// hours. Fixing it means switching every weekday/anchor calc to an explicit
+// Intl.DateTimeFormat(..., { timeZone: 'Asia/Jerusalem' }) read — a wider
+// change than this fix round's must/should items, and not something she's
+// hit yet (she isn't traveling). Left for a future round, not blocking WK2.
 
 export type Letter = 'A' | 'B' | 'C';
 
@@ -131,14 +143,64 @@ function afterLaunch(iso: string): boolean {
 // falls on a Saturday or Sunday, there IS no boundary to wait for (the
 // caller special-cases that and opens immediately, same as the launch
 // instant always has) - this function is only ever called for a Mon-Fri
-// close.
-function nextSaturdayBoundary(closedAtIso: string): number {
+// close. Returns the boundary as a Date (not just a timestamp) - r2 needs
+// the actual y/m/d to FORMAT it as the week's openedAt (see formatLocalIso).
+function nextSaturdayBoundary(closedAtIso: string): Date {
   const closed = new Date(closedAtIso);
   const day = closed.getDay(); // 0 Sun .. 6 Sat; never called with 0 or 6
   const daysUntilSaturday = 6 - day;
   const boundary = new Date(closed.getFullYear(), closed.getMonth(), closed.getDate());
   boundary.setDate(boundary.getDate() + daysUntilSaturday);
-  return boundary.getTime();
+  return boundary;
+}
+
+// The Monday right after a Sat boundary — i.e. the end (exclusive) of "that
+// weekend". Date arithmetic (setDate), not raw milliseconds, so a DST shift
+// landing on the boundary weekend still gives the right calendar day.
+function mondayAfter(boundary: Date): Date {
+  const monday = new Date(boundary.getFullYear(), boundary.getMonth(), boundary.getDate());
+  monday.setDate(monday.getDate() + 2); // boundary is always a Saturday
+  return monday;
+}
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+// WK1 fix r2 (checker must #1) — a plain function taking `boundary` as a
+// parameter, not read off the mutable `nextBoundary` closure variable in
+// `walkWeeks` below. TS won't narrow a captured `let` that a nested function
+// (`closeOpen`) also reassigns, even right after its own `!== null` check —
+// a parameter binding sidesteps that entirely.
+function resolveGapSession(
+  boundary: Date | null,
+  sessionDate: string
+): { opened: true; openedAt: string } | { opened: false } {
+  if (boundary === null || new Date(sessionDate).getTime() < boundary.getTime()) {
+    return { opened: false };
+  }
+  // On the anchor weekend itself (Sat or the following Sun) → the session's
+  // own date, same as always. Past it (Monday or later) → the anchor
+  // Saturday, frozen — her rule 1, see the WK1 fix r2 note at the call site.
+  const onAnchorWeekend = new Date(sessionDate).getTime() < mondayAfter(boundary).getTime();
+  return { opened: true, openedAt: onAnchorWeekend ? sessionDate : formatLocalIso(boundary) };
+}
+
+// Sep 27 2026 · WK1 fix r2 (checker must #1): format a local Date as an ISO
+// string carrying its OWN local offset (e.g. "+03:00"), not the UTC
+// `toISOString()` would give. Needed once a week's openedAt is a boundary
+// WE computed (Saturday 00:00) rather than a session's own already-ISO
+// date string - same shape as every other openedAt in WeekSpan so callers
+// never have to special-case it.
+function formatLocalIso(d: Date): string {
+  const offsetMin = -d.getTimezoneOffset();
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMin);
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
+    `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
+  );
 }
 
 function freshSpan(key: WeekKey, openedAt: string): WeekSpan {
@@ -175,21 +237,35 @@ function timeline(sessions: SessionLite[], moves: MoveOn[], rounds: RoundStart[]
   return events;
 }
 
+/** WK1 fix r2 (checker must #2) — the next week's number + when it opens,
+ * live during a weekday-close gap even with 0 sessions logged. `opensAt` is
+ * frozen the instant the gap starts (the first Sat/Sun boundary after the
+ * close) — the SAME value the eventual span's `openedAt` will carry once a
+ * session finally lands (see `walkWeeks` below), so a caller reading this
+ * mid-gap never disagrees with what week.ts reports once a session arrives. */
+export type PendingWeek = { key: WeekKey; opensAt: string };
+
 /**
  * Walk sessions + moves + round starts after the launch, in time order.
  * Pure: same inputs always give the same spans (a real Undo/delete is just a
  * fresh call with that row missing from the input, tests/week.test.ts #5).
  *
  * `open` is nullable — the amendment's own words: "the days between Tuesday
- * and the next Sat/Sun are a gap with NO open week." A caller (WK2) that
- * needs something to show during that gap projects it itself; this module
- * never invents a start day she hasn't actually started on.
+ * and the next Sat/Sun are a gap with NO open week." During that gap,
+ * `pending` (WK1 fix r2) carries the next week's key + when it opens, so a
+ * caller (WK2) reads the boundary from here instead of re-deriving it and
+ * risking disagreement once the first session actually lands.
  */
 export function walkWeeks(
   sessionsIn: SessionLite[],
   movesIn: MoveOn[],
   roundsIn: RoundStart[]
-): { spans: WeekSpan[]; open: WeekSpan | null; weekOf: Map<string, WeekKey> } {
+): {
+  spans: WeekSpan[];
+  open: WeekSpan | null;
+  pending: PendingWeek | null;
+  weekOf: Map<string, WeekKey>;
+} {
   const sessions = sessionsIn.filter((s) => afterLaunch(s.date));
   const moves = movesIn.filter((m) => afterLaunch(m.at));
   const rounds = roundsIn.filter((r) => afterLaunch(r.at));
@@ -217,8 +293,10 @@ export function walkWeeks(
   // waits - rule 7). Non-null while a gap is open: the amended anchor rule
   // (8d.5) - a session dated at/after this boundary opens the next week,
   // WHATEVER weekday it lands on (checker must #1); a session dated before
-  // it counts backward to `lastClosed` instead (rule 3).
-  let nextBoundary: number | null = null;
+  // it counts backward to `lastClosed` instead (rule 3). Stored as a Date so
+  // r2 can both compare it (getTime()) and format it (formatLocalIso) as the
+  // eventual openedAt.
+  let nextBoundary: Date | null = null;
 
   function closeOpen(at: string, how: 'three' | 'moved_on' | 'round_ended'): void {
     if (!open) return;
@@ -294,12 +372,26 @@ export function walkWeeks(
     // Saturday/Sunday boundary past the close, WHATEVER weekday it actually
     // lands on (her real rhythm rarely has a weekend session, so waiting
     // for an exact Sat/Sun hit meant the next week could never open at
-    // all). `openedAt` is this session's own date, on the SAME weekend as
-    // the boundary or later — never a day she hasn't actually started on
-    // (this module's own rule, never invented).
-    if (nextBoundary !== null && new Date(session.date).getTime() >= nextBoundary) {
+    // all).
+    //
+    // WK1 fix r2 (checker must #1, her rule 1: "a week always has to be
+    // start sat or sun not just mid week"): r1 used the session's OWN date
+    // as openedAt whatever weekday it landed on — a Monday session gave
+    // openedAt = Monday, which is exactly the mid-week start her amendment
+    // forbids. The fix: `openedAt` is the session's own date ONLY when it
+    // actually falls on the anchor weekend itself (Sat or the following
+    // Sun — same day rule 6 already opens on); once a session lands on or
+    // after the following Monday, the week's start is instead the anchor
+    // Saturday at 00:00 local, frozen at the moment the gap began. That
+    // freeze is deliberate (not "the latest Saturday before this session"):
+    // it's the SAME instant `pending.opensAt` already reports throughout the
+    // gap (below), so nothing jumps once a session finally lands, even if
+    // several weekends passed with no session at all. This is a real
+    // behavior decision, not just a formatting choice — flagged for her.
+    const gap = resolveGapSession(nextBoundary, session.date);
+    if (gap.opened) {
       // weekNow was already assigned at the close (8d.3) - just open now.
-      open = freshSpan({ round: roundNow, week: weekNow }, session.date);
+      open = freshSpan({ round: roundNow, week: weekNow }, gap.openedAt);
       open.sessions.push(session);
       openDone = new Set([session.workout]);
       weekOf.set(session.id, open.key);
@@ -337,7 +429,16 @@ export function walkWeeks(
     open.missing = missing;
   }
 
-  return { spans, open, weekOf };
+  // WK1 fix r2 (checker must #2) — still in a gap at the end of this walk
+  // (a weekday close with no session since) means the next week's number and
+  // its boundary are already decided; report them instead of leaving the
+  // caller to reconstruct the same rule and risk disagreeing with it.
+  const pending: PendingWeek | null =
+    open === null && nextBoundary !== null
+      ? { key: { round: roundNow, week: weekNow }, opensAt: formatLocalIso(nextBoundary) }
+      : null;
+
+  return { spans, open, pending, weekOf };
 }
 
 /** Days since the open week opened, local calendar days, today = day N. */
