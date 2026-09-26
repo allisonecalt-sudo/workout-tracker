@@ -3314,7 +3314,8 @@ test('indoor strip: the live segment advances by itself as the countdown crosses
 
   // 1:30 in — still inside the first two-minute segment.
   await advanceClock(page, 90_000);
-  await expect(page.locator('.timer-display')).toHaveText('8:30');
+  // v53 (Sep 26 2026): the running countdown lives in the pip now.
+  await expect(page.locator('.timer-pip-time')).toHaveText('8:30');
   await expect(page.locator('.cardio-routine')).toHaveAttribute('data-segment-index', '0');
 
   // Cross 2:00 → segment 2, with no tap from her.
@@ -3353,7 +3354,7 @@ test('indoor strip: a 25-minute block cycles past segment five back to segment o
   await advanceClock(page, 120_000);
   await expect(page.locator('.cardio-routine')).toHaveAttribute('data-segment-index', '0');
   await expect(page.locator('.cardio-seg-now')).toHaveText('Easy marching in place');
-  await expect(page.locator('.timer-display')).toHaveText('14:40');
+  await expect(page.locator('.timer-pip-time')).toHaveText('14:40');
 
   // …and keeps cycling on the second pass.
   await advanceClock(page, 130_000);
@@ -3614,7 +3615,8 @@ test('elliptical: the reading boxes + setup steps hide while the timer runs, and
   await page.locator('#start-timed').click();
   await expect(page.locator('#ell-km')).toHaveCount(0);
   await expect(page.locator('.ell-guide')).toHaveCount(0);
-  await expect(page.locator('.timer-label')).toHaveText('Running');
+  // v53 (Sep 26 2026): "Running" shows on the pip now, not an inline label.
+  await expect(page.locator('.timer-pip')).toBeVisible();
   await expect(page.locator('#ell-level-up')).toHaveCount(0);
   await expect(page.locator('#ww-outdoor')).toHaveCount(0);
 
@@ -3709,6 +3711,164 @@ test('back (v47): Back steps to the previous exercise, is hidden on the first st
   await expect(page.locator('.round-indicator').first()).toContainText('Main · Round 1 of 2');
   await expect(page.locator('.exercise-name')).toHaveText(lastRoundOneName);
   await expect(page.locator('.step-count')).toHaveText(new RegExp(`^${roundTwoStep - 1} of`));
+});
+
+// --- v53: timer as a pip + Back while it runs (Sep 26 2026) ------------------
+// Her words: "from the timer I need to be able to go back like it wasn't able
+// to go back" · "Maybe the timer should just be like a small circle that pops
+// up or something." Back's own rule (canGoBack) never changed — no step
+// before the very first one — so a running RIDE only gets a testable Back in
+// the one place the CURRENT program doesn't put cardio first: Week 1's
+// Workout C, where a real warmup step (Belly breathing) sits before it. Every
+// later week's A/B/C always opens on cardio, so Back stays correctly absent
+// there, running or not — same as before v53, not a regression.
+test.describe('v53: timer as a pip + Back while it runs', () => {
+  const TUE_WEEK4 = '2026-09-22T14:00:00.000Z'; // Tue inside Round 2 Week 4
+
+  const toWallSit = async (page: Page): Promise<void> => {
+    for (let i = 0; i < 40; i++) {
+      if ((await page.locator('.exercise-name').textContent()) === 'Wall sit') return;
+      await page.locator(NEXT).click();
+    }
+    throw new Error('never reached Wall sit');
+  };
+
+  test('ride: Back is visible while the ride is running, stops the timer, and keeps the real minutes', async ({
+    page,
+  }) => {
+    await movableClock(page, '2026-05-05T10:00:00.000Z'); // Week 1 — cardio is main[0], not warmup[0]
+    await page.goto('/');
+    await page.locator('button[data-workout="C"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await expect(page.locator('.exercise-name')).toHaveText('Belly breathing');
+    await expect(page.locator('#step-back')).toHaveCount(0); // the true first step — nothing behind it
+
+    await page.locator(NEXT).click();
+    await expect(page.locator('.exercise-name')).toHaveText('Cardio');
+    await expect(page.locator('#step-back')).toBeVisible(); // main[0] here, not warmup[0] — Belly breathing IS behind it
+
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.timer-pip')).toBeVisible();
+    await expect(page.locator('#step-back')).toBeVisible(); // v53: still there while the ride runs
+
+    await advanceClock(page, 3 * 60_000);
+    await page.locator('#step-back').click();
+
+    // One step back: the real 3 minutes were kept, the timer stopped, and
+    // she's on Belly breathing again — not a redo-from-scratch discard.
+    await expect(page.locator('.exercise-name')).toHaveText('Belly breathing');
+    await expect(page.locator('.timer-pip')).toHaveCount(0);
+    expect(
+      await page.evaluate(() => localStorage.getItem('workout-tracker:ww-lane-done-min'))
+    ).toBe('3');
+
+    // Forward again: the ride shows its kept minutes, not a fresh Ready face.
+    await page.locator(NEXT).click();
+    await expect(page.locator('.timer-done')).toHaveText('✓ 3 min done');
+  });
+
+  test('hold: Back is visible while a hold is running, stops the timer, and keeps the real seconds', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await toWallSit(page);
+    await expect(page.locator('#step-back')).toBeVisible(); // Wall sit is nowhere near the first step
+
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.timer-pip')).toBeVisible();
+    await expect(page.locator('#step-back')).toBeVisible(); // v53: still there while it holds
+
+    await advanceClock(page, 20_000); // 20 of 45 s
+    await page.locator('#step-back').click();
+
+    // One step back: the hold stopped and the 20 s she held is kept.
+    await expect(page.locator('.exercise-name')).not.toHaveText('Wall sit');
+    await expect(page.locator('.timer-pip')).toHaveCount(0);
+
+    // Forward again: Wall sit shows the held seconds, not a reset Ready face.
+    await page.locator(NEXT).click();
+    await expect(page.locator('.exercise-name')).toHaveText('Wall sit');
+    await expect(page.locator('.timer-done')).toContainText('✓ held 20 s');
+  });
+
+  test('pip: shows the running countdown and a shrinking progress ring', async ({ page }) => {
+    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await toWallSit(page);
+
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.timer-pip-time')).toHaveText('45');
+    const ring = page.locator('.timer-pip-progress');
+    const offsetAtStart = Number(await ring.getAttribute('stroke-dashoffset'));
+    expect(offsetAtStart).toBeCloseTo(0, 0); // the full ring — nothing elapsed yet
+
+    await advanceClock(page, 15_000);
+    await expect(page.locator('.timer-pip-time')).toHaveText('30');
+    const offsetLater = Number(await ring.getAttribute('stroke-dashoffset'));
+    expect(offsetLater).toBeGreaterThan(offsetAtStart); // the ring has emptied by a third
+  });
+
+  test('tap the pip → Pause/Stop sheet → Stop keeps the real seconds', async ({ page }) => {
+    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await toWallSit(page);
+
+    await page.locator('#start-timed').click();
+    await advanceClock(page, 12_000);
+    await page.locator('#timer-pip').click();
+    await expect(page.locator('.timer-pip-sheet')).toBeVisible();
+    await expect(page.locator('.timer-pip-sheet-time')).toHaveText('33'); // 45 - 12 left
+    await page.locator('#stop-timed').click();
+    await expect(page.locator('.timer-done')).toHaveText('✓ held 12 s');
+    await expect(page.locator('.timer-pip-sheet')).toHaveCount(0);
+  });
+
+  test('tap the pip → Cancel closes the sheet without touching the timer', async ({ page }) => {
+    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await toWallSit(page);
+
+    await page.locator('#start-timed').click();
+    await page.locator('#timer-pip').click();
+    await expect(page.locator('.timer-pip-sheet')).toBeVisible();
+    await page.locator('#timer-pip-close').click();
+    await expect(page.locator('.timer-pip-sheet')).toHaveCount(0);
+    await expect(page.locator('.timer-pip')).toBeVisible(); // still running, untouched
+  });
+
+  test.describe('at phone size', () => {
+    test.use({ viewport: { width: 412, height: 915 } });
+
+    test('running pip: no horizontal scroll, and it never sits over Done · Next', async ({
+      page,
+    }) => {
+      await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+      await page.goto('/');
+      await page.locator('button[data-workout="A"]').click();
+      await page.locator('button:has-text("Start")').click();
+      await toWallSit(page);
+      await page.locator('#start-timed').click();
+      await expect(page.locator('.timer-pip')).toBeVisible();
+
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+      expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+
+      const pipBox = (await page.locator('.timer-pip').boundingBox())!;
+      const barBox = (await page.locator('.action-bar').boundingBox())!;
+      expect(pipBox.y + pipBox.height).toBeLessThanOrEqual(barBox.y + 1);
+    });
+  });
 });
 
 // --- v48 P1 · data (Sep 24 2026) ---------------------------------------------
@@ -4473,8 +4633,13 @@ test.describe('v48 P2 shell', () => {
     expect(timerY).toBeLessThan(detailY);
 
     await page.locator('#start-timed').click();
-    await expect(page.locator('#stop-timed')).toBeVisible();
+    // v53 (Sep 26 2026): the running countdown moved into the floating pip —
+    // Stop now lives in its Pause/Stop sheet (same #stop-timed id/handler).
+    await expect(page.locator('#timer-pip')).toBeVisible();
     await expect(page.getByText('Running…')).toHaveCount(0);
+    await page.locator('#timer-pip').click();
+    await expect(page.locator('#stop-timed')).toBeVisible();
+    await page.locator('#timer-pip-close').click();
     await advanceClock(page, 45_000);
     await expect(page.locator('.timer-done')).toHaveText('✓ held 45 s · last time 43');
     await expect(page.locator('.timer-label')).toHaveText('Done');
@@ -4492,7 +4657,9 @@ test.describe('v48 P2 shell', () => {
     await page.locator('#start-timed').click();
     await expect(page.getByText('Running…')).toHaveCount(0);
     await advanceClock(page, 20_000);
-    await expect(page.locator('.timer-display')).toHaveText('25');
+    // v53: the countdown reads off the pip now, not an inline .timer-display.
+    await expect(page.locator('.timer-pip-time')).toHaveText('25');
+    await page.locator('#timer-pip').click();
     await page.locator('#stop-timed').click();
     await expect(page.locator('.timer-done')).toHaveText('✓ held 20 s'); // no earlier wall sit on record
     for (let i = 0; i < 60; i++) {
@@ -4910,13 +5077,18 @@ test.describe('v48 P3 cardio', () => {
     await page.locator('#start-timed').click();
     await expect(page.locator('.countdown-big')).toHaveCount(0);
     await expect(page.getByText('Get ready')).toHaveCount(0);
-    await expect(page.locator('.timer-label')).toHaveText('Running');
-    await expect(page.locator('.timer-display')).toHaveText('10:00');
+    // v53 (Sep 26 2026): the ride countdown lives in the floating pip now —
+    // the "Right now" line is still the elliptical's own face underneath it.
+    await expect(page.locator('.timer-pip-time')).toHaveText('10:00');
+    await expect(page.locator('.cardio-seg-label')).toHaveText('Right now');
+    await page.locator('#timer-pip').click();
     await expect(page.locator('#stop-lane')).toBeVisible();
+    await page.locator('#timer-pip-close').click();
     await expect(page.getByText('Running…')).toHaveCount(0);
     // Stop keeps what she did; the step shows the after-ride face.
     await advanceClock(page, 4 * 60_000);
-    await expect(page.locator('.timer-display')).toHaveText('6:00');
+    await expect(page.locator('.timer-pip-time')).toHaveText('6:00');
+    await page.locator('#timer-pip').click();
     await page.locator('#stop-lane').click();
     await expect(page.locator('.timer-done')).toHaveText('✓ 4 min done');
     await goToStep(page, 'Wall sit');
@@ -5217,13 +5389,14 @@ test.describe('v51 ride numbers screen', () => {
     await page.locator('#ww-elliptical').click();
     await page.locator('#start-timed').click();
     await advanceClock(page, 9 * 60_000); // 9 of 25 min in — still running
-    await expect(page.locator('.timer-label')).toHaveText('Running');
+    // v53 (Sep 26 2026): "Running" now shows on the pip, not an inline label.
+    await expect(page.locator('.timer-pip-time')).toHaveText('16:00'); // 25 - 9 left
 
     await page.locator('#next').click(); // Done · Next mid-ride
 
     // The numbers screen is up, not the running face.
     await expect(page.locator('#ell-time')).toBeVisible();
-    await expect(page.locator('.timer-label')).toHaveCount(0);
+    await expect(page.locator('#timer-pip')).toHaveCount(0);
     // The real minutes she rode (9, not the full 25) were kept.
     expect(
       await page.evaluate(() => localStorage.getItem('workout-tracker:ww-lane-done-min'))
@@ -5239,6 +5412,7 @@ test.describe('v51 ride numbers screen', () => {
     await page.locator('#ww-elliptical').click();
     await page.locator('#start-timed').click();
     await advanceClock(page, 6 * 60_000);
+    await page.locator('#timer-pip').click(); // v53: Stop lives in the pip's sheet now
     await page.locator('#stop-lane').click();
     await expect(page.locator('.timer-done')).toHaveText('✓ 6 min done');
     await expect(page.locator('#ell-time')).toHaveCount(0); // not shown yet
@@ -6010,7 +6184,8 @@ test.describe('v48 P5 logs', () => {
     await goToStep(page, 'Wall sit');
     await page.locator('#start-timed').click();
     await advanceClock(page, 30_000);
-    await expect(page.locator('.timer-display')).toHaveText('15');
+    await expect(page.locator('.timer-pip-time')).toHaveText('15'); // v53: reads off the pip now
+    await page.locator('#timer-pip').click();
     await page.locator('#stop-timed').click();
     await toPostLog(page);
     await expect(page.locator('#wallsit')).toHaveValue('30');

@@ -2859,6 +2859,14 @@ const state: AppState = {
 // already dismissed.
 let stepListOpen = false;
 
+// v53 (Sep 26 2026): whether the running-timer pip's Pause/Stop sheet is
+// open. Same reasoning as stepListOpen above — transient UI, not session
+// progress, so it's deliberately outside AppState/the resume snapshot; a
+// reload lands her back on the step with the sheet closed. stopTimer() (every
+// path that ends a running timer — Stop, Back, advancing, quitting) resets it,
+// so it can never outlive the timer it belongs to.
+let timerPipOpen = false;
+
 // ---------- audio ----------
 
 let audioCtx: AudioContext | null = null;
@@ -2969,6 +2977,7 @@ function stopTimer(): void {
   state.timerSeconds = 0;
   state.preCountdown = 0;
   releaseTimerWakeLock();
+  timerPipOpen = false; // v53: the pip's sheet never outlives the timer it belongs to
 }
 
 function startTimerCore(kind: TimerKind, seconds: number, onComplete: () => void): void {
@@ -4421,14 +4430,41 @@ function advanceExercise(): void {
   render();
 }
 
+// v53 (Sep 26 2026): "from the timer I need to be able to go back like it
+// wasn't able to go back" — Back from a RUNNING ride/hold used to discard the
+// minutes/seconds she'd already done (goBack called stopTimer() straight,
+// same as the "she's redoing it" wall-sit discard below). That's right for a
+// step she hasn't started measuring yet, but wrong once a real timer is
+// counting down: leaving mid-ride or mid-hold isn't a redo, so the time she
+// already put in is kept exactly the way the quiet Stop keeps it
+// (captureLaneMinutesIfLeaving for the elliptical/apartment lane; the same
+// held-seconds math stopTimedHold uses, plus captureWallSitIfPending for the
+// wall sit's own logged number). Called BEFORE stopTimer() clears the clock.
+function captureRunningProgressIfLeaving(): void {
+  const ex = getCurrentExercise();
+  if (!ex) return;
+  if (isIndoorLane(ex.name)) {
+    captureLaneMinutesIfLeaving();
+    return;
+  }
+  if (!isHoldStep(ex)) return;
+  const t = activeTimer;
+  if (t && t.kind === 'timed-exercise' && ex.durationSec) {
+    const remainSec = Math.max(0, (t.endsAt - Date.now()) / 1000);
+    recordHeld(holdStepKey(), Math.max(0, Math.round(ex.durationSec - remainSec)));
+  }
+  if (ex.name === 'Wall sit') captureWallSitIfPending();
+}
+
 // ---------- Back (Allison Sep 24 2026, v47) ----------
 // Her words: "this app needs back button like i can go back an exercise or a
 // round" → "i need to be able to go back". One step backwards through the
 // same walk advanceExercise takes forwards: within a phase, then across the
 // round boundary (Round 2 step 1 → Round 1 last step), then across phases
 // (main → warm-up, upper back → main last round, cool-down → the block before
-// it). Nothing is logged by going back: a running timer stops, a pending
-// wall-sit capture is discarded (she's redoing it), a rest is cancelled.
+// it). A pending wall-sit capture that never got a real second on the clock
+// is still discarded (nothing to keep); a rest is cancelled. v53: a RUNNING
+// timer is different — see captureRunningProgressIfLeaving above.
 function canGoBack(): boolean {
   if (state.screen !== 'workout') return false;
   return !(state.currentPhase === 'warmup' && state.currentExerciseIndex === 0 && !state.isResting);
@@ -4437,6 +4473,7 @@ function canGoBack(): boolean {
 function goBack(): void {
   const w = getCurrentWorkout();
   if (!w || !canGoBack()) return;
+  captureRunningProgressIfLeaving(); // v53: keep the real seconds/minutes — read BEFORE stopTimer() clears the clock
   stopTimer();
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
@@ -8081,6 +8118,70 @@ function renderStepListSheet(w: Workout): string {
     </div>`;
 }
 
+// v53 (Sep 26 2026) — which running timer (if any) the floating pip belongs
+// to. 'timed-exercise' only: a running REST timer also lives in
+// state.timerSeconds, but rest already has its own big ring + Back (see
+// renderRestScreen) and isn't part of this ask. null on the round-break/
+// ride-numbers/paused faces too — nothing to float over there.
+function runningTimedExercise(): { ex: Exercise; kind: 'lane' | 'hold' } | null {
+  if (state.screen !== 'workout') return null;
+  if (state.pausedAt !== null || state.isResting || state.roundBreak || state.rideNumbersOpen) {
+    return null;
+  }
+  if (!activeTimer || activeTimer.kind !== 'timed-exercise' || state.timerSeconds <= 0) return null;
+  const ex = getCurrentExercise();
+  if (!ex) return null;
+  if (isIndoorLane(ex.name)) return { ex, kind: 'lane' };
+  if (isHoldStep(ex)) return { ex, kind: 'hold' };
+  return null;
+}
+
+// v53 (Sep 26 2026) — her words: "Maybe the timer should just be like a
+// small circle that pops up or something." A running ride/hold no longer
+// takes the whole screen: the countdown lives in this ~96px pip, pinned
+// above the action bar (never over Done · Next), while the step's own
+// content (name, Tips, Steps, picture) stays visible and scrollable
+// underneath (see the running branches of renderLaneTimerCard/
+// renderHoldTimerCard, which now step aside instead of drawing the old big
+// slab). Tap it → a small Pause/Stop sheet; Stop reuses the exact
+// #stop-lane/#stop-timed ids and handlers the old slab used, so the real
+// seconds/minutes are kept exactly as before — only where they live moved.
+function renderTimerPip(): string {
+  const running = runningTimedExercise();
+  if (!running) return '';
+  const { ex, kind } = running;
+  const total = ex.durationSec ?? 0;
+  const remaining = state.timerSeconds;
+  const ratio = total > 0 ? Math.max(0, Math.min(1, remaining / total)) : 0;
+  const r = 40;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference * (1 - ratio);
+  const kindLabel = kind === 'lane' ? 'Ride' : 'Hold';
+  const pip = `
+    <button class="timer-pip" id="timer-pip" type="button" aria-label="${kindLabel} timer running, ${formatTimerDisplay(remaining)} left. Tap to pause or stop.">
+      <svg class="timer-pip-ring" viewBox="0 0 96 96" aria-hidden="true">
+        <circle cx="48" cy="48" r="${r}" class="timer-pip-track"></circle>
+        <circle cx="48" cy="48" r="${r}" class="timer-pip-progress"
+          stroke-dasharray="${circumference}" stroke-dashoffset="${offset}"
+          transform="rotate(-90 48 48)"></circle>
+      </svg>
+      <span class="timer-pip-time">${formatTimerDisplay(remaining)}</span>
+    </button>`;
+  if (!timerPipOpen) return pip;
+  const stopId = kind === 'lane' ? 'stop-lane' : 'stop-timed';
+  return `
+    ${pip}
+    <div class="timer-pip-sheet" id="timer-pip-sheet">
+      <div class="timer-pip-sheet-card">
+        <div class="timer-pip-sheet-time">${formatTimerDisplay(remaining)}</div>
+        <div class="timer-pip-sheet-sub">${kindLabel} running</div>
+        <button class="btn-large" id="timer-pip-pause" type="button">⏸ Pause</button>
+        <button class="btn-large btn-back" id="${stopId}" type="button">Stop</button>
+        <button class="back-link" id="timer-pip-close" type="button">Cancel</button>
+      </div>
+    </div>`;
+}
+
 // Full-screen "Paused" overlay — freezes the workout clock and any countdown
 // until she taps Resume. Deliberately unmissable so a step-away can't be left
 // silently running.
@@ -8262,10 +8363,12 @@ function renderLaneTimerCard(ex: Exercise, laneRan: boolean, under = ''): string
   const running = state.timerSeconds > 0 || state.preCountdown > 0;
   let inner: string;
   if (running) {
-    inner = `
-      <div class="timer-label">Running</div>
-      <div class="timer-display">${formatTimerDisplay(state.timerSeconds)}</div>
-      <button class="btn-ghost" id="stop-lane" type="button">Stop</button>`;
+    // v53 (Sep 26 2026): the countdown moved into the floating pip (her words,
+    // "maybe the timer should just be like a small circle that pops up") —
+    // this slab used to take the card here; now the ride/apartment content
+    // (name, "Right now" line, the guided strip) stays visible underneath
+    // instead, and Stop lives in the pip's sheet (same #stop-lane id/handler).
+    return '';
   } else if (laneRan) {
     const mins = laneDoneMinutes() ?? Math.round((ex.durationSec ?? 0) / 60);
     inner = `
@@ -8296,13 +8399,15 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
   const minutes = Math.round((ex.durationSec ?? 0) / 60);
 
   if (running) {
-    // DURING: the timer big at the top, a quiet Stop, one live line. Nothing
-    // else — no setup, no readings sentence (it re-renders every second).
+    // DURING: v53 (Sep 26 2026) — the countdown moved into the floating pip
+    // (renderTimerPip, appended at the top-level render()); this face keeps
+    // just the name + the one live line, per her spec ("for the elliptical
+    // keep the one live 'Right now' line under the name"). No setup, no
+    // readings sentence (it re-renders every second).
     const line = RIDE_LINE[ridePhase(ex.durationSec ?? 0, state.timerSeconds)];
     return `
       ${header}
       <div class="ride-title"><span class="exercise-name">${ELLIPTICAL_NAME}</span><span class="ride-title-reps">${minutes} min</span></div>
-      ${renderLaneTimerCard(ex, laneRan)}
       <div class="card cardio-routine ride-now">
         <div class="cardio-seg-label">Right now</div>
         <div class="cardio-seg-now" id="ride-line">${escapeHtml(line)}</div>
@@ -8375,15 +8480,18 @@ function renderHoldTimerCard(ex: Exercise, showTempo: boolean): string {
   const idle = state.timerSeconds === 0 && state.preCountdown === 0;
   let inner: string;
   if (state.preCountdown > 0) {
+    // v53: the 3-2-1 stays a full card — her words, "hold steps ... keep
+    // their Get-ready 3-2-1, then go to the pip."
     inner = `
       <div class="timer-label">Get ready</div>
       <div class="timer-display countdown-big">${state.preCountdown}</div>
       <button class="btn-ghost" id="stop-timed" type="button">Stop</button>`;
   } else if (!idle) {
-    inner = `
-      <div class="timer-label">Hold</div>
-      <div class="timer-display">${formatTimerDisplay(state.timerSeconds)}</div>
-      <button class="btn-ghost" id="stop-timed" type="button">Stop</button>`;
+    // v53 (Sep 26 2026): once the hold itself is running, the countdown moves
+    // into the floating pip and Stop lives in its sheet (same #stop-timed id
+    // /handler) — this card steps aside so the name/Tips/Steps/picture stay
+    // visible and scrollable, not a big "Hold" slab covering them.
+    return showTempo ? `<div class="card">${renderTempoBar()}</div>` : '';
   } else if (held > 0) {
     // "last time" = the most recent saved session with a real wall sit (logs
     // are newest-first; this session isn't saved yet). Omitted when none.
@@ -10735,6 +10843,13 @@ function render(): void {
     const w = getCurrentWorkout();
     if (w) html += renderStepListSheet(w);
   }
+  // v53 (Sep 26 2026): the running-timer pip — floats over whichever step
+  // face is showing (see renderTimerPip). Hidden while the List sheet is up
+  // (it's a full overlay above it anyway) — the timer itself keeps running
+  // underneath either way, so nothing is lost by not drawing the pip there.
+  if (state.screen === 'workout' && state.pausedAt === null && !stepListOpen) {
+    html += renderTimerPip();
+  }
   // Ship 6: screen transitions — apply enter-animation class except on
   // workout/timer screens where it would feel laggy mid-rep. The class
   // triggers a 220ms fade + 8px translateY with the spring ease curve.
@@ -10997,6 +11112,30 @@ function attachHandlers(): void {
   stepListPanel?.addEventListener('click', (e) => {
     if (e.target === stepListPanel) {
       stepListOpen = false;
+      render();
+    }
+  });
+
+  // v53 (Sep 26 2026): the running-timer pip. Tap opens the Pause/Stop sheet;
+  // Pause reuses togglePause() (the same "Paused" overlay + frozen clock the
+  // header's Pause button gives — one pause mechanism, not two); Stop keeps
+  // #stop-lane/#stop-timed exactly as before (bound below, unchanged).
+  bindClick('timer-pip', () => {
+    timerPipOpen = true;
+    render();
+  });
+  bindClick('timer-pip-close', () => {
+    timerPipOpen = false;
+    render();
+  });
+  bindClick('timer-pip-pause', () => {
+    timerPipOpen = false;
+    togglePause();
+  });
+  const timerPipSheet = document.getElementById('timer-pip-sheet');
+  timerPipSheet?.addEventListener('click', (e) => {
+    if (e.target === timerPipSheet) {
+      timerPipOpen = false;
       render();
     }
   });

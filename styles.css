@@ -4395,6 +4395,108 @@ input[type='number']:focus {
   padding: 2px 8px;
 }
 
+/* v53 (Sep 26 2026) — the running-timer pip. Her words: "Maybe the timer
+ * should just be like a small circle that pops up or something." Pinned well
+ * above the action bar (108px reserved for it, see #app.has-action-bar) so it
+ * never sits over Done · Next; the step content behind it scrolls normally. */
+.timer-pip {
+  position: fixed;
+  right: 16px;
+  bottom: calc(112px + env(safe-area-inset-bottom));
+  z-index: 850;
+  width: 96px;
+  height: 96px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--bg-elev-2);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.timer-pip-ring {
+  position: absolute;
+  inset: 0;
+  width: 96px;
+  height: 96px;
+}
+
+.timer-pip-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 6;
+}
+
+.timer-pip-progress {
+  fill: none;
+  stroke: var(--accent-progress);
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.9s linear;
+}
+
+.timer-pip-time {
+  position: relative;
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: 19px;
+  font-weight: var(--w-number);
+  letter-spacing: var(--track-number);
+  color: var(--ink);
+}
+
+/* The pip's Pause/Stop sheet — same bottom-sheet recipe as .step-list-panel/
+ * .step-list-card (own class names so the two sheets never share styling
+ * side effects). */
+.timer-pip-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.timer-pip-sheet-card {
+  background: var(--grad-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  width: 100%;
+  max-width: 520px;
+  padding: 22px 20px calc(20px + env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.timer-pip-sheet-time {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: 48px;
+  font-weight: var(--w-number);
+  letter-spacing: var(--track-number);
+  color: var(--ink);
+  line-height: 1;
+}
+
+.timer-pip-sheet-sub {
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  margin: 4px 0 18px;
+}
+
+.timer-pip-sheet-card .btn-large + .btn-large {
+  margin-top: 10px;
+}
+
+.timer-pip-sheet-card #timer-pip-close {
+  margin-top: 12px;
+}
+
 /* Post-log's plain skip count (v50, Sep 25 2026) — no verdict, same quiet
  * treatment as the witness line above it. */
 .postlog-skipped {
