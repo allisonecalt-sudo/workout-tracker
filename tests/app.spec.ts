@@ -1264,9 +1264,13 @@ test('swing (v52, was v46): Saturday morning with last week at 2 says today will
   );
   await mockDate(page, '2026-09-19T06:00:00.000Z'); // Sat Sep 19, 09:00 Jerusalem — nothing done yet
   await page.goto('/');
+  // v52 (Sep 26 2026): a swing Saturday now SHOWS last week (her "I want to be
+  // very clear that I'm in week 4 right now"), so the count is last week's
+  // and the old "today will count for it" note is replaced by the week line.
   await expect(page.locator('.week-line')).toHaveText(
     '2 of 3 · C left — tonight counts for Week 3'
   );
+  await expect(page.locator('.home-header h1')).toContainText('Week 3');
   await expect(page.locator('.swing-note')).toHaveCount(0);
 });
 
@@ -2683,15 +2687,15 @@ test('multi-week: "Coming next week" preview renders in Progress with diff', asy
   await expect(bBlock.locator('.next-week-block-list')).toContainText('14');
 });
 
-test('multi-week: Settings About shows Program weeks count (15)', async ({ page }) => {
+test('multi-week: Settings About shows Program weeks count (16)', async ({ page }) => {
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 14" row
-  // (11 round-1 weeks + R2 W1 + R2 W2 + R2 W3).
+  // About section has a "Program weeks: 16" row
+  // (11 round-1 weeks + R2 W1 + R2 W2 + R2 W3 + R2 W4 + R2 W5 (v52.2, Sep 26 2026)).
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 15');
+  ).toContainText('Program weeks: 16');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {
@@ -2775,8 +2779,10 @@ test('deploy hygiene: sw.js cache VERSION stays in sync with APP_VERSION', () =>
   const path = require('path') as typeof import('path');
   const appSrc = fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
   const swSrc = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
-  const appVersion = /APP_VERSION = '(v\d+)'/.exec(appSrc)?.[1];
-  const swVersion = /VERSION = 'workout-tracker-(v\d+)'/.exec(swSrc)?.[1];
+  // v52.2 (Sep 26 2026): versions can carry a dot now (v52.1, v52.2, …) — the
+  // pattern must accept that or a dotted bump falsely reads as "out of sync".
+  const appVersion = /APP_VERSION = '(v\d+(?:\.\d+)?)'/.exec(appSrc)?.[1];
+  const swVersion = /VERSION = 'workout-tracker-(v\d+(?:\.\d+)?)'/.exec(swSrc)?.[1];
   expect(appVersion).toBeTruthy();
   expect(swVersion).toBe(appVersion);
 });
@@ -5662,13 +5668,18 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.home-startnow-card .start-now-row').last()).toContainText('39');
     });
 
-    test('(g) Sat Sep 26 (no Week 5 encoded): the header says which plan is loaded, still one line', async ({
+    // v52.2 (Sep 26 2026): R2W5 shipped, so Sat Sep 26 morning (no sessions
+    // yet, so no swing — homeWeekOffset() is 0 before any session logs) now
+    // gets its OWN plan, not a Week-4 fallback — no more "· Week 4's plan"
+    // suffix. Title updated from "(no Week 5 encoded)"; the fail-loud plan-note
+    // itself is still covered above ((f) and the swing-plan tests below).
+    test('(g) Sat Sep 26 morning (Week 5 now encoded, no sessions yet): the header reads Week 5 clean, still one line', async ({
       page,
     }) => {
       await mockDate(page, '2026-09-26T09:00:00.000Z');
       await page.goto('/');
       const h1 = page.locator('.home-header h1');
-      await expect(h1).toHaveText("Round 2 · Week 5 · Week 4's plan");
+      await expect(h1).toHaveText('Round 2 · Week 5');
       expect((await h1.boundingBox())!.height).toBeLessThan(40);
       const h1Box = (await h1.boundingBox())!;
       const gear = (await page.locator('#open-settings').boundingBox())!;
@@ -5680,9 +5691,10 @@ test.describe('v48 P4 home', () => {
 
     test('(g) the version tag is one line and carries the version + a time', async ({ page }) => {
       const tag = page.locator('.home-header .app-version');
-      // "v4" was v48/v49-specific; match any "v<digits>" so this doesn't need
-      // a hand-edit on every version bump.
-      await expect(tag).toHaveText(/^v\d+ ·/);
+      // "v4" was v48/v49-specific; match any "v<digits>" (with an optional
+      // dotted patch, v52.2 (Sep 26 2026)) so this doesn't need a hand-edit on
+      // every version bump.
+      await expect(tag).toHaveText(/^v\d+(\.\d+)? ·/);
       await expect(tag).toHaveText(/\d{2}:\d{2}$/);
       await expect(tag).not.toContainText(/20\d\d/); // the year lives in Settings › About
       expect((await tag.boundingBox())!.height).toBeLessThan(24);
@@ -5731,11 +5743,11 @@ test.describe('v48 P4 home', () => {
     await expect(line).toContainText("Sat's");
     await expect(line).toContainText('went to');
     await expect(line).toHaveText("0 of 3 this week · Sat's C went to Week 3");
-    // The Saturday dot is still lit, and still opens its session (not the card).
-    await page.locator('.week-dot.dot-C').click();
-    await expect(page.locator('#app')).toContainText('Sat, Sep 19, 2026');
-    await expect(page.locator('.week-line')).toHaveCount(0);
-    await expect(page.locator('.weekly-review-subtitle')).toHaveCount(0);
+    // v52.1 (Sep 26 2026, her "I need b back for 5"): a session that COUNTED
+    // for last week gets no dot in this week's strip — the line already says
+    // where it went — so the Saturday dot is empty here.
+    await expect(page.locator('.week-card .week-dot.dot-C')).toHaveCount(0);
+    await expect(page.locator('.week-card .week-dot.dot-empty')).toHaveCount(7);
   });
 
   test('(d) what left home: no title/subtitle/pick copy, no Recent, no streak, no week arrows', async ({
@@ -5906,6 +5918,15 @@ test.describe('v48 P4 home', () => {
     ]);
     await page.goto('/');
     await expect(page.locator('.home-done-line')).toHaveText('3 of 3 in Week 4');
+    // "I need b back for 5" (22:18): the new week is at 0 of 3, so all three
+    // workouts stay on offer, led by the week's name; the swung B gets no dot
+    // in the new week's strip (the line already says where it went).
+    await expect(page.locator('.home-chips .home-chip')).toHaveCount(3);
+    await expect(page.locator('.home-chips-lead')).toHaveText('Week 5');
+    await expect(page.locator('.week-card .dot-B')).toHaveCount(0);
+    await expect(page.locator('.week-line')).toHaveText(
+      "0 of 3 this week · Sat's B went to Week 4"
+    );
   });
 
   test('(e3) once Saturday completes last week, Up next starts the new week at A', async ({
@@ -5919,6 +5940,50 @@ test.describe('v48 P4 home', () => {
     ]);
     await page.goto('/');
     await expect(page.locator('button.home-hero[data-workout="A"]')).toContainText('Up next');
+  });
+
+  // THE SWING FIX (v52.2, Sep 26 2026): R2W5 starts the same Saturday a swing
+  // session can still count toward Week 4. The plan must follow the week the
+  // session COUNTS toward, not the calendar — see planDateNow()/planDateForLog()
+  // next to homeWeekOffset() in app.ts.
+  // WEEK5-PROPOSAL-2026-09-26.md §e.
+  test("(swing-plan a) Sat Sep 26 evening, Thu A + Fri C logged: B still trains on Week 4's plan (10-min ride) — the swing", async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-26T18:20:00.000Z');
+    await seedLogs(page, [
+      swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+      swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+    ]);
+    await page.goto('/');
+    // B is still Week 4's B — last week is short (A + C only), so tonight's
+    // session swings back to it (same rule as (e2)/(e2b) above).
+    await page.locator('button[data-workout="B"]').click();
+    await expect(page.locator('.prelog-meta')).toContainText('R2 · Week 4');
+    await expect(page.locator('.prelog-meta')).not.toContainText('Week 5');
+    await page.locator('button:has-text("Start")').click();
+    await expect(page.locator('.exercise-name')).toHaveText('Cardio');
+    await expect(page.locator('.exercise-reps')).toHaveText('10 min'); // Week 4's ride, not Week 5's 12
+  });
+
+  test("(swing-plan b) Sun Sep 27, the swing closed last week: A opens on Week 5's plan (12-min ride), header clean", async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-27T09:00:00.000Z');
+    await seedLogs(page, [
+      swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+      swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+      swingLog('sat-b', '2026-09-26T19:30:00.000Z', 'B'),
+    ]);
+    await page.goto('/');
+    // Home header: "Round 2 · Week 5", no "· Week 4's plan" suffix.
+    await expect(page.locator('.home-header h1')).toHaveText('Round 2 · Week 5');
+    await page.locator('button[data-workout="A"]').click();
+    await expect(page.locator('.prelog-meta')).toContainText('R2 · Week 5');
+    await expect(page.locator('.prelog-meta')).not.toContainText("'s plan");
+    await page.locator('button:has-text("Start")').click();
+    await expect(page.locator('.exercise-name')).toHaveText('Cardio');
+    await expect(page.locator('.exercise-reps')).toHaveText('12 min'); // Week 5's ride
   });
 
   test('(f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress', async ({

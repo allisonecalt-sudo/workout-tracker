@@ -477,12 +477,15 @@ const SUPABASE_ANON_KEY =
 // v52 (Sep 26 2026, main/live): swing-Saturday home — the week tonight
 // counts toward (Week 4 on top, 8 days shown, A + C done) + Up next fix
 // (getTodaysPick / homeWeekOffset).
-// v53 (Sep 26 2026): merges v52's swing-week home into this branch's ride
-// numbers (Next -> "from the machine" entry screen) + Cue -> Tips (no
-// program notes in what she reads). Her words: "dont go to next week till
-// i approve".
+// v52.1/v52.2 (Sep 26 2026, main/live): after a swung Saturday the new week
+// offers A, B and C; Round 2 Week 5 (A/B ride 10 -> 12 min); the plan
+// follows the week a session counts toward.
+// v53 (Sep 26 2026): merges main's swing-week + Week 5 fixes into this
+// branch's ride numbers (Next -> "from the machine" entry screen) + Cue ->
+// Tips (no program notes in what she reads) + W0's offline-list fix. Her
+// words: "dont go to next week till i approve".
 const APP_VERSION = 'v53';
-const BUILD_DATE = 'Sep 26, 2026 · 21:45';
+const BUILD_DATE = 'Sep 26, 2026 · 23:38';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -516,7 +519,9 @@ function genId(): string {
 // literally appending one more row — no other code changes needed.
 //
 // Rules baked in (per Allison + WEEK-3-REGROUP-2026-05-15.md):
-//  - Walks STAY at 10/10/25 min strolling pace across all weeks.
+//  - Walks STAY at 10/10/25 min strolling pace across all weeks. SUPERSEDED Sep
+//    26 2026: the A/B ride earned 10 → 12 min in Round 2 Week 5 (her "now I
+//    should have ABC workout 5 available to me"); C's 25 is unearned, holds.
 //  - Cool-down stretches stay placeholder-shaped (no Claude-generated names).
 //  - Week 4 forearm-plank goes 1×15 → 2×15 ONLY (no longer hold).
 //  - 45-min cap per workout — see regroup doc §5.
@@ -2576,13 +2581,107 @@ PROGRAM.push({
   },
 });
 
+// ---------------------------------------------------------------------------
+// ROUND 2 · WEEK 5 (Sat Sep 26 – Fri Oct 2 2026) — shipped Sep 26 2026, on her
+// go. Her words tonight: "the whole of week five is a mess because it's not
+// doing week five ... now I should have ABC workout 5 available to me".
+// Standing brief: "always progressing but at a pace that will still keep me
+// engaged" (Sep 24), "dont raise too fast" (Sep 7). Proposal + receipts:
+//   second-brain/self/health/workout-app-audit-2026-09-24/next-level-2026-09-26/WEEK5-PROPOSAL-2026-09-26.md
+//
+// ONE dial: the A/B ride 10 → 12 min. Everything else HOLDS.
+//
+// WHY one: Week 4 went 3/3 (Thu A · Fri C · Sat B via the swing) and she felt
+// good (body 8→8, 8→9, 9→9), but two body signals spoke for the first time:
+//   - wrist 4 after C (Fri; her 7 on a misread scale, saved as 4 on her "Yes flip
+//     it") and 4 before → 3 after B (Sat). Her words: "a little bit worked
+//     definitely but it's okay" (Sep 25) · "Wrist is getting used to exercise but
+//     lightly doing it is important" (Sep 26).
+//   - back 2 after C (same flipped row) and 0 before → 1 after B.
+// Engine spec §9: wrist 3+ → the upper/hands lane rests; back 1+ in two sessions
+// → legs + core rest, and "the cardio step still happens" (spec, Weeks 5-12 note).
+// The ride is the one lane with neither signal in it: no spinal load, and no grip
+// load if the hands stay light (fixed handles, elliptical-york-bx200.md).
+//
+// THE RIDE (CARDIO_AB rung 1, spec §4): earned by the ladder's own gate. The last
+// two A/B rides were logged at the full 10 (10:02 Thu A, 10:00 Sat B, both level
+// 5). The gate asks for target − 2 = 10. Same step NAME ('Outdoor walk'), so the
+// walk, apartment and elliptical lanes all read the new minutes off `reps`
+// (walkStepMinutes / heroCardioLine). No voice note bakes "10 min" (the walk
+// script says "even ten minutes counts"; the how-to says "the minutes on your
+// screen").
+//
+// DELIBERATELY NOT IN THIS WEEK:
+//  - C's ride stays 25: one C ride logged (25:01 Fri), and rung 30 wants two at
+//    28+. Her note on it: "Knee ok felt it one dot on eliptical".
+//  - Row + curl stay 2 × 12 at 1 kg. The engine's her-ask step (2 × 15) waits: wrist
+//    4 → 3, and the curl came back "right", not "easy". THE 1 KG CEILING HOLDS
+//    (Sep 25: "it still needs to keep within 1K").
+//  - Wall lean stays 2 × 15-20 s (wrist). Her 22:13 "I need to be able to do the
+//    timer again" is the set-2 timer, an app fix, not a program change.
+//  - Wall sit stays 45: she held 44 on Sep 24, under target, so not earned.
+//  - Split squat exactly as Week 4 (only its 2nd week). The back spoke on the C
+//    and B days, not the split-squat day (A's back wasn't answered). TRIPWIRE for
+//    Week 6: back 1+ after A, or 3+ any day → A goes back to bodyweight squats.
+//  - Band clamshell 10/side, bird dog legs-only, calf raises, bridges, dead bug,
+//    plank: hold (back).
+//  - Lisa-gated, still parked: anything above 1 kg · wall push-up · counter-height
+//    lean · more palm load · the Sep-7 road's Week-5 single-leg calf raise
+//    (single-leg/balance is on Lisa's list, engine spec §2).
+// PACE GUARD: max one change per workout. A and B get the same small dial; C none.
+// ---------------------------------------------------------------------------
+const R2W4_PLAN = PROGRAM[PROGRAM.length - 1]!;
+if (R2W4_PLAN.round !== 2 || R2W4_PLAN.weekNum !== 4) {
+  throw new Error('R2W5: expected the last PROGRAM row to be Round 2 Week 4');
+}
+// A and B have carried the shared WALK_WARMUP_AB since R2W1. If that ever stops
+// being true, fail loudly instead of silently dropping a warm-up move.
+if (
+  R2W4_PLAN.workouts.A.warmup !== WALK_WARMUP_AB ||
+  R2W4_PLAN.workouts.B.warmup !== WALK_WARMUP_AB
+) {
+  throw new Error('R2W5: expected Week 4 A and B to use WALK_WARMUP_AB');
+}
+
+// Only the ride's minutes move. Belly breathing, pelvic tilts and glute squeezes
+// travel unchanged, and the name stays 'Outdoor walk' (walkStepMinutes, the three
+// cardio lanes, the detail card and the voice note all key off it).
+const WALK_WARMUP_AB_12: Exercise[] = WALK_WARMUP_AB.map((ex) =>
+  ex.name === 'Outdoor walk' ? { ...ex, reps: '12 min' } : ex
+);
+
+PROGRAM.push({
+  round: 2,
+  weekNum: 5,
+  startsOn: '2026-09-26',
+  label: 'Round 2 — Week 5 · a 12-minute ride in A and B, the rest holds',
+  workouts: {
+    A: {
+      ...R2W4_PLAN.workouts.A,
+      description:
+        'Same moves as last week · ride 12 min (elliptical or walk) · 2 rounds · ~32 min',
+      warmup: WALK_WARMUP_AB_12,
+    },
+    B: {
+      ...R2W4_PLAN.workouts.B,
+      description:
+        'Same moves as last week · ride 12 min (elliptical or walk) · 2 rounds · ~32 min',
+      warmup: WALK_WARMUP_AB_12,
+    },
+    // C unchanged on purpose: its 25-min ride isn't earned up yet (one C ride
+    // logged, knee "one dot"), and C stays the lighter day.
+    C: { ...R2W4_PLAN.workouts.C },
+  },
+});
+
 // --- Resolvers -----------------------------------------------------------
 //
 // All "what's the workout today?" logic flows through these two functions.
-// `date` defaults to now so tests can mock the system clock and still get
-// deterministic answers.
+// `date` defaults to `planDateNow()` (Sep 26 2026, the swing fix — see that
+// function, next to `homeWeekOffset()` below) so tests can mock the system
+// clock and still get deterministic answers.
 
-function getWeekPlan(date: Date = new Date()): WeekPlan {
+function getWeekPlan(date: Date = planDateNow()): WeekPlan {
   // Pick the highest-weekNum plan whose startsOn is on or before `date`. If
   // `date` is before Week 1 (shouldn't happen — PROGRAM_START_DATE is week 1),
   // fall back to Week 1. If `date` is past the last encoded week, fall back
@@ -2601,11 +2700,11 @@ function getWeekPlan(date: Date = new Date()): WeekPlan {
   return chosen;
 }
 
-function getWorkoutById(id: WorkoutId, date: Date = new Date()): Workout {
+function getWorkoutById(id: WorkoutId, date: Date = planDateNow()): Workout {
   return getWeekPlan(date).workouts[id];
 }
 
-function getFutureWeekPlans(date: Date = new Date()): WeekPlan[] {
+function getFutureWeekPlans(date: Date = planDateNow()): WeekPlan[] {
   const current = getWeekPlan(date);
   // indexOf, not findIndex-by-weekNum: week numbers repeat across rounds.
   const currentIdx = PROGRAM.indexOf(current);
@@ -2615,7 +2714,7 @@ function getFutureWeekPlans(date: Date = new Date()): WeekPlan[] {
 // Encoded weeks BEFORE the current one, oldest → newest. Powers the collapsed
 // "Past weeks" surface on home so previous programming stays browsable (the
 // archive-not-delete principle) without expanding heavy blocks by default.
-function getPastWeekPlans(date: Date = new Date()): WeekPlan[] {
+function getPastWeekPlans(date: Date = planDateNow()): WeekPlan[] {
   const current = getWeekPlan(date);
   const currentIdx = PROGRAM.indexOf(current);
   return PROGRAM.slice(0, currentIdx);
@@ -4043,7 +4142,10 @@ const V50_MOOD_SESSION_COLUMNS = ['mood_before', 'mood_after'] as const;
 // network (v48, Sep 24 2026). Every structured number has its own column now;
 // `notes` carries only system annotations.
 function sessionPayload(entry: LogEntry): Record<string, unknown> {
-  const hasWallSit = workoutHasWallSit(getWorkoutById(entry.workout, new Date(entry.date)));
+  // The swing fix (Sep 26 2026): the plan a session uses follows the week it
+  // COUNTS toward, not its calendar date — see planDateForLog() next to
+  // homeWeekOffset() below.
+  const hasWallSit = workoutHasWallSit(getWorkoutById(entry.workout, planDateForLog(entry)));
   return {
     id: entry.id,
     date: entry.date,
@@ -6495,7 +6597,36 @@ function homeWeekOffset(): number {
   return lastWeek > 0 && lastWeek < SESSIONS_PER_WEEK_TARGET ? 1 : 0;
 }
 
-function getWeekDots(offset = 0, withSwingSaturday = false): WeekDotInfo[] {
+// THE SWING FIX (Sep 26 2026). The problem: `getWeekPlan(date)` was a pure
+// calendar lookup, but a swing-Saturday session COUNTS toward last week
+// (attributeSessionsToWeeks). Once the next PROGRAM row starts that same
+// Saturday (R2W5 starts 2026-09-26), the calendar lookup would hand a
+// Saturday-night swing session the NEW week's moves — a session that counts
+// for Week 4 would train Week 5's plan. The fix: the plan a session uses
+// follows the week the session COUNTS toward, same rule as
+// attributeSessionsToWeeks / homeWeekOffset. This is also the one seam for her
+// "dont go to next week till i approve" gate: when that ships, planDateNow()
+// returns the unapproved week's Saturday.
+// second-brain/self/health/workout-app-audit-2026-09-24/next-level-2026-09-26/WEEK5-PROPOSAL-2026-09-26.md §e
+
+/** The date whose plan applies to a session starting NOW. */
+function planDateNow(): Date {
+  return homeWeekOffset() === 1 ? saturdayForOffset(1) : new Date();
+}
+
+/** The date whose plan applied to a SAVED session: the Saturday of the week it counts toward. */
+function planDateForLog(entry: LogEntry): Date {
+  const same = (l: LogEntry): boolean =>
+    entry.id ? l.id === entry.id : l.date === entry.date && l.workout === entry.workout;
+  const logs = loadLogs(); // fresh objects every call, so match by id, never by identity
+  const all = logs.some(same) ? logs : [...logs, entry]; // sessionPayload can run before the save
+  for (const [l, weekMs] of attributeSessionsToWeeks(all)) {
+    if (same(l)) return new Date(weekMs);
+  }
+  return new Date(entry.date);
+}
+
+function getWeekDots(offset = 0, withSwingSaturday = false, attributed = false): WeekDotInfo[] {
   const logs = loadLogs();
   // Allison's week = Sat..Fri (Shabbat-anchored). See memory
   // `reference_week_definition.md`. Saturday is index 0; Friday is index 6.
@@ -6506,7 +6637,7 @@ function getWeekDots(offset = 0, withSwingSaturday = false): WeekDotInfo[] {
   // before it).
   if (withSwingSaturday) dotLabels.push('S');
   const saturday = saturdayForOffset(offset);
-  const attribution = withSwingSaturday ? attributeSessionsToWeeks(logs) : null;
+  const attribution = withSwingSaturday || attributed ? attributeSessionsToWeeks(logs) : null;
 
   return dotLabels.map((label, i) => {
     const d = new Date(saturday);
@@ -7326,9 +7457,12 @@ function renderGearCard(): string {
 // ---------------------------------------------------------------------------
 
 // The header's one line: the week she's in. When the loaded plan is a
-// different week (no Week 5 encoded yet on Sat Sep 26), say so — fail-loud
-// (ux.md #10: the banner said Week 5 while pre-log said Week 4). Returns HTML:
-// the plan note is a smaller span so the title stays on one line.
+// different week (e.g. mid-round, before that week's row is encoded), say so
+// — fail-loud (ux.md #10: the banner said Week 5 while pre-log said Week 4).
+// R2W5 shipped Sep 26 2026, so this no longer fires on a plain Saturday — only
+// on a genuinely un-encoded week, or (via planDateNow) a swing Saturday whose
+// NEXT week exists but hasn't been approved yet. Returns HTML: the plan note
+// is a smaller span so the title stays on one line.
 function homeWeekTitle(): string {
   const week = homeWeekOffset() === 1 ? getViewedProgramWeek(1) : getProgramWeek();
   if (week.skippedLabel) return `${week.skippedLabel} week`;
@@ -7389,7 +7523,7 @@ function workoutChipLabel(w: Workout): string {
   return `${w.id} · ${w.name.split(/[\s+]+/)[0] ?? ''}`;
 }
 
-function renderWorkoutChips(exclude: WorkoutId): string {
+function renderWorkoutChips(exclude: WorkoutId | null, lead = 'or do'): string {
   const chips = (['A', 'B', 'C'] as WorkoutId[])
     .filter((id) => id !== exclude)
     .map((id) => {
@@ -7397,7 +7531,7 @@ function renderWorkoutChips(exclude: WorkoutId): string {
       return `<button class="btn-chip home-chip" data-workout="${id}" type="button" aria-label="Start Workout ${id} · ${escapeHtml(w.name)}">${escapeHtml(workoutChipLabel(w))}</button>`;
     })
     .join('');
-  return `<div class="home-chips"><span class="home-chips-lead">or do</span>${chips}</div>`;
+  return `<div class="home-chips"><span class="home-chips-lead">${escapeHtml(lead)}</span>${chips}</div>`;
 }
 
 // The "Up next" hero — the ONE sage thing on home. The whole card is the tap
@@ -7484,7 +7618,10 @@ function renderHome(): string {
   const pick = getTodaysPick();
   const weekWalks = walksThisWeek();
   const walkStartedAt = activeWalkStart();
-  const weekDots = getWeekDots(homeOffset, homeOffset === 1);
+  // Sep 26 2026: the strip shows only sessions that COUNT for the shown week —
+  // her screenshot had Saturday's B in Week 5's strip while the line said it
+  // went to Week 4.
+  const weekDots = getWeekDots(homeOffset, homeOffset === 1, true);
 
   // DECISIONS Q2 — the Saturday swing in WORDS, every day (not only on
   // Saturdays): "0 of 3 this week · Sat's C went to Week 3 · 39 total".
@@ -7593,7 +7730,14 @@ function renderHome(): string {
           : renderDoneTodayCard(doneToday, weekCount)
         : renderUpNextHero(pick)
     }
-    ${renderWorkoutChips(doneToday ? doneToday.workout : pick)}
+    ${
+      // Sep 26 2026, her words "I need b back for 5": a Saturday session that
+      // counted for LAST week leaves the new week at 0 of 3, so all three
+      // workouts stay on offer (the swung one included).
+      doneToday && attribution.get(doneToday) !== saturdayForOffset(0).getTime()
+        ? renderWorkoutChips(null, `Week ${week.num}`)
+        : renderWorkoutChips(doneToday ? doneToday.workout : pick)
+    }
     ${
       // v48 · P5: the 2 kg question sits right under the hero + its chips (the
       // chips read as part of the hero, so the card goes after them).
@@ -7804,10 +7948,11 @@ function workoutNeedsWristLine(w: Workout): boolean {
 }
 
 // "R2 · Week 4" from the calendar; when the loaded plan is a different week
-// (Sat Sep 26 has no Week 5 encoded) it names the plan instead — the same
-// fail-loud as the home header (DECISIONS §5).
+// it names the plan instead — the same fail-loud as the home header (DECISIONS
+// §5). Swing fix (Sep 26 2026): mirrors homeWeekTitle's viewed-week choice, so
+// a swing-Saturday pre-log reads last week's label, not the calendar's.
 function preLogWeekLabel(): string {
-  const week = getProgramWeek();
+  const week = homeWeekOffset() === 1 ? getViewedProgramWeek(1) : getProgramWeek();
   const plan = getWeekPlan();
   const planRound = plan.round ?? 1;
   const round = week.round > 1 ? `R${week.round} · ` : '';
@@ -9346,8 +9491,9 @@ function renderHistoryDetail(): string {
   if (cardio)
     rows.push(detailRow('Cardio', escapeHtml(cardioText(cardio)), { id: 'detail-cardio' }));
   if (log.liteDay) {
-    // Lite = one round less than the plan that week had.
-    const rounds = Math.max(1, getWorkoutById(log.workout, new Date(log.date)).rounds - 1);
+    // Lite = one round less than the plan that week had. Swing fix (Sep 26
+    // 2026): the plan follows the week the session counted toward.
+    const rounds = Math.max(1, getWorkoutById(log.workout, planDateForLog(log)).rounds - 1);
     rows.push(detailRow('Lite', `${rounds} round${rounds === 1 ? '' : 's'}`));
   }
   const arms = armFeelText(log.armFeel);
