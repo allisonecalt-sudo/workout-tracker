@@ -442,6 +442,10 @@ test('untouched sliders (v46): a slider she DID move saves her number; the other
   await page.locator('button:has-text("Start")').click();
   await walkToPostLog(page);
   await page.locator('#back-some').click();
+  // v53 (Sep 26 2026): the back/wrist chip is drawn in FEEL now (her fix:
+  // "It was the opposite of what it meant" / "flip it... make it all
+  // align") — button #back-2 still means "feel 2", which now SAVES as pain
+  // 8 (painFromFeel: pain = 10 − feel), not pain 2.
   await page.locator('#back-2').click();
   await page.locator('#save-log').click();
   await expect(page.locator('.home-header h1')).toBeVisible();
@@ -450,7 +454,7 @@ test('untouched sliders (v46): a slider she DID move saves her number; the other
   const logs = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>;
   expect(logs[0]?.['capacityBefore']).toBe(7);
   expect(logs[0]?.['capacityAfter']).toBeNull();
-  expect(logs[0]?.['backPain']).toBe(2);
+  expect(logs[0]?.['backPain']).toBe(8);
 });
 
 // v50 · mood: mood-before survives from pre-log, mood-after from post-log —
@@ -6048,7 +6052,13 @@ test.describe('v48 P5 logs', () => {
     expect(log['backPain']).toBeNull();
   });
 
-  test('(d) back: "Something" opens a blank 1-10 row; tapping 4 saves 4', async ({ page }) => {
+  // v53 (Sep 26 2026): the row reads FEEL now ("How does your back feel?",
+  // 1 hurts a lot · 10 feels fine) — her fix for "It was the opposite of
+  // what it meant". Tapping the "4" chip (feel 4) SAVES pain 6
+  // (painFromFeel: pain = 10 − feel), not pain 4. Storage stays pain-shaped.
+  test('(d) back: "Something" opens a blank 1-10 row; tapping feel 4 saves pain 6', async ({
+    page,
+  }) => {
     await mockDate(page, TUE_WEEK4);
     await page.goto('/');
     await page.locator('button[data-workout="C"]').click();
@@ -6060,7 +6070,7 @@ test.describe('v48 P5 logs', () => {
     await page.locator('#back-4').click();
     await expect(page.locator('#back-4')).toHaveAttribute('aria-checked', 'true');
     const log = await saveAndRead(page);
-    expect(log['backPain']).toBe(4);
+    expect(log['backPain']).toBe(6);
   });
 
   test('(d) back: "Something" opened but no number tapped saves null', async ({ page }) => {
@@ -6115,7 +6125,9 @@ test.describe('v48 P5 logs', () => {
     expect(untouched['backPainBefore']).toBeNull();
   });
 
-  test('(d2) back BEFORE: "Something" opens a blank 1-10 row; tapping 4 saves 4', async ({
+  // v53 (Sep 26 2026): feel 4 -> pain 6 at the edge, same conversion as the
+  // post-log row (renderBackWristControl is shared between the two).
+  test('(d2) back BEFORE: "Something" opens a blank 1-10 row; tapping feel 4 saves pain 6', async ({
     page,
   }) => {
     await mockDate(page, TUE_WEEK4);
@@ -6131,10 +6143,11 @@ test.describe('v48 P5 logs', () => {
     await page.locator('#begin').click();
     await toPostLog(page);
     const log = await saveAndRead(page);
-    expect(log['backPainBefore']).toBe(4);
+    expect(log['backPainBefore']).toBe(6);
   });
 
-  test('(d2) wrist BEFORE: "Something" opens a blank 1-10 row; tapping 3 saves 3, back stays untouched', async ({
+  // v53 (Sep 26 2026): feel 3 -> pain 7 at the edge.
+  test('(d2) wrist BEFORE: "Something" opens a blank 1-10 row; tapping feel 3 saves pain 7, back stays untouched', async ({
     page,
   }) => {
     await mockDate(page, TUE_WEEK4);
@@ -6146,7 +6159,7 @@ test.describe('v48 P5 logs', () => {
     await page.locator('#begin').click();
     await toPostLog(page);
     const log = await saveAndRead(page);
-    expect(log['wristPainBefore']).toBe(3);
+    expect(log['wristPainBefore']).toBe(7);
     expect(log['backPainBefore']).toBeNull();
   });
 

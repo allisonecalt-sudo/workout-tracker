@@ -7,6 +7,7 @@
 import { EXERCISE_VISUALS } from './exercise-visuals.js';
 import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
 import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
+import { painFromFeel, feelFromPain } from './pain-feel.js';
 import {
   excludedUntouchedCount,
   todayCycleStatus,
@@ -7557,6 +7558,9 @@ function renderBodyChips(
 // a clean session; Back/Wrist each open their own 1-10 row) — only the ids
 // and which state fields feed it differ, passed in by the caller so post-
 // log's already-shipped ids (and tests) never move.
+// v53 (Sep 26 2026): backValue/wristValue arrive here as STORED PAIN — the
+// chip row itself is drawn and read back in FEEL (feelFromPain), so the tap
+// handler below is the only other place that has to know about the flip.
 function renderBackWristControl(opts: {
   fineId: string;
   backSomeId: string;
@@ -7573,14 +7577,14 @@ function renderBackWristControl(opts: {
   const bothFine =
     opts.backTouched && opts.backValue === 0 && opts.wristTouched && opts.wristValue === 0;
   const backRow = opts.backOpen
-    ? `<div class="label-text body-label">Back</div>
-       ${renderChipRow(opts.backChipGroup, opts.backValue, opts.backTouched && opts.backValue > 0, 'Back pain, 1 to 10')}
-       <div class="body-anchor">1 barely · 10 worst</div>`
+    ? `<div class="label-text body-label">How does your back feel?</div>
+       ${renderChipRow(opts.backChipGroup, feelFromPain(opts.backValue), opts.backTouched && opts.backValue > 0, 'How does your back feel, 1 to 10')}
+       <div class="body-anchor">1 hurts a lot · 10 feels fine</div>`
     : '';
   const wristRow = opts.wristOpen
-    ? `<div class="label-text body-label">Wrist</div>
-       ${renderChipRow(opts.wristChipGroup, opts.wristValue, opts.wristTouched && opts.wristValue > 0, 'Wrist pain, 1 to 10')}
-       <div class="body-anchor">1 barely · 10 worst</div>`
+    ? `<div class="label-text body-label">How does your wrist feel?</div>
+       ${renderChipRow(opts.wristChipGroup, feelFromPain(opts.wristValue), opts.wristTouched && opts.wristValue > 0, 'How does your wrist feel, 1 to 10')}
+       <div class="body-anchor">1 hurts a lot · 10 feels fine</div>`
     : '';
   return `
     <div class="field back-field">
@@ -8988,10 +8992,15 @@ function renderSessionRow(l: LogEntry, logs: LogEntry[]): string {
   const idAttr = l.id ? `data-detail="${escapeHtml(l.id)}"` : '';
   const trend = l.workout === 'A' && l.wallSitSec > 0 ? getWallSitTrend(logs, l.id ?? null) : [];
   const spark = renderSparkline(trend);
+  // v53 (Sep 26 2026): "back pain" (was "back") — labeled, not converted. The
+  // stored number here is still PAIN (higher = worse); only the live 1-10
+  // TAP on the pre/post-log screens flipped to "feel" (10 = fine). Naming
+  // this one plainly as pain keeps the two screens from reading as the same
+  // scale in opposite directions (her ask: "make it all align").
   const back =
     l.backPain === null
-      ? 'back —'
-      : `back <span class="session-back${l.backPain >= BACK_PAIN_STOP_AT ? ' session-back-warn' : ''}">${l.backPain}</span>`;
+      ? 'back pain —'
+      : `back pain <span class="session-back${l.backPain >= BACK_PAIN_STOP_AT ? ' session-back-warn' : ''}">${l.backPain}</span>`;
   const wall =
     // v46: B and C have no wall sit — "wall 0s" there read as a zero.
     l.wallSitSec > 0 || l.workout === 'A' ? ` · wall ${l.wallSitSec}s` : '';
@@ -11026,6 +11035,11 @@ function attachHandlers(): void {
 
   // v48 · P5: the 1-10 body/back chips. Tap = that number; tap the chosen one
   // again = no reading (null), the way an untouched slider saved since v46.
+  // v53 (Sep 26 2026): the back/wrist groups are drawn in FEEL (renderBack-
+  // WristControl), so `v` here is a FEEL number for those four groups — convert
+  // with painFromFeel before it touches state, which stays PAIN throughout
+  // (DB columns, the progression flare gate, the cycle page). Body/mood are
+  // untouched — they were never inverted.
   document.querySelectorAll<HTMLButtonElement>('[data-body-chip]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const group = btn.dataset['bodyChip'];
@@ -11045,19 +11059,19 @@ function attachHandlers(): void {
         state.moodAfter = v;
         state.moodAfterTouched = !again;
       } else if (group === 'back') {
-        state.backPain = v;
+        state.backPain = painFromFeel(v);
         state.backPainTouched = !again;
         state.backSomethingOpen = true;
       } else if (group === 'wrist') {
-        state.wristPain = v;
+        state.wristPain = painFromFeel(v);
         state.wristPainTouched = !again;
         state.wristSomethingOpen = true;
       } else if (group === 'back-before') {
-        state.backPainBefore = v;
+        state.backPainBefore = painFromFeel(v);
         state.backPainBeforeTouched = !again;
         state.backBeforeSomethingOpen = true;
       } else if (group === 'wrist-before') {
-        state.wristPainBefore = v;
+        state.wristPainBefore = painFromFeel(v);
         state.wristPainBeforeTouched = !again;
         state.wristBeforeSomethingOpen = true;
       }
