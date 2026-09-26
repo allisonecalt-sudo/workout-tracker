@@ -179,6 +179,14 @@ type LogEntry = {
   // before the jump list existed (nothing was tracked to skip), 0 on a v50
   // session where everything got a Done tap. No verdict, just the count.
   stepsSkipped?: number | null;
+  // v53 (Sep 26 2026): this row's ride numbers were fixed AFTER it already
+  // synced (renderHistoryEdit/saveHistoryEdit) — the server already has this
+  // id, so the queued write is a PATCH, never another POST (postSession's
+  // ignore-duplicates would just no-op against an id it already has and the
+  // fix would silently never reach Supabase). Cleared back to false the
+  // moment the PATCH lands (markLogEdited). Undefined/false on every session
+  // that was never edited after the fact.
+  pendingEdit?: boolean;
   synced?: boolean;
 };
 
@@ -189,6 +197,10 @@ type AppScreen =
   | 'post-log'
   | 'history'
   | 'history-detail'
+  // v53 (Sep 26 2026): fix a past session's ride numbers — her words: "I
+  // don't know how to update this information... there have to be an easy
+  // way to enter the data." Reached from history-detail's Edit button.
+  | 'history-edit'
   | 'weekly-review'
   | 'progress'
   | 'settings'
@@ -3730,6 +3742,33 @@ function formatMmSs(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// v53 (Sep 26 2026) — the same three console-reading validators as
+// ellipticalKm()/ellipticalPulse()/ellipticalKcal() above, but pure (a plain
+// string in, never localStorage): the history-edit screen (renderHistoryEdit)
+// edits a saved LogEntry's fields directly, not the live in-workout keys those
+// three read. Same rule as every reading in this app: blank or out-of-range
+// is not a value — null, never a guess or a zero.
+function parseKmReading(raw: string): number | null {
+  const v = raw.trim().replace(',', '.');
+  if (v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 && n < 100 ? Math.round(n * 100) / 100 : null;
+}
+
+function parsePulseReading(raw: string): number | null {
+  const v = raw.trim().replace(',', '.');
+  if (v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 30 && n <= 230 ? Math.round(n) : null;
+}
+
+function parseKcalReading(raw: string): number | null {
+  const v = raw.trim().replace(',', '.');
+  if (v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 && n < 5000 ? Math.round(n * 10) / 10 : null;
+}
+
 // Saved on every keystroke so the value survives a re-render or an app close.
 function setEllipticalReading(key: string, raw: string): void {
   const v = raw.trim().replace(',', '.');
@@ -4107,6 +4146,82 @@ async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
     return false;
   } catch (err) {
     console.warn('[sync] push threw:', err);
+    return false;
+  }
+}
+
+function markLogEdited(id: string): void {
+  const logs = loadLogs();
+  const idx = logs.findIndex((l) => l.id === id);
+  if (idx === -1) return;
+  const entry = logs[idx];
+  if (!entry) return;
+  logs[idx] = { ...entry, synced: true, pendingEdit: false };
+  writeLogs(logs);
+}
+
+// Pure — the PATCH request for an EDITED session (pendingEdit rows): the row
+// already exists in Supabase (it synced once already), so the id goes in the
+// URL filter, never the body, and never another POST — postSession's
+// ignore-duplicates would just no-op against an id the server already has and
+// her fix would silently never land. Same shape as sessionPayload/
+// legacySessionPayload above (pure, so it's testable without a network — see
+// __wtPatchSessionRequest).
+function patchSessionRequest(
+  entry: LogEntry,
+  legacy = false
+): { url: string; body: Record<string, unknown> } {
+  const body = legacy ? legacySessionPayload(entry) : sessionPayload(entry);
+  delete body['id'];
+  return {
+    url: `${SUPABASE_URL}/rest/v1/workout_sessions?id=eq.${encodeURIComponent(entry.id ?? '')}`,
+    body,
+  };
+}
+
+async function patchSession(entry: LogEntry, legacy = false): Promise<Response> {
+  const { url, body } = patchSessionRequest(entry, legacy);
+  return fetch(url, {
+    method: 'PATCH',
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+// v53 (Sep 26 2026) — her words: "I don't know how to update this
+// information... there have to be an easy way to enter the data." Same
+// fail-loud + legacy-schema-retry shape as pushLogToSupabase, PATCH instead
+// of POST (see patchSessionRequest above for why).
+async function patchLogToSupabase(entry: LogEntry): Promise<boolean> {
+  if (syncDisabled()) return false;
+  if (!entry.id) return false;
+  try {
+    let res = await patchSession(entry);
+    if (res.status === 400) {
+      const body = await res.text().catch(() => '');
+      if (!body.includes('PGRST204')) {
+        console.warn('[sync] edit push failed:', res.status, body);
+        return false;
+      }
+      console.warn(
+        '[sync] v48 columns missing on the server — retrying the edit with the legacy row:',
+        body
+      );
+      res = await patchSession(entry, true);
+    }
+    if (res.ok) {
+      markLogEdited(entry.id);
+      return true;
+    }
+    console.warn('[sync] edit push failed:', res.status, await res.text().catch(() => ''));
+    return false;
+  } catch (err) {
+    console.warn('[sync] edit push threw:', err);
     return false;
   }
 }
@@ -5703,7 +5818,12 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
     if (existing && !existing.synced) {
       // Local-unsynced wins on content. But the server having its id means an
       // earlier push DID land — mark it synced so it stops re-pushing (v45).
-      byId.set(r.id, { ...existing, synced: true });
+      // v53: an EDIT (pendingEdit) is different — the server already had this
+      // id BEFORE the edit, so its presence here proves nothing about whether
+      // the PATCH landed. Marking it synced here would drop the fix silently
+      // (the flush would never retry it). Stay unsynced + pendingEdit until
+      // patchLogToSupabase itself confirms the PATCH (markLogEdited).
+      byId.set(r.id, existing.pendingEdit ? existing : { ...existing, synced: true });
       continue;
     }
     byId.set(r.id, {
@@ -5765,6 +5885,7 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     __wtComputeWeekTotals?: typeof computeWeekTotals;
     __wtSessionPayload?: typeof sessionPayload;
     __wtLegacySessionPayload?: typeof legacySessionPayload;
+    __wtPatchSessionRequest?: typeof patchSessionRequest;
   };
   w.__wtMergeRemoteSessions = mergeRemoteSessions;
   w.__wtIsValidLogEntry = isValidLogEntry;
@@ -5772,6 +5893,9 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   // v48: the push payloads are pure — tested here since sync is off in tests.
   w.__wtSessionPayload = sessionPayload;
   w.__wtLegacySessionPayload = legacySessionPayload;
+  // v53: the edit PATCH request is pure too (url + body, no fetch) — same
+  // reasoning, tested the same way.
+  w.__wtPatchSessionRequest = patchSessionRequest;
 }
 
 async function pullFromSupabase(): Promise<void> {
@@ -6004,6 +6128,22 @@ let cycleReturnTo: 'progress' | 'home' = 'progress';
 let cycleCompareMetric: CycleMetric = 'body';
 let progressScrollForCycle = 0;
 
+// v53 (Sep 26 2026) — the history-edit screen's draft (renderHistoryEdit,
+// openHistoryEdit, saveHistoryEdit). Transient, module-level, like the cycle
+// fields above — the screen is reached by an explicit tap (Edit, on the
+// Session she's already looking at), not something an app close needs to
+// resume mid-edit. `state.historyDetailId` still says WHICH session; this is
+// only what she's typed so far.
+type HistoryEditDraft = {
+  timeStr: string;
+  kmStr: string;
+  kcalStr: string;
+  level: number | null;
+  pulseStr: string;
+  note: string;
+};
+let historyEditDraft: HistoryEditDraft | null = null;
+
 if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   const w = window as unknown as {
     __wtCyclePeriodPayload?: typeof cyclePeriodPayload;
@@ -6042,7 +6182,10 @@ async function flushPendingSyncs(): Promise<void> {
   updateSyncIndicator();
   let allOk = true;
   for (const entry of pendingLogs) {
-    const ok = await pushLogToSupabase(entry);
+    // v53: an edited-after-the-fact row PATCHes an existing server row; a
+    // brand-new session POSTs one. See patchSessionRequest's comment for why
+    // the two can never share one code path.
+    const ok = entry.pendingEdit ? await patchLogToSupabase(entry) : await pushLogToSupabase(entry);
     if (!ok) allOk = false;
   }
   for (const period of pendingPeriods) {
@@ -7296,8 +7439,15 @@ function renderDoneTodayCard(log: LogEntry, weekCount: number, weekLabel = 'this
   // v48 · final (Sep 25 2026): "Back:" for returning moves sat one screen after
   // her back-pain check ("Back: Fine") and read like a pain report. "Again".
   const backLine = back.length ? `Again: ${back.join(' · ')}` : '';
+  // v53 (Sep 26 2026): tappable, same door as a Sessions row or a week dot —
+  // opens today's own Session screen, where Edit lives (her ask: "there have
+  // to be an easy way to enter the data"). A div (like open-weekly-review
+  // below it), so it needs its own keydown for Enter/Space — see attachHandlers.
+  const detailAttrs = log.id
+    ? ` data-detail="${escapeHtml(log.id)}" role="button" tabindex="0" aria-label="Open today's session"`
+    : '';
   return `
-    <div class="card home-done-card" id="home-done-card">
+    <div class="card home-done-card" id="home-done-card"${detailAttrs}>
       <div class="home-done-title">Done ✓ · Workout ${log.workout}</div>
       <div class="home-done-line">${weekCount} of 3 ${weekLabel}</div>
       ${firstsLine ? `<div class="home-done-firsts" dir="auto">${escapeHtml(firstsLine)}</div>` : ''}
@@ -9214,7 +9364,133 @@ function renderHistoryDetail(): string {
     ${header}
     <p class="detail-sub">Workout ${log.workout} · ${formatDateLong(log.date)}</p>
     <div class="card detail-card">${rows.join('')}</div>
+    <button class="btn-chip detail-edit-btn" id="edit-history-session" type="button">Edit</button>
   `;
+}
+
+// v53 (Sep 26 2026) — fix a past session's ride numbers. Her words: "I don't
+// know how to update this information but ok workout b week 4 did on level 5,
+// 10 min, .69 distant 62.4 calories... there have to be an easy way to enter
+// the data." The Edit button on the Session screen above opens this: the same
+// five console fields as the live ride-numbers screen (renderRideNumbersCard,
+// same order — Time, Distance, Calories, Level, Pulse) plus her free-text
+// note, but reading from/writing to the saved LogEntry instead of the live
+// in-workout localStorage keys. Only these six fields ever change here
+// (saveHistoryEdit) — never the date, the workout letter, or anything else on
+// the session.
+function openHistoryEdit(log: LogEntry): void {
+  historyEditDraft = {
+    timeStr: typeof log.ellipticalTimeSec === 'number' ? formatMmSs(log.ellipticalTimeSec) : '',
+    kmStr: typeof log.ellipticalKm === 'number' ? String(log.ellipticalKm) : '',
+    kcalStr: typeof log.ellipticalKcal === 'number' ? String(log.ellipticalKcal) : '',
+    level: typeof log.ellipticalLevel === 'number' ? log.ellipticalLevel : null,
+    pulseStr: typeof log.ellipticalPulse === 'number' ? String(log.ellipticalPulse) : '',
+    note: log.sessionNote ?? '',
+  };
+  state.screen = 'history-edit';
+  render();
+}
+
+// Same reading-row markup as renderRideNumbersCard (ell-reading classes), so
+// the edit screen looks like the same control she already knows from the
+// live ride — just aimed at a saved session instead of the one in progress.
+function renderHistoryEditReadingRow(
+  id: string,
+  label: string,
+  value: string,
+  unit: string,
+  opts: { type?: string; step?: string; min?: string; max?: string } = {}
+): string {
+  return `
+      <label class="ell-reading" for="${id}">
+        <span class="ell-reading-label">${label}</span>
+        <span class="ell-reading-field">
+          <input type="${opts.type ?? 'number'}" id="${id}" inputmode="${opts.type === 'text' ? 'numeric' : 'decimal'}" ${opts.step ? `step="${opts.step}"` : ''} ${opts.min ? `min="${opts.min}"` : ''} ${opts.max ? `max="${opts.max}"` : ''} placeholder="–" value="${escapeHtml(value)}" />
+          ${unit ? `<span class="ell-reading-unit">${unit}</span>` : ''}
+        </span>
+      </label>`;
+}
+
+function renderHistoryEdit(): string {
+  const header = `
+    <div class="screen-header">
+      <h2>Edit session</h2>
+      <button class="quit-link" id="back-history-edit" type="button">× Back</button>
+    </div>`;
+  const log = loadLogs().find((l) => l.id === state.historyDetailId);
+  if (!log || !historyEditDraft) {
+    return `${header}<p class="empty">That session isn't here anymore.</p>`;
+  }
+  const draft = historyEditDraft;
+  const level = draft.level;
+  return `
+    ${header}
+    <p class="detail-sub">Workout ${log.workout} · ${formatDateLong(log.date)}</p>
+    <div class="card ell-after-card">
+      <div class="ell-readings-title">Ride numbers</div>
+      <p class="ell-numbers-note">Only these numbers and the note change — nothing else about this session.</p>
+      <div class="ell-readings-row">
+        ${renderHistoryEditReadingRow('hist-time', 'Time', draft.timeStr, '', { type: 'text' })}
+        ${renderHistoryEditReadingRow('hist-km', 'Distance', draft.kmStr, 'km', { step: '0.01', min: '0' })}
+        ${renderHistoryEditReadingRow('hist-kcal', 'Calories', draft.kcalStr, 'kcal', { step: '0.1', min: '0' })}
+      </div>
+      <div class="ell-field ell-field-level">
+        <span class="ell-field-label">Level</span>
+        <div class="ell-level-controls">
+          <div class="settings-stepper ell-stepper">
+            <button class="settings-stepper-btn" id="hist-level-down" type="button" aria-label="Level down" ${level !== null && level <= 1 ? 'disabled' : ''}>−</button>
+            <span class="settings-stepper-val${level === null ? ' is-empty' : ''}" id="hist-level">${level ?? '—'}</span>
+            <button class="settings-stepper-btn" id="hist-level-up" type="button" aria-label="Level up" ${level !== null && level >= ELLIPTICAL_MAX_LEVEL ? 'disabled' : ''}>+</button>
+          </div>
+        </div>
+      </div>
+      <div class="ell-readings-row">
+        ${renderHistoryEditReadingRow('hist-pulse', 'Pulse', draft.pulseStr, 'bpm', { step: '1', min: '30', max: '230' })}
+      </div>
+      <label class="field note-field">
+        <span class="label-text">Note</span>
+        <textarea id="hist-note" rows="3" maxlength="500" dir="auto" enterkeyhint="done" placeholder="Knee fine, stopped the elliptical early…">${escapeHtml(draft.note)}</textarea>
+      </label>
+    </div>
+    ${renderActionBar(`<button class="btn-large btn-primary" id="save-history-edit" type="button">Save</button>`)}
+  `;
+}
+
+// Merges the draft back into the ONE saved row it came from — every other
+// field on `existing` is spread through untouched. Queued exactly like a new
+// session (synced:false), plus pendingEdit:true so the flush PATCHes instead
+// of posting a duplicate (see patchSessionRequest).
+function saveHistoryEdit(): void {
+  const id = state.historyDetailId;
+  const draft = historyEditDraft;
+  if (!id || !draft) return;
+  const logs = loadLogs();
+  const idx = logs.findIndex((l) => l.id === id);
+  if (idx === -1) return;
+  const existing = logs[idx];
+  if (!existing) return;
+  const updated: LogEntry = {
+    ...existing,
+    ellipticalTimeSec: parseMmSs(draft.timeStr),
+    ellipticalKm: parseKmReading(draft.kmStr),
+    ellipticalKcal: parseKcalReading(draft.kcalStr),
+    ellipticalLevel: draft.level,
+    ellipticalPulse: parsePulseReading(draft.pulseStr),
+    sessionNote: draft.note.trim() || null,
+    synced: false,
+    pendingEdit: true,
+  };
+  logs[idx] = updated;
+  writeLogs(logs);
+  historyEditDraft = null;
+  state.screen = 'history-detail';
+  render();
+  state.syncStatus = 'syncing';
+  updateSyncIndicator();
+  void patchLogToSupabase(updated).then((ok) => {
+    state.syncStatus = ok ? 'synced' : 'offline';
+    updateSyncIndicator();
+  });
 }
 
 // ---------- Ship 4: weekly review (2026-05-15) ----------
@@ -10642,7 +10918,10 @@ function isValidLogEntry(x: unknown): x is LogEntry {
     // v51: optional AND nullable, same shape — an export from before v51 has
     // neither key and must still restore.
     isOptionalOf(o['backPainBefore'], 'number') &&
-    isOptionalOf(o['wristPainBefore'], 'number')
+    isOptionalOf(o['wristPainBefore'], 'number') &&
+    // v53: optional AND boolean-typed only when present — an export from
+    // before the edit feature has no key, same shape as liteDay/armFeel above.
+    isOptionalOf(o['pendingEdit'], 'boolean')
   );
 }
 
@@ -10814,6 +11093,9 @@ function render(): void {
       break;
     case 'history-detail':
       html = renderHistoryDetail();
+      break;
+    case 'history-edit':
+      html = renderHistoryEdit();
       break;
     case 'weekly-review':
       html = renderWeeklyReview();
@@ -11047,6 +11329,69 @@ function attachHandlers(): void {
     state.historyDetailId = null;
     state.detailReturnTo = null;
     render();
+  });
+
+  // v53 (Sep 26 2026) — fix a past session's ride numbers (her ask: "there
+  // have to be an easy way to enter the data"). The Edit button lives on the
+  // Session screen; its own × Back just closes the edit and returns there
+  // (state.historyDetailId is unchanged either way — still the same session).
+  bindClick('edit-history-session', () => {
+    const log = loadLogs().find((l) => l.id === state.historyDetailId);
+    if (!log) return;
+    openHistoryEdit(log);
+  });
+  bindClick('back-history-edit', () => {
+    historyEditDraft = null;
+    state.screen = 'history-detail';
+    render();
+  });
+  bindClick('save-history-edit', () => {
+    saveHistoryEdit();
+  });
+  bindClick('hist-level-down', () => {
+    if (!historyEditDraft) return;
+    const from = historyEditDraft.level ?? lastEllipticalLevel() ?? ELLIPTICAL_START_LEVEL;
+    historyEditDraft = { ...historyEditDraft, level: clampEllipticalLevel(from - 1) };
+    render();
+  });
+  bindClick('hist-level-up', () => {
+    if (!historyEditDraft) return;
+    const from = historyEditDraft.level ?? lastEllipticalLevel() ?? ELLIPTICAL_START_LEVEL;
+    historyEditDraft = { ...historyEditDraft, level: clampEllipticalLevel(from + 1) };
+    render();
+  });
+  // Per-keystroke, no re-render (keeps focus) — same pattern as the live
+  // ride-numbers screen's ell-km/ell-pulse/ell-kcal/ell-time listeners.
+  const histTime = document.getElementById('hist-time') as HTMLInputElement | null;
+  histTime?.addEventListener('input', () => {
+    if (historyEditDraft) historyEditDraft.timeStr = histTime.value;
+  });
+  const histKm = document.getElementById('hist-km') as HTMLInputElement | null;
+  histKm?.addEventListener('input', () => {
+    if (historyEditDraft) historyEditDraft.kmStr = histKm.value;
+  });
+  const histKcal = document.getElementById('hist-kcal') as HTMLInputElement | null;
+  histKcal?.addEventListener('input', () => {
+    if (historyEditDraft) historyEditDraft.kcalStr = histKcal.value;
+  });
+  const histPulse = document.getElementById('hist-pulse') as HTMLInputElement | null;
+  histPulse?.addEventListener('input', () => {
+    if (historyEditDraft) historyEditDraft.pulseStr = histPulse.value;
+  });
+  const histNote = document.getElementById('hist-note') as HTMLTextAreaElement | null;
+  histNote?.addEventListener('input', () => {
+    if (historyEditDraft) historyEditDraft.note = histNote.value;
+  });
+
+  // The Done card (home-done-card) is a div, same reason open-weekly-review
+  // needs its own keydown below — Enter/Space don't click a non-button by
+  // default.
+  document.getElementById('home-done-card')?.addEventListener('keydown', (e) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      (e.currentTarget as HTMLElement).click();
+    }
   });
 
   // Week dots + history rows + year-grid cells — navigate to history-detail.

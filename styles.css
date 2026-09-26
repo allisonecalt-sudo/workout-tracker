@@ -1243,6 +1243,28 @@ input[type='number']:focus {
   outline: none;
 }
 
+/* v53 (Sep 26 2026) fix: the post-log/history-edit note field had no rule of
+ * its own — every textarea in the app (#session-note, #hist-note) rendered
+ * with the browser's bare default (white box, monospace, square corners)
+ * instead of matching the text inputs right above it. Same look as
+ * input[type=text/number] above, one class fix, not a one-off patch. */
+textarea {
+  width: 100%;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font: inherit;
+  font-size: var(--t-body);
+  resize: vertical;
+}
+
+textarea:focus {
+  border: 2px solid var(--ink);
+  outline: none;
+}
+
 .range-row {
   display: flex;
   align-items: center;
@@ -1372,6 +1394,13 @@ input[type='number']:focus {
  * the exercise detail card, which shares the class name (Sep 24 2026 audit). */
 .card.detail-card {
   padding: 8px 4px;
+}
+
+/* v53 (Sep 26 2026) — the Session screen's Edit button (fix a past session's
+ * ride numbers). .btn-chip is the app's existing pill; this just gives it its
+ * own row under the card instead of crowding the header. */
+.detail-edit-btn {
+  margin-top: 12px;
 }
 
 .detail-row {
@@ -5176,10 +5205,16 @@ input[type='number']:focus {
   white-space: nowrap;
 }
 
-/* After Save, until midnight — witnessed, not sage. */
+/* After Save, until midnight — witnessed, not sage. v53: also the door to
+ * today's Session screen (Edit lives there) — same tap affordance as .week-card. */
 .home-done-card {
   margin-bottom: 10px;
   padding: 18px 20px;
+  cursor: pointer;
+}
+
+.home-done-card:hover {
+  border-color: var(--border-strong);
 }
 
 .home-done-title {
