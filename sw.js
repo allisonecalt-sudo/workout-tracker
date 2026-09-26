@@ -44,6 +44,12 @@ const SHELL_ASSETS = [
   // v50 · jump list (Sep 25 2026) — the flat step list + completion tracking
   // behind the List sheet, its own module the same way cycle.js is.
   './dist/step-list.js',
+  // v53 fix (CHECK M1, Sep 26 2026): app.js imports this statically (feel<->
+  // pain conversion) and it was the ONE module missing from precache — an
+  // offline start failed the whole module graph on a blank page. See the W0
+  // test below (tests/app.spec.ts) that fails whenever this list drifts from
+  // app.ts's own import graph again.
+  './dist/pain-feel.js',
   './manifest.webmanifest',
   // v49 · look (Sep 25 2026): self-hosted DM Sans (spec §3 "Font loading") —
   // precached so it renders offline on the floor, never a runtime Google
@@ -207,6 +213,7 @@ function isCodeRequest(url, request) {
     url.pathname.endsWith('/dist/progression.js') ||
     url.pathname.endsWith('/dist/cycle.js') ||
     url.pathname.endsWith('/dist/step-list.js') ||
+    url.pathname.endsWith('/dist/pain-feel.js') ||
     url.pathname.endsWith('/index.html')
   );
 }

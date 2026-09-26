@@ -1030,8 +1030,11 @@ test('R2 W3: the tying setup does NOT leak onto Week 2, whose clamshell is bodyw
     if (name.includes('Side-lying clamshells')) {
       await expect(page.locator('.setup-block')).toHaveCount(0);
       await expect(page.locator('.exercise-reps')).not.toContainText('yellow band');
+      // v53 fix (CHECK M6, Sep 26 2026): "Bodyweight this week" was pure
+      // program bookkeeping, not movement guidance — moved to a PROGRAM
+      // comment (Tips audit). No notes left on this step means no Tips row.
       await openCue(page);
-      await expect(page.locator('.exercise-notes').first()).toContainText('Bodyweight this week');
+      await expect(page.locator('.tips-section')).toHaveCount(0);
       return;
     }
     const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
@@ -2754,6 +2757,16 @@ test('Tips audit: no exercise notes string leaks PROGRAM bookkeeping instead of 
     [/\bwas \d/, '"was N" (stale-number bookkeeping)'],
     [/\bv\d{2}\b/, 'a version tag (vNN)'],
     [/week \d/i, 'a week number'],
+    // v53 fix (CHECK M6, Sep 26 2026): the 6 patterns that let R2 Week 2's
+    // citation text ("81% MVIC, best of 12 tested — DiStefano 2009") and
+    // program-comparison tells ("stays exactly as it is", "the change is
+    // EFFORT") through — the gate was green while she'd have read them.
+    [/MVIC/, 'a study measure (MVIC)'],
+    [/\d+%/, 'a percentage (study data)'],
+    [/best of \d+ tested/i, 'a study-selection citation'],
+    [/\b[A-Z][a-z]+ (19|20)\d{2}\b/, 'a Name-YYYY citation'],
+    [/stays exactly as it is/i, 'a program-comparison tell'],
+    [/the change is/i, 'a program-comparison tell'],
   ];
   const noteRe = /notes:\s*\n?\s*(['"])((?:\\.|(?!\1).)*)\1/g;
   const offenders: string[] = [];
@@ -2769,6 +2782,56 @@ test('Tips audit: no exercise notes string leaks PROGRAM bookkeeping instead of 
     }
   }
   expect(offenders).toEqual([]);
+});
+
+test('deploy hygiene: every dist/*.js module app.js imports (transitively) is precached', () => {
+  // v53 fix (CHECK M1, Sep 26 2026): dist/pain-feel.js was imported by
+  // app.js but missing from BOTH sw.js precache lists — the ONE gap in nine
+  // modules was enough for an offline start to fail the whole module graph
+  // on a blank page (Playwright's setOffline doesn't exercise the service
+  // worker, so a naive offline test passed falsely; only a stopped-server
+  // drive with the HTTP cache cleared caught it). This walks the REAL import
+  // graph from the BUILT dist/*.js output — not a hand-kept list of module
+  // names — so a future import can never repeat the gap silently.
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const distDir = path.join(__dirname, '..', 'dist');
+  const importRe = /from\s+'\.\/([\w-]+\.js)'/g;
+
+  function localImports(file: string): string[] {
+    const src = fs.readFileSync(path.join(distDir, file), 'utf8');
+    const found: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = importRe.exec(src))) found.push(m[1]!);
+    return found;
+  }
+
+  const graph = new Set<string>();
+  const queue: string[] = ['app.js'];
+  while (queue.length > 0) {
+    const file = queue.shift()!;
+    for (const dep of localImports(file)) {
+      if (!graph.has(dep)) {
+        graph.add(dep);
+        queue.push(dep);
+      }
+    }
+  }
+  // Sanity: the graph actually found something, so an empty/broken build
+  // doesn't pass this test by vacuous truth.
+  expect(graph.size).toBeGreaterThan(0);
+
+  const swSrc = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  const missingFromShell: string[] = [];
+  const missingFromCodeRequest: string[] = [];
+  for (const mod of graph) {
+    if (!swSrc.includes(`'./dist/${mod}'`)) missingFromShell.push(mod);
+    if (!swSrc.includes(`endsWith('/dist/${mod}')`)) missingFromCodeRequest.push(mod);
+  }
+  expect({ missingFromShell, missingFromCodeRequest }).toEqual({
+    missingFromShell: [],
+    missingFromCodeRequest: [],
+  });
 });
 
 test('deploy hygiene: sw.js cache VERSION stays in sync with APP_VERSION', () => {
@@ -2989,9 +3052,12 @@ test('R2 W2: workout A carries the full dead bug, bird dog legs-only, the tilted
   }
 
   await expect(page.locator('.exercise-name')).toHaveText('Forearm plank');
-  // Wall sit: 40 s, and the cue is DEEPER not longer (she held 38 s last week).
+  // Wall sit: 40 s, and the cue is DEEPER not longer. v53 fix (CHECK M6, Sep
+  // 26 2026): "You held 38 s last week" was program-comparison talk, not
+  // movement guidance — moved to a PROGRAM comment (Tips audit).
   expect(seen['Wall sit']).toContain('40 sec');
-  expect(seen['Wall sit']).toContain('38');
+  expect(seen['Wall sit']).toContain('DEEPER, not longer');
+  expect(seen['Wall sit']).not.toContain('38 s');
   // Forearm plank: same 20 s, held WITH a posterior pelvic tilt.
   expect(seen['Forearm plank']).toContain('20 sec');
   expect(seen['Forearm plank']).toContain('posterior pelvic tilt');
@@ -3677,23 +3743,24 @@ test('post-log: the free-text note saves verbatim on a session with no cardio la
 // Her words: "this app needs back button like i can go back an exercise or a
 // round" → "i need to be able to go back". One step backwards, across rounds.
 
-test('back (v47): Back steps to the previous exercise, is hidden on the first step, and crosses the round boundary', async ({
+test('back (v47): Back steps to the previous exercise, and crosses the round boundary; v53 fix: step 1 has a Back too (see the dedicated pre-log test)', async ({
   page,
 }) => {
   await mockDate(page, '2026-09-24T14:00:00.000Z');
   await page.goto('/');
   await page.locator('button[data-workout="A"]').click();
   await page.locator('button:has-text("Start")').click();
-  // First step: nothing behind her → no Back.
+  // v53 fix (CHECK M4): step 1 used to hide Back ("nothing behind her") — it
+  // shows now too; from here it goes to the pre-log, not a step further back.
   await expect(page.locator('.exercise-name')).toHaveText('Cardio');
-  await expect(page.locator('#step-back')).toHaveCount(0);
+  await expect(page.locator('#step-back')).toBeVisible();
 
   await page.locator(NEXT).click();
   await expect(page.locator('.exercise-name')).toHaveText('Belly breathing');
   await expect(page.locator('#step-back')).toBeVisible();
   await page.locator('#step-back').click();
   await expect(page.locator('.exercise-name')).toHaveText('Cardio');
-  await expect(page.locator('#step-back')).toHaveCount(0);
+  await expect(page.locator('#step-back')).toBeVisible();
 
   // Walk forward into Round 2, then Back → Round 1's last exercise.
   // v48: the one progress line reads "Main · Round 2 of 2" and one count for the
@@ -3722,12 +3789,18 @@ test('back (v47): Back steps to the previous exercise, is hidden on the first st
 // --- v53: timer as a pip + Back while it runs (Sep 26 2026) ------------------
 // Her words: "from the timer I need to be able to go back like it wasn't able
 // to go back" · "Maybe the timer should just be like a small circle that pops
-// up or something." Back's own rule (canGoBack) never changed — no step
-// before the very first one — so a running RIDE only gets a testable Back in
-// the one place the CURRENT program doesn't put cardio first: Week 1's
-// Workout C, where a real warmup step (Belly breathing) sits before it. Every
-// later week's A/B/C always opens on cardio, so Back stays correctly absent
-// there, running or not — same as before v53, not a regression.
+// up or something." First shipped with Back's OLD rule unchanged (no step
+// before the very first one), so a running ride only had a testable Back on
+// Week 1's Workout C, where a real warmup step (Belly breathing) sits before
+// it — every later week's A/B/C opens straight on the ride, so Back read as
+// correctly absent there. CHECK M4 (Sep 26 2026) caught that as the actual
+// bug: R2 Week 4 — the week she's IN — opens A, B and C on the ride, so "no
+// Back on step 1" meant no Back on the one ride she does this week, exactly
+// where her words above asked for it. Fixed: step 1 now has a Back too; it
+// goes to the pre-log (there's no earlier step to land on) — true for ANY
+// step 1, not just a ride, so the Week-1-C test below (a real warm-up
+// exercise on its true first step) needed the same update; the new "step 1"
+// test covers the ride case specifically.
 test.describe('v53: timer as a pip + Back while it runs', () => {
   const TUE_WEEK4 = '2026-09-22T14:00:00.000Z'; // Tue inside Round 2 Week 4
 
@@ -3747,7 +3820,9 @@ test.describe('v53: timer as a pip + Back while it runs', () => {
     await page.locator('button[data-workout="C"]').click();
     await page.locator('button:has-text("Start")').click();
     await expect(page.locator('.exercise-name')).toHaveText('Belly breathing');
-    await expect(page.locator('#step-back')).toHaveCount(0); // the true first step — nothing behind it
+    // v53 fix (CHECK M4): the true first step now shows Back too — it goes to
+    // the pre-log instead of a step further back (there is none).
+    await expect(page.locator('#step-back')).toBeVisible();
 
     await page.locator(NEXT).click();
     await expect(page.locator('.exercise-name')).toHaveText('Cardio');
@@ -3772,6 +3847,44 @@ test.describe('v53: timer as a pip + Back while it runs', () => {
     // Forward again: the ride shows its kept minutes, not a fresh Ready face.
     await page.locator(NEXT).click();
     await expect(page.locator('.timer-done')).toHaveText('✓ 3 min done');
+  });
+
+  test('ride: Back from step 1 (this week opens A/B/C on the ride) goes to the pre-log, keeps her answer and the real minutes', async ({
+    page,
+  }) => {
+    // v53 fix (CHECK M4, Sep 26 2026): R2 Week 4 opens on the ride in warmup[0]
+    // for A, B and C — "no Back on step 1" meant no Back on the ride she does
+    // THIS week. canGoBack is true here now; Back goes to the pre-log (her
+    // "lead's call" — there's no step further back to land on).
+    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    // Leave a mark on the pre-log so Back-to-pre-log can be proven to keep it.
+    await page.locator('[data-body-chip="cap-before"][data-value="7"]').click();
+    await page.locator('button:has-text("Start")').click();
+
+    await expect(page.locator('.exercise-name')).toHaveText('Cardio');
+    await expect(page.locator('#step-back')).toBeVisible(); // the fix: step 1 has a Back
+
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.timer-pip')).toBeVisible();
+    await expect(page.locator('#step-back')).toBeVisible(); // still there while it runs
+
+    await advanceClock(page, 3 * 60_000);
+    await page.locator('#step-back').click();
+
+    // Lands on the pre-log, not a step further back — there is none — and her
+    // capacity answer from before Start is still there.
+    await expect(page.locator('button:has-text("Start")')).toBeVisible();
+    await expect(
+      page.locator('[data-body-chip="cap-before"][data-value="7"][aria-checked="true"]')
+    ).toBeVisible();
+
+    // The real 3 minutes were kept — same rule as any other Back-while-running.
+    expect(
+      await page.evaluate(() => localStorage.getItem('workout-tracker:ww-lane-done-min'))
+    ).toBe('3');
   });
 
   test('hold: Back is visible while a hold is running, stops the timer, and keeps the real seconds', async ({
@@ -7545,6 +7658,189 @@ test.describe('v53 · edit a past session (A5)', () => {
     expect(patchReq.url).toContain('id=eq.b-week4');
     expect(patchReq.body['id']).toBeUndefined();
     expect(patchReq.body['elliptical_level']).toBe(5);
+    // v53 fix (CHECK M3, Sep 26 2026): the body used to be the full
+    // sessionPayload minus id (30-odd columns, including date and
+    // workout_type) — an explicit allow-list now, so the exact key set is the
+    // contract, not just a spot check on one field.
+    expect(Object.keys(patchReq.body).sort()).toEqual(
+      [
+        'elliptical_kcal',
+        'elliptical_km',
+        'elliptical_level',
+        'elliptical_pulse',
+        'elliptical_time_sec',
+        'session_note',
+      ].sort()
+    );
+    expect(patchReq.body['date']).toBeUndefined();
+    expect(patchReq.body['workout_type']).toBeUndefined();
+  });
+
+  test('(f) the PATCH body — CHECK M3: only the 6 ride/note columns, never date, workout_type or anything else on the row', async ({
+    page,
+  }) => {
+    // Pure-function test, same shape as (a)'s payload check but exhaustive:
+    // walks a REALISTIC full LogEntry (every field a real session carries)
+    // through __wtPatchSessionRequest and asserts the body key set exactly —
+    // so a future field added to sessionPayload can't silently leak back in.
+    await seedLogs(page, [rideLog()]);
+    await page.goto('/');
+    const patchReq = await page.evaluate(() => {
+      const entry = {
+        id: 'b-week4',
+        date: '2026-09-20T15:00:00.000Z',
+        workout: 'B',
+        capacityBefore: 6,
+        capacityAfter: 7,
+        moodBefore: 5,
+        moodAfter: 6,
+        wallSitSec: 0,
+        backPain: 0,
+        wristPain: 0,
+        backPainBefore: 0,
+        wristPainBefore: 0,
+        stepFeel: 'fine',
+        word: 'strong',
+        startedAt: '2026-09-20T15:00:00.000Z',
+        completedAt: '2026-09-20T16:00:00.000Z',
+        durationSec: 3600,
+        walkMinutes: 10,
+        walkSteps: 1200,
+        walkMeters: 900,
+        notes: 'some system note',
+        cardioLane: 'elliptical',
+        cardioMinutes: 10,
+        ellipticalLevel: 5,
+        ellipticalKm: 0.69,
+        ellipticalPulse: 118,
+        ellipticalTimeSec: 600,
+        ellipticalKcal: 62.4,
+        sessionNote: 'Felt strong.',
+        liteDay: false,
+        armFeel: null,
+        voicePlays: 2,
+        stepsSkipped: 1,
+        synced: true,
+        pendingEdit: true,
+      };
+      const w = window as unknown as {
+        __wtPatchSessionRequest: (x: unknown) => { url: string; body: Record<string, unknown> };
+      };
+      return {
+        normal: w.__wtPatchSessionRequest(entry, false),
+        legacy: w.__wtPatchSessionRequest(entry, true),
+      };
+    });
+    expect(Object.keys(patchReq.normal.body).sort()).toEqual(
+      [
+        'elliptical_kcal',
+        'elliptical_km',
+        'elliptical_level',
+        'elliptical_pulse',
+        'elliptical_time_sec',
+        'session_note',
+      ].sort()
+    );
+    // The legacy (pre-v48-schema) fallback has no ride-number columns at all —
+    // legacySessionPayload folds everything into `notes`, so that's the one
+    // key the legacy PATCH body carries.
+    expect(Object.keys(patchReq.legacy.body)).toEqual(['notes']);
+  });
+
+  // v53 fix (CHECK M2, Sep 26 2026): return=minimal gave a bare 204 on EVERY
+  // PATCH, including one that matched 0 rows — `res.ok` alone can't tell an
+  // update from a no-op, and the old code read a no-op as saved. Unit-level
+  // (pure function, no network — same reasoning as the payload tests above).
+  test('(g) CHECK M2 — a PATCH matching 0 rows never reads as success', async ({ page }) => {
+    await page.goto('/');
+    const result = await page.evaluate(() => {
+      const w = window as unknown as { __wtPatchMatchedARow: (rows: unknown) => boolean };
+      return {
+        empty: w.__wtPatchMatchedARow([]),
+        oneRow: w.__wtPatchMatchedARow([{ id: 'b-week4' }]),
+        twoRows: w.__wtPatchMatchedARow([{ id: 'a' }, { id: 'b' }]),
+        notAnArray: w.__wtPatchMatchedARow(null),
+        undefinedBody: w.__wtPatchMatchedARow(undefined),
+      };
+    });
+    expect(result.empty).toBe(false); // 0 rows matched — the exact CHECK M2 case
+    expect(result.oneRow).toBe(true);
+    expect(result.twoRows).toBe(true);
+    expect(result.notAnArray).toBe(false);
+    expect(result.undefinedBody).toBe(false);
+  });
+
+  // v53 fix (CHECK M2, Sep 26 2026): saveHistoryEdit used to set pendingEdit
+  // unconditionally. A session that finished OFFLINE and never reached
+  // Supabase (synced:false, no pendingEdit) has no server row for a PATCH to
+  // find — every attempt would match 0 rows (see (g)) and never fall back to
+  // a POST, so the whole session (not just the edit) was unrecoverable. Now
+  // it stays a normal queued row and routes through the same POST path any
+  // other never-synced session does.
+  test('(h) CHECK M2 — editing a session that never reached Supabase keeps it a normal queued row (POST path), not pendingEdit (PATCH path)', async ({
+    page,
+  }) => {
+    await seedLogs(page, [rideLog({ synced: false, pendingEdit: undefined })]);
+    await page.goto('/');
+    await openEdit(page);
+    await page.locator('#hist-km').fill('0.69');
+    await page.locator('#save-history-edit').click();
+    await expect(page.locator('.screen-header h2')).toHaveText('Session');
+
+    const log = await readLog(page, 'b-week4');
+    expect(log['ellipticalKm']).toBe(0.69);
+    expect(log['synced']).toBe(false);
+    // The whole point: NOT pendingEdit — a PATCH-by-id would match nothing.
+    expect(log['pendingEdit']).toBeFalsy();
+
+    // Never disappears: mergeRemoteSessions' drop rule only fires on
+    // `synced === true` rows missing from the remote pull — this row is
+    // synced:false, so a pull where the server has never heard of it (the
+    // exact offline-finished case) must keep it, not drop it.
+    const survived = await page.evaluate((entry) => {
+      const w = window as unknown as {
+        __wtMergeRemoteSessions: (l: unknown[], r: unknown[]) => Array<Record<string, unknown>>;
+      };
+      // Remote pull has OTHER sessions but nothing with this id — the server
+      // genuinely never received it, same as "PATCH matched 0 rows" would say.
+      return w.__wtMergeRemoteSessions(
+        [entry],
+        [
+          {
+            id: 'some-other-session',
+            date: '2026-09-01T15:00:00.000Z',
+            workout_type: 'A',
+            capacity_before_1_10: 5,
+            capacity_after_1_10: 5,
+            wall_sit_seconds: 0,
+            pain_back_0_10: 0,
+            one_word: '',
+            started_at: null,
+            completed_at: null,
+            duration_seconds: null,
+            notes: null,
+          },
+        ]
+      );
+    }, log);
+    expect(survived.some((r) => r['id'] === 'b-week4')).toBe(true);
+    expect(survived.find((r) => r['id'] === 'b-week4')?.['ellipticalKm']).toBe(0.69);
+  });
+
+  // v53 fix (CHECK M2, Sep 26 2026): a queued edit must be VISIBLE on the one
+  // session it could be lost from — not just folded into the header's generic
+  // "offline · N pending" count.
+  test('(i) CHECK M2 — a still-queued edit shows "Not saved online yet — will retry" on the session screen', async ({
+    page,
+  }) => {
+    await seedLogs(page, [rideLog({ synced: false, pendingEdit: true, ellipticalKm: 0.69 })]);
+    await page.goto('/');
+    await page.locator('#view-history').click();
+    await page.locator('[data-detail="b-week4"]').click();
+    await expect(page.locator('.screen-header h2')).toHaveText('Session');
+    await expect(page.locator('#detail-edit-unsynced')).toHaveText(
+      'Not saved online yet — will retry'
+    );
   });
 
   // mergeRemoteSessions used to mark ANY local-unsynced row synced the moment

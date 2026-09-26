@@ -1403,6 +1403,15 @@ textarea:focus {
   margin-top: 12px;
 }
 
+/* v53 fix (CHECK M2, Sep 26 2026) — a queued edit that hasn't reached the
+ * server yet (or a PATCH that failed/matched 0 rows): same amber as the
+ * back-pain stop line, so an unsaved edit reads as something to notice. */
+.detail-edit-unsynced {
+  color: var(--accent-warn);
+  font-size: var(--font-small);
+  margin: 8px 4px 0;
+}
+
 .detail-row {
   display: flex;
   justify-content: space-between;

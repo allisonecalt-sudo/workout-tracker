@@ -2182,16 +2182,21 @@ PROGRAM.push({
         {
           name: 'Bodyweight squats',
           reps: '12 reps · 3-1-3 tempo',
+          // PROGRAM (CHECK M6, Sep 26 2026): same 12 reps as last week — the
+          // change this week is effort (stop ~2 reps short on the last round
+          // instead of ~6).
           notes:
-            'Same 12 as last week — the change is EFFORT: on the LAST round stop about 2 reps short, not 6. Never to failure. Arms crossed over chest; wall behind shoulder if balance wobbly.',
+            'On the last round, stop about 2 reps short — never to failure. Arms crossed over chest; wall behind shoulder if balance is wobbly.',
         },
         HIP_HINGE_W8,
         { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
         {
           name: 'Wall sit',
           reps: '40 sec hold',
+          // PROGRAM (CHECK M6, Sep 26 2026): she held 38 s last week; seconds
+          // aren't the point this week, the knee angle is.
           notes:
-            'DEEPER, not longer — slide down until the knees come toward 90°. You held 38 s last week, so seconds are not the point this week; the angle is. Hands rest on thighs or hang. No pushing on the wall.',
+            'DEEPER, not longer — slide down until the knees come toward 90°. Hands rest on thighs or hang. No pushing on the wall.',
           durationSec: 40,
           isTimed: true,
         },
@@ -2219,22 +2224,24 @@ PROGRAM.push({
         {
           name: 'Side-lying leg raises',
           reps: '12 each side',
-          notes:
-            'Your best glute-med move (81% MVIC, best of 12 tested — DiStefano 2009), so it stays exactly as it is. The change is EFFORT: last round stop about 2 reps short, not 6.',
+          // PROGRAM (CHECK M6, Sep 26 2026): her best glute-med move (81%
+          // MVIC, best of 12 tested — DiStefano 2009), so it stays exactly as
+          // it is; the change this week is effort.
+          notes: 'On the last round, stop about 2 reps short, not 6.',
         },
         {
           name: 'Side-lying clamshells',
           reps: '10 each side',
           // PROGRAM: the TheraBand kit is confirmed home (Sep 7) — the band
-          // loops in starting Week 3, not this week. Her words the same
-          // minute: "dont raise too fast."
-          notes: 'Bodyweight this week.',
+          // loops in starting Week 3, not this week (bodyweight only for
+          // now). Her words the same minute: "dont raise too fast."
         },
         {
           name: 'Single-leg glute bridges',
           reps: '10 each side',
-          notes:
-            'Already the hard version — the small dial this week is a 2-3 sec SQUEEZE at the top of every rep.',
+          // PROGRAM (CHECK M6, Sep 26 2026): already the hard version — the
+          // small dial this week is the squeeze hold below.
+          notes: 'Squeeze for 2-3 seconds at the top of every rep.',
         },
         FULL_DEAD_BUG,
         {
@@ -4262,23 +4269,52 @@ function markLogEdited(id: string): void {
   writeLogs(logs);
 }
 
+// v53 fix (CHECK M3, Sep 26 2026): the ONLY columns the edit screen ever
+// shows or changes (renderHistoryEdit's own copy: "Only these numbers and
+// the note change — nothing else about this session"). An earlier version
+// built the PATCH body from the full sessionPayload minus id, which silently
+// carried date/workout_type/every other column from the PHONE'S copy — a
+// server-side hand fix to any of those would get overwritten by a stale edit
+// sync. Explicit allow-list, never derived from the full payload.
+const EDIT_SESSION_PATCH_COLUMNS = [
+  'elliptical_time_sec',
+  'elliptical_km',
+  'elliptical_kcal',
+  'elliptical_level',
+  'elliptical_pulse',
+  'session_note',
+] as const;
+
 // Pure — the PATCH request for an EDITED session (pendingEdit rows): the row
 // already exists in Supabase (it synced once already), so the id goes in the
 // URL filter, never the body, and never another POST — postSession's
 // ignore-duplicates would just no-op against an id the server already has and
-// her fix would silently never land. Same shape as sessionPayload/
-// legacySessionPayload above (pure, so it's testable without a network — see
-// __wtPatchSessionRequest).
+// her fix would silently never land. The legacy (v47-shaped server) case has
+// no ride-number columns at all — legacySessionPayload folds them into
+// `notes`, so that's the one column the legacy PATCH body carries. Pure, so
+// it's testable without a network — see __wtPatchSessionRequest.
 function patchSessionRequest(
   entry: LogEntry,
   legacy = false
 ): { url: string; body: Record<string, unknown> } {
-  const body = legacy ? legacySessionPayload(entry) : sessionPayload(entry);
-  delete body['id'];
+  const full = legacy ? legacySessionPayload(entry) : sessionPayload(entry);
+  const body: Record<string, unknown> = legacy
+    ? { notes: full['notes'] }
+    : Object.fromEntries(EDIT_SESSION_PATCH_COLUMNS.map((col) => [col, full[col]]));
   return {
     url: `${SUPABASE_URL}/rest/v1/workout_sessions?id=eq.${encodeURIComponent(entry.id ?? '')}`,
     body,
   };
+}
+
+// Pure — CHECK M2's fix, isolated so it's testable without a network. With
+// `Prefer: return=representation`, PostgREST hands back the rows the filter
+// actually matched: a real update is a non-empty array, and 0 matches (a
+// deleted row, a stale/wrong id, RLS) comes back `[]` — same 200/204 `res.ok`
+// either way, so the row COUNT, not the HTTP status, is the only honest
+// signal that something actually landed.
+function patchMatchedARow(rows: unknown): boolean {
+  return Array.isArray(rows) && rows.length > 0;
 }
 
 async function patchSession(entry: LogEntry, legacy = false): Promise<Response> {
@@ -4289,7 +4325,13 @@ async function patchSession(entry: LogEntry, legacy = false): Promise<Response> 
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
       'Content-Type': 'application/json',
-      Prefer: 'return=minimal',
+      // v53 fix (CHECK M2, Sep 26 2026): return=minimal gave a bare 204 on
+      // EVERY PATCH, including one that matched 0 rows (deleted server-side,
+      // wrong/stale id) — `res.ok` read that as success and the row got
+      // marked synced with the edit never actually landed. representation
+      // makes PostgREST hand back the matched rows (an empty array on 0
+      // matches), so patchLogToSupabase below can tell the difference.
+      Prefer: 'return=representation',
     },
     body: JSON.stringify(body),
   });
@@ -4317,8 +4359,18 @@ async function patchLogToSupabase(entry: LogEntry): Promise<boolean> {
       res = await patchSession(entry, true);
     }
     if (res.ok) {
-      markLogEdited(entry.id);
-      return true;
+      // v53 fix (CHECK M2): a 200/204 with an empty array means the filter
+      // matched NO row — that must never read as "saved". Leave the row
+      // exactly as it is (still synced:false, pendingEdit:true from
+      // saveHistoryEdit) so the next flush retries it instead of the edit
+      // silently vanishing.
+      const rows: unknown = await res.json().catch(() => null);
+      if (patchMatchedARow(rows)) {
+        markLogEdited(entry.id);
+        return true;
+      }
+      console.warn('[sync] edit PATCH matched 0 rows — keeping it queued:', entry.id);
+      return false;
     }
     console.warn('[sync] edit push failed:', res.status, await res.text().catch(() => ''));
     return false;
@@ -4682,9 +4734,15 @@ function captureRunningProgressIfLeaving(): void {
 // it). A pending wall-sit capture that never got a real second on the clock
 // is still discarded (nothing to keep); a rest is cancelled. v53: a RUNNING
 // timer is different — see captureRunningProgressIfLeaving above.
+// v53 fix (CHECK M4, Sep 26 2026): step 1 (warm-up, index 0, not resting)
+// used to have NO Back at all — R2 Week 4 opens A, B and C all on the ride,
+// so "the ride IS step 1" this week and Back vanished on the exact step she
+// most wants to leave mid-run ("from the timer I need to be able to go
+// back"). The lead's call while she's asleep (undoable): Back from step 1
+// goes to the pre-log instead of a step behind it — there is none. See the
+// step-1 branch at the top of goBack.
 function canGoBack(): boolean {
-  if (state.screen !== 'workout') return false;
-  return !(state.currentPhase === 'warmup' && state.currentExerciseIndex === 0 && !state.isResting);
+  return state.screen === 'workout';
 }
 
 function goBack(): void {
@@ -4695,6 +4753,15 @@ function goBack(): void {
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
   state.rideNumbersOpen = false; // v51: leaving the elliptical step by any route closes it
+  // v53 fix (CHECK M4): step 1 has no step behind it — Back here goes to the
+  // pre-log instead. captureRunningProgressIfLeaving + stopTimer above already
+  // kept a running ride's real minutes; her pre-log answers are untouched
+  // (they live directly on `state`, never cleared by beginExercises).
+  if (state.currentPhase === 'warmup' && state.currentExerciseIndex === 0 && !state.isResting) {
+    state.screen = 'pre-log';
+    render();
+    return;
+  }
   // v48: Back from the "Round 1 done ✓" screen = round 1's last move, which is
   // where the state already points (the break sits on top of it).
   if (state.roundBreak) {
@@ -4801,9 +4868,11 @@ function renderActionBar(inner: string): string {
   return `<div class="action-bar"><div class="action-bar-inner">${inner}</div></div>`;
 }
 
-// The Back + Done pair under every step (v47), pinned since v48. Back is hidden
-// on the very first step, where there is nothing behind her. `quiet` = Done
-// in the Back style (v48: a timed hold before it has run — the sage belongs to
+// The Back + Done pair under every step (v47), pinned since v48. v53 fix
+// (CHECK M4): Back used to hide on the very first step ("nothing behind
+// her") — it now always shows; from step 1 specifically it goes to the
+// pre-log instead of a step further back (see goBack). `quiet` = Done in the
+// Back style (v48: a timed hold before it has run — the sage belongs to
 // Start timer then; one sage per screen). Still tappable either way: she may
 // have used her own clock.
 function renderStepNav(doneLabel: string, quiet = false): string {
@@ -5988,6 +6057,7 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     __wtSessionPayload?: typeof sessionPayload;
     __wtLegacySessionPayload?: typeof legacySessionPayload;
     __wtPatchSessionRequest?: typeof patchSessionRequest;
+    __wtPatchMatchedARow?: typeof patchMatchedARow;
   };
   w.__wtMergeRemoteSessions = mergeRemoteSessions;
   w.__wtIsValidLogEntry = isValidLogEntry;
@@ -5998,6 +6068,8 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   // v53: the edit PATCH request is pure too (url + body, no fetch) — same
   // reasoning, tested the same way.
   w.__wtPatchSessionRequest = patchSessionRequest;
+  // v53 fix (CHECK M2): the 0-rows-matched decision, isolated the same way.
+  w.__wtPatchMatchedARow = patchMatchedARow;
 }
 
 async function pullFromSupabase(): Promise<void> {
@@ -7907,14 +7979,20 @@ function renderBackWristControl(opts: {
 }): string {
   const bothFine =
     opts.backTouched && opts.backValue === 0 && opts.wristTouched && opts.wristValue === 0;
+  // v53 fix (CHECK M5, Sep 26 2026): the lit flag used to be `touched &&
+  // value > 0` — feel 10 IS pain 0, so tapping the good end (10 · feels
+  // fine) saved correctly but never lit, and looked un-tappable/broken (her
+  // Cue complaint again). `touched` alone is the right flag: it's already
+  // reset on open by the Back/Wrist buttons, so it can't leak a stale light
+  // from a previous session.
   const backRow = opts.backOpen
     ? `<div class="label-text body-label">How does your back feel?</div>
-       ${renderChipRow(opts.backChipGroup, feelFromPain(opts.backValue), opts.backTouched && opts.backValue > 0, 'How does your back feel, 1 to 10')}
+       ${renderChipRow(opts.backChipGroup, feelFromPain(opts.backValue), opts.backTouched, 'How does your back feel, 1 to 10')}
        <div class="body-anchor">1 hurts a lot · 10 feels fine</div>`
     : '';
   const wristRow = opts.wristOpen
     ? `<div class="label-text body-label">How does your wrist feel?</div>
-       ${renderChipRow(opts.wristChipGroup, feelFromPain(opts.wristValue), opts.wristTouched && opts.wristValue > 0, 'How does your wrist feel, 1 to 10')}
+       ${renderChipRow(opts.wristChipGroup, feelFromPain(opts.wristValue), opts.wristTouched, 'How does your wrist feel, 1 to 10')}
        <div class="body-anchor">1 hurts a lot · 10 feels fine</div>`
     : '';
   return `
@@ -9506,10 +9584,18 @@ function renderHistoryDetail(): string {
   if (system.length > 0) {
     rows.push(detailRow('System', escapeHtml(system.join(' · ')), { stack: true }));
   }
+  // v53 fix (CHECK M2, Sep 26 2026): pendingEdit staying true (a queued edit
+  // that hasn't landed, or a PATCH that failed/matched 0 rows) must be
+  // VISIBLE here, on the one session this could be lost from — not just in
+  // the header's generic "offline · N pending" count.
+  const unsyncedLine = log.pendingEdit
+    ? `<p class="detail-edit-unsynced" id="detail-edit-unsynced">Not saved online yet — will retry</p>`
+    : '';
   return `
     ${header}
     <p class="detail-sub">Workout ${log.workout} · ${formatDateLong(log.date)}</p>
     <div class="card detail-card">${rows.join('')}</div>
+    ${unsyncedLine}
     <button class="btn-chip detail-edit-btn" id="edit-history-session" type="button">Edit</button>
   `;
 }
@@ -9603,9 +9689,18 @@ function renderHistoryEdit(): string {
 }
 
 // Merges the draft back into the ONE saved row it came from — every other
-// field on `existing` is spread through untouched. Queued exactly like a new
-// session (synced:false), plus pendingEdit:true so the flush PATCHes instead
-// of posting a duplicate (see patchSessionRequest).
+// field on `existing` is spread through untouched.
+//
+// v53 fix (CHECK M2, Sep 26 2026): pendingEdit only goes true when the
+// server already HAS this row (synced, or a previous edit is still queued
+// for it) — that's the only case a PATCH-by-id can find anything. A session
+// that finished OFFLINE and never reached Supabase has no server row yet;
+// routing it through pendingEdit meant every PATCH matched 0 rows (M2) and
+// the retry would never switch to a POST — the whole session, not just the
+// edit, was silently unrecoverable. Such a row stays a normal unsynced entry
+// here, and the flush below (matching the pendingEdit ternary everywhere
+// else in this file — see patchLogToSupabase's own call site) posts it with
+// the edited numbers already folded in, same as any other queued session.
 function saveHistoryEdit(): void {
   const id = state.historyDetailId;
   const draft = historyEditDraft;
@@ -9615,6 +9710,7 @@ function saveHistoryEdit(): void {
   if (idx === -1) return;
   const existing = logs[idx];
   if (!existing) return;
+  const existingOnServer = existing.synced === true || existing.pendingEdit === true;
   const updated: LogEntry = {
     ...existing,
     ellipticalTimeSec: parseMmSs(draft.timeStr),
@@ -9624,7 +9720,7 @@ function saveHistoryEdit(): void {
     ellipticalPulse: parsePulseReading(draft.pulseStr),
     sessionNote: draft.note.trim() || null,
     synced: false,
-    pendingEdit: true,
+    pendingEdit: existingOnServer,
   };
   logs[idx] = updated;
   writeLogs(logs);
@@ -9633,7 +9729,7 @@ function saveHistoryEdit(): void {
   render();
   state.syncStatus = 'syncing';
   updateSyncIndicator();
-  void patchLogToSupabase(updated).then((ok) => {
+  void (existingOnServer ? patchLogToSupabase(updated) : pushLogToSupabase(updated)).then((ok) => {
     state.syncStatus = ok ? 'synced' : 'offline';
     updateSyncIndicator();
   });
