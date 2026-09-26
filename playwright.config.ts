@@ -1,5 +1,14 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Sep 27 2026 · WK1 fix r1 (checker must #2): week.ts's getDay()/getDate() calls
+// read the RUNTIME's local timezone, not the +03:00 offset embedded in a test's
+// ISO string — so tests/week.test.ts passes on this laptop (Asia/Jerusalem) but
+// fails on CI's ubuntu-latest runner, which defaults to UTC. The app's calendar
+// semantics (Saturday/Sunday anchors, the swing) are inherently Jerusalem-local
+// (her own timezone, the only one that matters), so the whole suite is pinned
+// to it, not left to whatever box happens to run it.
+process.env.TZ = 'Asia/Jerusalem';
+
 // Sep 26 2026: PW_PORT lets two checkouts (a hotfix worktree + the main
 // checkout's builders) run the suite at once without one reusing the other's
 // server — that served STALE code to the wrong suite twice tonight.

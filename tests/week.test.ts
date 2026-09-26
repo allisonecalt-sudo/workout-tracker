@@ -85,7 +85,14 @@ const HER_42_REAL_ROWS: SessionLite[] = [
   { id: 'S42', date: '2026-09-26T19:14:51.421+00:00', workout: 'B' },
 ];
 
-test.describe('#1 — pre-launch rows never enter the new model', () => {
+test.describe('#1 — pre-launch rows predate the launch and are filtered out (NOT a full parity test)', () => {
+  // Sep 27 2026 · WK1 fix r1 (checker should #3): this test's old name
+  // ("same counts per week as today's attributeSessionsToWeeks") over-promised
+  // — it only proves every one of her 42 real rows predates the launch, so
+  // the new model never touches them. attributeSessionsToWeeks (app.ts)
+  // stays untouched by WK1 on purpose, so week-by-week parity against IT
+  // can't be proven from inside this pure module. That comparison is WK2's
+  // job, the moment counting switches over (§2.7 test #1's real intent).
   test('all 42 of her real rows predate the launch and are filtered out untouched', () => {
     for (const row of HER_42_REAL_ROWS) {
       expect(new Date(row.date).getTime()).toBeLessThan(
@@ -141,6 +148,77 @@ test.describe('#2 — closes on the 3rd letter, then a weekday gap counts backwa
   });
 });
 
+test.describe('#2b — a weekday session AFTER the boundary has passed still opens the next week', () => {
+  // Sep 27 2026 · WK1 fix r1 (checker must #1). Her real rhythm almost never
+  // lands on a Sat/Sun (38 of 42 real rows are Mon-Fri) — the pre-fix code
+  // only opened the next week when a session literally fell on a Sat/Sun, so
+  // a plain Mon/Thu/Fri week after a close counted ALL THREE back into the
+  // closed week and the next week never opened (open stayed null forever).
+  // The fix: once the boundary Saturday has passed, the FIRST session after
+  // it opens the next week on its own day, whatever weekday that is.
+  test('Mon A / Thu B / Fri C after a Wed close = Week 6 at 3 of 3, not folded into Week 5', () => {
+    const sessions: SessionLite[] = [
+      { id: 'A1', date: '2026-09-27T10:00:00+03:00', workout: 'A' }, // Sun
+      { id: 'B1', date: '2026-09-28T10:00:00+03:00', workout: 'B' }, // Mon
+      { id: 'C1', date: '2026-09-30T10:00:00+03:00', workout: 'C' }, // Wed — closes Wk5
+      { id: 'D1', date: '2026-10-05T10:00:00+03:00', workout: 'A' }, // Mon — boundary (Sat Oct 3) already passed
+      { id: 'E1', date: '2026-10-08T10:00:00+03:00', workout: 'B' }, // Thu
+      { id: 'F1', date: '2026-10-09T10:00:00+03:00', workout: 'C' }, // Fri — closes Wk6
+    ];
+    const { spans, open } = walkWeeks(sessions, [], []);
+
+    expect(spans).toHaveLength(2);
+    const wk5 = spans[0] as WeekSpan;
+    const wk6 = spans[1] as WeekSpan;
+    expect(wk5.key).toEqual({ round: 2, week: 5 });
+    expect(wk5.done).toEqual(['A', 'B', 'C']);
+
+    expect(wk6.key).toEqual({ round: 2, week: 6 });
+    expect(wk6.how).toBe('three');
+    expect(wk6.openedAt).toBe('2026-10-05T10:00:00+03:00'); // D1's own date — the Monday, not a Saturday
+    expect(wk6.done).toEqual(['A', 'B', 'C']);
+    expect(wk6.missing).toEqual([]);
+    expect(wk6.sessions.map((s) => s.id)).toEqual(['D1', 'E1', 'F1']);
+
+    // Week 7 stays a gap (no session yet) rather than being invented.
+    expect(open).toBeNull();
+  });
+});
+
+test.describe('#2c — replaying her real Round 2 rows, shifted after launch, keeps 4 weeks as 4 weeks', () => {
+  // Sep 27 2026 · WK1 fix r1 (checker must #1, the exact regression it found):
+  // her real Aug 30 – Sep 26 stretch (S31-S42 of HER_42_REAL_ROWS) is 4 real
+  // weeks at 3/3. Shifting every date +28 days (4 weeks — same weekday, same
+  // letters) lands them all after the launch. Pre-fix, this collapsed to 2
+  // weeks (W5 got 8 sessions, W6 got 4) because most of these sessions land
+  // on weekdays, not a Sat/Sun. Post-fix it must stay 4 separate weeks.
+  function shiftDays(iso: string, days: number): string {
+    const d = new Date(iso);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString();
+  }
+
+  const REAL_FOUR_WEEKS: SessionLite[] = HER_42_REAL_ROWS.slice(30); // S31..S42
+
+  test('4 real 3/3 weeks, shifted +28 days, are still 4 closed weeks at 3/3 (not 2)', () => {
+    const shifted = REAL_FOUR_WEEKS.map((s) => ({ ...s, date: shiftDays(s.date, 28) }));
+    const { spans, open } = walkWeeks(shifted, [], []);
+
+    expect(spans).toHaveLength(4);
+    for (const span of spans) {
+      expect(span.how).toBe('three');
+      expect(span.done).toEqual(['A', 'B', 'C']);
+      expect(span.missing).toEqual([]);
+      expect(span.sessions).toHaveLength(3);
+    }
+    expect(spans.map((s) => s.key.week)).toEqual([5, 6, 7, 8]);
+    // The 4th week's close (Sat, shifted from her real Sep 26 close) opens
+    // Week 9 immediately (no boundary to wait for) — empty until she logs.
+    expect(open?.key).toEqual({ round: 2, week: 9 });
+    expect(open?.sessions).toEqual([]);
+  });
+});
+
 test.describe('#3 — a short week stays open past Friday, into a second weekend', () => {
   test('A, A (repeat), B across 10 days → still open, missing = [C]', () => {
     const sessions: SessionLite[] = [
@@ -190,6 +268,35 @@ test.describe('#4 — "Move on without it" closes the week; a duplicate tap is i
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain('stale "move on"');
     });
+  });
+});
+
+test.describe('#4b — a gap session counting back into a moved-on week updates its done/missing too', () => {
+  // Sep 27 2026 · WK1 fix r1 (checker should: week.ts:244-246). A gap session
+  // landing in `.sessions` while `.done`/`.missing` stayed frozen from the
+  // close meant a week could list a C session AND still say `missing: ['C']`
+  // — contradictory data a weekly-review screen would show as-is. `how`
+  // stays 'moved_on' (the week really did close that way); done/missing now
+  // reflect the letters actually in `.sessions`.
+  test('a gap C after "moved on without it" (missing C) updates missing to []', () => {
+    const sessions: SessionLite[] = [
+      { id: 'A1', date: '2026-09-27T10:00:00+03:00', workout: 'A' },
+      { id: 'B1', date: '2026-09-28T10:00:00+03:00', workout: 'B' },
+      { id: 'D1', date: '2026-10-01T10:00:00+03:00', workout: 'C' }, // Thu, gap — backward
+      { id: 'F1', date: '2026-10-03T10:00:00+03:00', workout: 'A' }, // Sat — opens Wk6
+    ];
+    const moves: MoveOn[] = [{ round: 2, week: 5, at: '2026-09-30T12:00:00+03:00' }]; // Wed, missing C
+
+    const { spans, open } = walkWeeks(sessions, moves, []);
+
+    expect(spans).toHaveLength(1);
+    const wk5 = spans[0] as WeekSpan;
+    expect(wk5.how).toBe('moved_on'); // still closed the way it really closed
+    expect(wk5.sessions.map((s) => s.id)).toEqual(['A1', 'B1', 'D1']);
+    expect(wk5.done).toEqual(['A', 'B', 'C']); // recomputed — D1 is in the list now
+    expect(wk5.missing).toEqual([]); // no longer contradicts .sessions
+
+    expect(open?.key).toEqual({ round: 2, week: 6 });
   });
 });
 

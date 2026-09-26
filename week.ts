@@ -56,6 +56,20 @@
 // her delete a session's date/letter, only its numbers/note, and a plain
 // delete of a closing session is not yet guarded here). Don't silently
 // "fix" this without her/Opus weighing in on the right rule.
+//
+// DELIBERATELY STILL OPEN after the Sep 27 2026 fix round (checker's "should"
+// #1): the suggested fix ("a span with a later span or session stays closed")
+// can't be built as a pure time-based rule here, because rule 3/8d.2 says the
+// OPPOSITE for a legitimate short week - it stays open through as many
+// Saturdays/Sundays as it takes (tests/week.test.ts #3, 10 real days). A
+// pure recompute genuinely cannot tell "week 5 is still short and open" apart
+// from "week 5 was reopened because its closing letter got deleted" - both
+// look identical from a session list alone. The real fix needs the week's
+// close to survive a session's deletion, i.e. persisted memory, which is what
+// PLAN-2026-09-26.md §2.2's optional `counted_round`/`counted_week` audit
+// columns are for. That's a schema decision (her yes first), not a WK1 patch.
+// The app still has no UI path to delete a closing session, so this stays a
+// flagged edge, not a live bug.
 
 export type Letter = 'A' | 'B' | 'C';
 
@@ -108,6 +122,23 @@ function isWeekendAnchorDay(iso: string): boolean {
 
 function afterLaunch(iso: string): boolean {
   return new Date(iso).getTime() >= new Date(COMPLETION_WEEKS_FROM.at).getTime();
+}
+
+// Sep 27 2026 · WK1 fix r1 (checker must #1, spec 8d.5): "the next week ...
+// only opens the next week at the first such boundary at or after the
+// current week's close." Given the instant a week closes, this is that
+// boundary: the next local Saturday at 00:00. If the close itself already
+// falls on a Saturday or Sunday, there IS no boundary to wait for (the
+// caller special-cases that and opens immediately, same as the launch
+// instant always has) - this function is only ever called for a Mon-Fri
+// close.
+function nextSaturdayBoundary(closedAtIso: string): number {
+  const closed = new Date(closedAtIso);
+  const day = closed.getDay(); // 0 Sun .. 6 Sat; never called with 0 or 6
+  const daysUntilSaturday = 6 - day;
+  const boundary = new Date(closed.getFullYear(), closed.getMonth(), closed.getDate());
+  boundary.setDate(boundary.getDate() + daysUntilSaturday);
+  return boundary.getTime();
 }
 
 function freshSpan(key: WeekKey, openedAt: string): WeekSpan {
@@ -182,6 +213,13 @@ export function walkWeeks(
   // to this one instead of opening a new week itself.
   let lastClosed: WeekSpan | null = null;
 
+  // Set the instant a week closes (except a round restart, which never
+  // waits - rule 7). Non-null while a gap is open: the amended anchor rule
+  // (8d.5) - a session dated at/after this boundary opens the next week,
+  // WHATEVER weekday it lands on (checker must #1); a session dated before
+  // it counts backward to `lastClosed` instead (rule 3).
+  let nextBoundary: number | null = null;
+
   function closeOpen(at: string, how: 'three' | 'moved_on' | 'round_ended'): void {
     if (!open) return;
     const { done, missing } = doneAndMissing(openDone);
@@ -192,6 +230,24 @@ export function walkWeeks(
     spans.push(open);
     lastClosed = open;
     open = null;
+
+    // "round_ended" opens its own Week 1 right away (rule 7) - the caller
+    // does that itself, right after calling closeOpen. For an ordinary
+    // close, the next week's NUMBER is assigned now (8d.3), but its own
+    // start still waits for a Saturday/Sunday boundary - UNLESS the close
+    // itself already landed on one, in which case there's nothing to wait
+    // for (same reasoning as the launch instant always opening straight
+    // away).
+    if (how !== 'round_ended') {
+      weekNow += 1;
+      if (isWeekendAnchorDay(at)) {
+        open = freshSpan({ round: roundNow, week: weekNow }, at);
+        openDone = new Set();
+        nextBoundary = null;
+      } else {
+        nextBoundary = nextSaturdayBoundary(at);
+      }
+    }
   }
 
   for (const ev of events) {
@@ -204,6 +260,7 @@ export function walkWeeks(
       weekNow = 1;
       open = freshSpan({ round: roundNow, week: weekNow }, ev.round.at);
       openDone = new Set();
+      nextBoundary = null; // her own restart moment - no boundary to wait for
       continue;
     }
 
@@ -232,18 +289,35 @@ export function walkWeeks(
       continue;
     }
 
-    // A gap: no week is open. Rule 1/3 — a session opens the NEXT week only
-    // when it lands on a Saturday or Sunday (whichever she actually starts
-    // on); anything else counts backward to the week that just closed.
-    if (isWeekendAnchorDay(session.date)) {
-      weekNow += 1;
+    // A gap: no week is open. The amended rule (8d.5, checker must #1) — a
+    // session opens the NEXT week once its date is at or after the next
+    // Saturday/Sunday boundary past the close, WHATEVER weekday it actually
+    // lands on (her real rhythm rarely has a weekend session, so waiting
+    // for an exact Sat/Sun hit meant the next week could never open at
+    // all). `openedAt` is this session's own date, on the SAME weekend as
+    // the boundary or later — never a day she hasn't actually started on
+    // (this module's own rule, never invented).
+    if (nextBoundary !== null && new Date(session.date).getTime() >= nextBoundary) {
+      // weekNow was already assigned at the close (8d.3) - just open now.
       open = freshSpan({ round: roundNow, week: weekNow }, session.date);
       open.sessions.push(session);
       openDone = new Set([session.workout]);
       weekOf.set(session.id, open.key);
+      nextBoundary = null; // consumed - the week is open now
     } else if (lastClosed) {
-      (lastClosed as WeekSpan).sessions.push(session);
-      weekOf.set(session.id, (lastClosed as WeekSpan).key);
+      const closed = lastClosed as WeekSpan;
+      closed.sessions.push(session);
+      weekOf.set(session.id, closed.key);
+      // Should-fix (checker): a gap session that counts back into a closed
+      // week was landing in `.sessions` while `.done`/`.missing` stayed
+      // frozen from the moment it closed — a session could show up in the
+      // list AND in `missing` at once. `how` stays frozen (the week really
+      // did close that way); done/missing are recomputed from the letters
+      // actually in `.sessions` now.
+      const doneSet = new Set(closed.sessions.map((s) => s.workout));
+      const { done, missing } = doneAndMissing(doneSet);
+      closed.done = done;
+      closed.missing = missing;
     } else {
       // Shouldn't happen — the launch instant starts `open` immediately, so
       // there's always a `lastClosed` by the time a gap can exist. Fail
