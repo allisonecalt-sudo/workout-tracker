@@ -5243,11 +5243,11 @@ test.describe('v48 P4 home', () => {
     await expect(line).toContainText("Sat's");
     await expect(line).toContainText('went to');
     await expect(line).toHaveText("0 of 3 this week · Sat's C went to Week 3");
-    // The Saturday dot is still lit, and still opens its session (not the card).
-    await page.locator('.week-dot.dot-C').click();
-    await expect(page.locator('#app')).toContainText('Sat, Sep 19, 2026');
-    await expect(page.locator('.week-line')).toHaveCount(0);
-    await expect(page.locator('.weekly-review-subtitle')).toHaveCount(0);
+    // v52.1 (Sep 26 2026, her "I need b back for 5"): a session that COUNTED
+    // for last week gets no dot in this week's strip — the line already says
+    // where it went — so the Saturday dot is empty here.
+    await expect(page.locator('.week-card .week-dot.dot-C')).toHaveCount(0);
+    await expect(page.locator('.week-card .week-dot.dot-empty')).toHaveCount(7);
   });
 
   test('(d) what left home: no title/subtitle/pick copy, no Recent, no streak, no week arrows', async ({
