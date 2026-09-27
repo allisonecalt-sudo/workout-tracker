@@ -41,8 +41,11 @@ import {
 import {
   walkWeeks,
   dayOfWeek as weekDayOfWeek,
-  // canMoveOn (week.ts) isn't wired in yet — WK3 ("Move on without it") is
-  // its own item, schema-gated (her yes first). Re-add this import there.
+  // WK3 (Sep 27 2026): "Move on without it" — wired into movesForWeekModel /
+  // renderHome below. Schema-gated (§2.2's week_moves table needs her yes
+  // before the migration is applied), but the pure check itself has no
+  // schema dependency, so it's safe to read now.
+  canMoveOn as weekCanMoveOn,
   COMPLETION_WEEKS_FROM,
   type SessionLite as WeekSessionLite,
   type MoveOn as WeekMoveOn,
@@ -6497,6 +6500,8 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   const w = window as unknown as {
     __wtCyclePeriodPayload?: typeof cyclePeriodPayload;
     __wtLogPeriodStart?: typeof logPeriodStart;
+    __wtWeekMovePayload?: typeof weekMovePayload;
+    __wtMergeWeekMoves?: typeof mergeWeekMoves;
   };
   w.__wtCyclePeriodPayload = cyclePeriodPayload;
   // v50: the tap's real timer (10s) is too slow to wait out in a test — this
@@ -6504,6 +6509,10 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   // row + the payload without a real-time wait (her sync-is-off automation
   // rule: assert local state + payload, not a round trip).
   w.__wtLogPeriodStart = logPeriodStart;
+  // WK3 (Sep 27 2026): same reasoning as __wtCyclePeriodPayload — a test can
+  // assert the exact push body + the pure merge without a real network call.
+  w.__wtWeekMovePayload = weekMovePayload;
+  w.__wtMergeWeekMoves = mergeWeekMoves;
 }
 
 async function flushPendingSyncs(): Promise<void> {
@@ -6522,7 +6531,11 @@ async function flushPendingSyncs(): Promise<void> {
   // tandem rule: an unsynced row that never reaches cycle_periods is a row I
   // can't see either. Push those alongside pending session logs.
   const pendingPeriods = loadCyclePeriods().filter((p) => !p.synced);
-  if (pendingLogs.length === 0 && pendingPeriods.length === 0) {
+  // WK3 (Sep 27 2026): a "Move on without it" tap made offline, or one whose
+  // POST failed, retries here too — same fail-loud reasoning as pendingPeriods
+  // above (an unsynced week_moves row is a row Claude can't see either).
+  const pendingWeekMoves = loadWeekMoves().filter((m) => !m.synced);
+  if (pendingLogs.length === 0 && pendingPeriods.length === 0 && pendingWeekMoves.length === 0) {
     state.syncStatus = 'synced';
     updateSyncIndicator();
     return;
@@ -6541,6 +6554,10 @@ async function flushPendingSyncs(): Promise<void> {
     await pushCyclePeriod(period); // marks synced:true in localStorage on success
   }
   if (loadCyclePeriods().some((p) => !p.synced)) allOk = false;
+  for (const move of pendingWeekMoves) {
+    await pushWeekMove(move); // marks synced:true in localStorage on success
+  }
+  if (loadWeekMoves().some((m) => !m.synced)) allOk = false;
   state.syncStatus = allOk ? 'synced' : 'offline';
   updateSyncIndicator();
 }
@@ -6554,9 +6571,12 @@ function updateSyncIndicator(): void {
 
 function syncIndicatorText(): string {
   // v50 · fix (Sep 25 2026): pending cycle-period rows count toward the
-  // indicator too — see flushPendingSyncs above.
+  // indicator too — see flushPendingSyncs above. WK3 (Sep 27 2026): same for
+  // a pending week_moves row.
   const pending =
-    loadLogs().filter((l) => !l.synced).length + loadCyclePeriods().filter((p) => !p.synced).length;
+    loadLogs().filter((l) => !l.synced).length +
+    loadCyclePeriods().filter((p) => !p.synced).length +
+    loadWeekMoves().filter((m) => !m.synced).length;
   if (state.syncStatus === 'syncing') return 'syncing…';
   if (pending > 0) return `offline · ${pending} pending`;
   // v48 · P4 (Sep 24 2026): "synced ✓" hides — it was a third status line above
@@ -7018,11 +7038,206 @@ function roundStartsForWeekModel(): WeekRoundStart[] {
   return ROUNDS.map((r) => ({ round: r.num, at: `${r.start}T00:00:00+03:00` }));
 }
 
-/** WK3 ("Move on without it" + the week_moves table) hasn't shipped — no
- * table, no sync — so this is always []. One seam here means WK3 only has to
- * fill in this one function, not every call site below. */
+// ---------- WK3 · week_moves sync (Sep 27 2026) ----------
+//
+// PLAN-2026-09-26.md §2.2: "Move on without it" is a quiet, explicit event
+// (week.ts's MoveOn), never inferred — the table holds ONLY the exceptions (a
+// week she chose to close with 1-2 done); completed weeks are still derived
+// from workout_sessions, untouched. Same sync shape as cycle_periods
+// (v50, above): no pagination, no delete-detection window — "pull replaces
+// synced rows, an unsynced local write always wins until it's confirmed."
+// Undo (§2.4) is a plain DELETE by (round, week) — to a fresh walkWeeks()
+// recompute that's exactly "this move never happened", no special case
+// needed on the read side.
+//
+// SCHEMA: the table itself (migrations/2026-09-27-v53-week-moves.sql) is
+// NOT YET APPLIED — her yes comes first (CLAUDE.md's schema-change rule).
+// Until then every pull/push/delete below fails loud (console.warn) exactly
+// like any other network hiccup — no app-side change needed once it ships.
+const WEEK_MOVES_STORAGE_KEY = 'workout-tracker:week-moves';
+
+// `missing` is kept as the plain letters string ("B" / "BC", §2.2's own
+// `CHECK (missing ~ '^[ABC]{1,2}$')`) — it's never read back INTO the week
+// model (movesForWeekModel only needs round/week/at), only used to render
+// the moved-note's "closed at N of 3" without re-deriving it from a span
+// that may no longer exist by the time she reads the note.
+type StoredWeekMove = {
+  round: number;
+  week: number;
+  at: string;
+  missing: string;
+  synced?: boolean;
+};
+
+function loadWeekMoves(): StoredWeekMove[] {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem(WEEK_MOVES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (m): m is StoredWeekMove =>
+        !!m &&
+        typeof m === 'object' &&
+        typeof (m as StoredWeekMove).round === 'number' &&
+        typeof (m as StoredWeekMove).week === 'number' &&
+        typeof (m as StoredWeekMove).at === 'string'
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeWeekMoves(moves: StoredWeekMove[]): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(WEEK_MOVES_STORAGE_KEY, JSON.stringify(moves));
+  } catch {
+    // localStorage full/unavailable — non-fatal, same as writeCyclePeriods.
+  }
+}
+
+type RemoteWeekMove = { round: number; week: number; moved_at: string; missing: string | null };
+
+function weekMoveKey(round: number, week: number): string {
+  return `${round}-${week}`;
+}
+
+function mergeWeekMoves(local: StoredWeekMove[], remote: RemoteWeekMove[]): StoredWeekMove[] {
+  const byKey = new Map<string, StoredWeekMove>();
+  for (const l of local) if (l.synced === false) byKey.set(weekMoveKey(l.round, l.week), l);
+  for (const r of remote) {
+    const key = weekMoveKey(r.round, r.week);
+    const existing = byKey.get(key);
+    if (existing && existing.synced === false) continue; // local unsynced write wins on content
+    byKey.set(key, {
+      round: r.round,
+      week: r.week,
+      at: r.moved_at,
+      missing: r.missing ?? '',
+      synced: true,
+    });
+  }
+  return [...byKey.values()];
+}
+
+async function pullWeekMovesFromSupabase(): Promise<void> {
+  if (syncDisabled()) return;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/week_moves?select=round,week,moved_at,missing&order=moved_at.desc`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+    );
+    if (res.ok && res.headers.get('X-SW-Cache') !== '1') {
+      const remote: RemoteWeekMove[] = await res.json();
+      writeWeekMoves(mergeWeekMoves(loadWeekMoves(), remote));
+      if (state.screen === 'home') render();
+    } else if (!res.ok) {
+      console.warn('[sync] pull week_moves failed:', res.status);
+    }
+  } catch (err) {
+    console.warn('[sync] pull week_moves threw:', err);
+  }
+}
+
+// Pure — kept separate from the fetch call so tests can assert it via a
+// window hook, the same way cyclePeriodPayload does for cycle_periods.
+function weekMovePayload(m: StoredWeekMove): RemoteWeekMove {
+  return { round: m.round, week: m.week, moved_at: m.at, missing: m.missing || null };
+}
+
+async function pushWeekMove(m: StoredWeekMove): Promise<void> {
+  if (syncDisabled()) return;
+  try {
+    // (round, week) is UNIQUE (§2.2) — merge-duplicates makes a repeat push
+    // (a retry, a second phone) an upsert, not a 409 — same on_conflict shape
+    // as cycle_periods' pushCyclePeriod above.
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/week_moves?on_conflict=round,week`, {
+      method: 'POST',
+      headers: { ...supabaseHeaders(), Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(weekMovePayload(m)),
+    });
+    if (res.ok) {
+      const moves = loadWeekMoves();
+      const idx = moves.findIndex((x) => x.round === m.round && x.week === m.week);
+      if (idx >= 0) {
+        moves[idx] = { ...moves[idx]!, synced: true };
+        writeWeekMoves(moves);
+      }
+    } else {
+      console.warn('[sync] push week_moves failed:', res.status);
+    }
+  } catch (err) {
+    console.warn('[sync] push week_moves threw:', err);
+  }
+}
+
+async function deleteWeekMove(round: number, week: number): Promise<void> {
+  if (syncDisabled()) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/week_moves?round=eq.${round}&week=eq.${week}`, {
+      method: 'DELETE',
+      headers: supabaseHeaders(),
+    });
+  } catch (err) {
+    console.warn('[sync] delete week_moves threw:', err);
+  }
+}
+
+/** §2.4's quiet week-card button: her explicit "Move on without it" tap.
+ * Optimistic local write first (offline-safe, same as every other save in
+ * this app), then pushed if a network is allowed — never network-first (the
+ * tap must never silently do nothing on a bad connection). */
+function moveOnWithoutIt(key: WeekKey, missing: readonly string[]): void {
+  const move: StoredWeekMove = {
+    round: key.round,
+    week: key.week,
+    at: new Date().toISOString(),
+    missing: missing.join(''),
+    // Sep 27 fix: always false on write, like every other save in this app
+    // (logLog's `synced: false` at line 3333, logWalk's at 3575) — the push
+    // below (pushWeekMove) already has its own `if (syncDisabled()) return`
+    // guard, so no network is ever attempted under automation. Marking it
+    // synced HERE too was a bug: it made a "Move on" tap silently skip the
+    // offline queue under test automation, unlike every other save path.
+    synced: false,
+  };
+  writeWeekMoves([
+    move,
+    ...loadWeekMoves().filter(
+      (m) => weekMoveKey(m.round, m.week) !== weekMoveKey(key.round, key.week)
+    ),
+  ]);
+  void pushWeekMove(move);
+  render();
+}
+
+/** §2.4's Undo — a plain delete. Live only "for the rest of that day"
+ * (todaysWeekMove below is date-driven, not a timer), so there's no undo
+ * window to manage: the button simply stops rendering once local midnight
+ * passes, same as the note above it. */
+function undoWeekMove(move: StoredWeekMove): void {
+  writeWeekMoves(
+    loadWeekMoves().filter(
+      (m) => weekMoveKey(m.round, m.week) !== weekMoveKey(move.round, move.week)
+    )
+  );
+  void deleteWeekMove(move.round, move.week);
+  render();
+}
+
+/** The move (if any) she made TODAY — drives §2.4's moved-note under the
+ * header. Date-driven on purpose: the note (and its Undo) stops appearing
+ * once local midnight passes, with no timer to leak or clear. */
+function todaysWeekMove(): StoredWeekMove | null {
+  const today = localIsoDate(new Date());
+  return loadWeekMoves().find((m) => localIsoDate(new Date(m.at)) === today) ?? null;
+}
+
+/** week.ts's MoveOn events, from the synced local week_moves table (WK3). */
 function movesForWeekModel(): WeekMoveOn[] {
-  return [];
+  return loadWeekMoves().map((m) => ({ round: m.round, week: m.week, at: m.at }));
 }
 
 /** Is "now" (or a caller-supplied instant — tests mock the clock) at/after
@@ -8370,6 +8585,11 @@ function renderHome(): string {
   let doneCardLines: string[];
   let chipsHtml: string;
   let weekNavLinkHtml: string;
+  // WK3 (Sep 27 2026): the "Move on without it" button + its moved-note
+  // (§2.4). Both stay '' pre-launch — the old calendar model has no
+  // completion week to move on FROM.
+  let moveOnHtml = '';
+  let movedNoteHtml = '';
 
   if (!isNowAfterCompletionLaunch()) {
     // ---- PRE-LAUNCH: the original calendar + Saturday-swing model, untouched ----
@@ -8467,6 +8687,28 @@ function renderHome(): string {
       weekLineText = weekCountLine(shown);
     }
     saturdayNote = '';
+
+    // WK3 (Sep 27 2026), §2.4: the quiet "Move on without it" button — only
+    // on the LIVE week (never while peeking at a closed one), only when
+    // week.ts's own canMoveOn says so (1-2 done, open 8+ days). The app
+    // never moves on by itself — this only ever renders a button; the write
+    // happens on her explicit tap (moveOnWithoutIt, bound below).
+    if (!peek && shown.span && weekCanMoveOn(shown.span, new Date())) {
+      moveOnHtml =
+        `<button class="week-move-on-btn" id="week-move-on" type="button">` +
+        `Move on to Week ${shown.key.week + 1} without ${joinMissingLetters(shown.span.missing)}</button>`;
+    }
+    // The moved-note is about "today" specifically, independent of whether
+    // she's peeking at an older week right now — it stops matching on its
+    // own once local midnight passes (todaysWeekMove is date-driven, not a
+    // timer, §2.4's "for the rest of that day").
+    const todaysMove = todaysWeekMove();
+    if (todaysMove) {
+      const doneCount = 3 - todaysMove.missing.length;
+      movedNoteHtml =
+        `<div class="week-moved-note" id="week-moved-note">Week ${todaysMove.week} closed at ${doneCount} of 3 · ` +
+        `<button class="week-undo-btn" id="week-undo" type="button">Undo</button></div>`;
+    }
 
     // Did TODAY'S save close its own week? (its week resolves to a CLOSED
     // span, not the currently open/pending one.)
@@ -8595,6 +8837,7 @@ function renderHome(): string {
       </button>
     </div>
     ${subLineHtml}
+    ${movedNoteHtml}
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
     ${staleSnapshot ? renderStaleSessionCard(staleSnapshot) : ''}
 
@@ -8613,6 +8856,7 @@ function renderHome(): string {
       </div>
       <div class="week-dots" id="week-strip">${dotsHtml}</div>
       <div class="week-line" id="week-count">${weekLineText}</div>
+      ${moveOnHtml}
       ${saturdayNote}
       ${weekNavLinkHtml}
     </div>
@@ -12396,6 +12640,23 @@ function attachHandlers(): void {
     render();
   });
 
+  // WK3 (Sep 27 2026), §2.4: "Move on without it" — quiet, explicit, her own
+  // tap only (the app never moves on by itself). Raw listener + stopPropagation
+  // for the same reason week-nav-back/forward need it: this button sits
+  // INSIDE .week-card, whose own click opens Weekly review.
+  document.getElementById('week-move-on')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const shown = shownWeek();
+    if (!shown.span) return; // button only ever renders when shown.span exists (canMoveOn needs it)
+    moveOnWithoutIt(shown.key, shown.span.missing);
+  });
+  // #week-undo sits under the header (outside .week-card), so a plain
+  // bindClick is enough — no propagation to stop.
+  bindClick('week-undo', () => {
+    const move = todaysWeekMove();
+    if (move) undoWeekMove(move);
+  });
+
   // Ship 5: Progress screen — full-history longitudinal view, from home's door.
   // (v48 · P6: the Session screen's "📈 View progress" link and the Exercise
   // breakdown toggle are gone with what they opened.)
@@ -13171,6 +13432,7 @@ document.addEventListener('DOMContentLoaded', () => {
     void fetchStepsToday(); // v48 · P4: once, after the pull
   });
   void pullCyclePeriodsFromSupabase(); // v50 · cycle
+  void pullWeekMovesFromSupabase(); // WK3 · week_moves
   void flushPendingWalks();
   // v45: a session saved offline (gym basement, airplane mode) now syncs the
   // moment the signal comes back — before, only on the next app open.
@@ -13178,6 +13440,7 @@ document.addEventListener('DOMContentLoaded', () => {
     void flushPendingSyncs();
     void flushPendingWalks();
     void pullCyclePeriodsFromSupabase(); // v50 · cycle
+    void pullWeekMovesFromSupabase(); // WK3 · week_moves
   });
   // Resume an in-progress WALK too (Jul 4): restart GPS + step tracking and
   // the wake lock — accumulated meters/steps live in localStorage, so a

@@ -8561,3 +8561,212 @@ test.describe('v53 · edit a past session (A5)', () => {
     await expect(page.locator('.screen-header h2')).toHaveText('Edit session');
   });
 });
+
+// WK3 (Sep 27 2026) — PLAN-2026-09-26.md §2.4/§10: "Move on without it" +
+// week_moves + sync + Undo. Her words, 21:24: "dont go to next week till i
+// approve" — the button is quiet and explicit, never automatic. Fixture
+// shape matches week.test.ts's own #11 canMoveOn tests exactly (same real
+// launch instant, same day-7/day-8 boundary) so the UI and the pure module
+// agree on the same real dates.
+test.describe('WK3 · "Move on without it" + week_moves', () => {
+  type Row = Record<string, unknown>;
+
+  const seedLogs = async (page: Page, logs: Row[]): Promise<void> => {
+    await page.addInitScript((rows) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    }, logs);
+  };
+
+  const readWeekMoves = async (page: Page): Promise<Row[]> => {
+    const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:week-moves'));
+    return JSON.parse(raw ?? '[]') as Row[];
+  };
+
+  const log = (id: string, date: string, workout: 'A' | 'B' | 'C'): Row => ({
+    id,
+    date,
+    workout,
+    capacityBefore: 6,
+    capacityAfter: 7,
+    wallSitSec: 0,
+    backPain: 0,
+    word: '',
+    // Sep 27 fix: these fixture sessions are seeded already-synced (the
+    // convention every other describe block in this file uses, e.g. line
+    // 5115/7300) — this block is testing the week_moves queue in isolation,
+    // not the unrelated session-log queue, so an unsynced seed row was
+    // double-counting into #sync-indicator's "N pending" and breaking the
+    // one test that reads it (WK3's own offline-queue test).
+    synced: true,
+  });
+
+  // Week 5 opens at the real launch instant (Sat Sep 26 2026 22:30 +03:00).
+  // An A the next day + a B two days later leave it at 2 of 3, missing only
+  // C — done.length > 0 and < 3 is canMoveOn's own gate.
+  const TWO_DONE = [
+    log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
+    log('wk5-b', '2026-09-29T10:00:00+03:00', 'B'),
+  ];
+  const DAY_7 = '2026-10-02T12:00:00+03:00'; // Fri — canMoveOn's own "hidden" day
+  const DAY_8 = '2026-10-03T12:00:00+03:00'; // Sat — canMoveOn's own "shown" day
+
+  test('hidden on day 7, even with 2 of 3 done', async ({ page }) => {
+    await seedLogs(page, TWO_DONE);
+    await mockDate(page, DAY_7);
+    await page.goto('/');
+    await expect(page.locator('.home-header h1')).toContainText('Week 5');
+    await expect(page.locator('.week-line')).toContainText('2 of 3');
+    await expect(page.locator('#week-move-on')).toHaveCount(0);
+  });
+
+  test('shown on day 8 with 2 of 3 done — "Move on to Week 6 without C"', async ({ page }) => {
+    await seedLogs(page, TWO_DONE);
+    await mockDate(page, DAY_8);
+    await page.goto('/');
+    await expect(page.locator('#week-move-on')).toHaveText('Move on to Week 6 without C');
+  });
+
+  test('never shown at 0 done, even well past day 8', async ({ page }) => {
+    // No logs seeded at all — Week 5 sits at 0 of 3.
+    await mockDate(page, '2026-10-16T12:00:00+03:00');
+    await page.goto('/');
+    await expect(page.locator('.home-header h1')).toContainText('Week 5');
+    await expect(page.locator('.week-line')).toContainText('0 of 3');
+    await expect(page.locator('#week-move-on')).toHaveCount(0);
+  });
+
+  test('tap → Week 6 opens; the moved-note + Undo appear under the header', async ({ page }) => {
+    await seedLogs(page, TWO_DONE);
+    await mockDate(page, DAY_8);
+    await page.goto('/');
+    await page.locator('#week-move-on').click();
+    await expect(page.locator('.home-header h1')).toContainText('Week 6');
+    // Day 8 (Sat) is itself an anchor day, so Week 6 opens immediately as the
+    // live open week — not a pending gap (§2.4's #week-count table).
+    await expect(page.locator('.week-line')).toContainText('0 of 3');
+    await expect(page.locator('#week-moved-note')).toContainText('Week 5 closed at 2 of 3');
+    await expect(page.locator('#week-undo')).toBeVisible();
+  });
+
+  test('Undo → back to Week 5 open, "Move on" reappears', async ({ page }) => {
+    await seedLogs(page, TWO_DONE);
+    await mockDate(page, DAY_8);
+    await page.goto('/');
+    await page.locator('#week-move-on').click();
+    await expect(page.locator('.home-header h1')).toContainText('Week 6');
+    await page.locator('#week-undo').click();
+    await expect(page.locator('.home-header h1')).toContainText('Week 5');
+    await expect(page.locator('.week-line')).toContainText('2 of 3');
+    await expect(page.locator('#week-move-on')).toHaveText('Move on to Week 6 without C');
+    await expect(page.locator('#week-moved-note')).toHaveCount(0);
+    expect(await readWeekMoves(page)).toEqual([]);
+  });
+
+  test('a stale move (a week that was never the open one) is ignored, not thrown', async ({
+    page,
+  }) => {
+    // week.ts's own rule (§2.1): a move for a week that isn't the currently
+    // open one is stale and is ignored with a console.warn, never a throw.
+    // round 2 week 99 was never open at any point in this fixture's history
+    // — the exact shape a stray/duplicate pull from another phone could
+    // leave behind — so Week 5 must stay exactly as it was.
+    await seedLogs(page, TWO_DONE);
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'workout-tracker:week-moves',
+        JSON.stringify([
+          { round: 2, week: 99, at: '2026-09-27T08:00:00+03:00', missing: 'C', synced: true },
+        ])
+      );
+    });
+    const errors: string[] = [];
+    await mockDate(page, DAY_8);
+    await page.goto('/');
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await expect(page.locator('.home-header h1')).toContainText('Week 5');
+    await expect(page.locator('.week-line')).toContainText('2 of 3');
+    expect(errors).toEqual([]);
+  });
+
+  test('an offline tap queues (synced:false), survives a reload, and reconnecting never throws or drops it', async ({
+    page,
+    context,
+  }) => {
+    await seedLogs(page, TWO_DONE);
+    await mockDate(page, DAY_8);
+    await page.goto('/');
+    await page.locator('#week-move-on').click();
+    // Real sync is off under automation (never write to Supabase in tests) —
+    // it stays pending exactly like a brand-new session saved offline would,
+    // same as the edit-a-past-session offline test above.
+    await expect(page.locator('#sync-indicator')).toHaveText('offline · 1 pending');
+
+    const moves = await readWeekMoves(page);
+    expect(moves).toHaveLength(1);
+    expect(moves[0]?.['round']).toBe(2);
+    expect(moves[0]?.['week']).toBe(5);
+    expect(moves[0]?.['synced']).toBe(false);
+
+    // Survives an app close — same trick the edit-offline test above uses: a
+    // fresh page in the SAME context sees whatever real localStorage the tap
+    // left behind (shared per-origin across pages in one context).
+    const reopened = await context.newPage();
+    const errors: string[] = [];
+    reopened.on('pageerror', (e) => errors.push(String(e)));
+    await mockDate(reopened, DAY_8);
+    await reopened.goto('/');
+    await expect(reopened.locator('#sync-indicator')).toHaveText('offline · 1 pending');
+    await expect(reopened.locator('.home-header h1')).toContainText('Week 6');
+
+    // Reconnecting fires the same flush a brand-new session's does
+    // (flushPendingSyncs → pushWeekMove). No real network happens under
+    // automation, so nothing here proves the server accepted it — this
+    // proves the new routing doesn't throw or corrupt the queued row.
+    await reopened.evaluate(() => window.dispatchEvent(new Event('online')));
+    await reopened.waitForTimeout(200);
+    expect(errors).toEqual([]);
+    const movesAfter = await readWeekMoves(reopened);
+    expect(movesAfter).toHaveLength(1);
+    expect(movesAfter[0]?.['synced']).toBe(false);
+  });
+
+  test('the push payload + pure merge are exact (window hooks, no real network)', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const out = await page.evaluate(() => {
+      const w = window as unknown as {
+        __wtWeekMovePayload: (m: unknown) => unknown;
+        __wtMergeWeekMoves: (local: unknown[], remote: unknown[]) => unknown[];
+      };
+      const payload = w.__wtWeekMovePayload({
+        round: 2,
+        week: 5,
+        at: '2026-10-03T09:30:00+03:00',
+        missing: 'C',
+        synced: false,
+      });
+      // A remote row for a DIFFERENT week merges alongside an unsynced local
+      // write for week 5 — the local unsynced write must win on content
+      // (same "local unsynced wins" rule cycle_periods' merge already has).
+      const merged = w.__wtMergeWeekMoves(
+        [{ round: 2, week: 5, at: '2026-10-03T09:30:00+03:00', missing: 'C', synced: false }],
+        [
+          { round: 2, week: 5, moved_at: '2026-10-03T00:00:00+03:00', missing: 'BC' },
+          { round: 2, week: 6, moved_at: '2026-10-11T00:00:00+03:00', missing: 'A' },
+        ]
+      );
+      return { payload, merged };
+    });
+    expect(out.payload).toEqual({
+      round: 2,
+      week: 5,
+      moved_at: '2026-10-03T09:30:00+03:00',
+      missing: 'C',
+    });
+    expect(out.merged).toEqual([
+      { round: 2, week: 5, at: '2026-10-03T09:30:00+03:00', missing: 'C', synced: false },
+      { round: 2, week: 6, at: '2026-10-11T00:00:00+03:00', missing: 'A', synced: true },
+    ]);
+  });
+});
