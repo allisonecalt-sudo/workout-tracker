@@ -3935,6 +3935,102 @@ test('Workout D survives a second read: Done card, Sessions, the rides page and 
   await expect(weekRow).toContainText('1 ride · 30 min · 3 km · 180 kcal');
 });
 
+test("rides \"This week\": the Saturday-closing ride doesn't leak into the new week (membership, not date); Sunday's D still counts (v54 fix r3, checker's must)", async ({
+  page,
+  context,
+}) => {
+  // v54 fix r3 (Sep 27 2026), checker's must (round 3 — round 2's own fix
+  // just above is what caused this): week.ts opens the next span at the
+  // CLOSING session's own timestamp, so a plain "date >= since" filter
+  // matched that same closing ride's own date and double-counted it — once
+  // (correctly) in the week it closed, and again in the brand-new week that
+  // opened at its own instant. This is her NORMAL swing rhythm (a week
+  // closing on Sat/Sun), reproduced here on the checker's own dates: her
+  // real Thu/Fri/Sat A/C/B pattern, moved one week past the completion-model
+  // launch (Sat Sep 26 22:30) so it lands inside the completion model
+  // instead of the legacy calendar week — A Thu Oct 1, C Fri Oct 2, B Sat
+  // Oct 3 closes the week (Oct 3 is a Saturday, same as Sep 26); D Sun Oct 4
+  // opens the new one.
+  await movableClock(page, '2026-10-03T23:00:00+03:00'); // Sat night, just after B closed the week
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'workout-tracker:logs',
+      JSON.stringify([
+        {
+          id: 'r3-thu-a',
+          date: '2026-10-01T15:56:00+03:00',
+          workout: 'A',
+          capacityBefore: 8,
+          capacityAfter: 8,
+          wallSitSec: 0,
+          backPain: 0,
+          word: '',
+          synced: true,
+          notes: 'cardio: elliptical 10 min · level 8 · 1.9 km · pulse 130',
+        },
+        {
+          id: 'r3-fri-c',
+          date: '2026-10-02T11:53:00+03:00',
+          workout: 'C',
+          capacityBefore: 8,
+          capacityAfter: 8,
+          wallSitSec: 0,
+          backPain: 0,
+          word: '',
+          synced: true,
+          notes: 'cardio: elliptical 12 min · level 5 · 2.0 km · pulse 120',
+        },
+        {
+          id: 'r3-sat-b',
+          date: '2026-10-03T22:14:00+03:00',
+          workout: 'B',
+          capacityBefore: 8,
+          capacityAfter: 8,
+          wallSitSec: 0,
+          backPain: 0,
+          word: '',
+          synced: true,
+          notes: 'cardio: elliptical 10 min · level 6 · 1.5 km · pulse 118',
+        },
+      ])
+    );
+  });
+  await page.goto('/');
+  await page.locator('#open-progress-link').click();
+  await page.locator('#open-rides').click();
+  const satWeekRow = page.locator('.rides-totals-row').filter({ hasText: 'This week' });
+  await expect(satWeekRow).toContainText('0 rides');
+
+  // Sunday, a fresh context page — no beforeEach clear script, so the three
+  // rows above survive (same storage, same origin); this init script just
+  // appends the D ride to them before the app itself ever reads the store.
+  const sunday = await context.newPage();
+  await movableClock(sunday, '2026-10-04T10:00:00+03:00');
+  await sunday.addInitScript(() => {
+    const rows = JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]') as Array<
+      Record<string, unknown>
+    >;
+    rows.push({
+      id: 'r3-sun-d',
+      date: '2026-10-04T09:00:00+03:00',
+      workout: 'D',
+      capacityBefore: 8,
+      capacityAfter: 8,
+      wallSitSec: 0,
+      backPain: 0,
+      word: '',
+      synced: true,
+      notes: 'cardio: elliptical 30 min · level 6 · 3.0 km · pulse 120',
+    });
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+  });
+  await sunday.goto('/');
+  await sunday.locator('#open-progress-link').click();
+  await sunday.locator('#open-rides').click();
+  const sunWeekRow = sunday.locator('.rides-totals-row').filter({ hasText: 'This week' });
+  await expect(sunWeekRow).toContainText('1 ride');
+});
+
 test('elliptical: the next ride opens on the elliptical and offers the last level again', async ({
   page,
 }) => {
@@ -9465,6 +9561,39 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     // Back to page 0.
     await page.locator('#next-week').click();
     await expect(page.locator('.review-title')).toHaveText('Week 5 · since Sat Sep 26');
+  });
+
+  // v54 fix r3 (Sep 27 2026), checker's should #1 (round 3 — round 2's own
+  // fix, right above r2's comment on this test file, only half-closed it):
+  // "No sessions this week." directly above a "D · ... · extra ride" line
+  // flatly contradicted itself — she DID ride, it just wasn't one of A/B/C.
+  test('a D-only live week (no A/B/C yet) reads "None of A, B, C yet.", never the old blanket line that contradicted the D row below it', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      log('thu-a', '2026-09-24T15:56:00+03:00', 'A'),
+      log('fri-c', '2026-09-25T11:53:00+03:00', 'C'),
+      log('sat-b', '2026-09-26T19:14:51+03:00', 'B'), // before the launch — closes legacy Week 4 only
+      {
+        id: 'wk5-d',
+        date: '2026-09-27T12:00:00+03:00', // Sun, inside Week 5, after the launch
+        workout: 'D',
+        capacityBefore: 6,
+        capacityAfter: 7,
+        wallSitSec: 0,
+        backPain: 0,
+        word: '',
+        synced: true,
+      },
+    ]);
+    await mockDate(page, '2026-09-28T08:00:00+03:00'); // Mon Sep 28 — Week 5, day 3
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await expect(page.locator('.review-title')).toHaveText('Week 5 · since Sat Sep 26');
+    await expect(page.locator('.weekly-review-empty')).toHaveText('None of A, B, C yet.');
+    await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
+    await expect(page.locator('.weekly-review-extra-row')).toContainText('D');
+    await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
   });
 
   test('Progress · Sessions per week: a closed completion week reads "wk 5 · 3 / 3", never a recomputed calendar count', async ({

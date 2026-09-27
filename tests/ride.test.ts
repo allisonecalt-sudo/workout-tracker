@@ -13,6 +13,7 @@
 import { test, expect } from '@playwright/test';
 import {
   hasRideNumbers,
+  isPlausibleRideRate,
   rideRate,
   projectedKcal,
   projectedKm,
@@ -170,6 +171,21 @@ test.describe('usualKcalPerMin: "median of last 5 rides, shown when >= 5 rides"'
     // 5 rate-eligible rides, all 6.3 -> median 6.3 (the gap never counted as a 5th)
     expect(usualKcalPerMin(withGap)).toBe(6.3);
   });
+
+  // v54 fix r3 (Sep 27 2026), checker's nice #1: same reasoning as bestRide's
+  // — a 1s ride shouldn't drag "Your usual" toward a number nobody rode.
+  test('a 1s implausible ride in the mix is skipped, same as "no numbers"', () => {
+    const withOutlier: RideRecord[] = [
+      { ...RIDE_A, id: 'r1', date: '2026-09-01' },
+      { ...RIDE_A, id: 'broken', date: '2026-09-03', kcal: 3, timeSec: 1 }, // 180 kcal/min
+      { ...RIDE_A, id: 'r2', date: '2026-09-05' },
+      { ...RIDE_A, id: 'r3', date: '2026-09-10' },
+      { ...RIDE_A, id: 'r4', date: '2026-09-15' },
+      { ...RIDE_A, id: 'r5', date: '2026-09-20' },
+    ];
+    // 5 plausible rides, all 6.3 -> median 6.3 (the outlier never counted as a 5th)
+    expect(usualKcalPerMin(withOutlier)).toBe(6.3);
+  });
 });
 
 test.describe('bestRide: the highest kcal/min, with its date — never a verdict word', () => {
@@ -187,6 +203,51 @@ test.describe('bestRide: the highest kcal/min, with its date — never a verdict
 
   test('no rate-eligible rides -> null', () => {
     expect(bestRide([{ ...RIDE_A, kcal: null }])).toBeNull();
+  });
+
+  // v54 fix r3 (Sep 27 2026), checker's nice #1: her own repro — a 1s test
+  // ride gave 180 kcal/min · 126 km/h and would otherwise sit in "Your best"
+  // forever, since bestRide never ages out a max.
+  test('a 1s ride (broken timer) is never picked as best, even though it "has numbers"', () => {
+    const oneSecond: RideRecord = {
+      ...RIDE_A,
+      id: 'broken',
+      date: '2026-09-27',
+      kcal: 3,
+      timeSec: 1, // 3/(1/60) = 180 kcal/min
+    };
+    expect(hasRideNumbers(oneSecond)).toBe(true); // still "has numbers"
+    expect(isPlausibleRideRate(oneSecond)).toBe(false);
+    const best = bestRide([oneSecond, RIDE_A, RIDE_C, RIDE_B]);
+    expect(best?.ride.id).toBe('a1'); // her real best (6.3), not the broken 180
+  });
+});
+
+test.describe('isPlausibleRideRate: guards a broken-timer outlier out of best/usual', () => {
+  test('a normal real ride is plausible', () => {
+    expect(isPlausibleRideRate(RIDE_A)).toBe(true);
+  });
+
+  test('under 3 min is implausible even with an ordinary-looking rate', () => {
+    // 12 kcal / 2 min = 6.0 kcal/min — a perfectly normal rate, but too short
+    // a ride to trust as a reading.
+    const short: RideRecord = { ...RIDE_A, id: 'short', kcal: 12, timeSec: 120 };
+    expect(isPlausibleRideRate(short)).toBe(false);
+  });
+
+  test('over 20 kcal/min is implausible even at a normal length', () => {
+    // 100 kcal / (200s / 60) = 30 kcal/min at 3:20 — long enough, rate's not.
+    const tooFast: RideRecord = { ...RIDE_A, id: 'fast', kcal: 100, timeSec: 200 };
+    expect(isPlausibleRideRate(tooFast)).toBe(false);
+  });
+
+  test('exactly at the boundary (3 min, 20 kcal/min) is still plausible', () => {
+    const boundary: RideRecord = { ...RIDE_A, id: 'boundary', kcal: 60, timeSec: 180 }; // 20.0 kcal/min
+    expect(isPlausibleRideRate(boundary)).toBe(true);
+  });
+
+  test('"no numbers" is never plausible either', () => {
+    expect(isPlausibleRideRate({ ...RIDE_A, kcal: null })).toBe(false);
   });
 });
 

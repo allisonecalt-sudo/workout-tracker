@@ -11,6 +11,7 @@ import { painFromFeel, feelFromPain } from './pain-feel.js';
 import { trainingMinutes, formatWorkoutTime, formatWorkoutMinutesTotal } from './timing.js';
 import {
   hasRideNumbers,
+  isPlausibleRideRate,
   rideRate,
   projectedKcal,
   projectedKm,
@@ -601,7 +602,7 @@ const SUPABASE_ANON_KEY =
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
 const APP_VERSION = 'v54';
-const BUILD_DATE = 'Sep 27, 2026 · 21:36';
+const BUILD_DATE = 'Sep 27, 2026 · 22:04';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -12206,11 +12207,22 @@ function renderWeeklyReview(): string {
 
   // Empty state — single subtle line, no nudge.
   if (sessions.length === 0) {
+    // v54 fix r3 (Sep 27 2026), checker's should #1 (round 3 — round 2's own
+    // fix above only half-closed this): "No sessions this week." directly
+    // above a "D · ... · extra ride" line contradicts itself — she DID ride,
+    // it just wasn't one of A/B/C. When extraRows is non-empty the line now
+    // names what's actually still open (skippedLabel never co-occurs with
+    // extraSessions — completion pages always set skippedLabel: null, see
+    // reviewWeekViewAt — so this branches cleanly ahead of it).
     const emptyLine = view.skippedLabel
       ? 'Held the slot — doesn’t count.'
-      : view.isLiveOpen
-        ? 'No sessions this week.'
-        : 'No sessions that week.';
+      : extraRows
+        ? view.isLiveOpen
+          ? 'None of A, B, C yet.'
+          : 'None of A, B, C that week.'
+        : view.isLiveOpen
+          ? 'No sessions this week.'
+          : 'No sessions that week.';
     return `
       ${header}
       ${subtitle}
@@ -13339,22 +13351,37 @@ function renderRidesUsualBestCard(
 // plain calendar month to date — the app has no other "month" concept yet
 // to collide with.
 function renderRidesTotalsCard(rides: RideRecord[]): string {
+  // v54 fix r3 (Sep 27 2026), checker's must #1 (round 3 — r2's own fix
+  // above introduced this): a date-only filter double-counts the CLOSING
+  // session itself whenever a week closes on a Sat/Sun (her normal swing
+  // rhythm) — week.ts opens the next span at the closing session's own
+  // timestamp (weekendAnchorDay branch of closeOpen()), and `date >= since`
+  // then matches that same session's own date, so Saturday's B reads as
+  // "This week" for the week it just closed OUT of, on top of counting
+  // (correctly) toward the week it closed. Fix: A/B/C are counted by
+  // MEMBERSHIP in the open span's own `sessions` (a brand-new span starts
+  // with sessions: [], so the closing ride isn't in it) — only D (never one
+  // of the three, so it has no membership to check; see r2's comment below)
+  // stays date-based. In a gap (no span open yet), membership/since both
+  // fall back to the last CLOSED span, same source r2 already used for
+  // `since` alone.
+  const { open, spans } = weekModel();
+  const activeSpan = open ?? (spans.length ? spans[spans.length - 1]! : null);
+  const since = activeSpan
+    ? new Date(activeSpan.openedAt).getTime()
+    : new Date(COMPLETION_WEEKS_FROM.at).getTime();
+  const openIds = new Set((activeSpan?.sessions ?? []).map((s) => s.id));
   // v54 fix r2 (Sep 27 2026), checker's must #2: "This week" was filtered by
   // weekModel().open.sessions — but week.ts excludes 'D' from the completion
   // model ON PURPOSE (D is extra, never one of the three; see
   // buildWeeklyTargetRows above). That made a D ride real Sun Sep 27 2026 —
   // her own data, 42 rows -> 43 after saving it — read "This week 0 rides"
-  // while "This month" already said 4. Same fix as walksThisWeek() (another
-  // extra-outside-the-three count): count by DATE against the week's own
-  // start, not by session membership, so a D ride lands in the week it
-  // actually happened in even though it's not one of the three slots.
-  const { open, spans } = weekModel();
-  const since = open
-    ? new Date(open.openedAt).getTime()
-    : spans.length
-      ? new Date(spans[spans.length - 1]!.openedAt).getTime()
-      : new Date(COMPLETION_WEEKS_FROM.at).getTime();
-  const weekRides = rides.filter((r) => new Date(r.date).getTime() >= since);
+  // while "This month" already said 4. D still isn't session-membership
+  // eligible (it never joins a span's `sessions`), so it stays on the r2
+  // date rule; A/B/C use the r3 membership rule above instead.
+  const weekRides = rides.filter(
+    (r) => openIds.has(r.id) || (r.workout === 'D' && new Date(r.date).getTime() >= since)
+  );
   const monthPrefix = localIsoDate(new Date()).slice(0, 7);
   const monthRides = rides.filter((r) => r.date.slice(0, 7) === monthPrefix);
   const row = (label: string, t: RideTotals): string => `
@@ -13423,13 +13450,18 @@ function renderRidesChartCard(rides: RideRecord[]): string {
 // The plain list — date · workout letter · min · km · kcal · level, newest
 // first. A ride excluded from rates (§4.2's rule: kcal 0 or missing time)
 // still gets its own row — "no numbers", never hidden (the archive rule:
-// don't disappear, just say honestly there's nothing to read here).
+// don't disappear, just say honestly there's nothing to read here). v54 fix
+// r3 (Sep 27 2026), checker's nice #1: an implausible rate (e.g. a 1s ride
+// the app timer started ahead of the machine — see ride.ts's
+// isPlausibleRideRate) reads the same "no numbers" here as a genuinely
+// missing one — the row still lists (nothing hidden), it just isn't shown a
+// rate nobody would trust for best/usual either.
 function renderRidesListCard(rides: RideRecord[]): string {
   const rows = [...rides]
     .reverse()
     .map((r) => {
       const left = `${formatMonthDay(r.date)} · ${r.workout}`;
-      if (!hasRideNumbers(r)) {
+      if (!isPlausibleRideRate(r)) {
         return `
           <div class="rides-list-row">
             <span class="rides-list-left">${escapeHtml(left)}</span>
@@ -13471,7 +13503,9 @@ function renderRides(): string {
 
   const latest = rides[rides.length - 1]!;
   const latestRate = rideRate(latest);
-  const eligibleCount = rides.filter(hasRideNumbers).length;
+  // v54 fix r3: matches usualKcalPerMin's own gate (isPlausibleRideRate) so
+  // "so far" counts the same rides the median actually will.
+  const eligibleCount = rides.filter(isPlausibleRideRate).length;
 
   return `
     ${header}

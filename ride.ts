@@ -19,9 +19,11 @@
 // THE RULE (§4.2's exclusion, restated exactly): "Rides with kcal 0 or
 // missing time are excluded from rates but listed as 'no numbers'." A ride
 // with no calories or no time isn't a worse ride — it's a ride she didn't
-// read the console on. hasRideNumbers() is the one gate every rate/usual/
-// best/chart function below checks before it computes anything; a missing
-// value is never guessed as 0.
+// read the console on. hasRideNumbers() is the base gate every rate/chart
+// function below checks before it computes anything; a missing value is
+// never guessed as 0. usualKcalPerMin/bestRide layer isPlausibleRideRate()
+// on top of it (v54 fix r3) — still "has numbers", just not trusted for
+// arithmetic that keeps an outlier forever (see that function's comment).
 //
 // ROUNDING: one decimal for a rate (kcal/min, km/h — matches the console's
 // own 1-decimal calorie precision), two decimals for a distance sum (km),
@@ -132,11 +134,35 @@ export function median(nums: number[]): number | null {
 // there are at least 5.
 export function usualKcalPerMin(chronologicalRides: RideRecord[]): number | null {
   const rates = chronologicalRides
-    .filter(hasRideNumbers)
+    .filter(isPlausibleRideRate)
     .map((r) => rideRate(r).kcalPerMin)
     .filter((v): v is number => v !== null);
   if (rates.length < 5) return null;
   return median(rates.slice(-5));
+}
+
+// v54 fix r3 (Sep 27 2026), checker's nice #1: hasRideNumbers only asks "is
+// there a kcal and a time" — a 1s test ride (or a real ride where the app
+// timer started before the machine did) still passes that and gives a
+// kcal/min the console never actually showed (the checker's own repro: 180
+// kcal/min from a 1s ride). "Your best" has no verdict language to soften a
+// bad number — it just keeps whatever's highest, forever — so an
+// implausible outlier would sit there permanently. This is a SEPARATE,
+// narrower gate than hasRideNumbers: still "has numbers" (still gets a
+// plain list row), just not trusted for best/usual's arithmetic. The
+// thresholds are generous on purpose (her real rides run 6-15 min,
+// 5-7 kcal/min) — this only catches clearly-broken timing, never a real
+// easy or short-but-real ride.
+const MIN_PLAUSIBLE_RATE_SEC = 180; // 3 min
+const MAX_PLAUSIBLE_KCAL_PER_MIN = 20;
+
+export function isPlausibleRideRate(r: RideRecord): boolean {
+  if (!hasRideNumbers(r)) return false;
+  const kcalPerMin = rideRate(r).kcalPerMin;
+  if (kcalPerMin === null) return false;
+  return (
+    (r.timeSec as number) >= MIN_PLAUSIBLE_RATE_SEC && kcalPerMin <= MAX_PLAUSIBLE_KCAL_PER_MIN
+  );
 }
 
 export type BestRide = { ride: RideRecord; kcalPerMin: number };
@@ -147,7 +173,7 @@ export type BestRide = { ride: RideRecord; kcalPerMin: number };
 export function bestRide(rides: RideRecord[]): BestRide | null {
   let best: BestRide | null = null;
   for (const r of rides) {
-    if (!hasRideNumbers(r)) continue;
+    if (!isPlausibleRideRate(r)) continue;
     const kcalPerMin = rideRate(r).kcalPerMin;
     if (kcalPerMin === null) continue;
     if (!best || kcalPerMin > best.kcalPerMin) best = { ride: r, kcalPerMin };
