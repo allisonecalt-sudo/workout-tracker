@@ -249,9 +249,17 @@ type AppState = {
   // session that straddles a week's own Sat/Sun open boundary (started right
   // before midnight, still running after) could switch which week's moves
   // it's showing mid-workout. Set once in startWorkout(); null = no session
-  // chosen yet (Home reads live). ISO date string, not a WeekKey — it feeds
+  // chosen yet (Home reads live). Pre-launch: an ISO date string, feeding
   // straight into getWeekPlan(date)'s existing lookup (see planDateNow()).
   pinnedPlanDateIso: string | null;
+  // WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.3's own "land WK4's planForLog
+  // before any Week 6 PROGRAM row is written": at/after the launch, the pin
+  // is the RESOLVED completion-model key itself, not a synthetic calendar
+  // date to re-derive it from — closing the gap §2.8 item 4 (Opus check)
+  // flagged (getCurrentWorkout's own earlier comment named this exact field
+  // as the fix). Exactly one of the two pins is ever set for a given session
+  // (see startWorkout) — pinnedWeekKey wins in getCurrentWorkout when present.
+  pinnedWeekKey: WeekKey | null;
   capacityBefore: number;
   capacityAfter: number;
   // v50 · mood: same 1-10/touched shape as capacity, kept as a separate pair
@@ -2950,6 +2958,7 @@ const state: AppState = {
   screen: 'home',
   selectedWorkout: null,
   pinnedPlanDateIso: null,
+  pinnedWeekKey: null,
   capacityBefore: 5,
   capacityAfter: 5,
   // v50 · mood: blank by default (untouched), same as capacity's chips.
@@ -4113,9 +4122,24 @@ function apartmentSegmentRemainingSec(totalSec: number, remainingSec: number): n
   return Math.max(0, Math.min(APARTMENT_SEGMENT_SEC - intoSegment, remain));
 }
 
+// WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.6 "Small ones": before the launch,
+// unchanged (the calendar Sat-Fri week). At/after it, since the completion
+// model's own week start — the OPEN span's openedAt, or (no span has closed
+// yet, the "shouldn't happen" edge week.ts's own comment names) the launch
+// instant itself — never "today's calendar Saturday", which the completion
+// model has already replaced for "now" (same reasoning as isNowAfterCompletionLaunch).
 function walksThisWeek(): number {
-  const weekStart = saturdayForOffset(0).getTime();
-  return loadWalks().filter((w) => new Date(w.date).getTime() >= weekStart).length;
+  if (!isNowAfterCompletionLaunch()) {
+    const weekStart = saturdayForOffset(0).getTime();
+    return loadWalks().filter((w) => new Date(w.date).getTime() >= weekStart).length;
+  }
+  const { open, spans } = weekModel();
+  const since = open
+    ? new Date(open.openedAt).getTime()
+    : spans.length
+      ? new Date(spans[spans.length - 1]!.openedAt).getTime()
+      : new Date(COMPLETION_WEEKS_FROM.at).getTime();
+  return loadWalks().filter((w) => new Date(w.date).getTime() >= since).length;
 }
 
 // Group 1F: wrist columns dropped from POST payload — Lisa Cohen cleared the
@@ -4184,10 +4208,12 @@ const V50_MOOD_SESSION_COLUMNS = ['mood_before', 'mood_after'] as const;
 // network (v48, Sep 24 2026). Every structured number has its own column now;
 // `notes` carries only system annotations.
 function sessionPayload(entry: LogEntry): Record<string, unknown> {
-  // The swing fix (Sep 26 2026): the plan a session uses follows the week it
-  // COUNTS toward, not its calendar date — see planDateForLog() next to
-  // homeWeekOffset() below.
-  const hasWallSit = workoutHasWallSit(getWorkoutById(entry.workout, planDateForLog(entry)));
+  // WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.6 "Saved-session plan": before the
+  // launch, unchanged (the swing fix, Sep 26 2026 — the plan follows the week
+  // it COUNTS toward, via planDateForLog next to homeWeekOffset() below). At/
+  // after it, planForLog resolves through the completion model's own weekOf
+  // map instead (see planForLog's own comment, next to planDateForLog).
+  const hasWallSit = workoutHasWallSit(planForLog(entry));
   return {
     id: entry.id,
     date: entry.date,
@@ -4474,8 +4500,14 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
 
 function getCurrentWorkout(): Workout | null {
   if (!state.selectedWorkout) return null;
-  // WK2 (Sep 27 2026): a pinned date (set at startWorkout()) wins over the
-  // live "now" — see the pin's own comment there.
+  // WK4 (Sep 27 2026): the RESOLVED-key pin (post-launch sessions) wins first
+  // — see its own comment on AppState.pinnedWeekKey and startWorkout().
+  if (state.pinnedWeekKey) {
+    return planForWeekKey(state.pinnedWeekKey).plan.workouts[state.selectedWorkout];
+  }
+  // WK2 (Sep 27 2026): a pinned date (pre-launch sessions, set at
+  // startWorkout()) wins over the live "now" — see the pin's own comment
+  // there. Exactly one of pinnedWeekKey/pinnedPlanDateIso is ever set.
   if (state.pinnedPlanDateIso) {
     return getWorkoutById(state.selectedWorkout, new Date(state.pinnedPlanDateIso));
   }
@@ -4489,10 +4521,9 @@ function getCurrentWorkout(): Workout | null {
   // with planForWeekKey the moment a future PROGRAM row's own `startsOn`
   // lands off the round's 7-day grid — she'd train one week's moves while
   // the screen names a different one, with no repeat line to flag it.
-  // A session already IN PROGRESS keeps reading its pinned date (above,
-  // unchanged) — giving the pin itself a resolved KEY instead of a date is
-  // WK4's job (PLAN-2026-09-26.md §2.3: "land WK4's planForLog before any
-  // Week 6 PROGRAM row is written").
+  // A session already IN PROGRESS reads its pinned KEY (above) once WK4's
+  // startWorkout sets one — this branch is reached only pre-launch, or for a
+  // stale snapshot saved before WK4 (readActiveSnapshot resolves that case).
   // WK2 fix r2 (Sep 27 2026, checker's should #2): during a GAP, shownWeek()
   // .key is the PENDING week — exactly what preLogWeekLabel/weekSubLabel
   // already stopped naming here (gapCountsBackToWeekKey). Reading the raw key
@@ -4542,7 +4573,17 @@ function startWorkout(id: WorkoutId): void {
   // Sat/Sun boundary (started right before it, still running after) keeps
   // training the moves she was shown at pre-log, not whatever week.ts says
   // "now" is by the time she reaches the workout screen.
-  state.pinnedPlanDateIso = planDateNow().toISOString();
+  // WK4 (Sep 27 2026): post-launch, pin the RESOLVED key instead of a
+  // synthetic date — the same key gapCountsBackToWeekKey/shownWeek already
+  // used to pick what she was SHOWN, so the pin can never disagree with it.
+  // Exactly one of the two pins is set; the other is cleared.
+  if (isNowAfterCompletionLaunch()) {
+    state.pinnedWeekKey = gapCountsBackToWeekKey() ?? shownWeek().key;
+    state.pinnedPlanDateIso = null;
+  } else {
+    state.pinnedWeekKey = null;
+    state.pinnedPlanDateIso = planDateNow().toISOString();
+  }
   state.screen = 'pre-log';
   state.liteDay = false; // fresh pick, full program until she says otherwise
   render();
@@ -5596,6 +5637,9 @@ type ActiveSessionSnapshot = {
   // null on a pre-WK2 snapshot (nothing to pin then); getCurrentWorkout()
   // falls back to planDateNow() when it's absent, same as a fresh session.
   pinnedPlanDateIso: string | null;
+  // WK4 (Sep 27 2026): the resolved-key pin (post-launch sessions) — see
+  // AppState.pinnedWeekKey's own comment. null on a pre-WK4 snapshot.
+  pinnedWeekKey: WeekKey | null;
 };
 
 function saveActiveSession(): void {
@@ -5642,6 +5686,7 @@ function saveActiveSession(): void {
       completedSteps: state.completedSteps,
       rideNumbersOpen: state.rideNumbersOpen,
       pinnedPlanDateIso: state.pinnedPlanDateIso,
+      pinnedWeekKey: state.pinnedWeekKey,
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
   } catch {
@@ -5762,6 +5807,16 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
         !Number.isNaN(new Date(snap.pinnedPlanDateIso).getTime())
           ? snap.pinnedPlanDateIso
           : null,
+      // WK4: a pre-WK4 snapshot (or a corrupt shape) has none → null, which
+      // getCurrentWorkout() falls back to pinnedPlanDateIso (above) for, same
+      // as a session pinned before WK4 shipped.
+      pinnedWeekKey:
+        snap.pinnedWeekKey &&
+        typeof snap.pinnedWeekKey === 'object' &&
+        typeof snap.pinnedWeekKey.round === 'number' &&
+        typeof snap.pinnedWeekKey.week === 'number'
+          ? { round: snap.pinnedWeekKey.round, week: snap.pinnedWeekKey.week }
+          : null,
     };
   } catch {
     clearActiveSession();
@@ -5775,6 +5830,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.screen = snap.screen;
   state.selectedWorkout = snap.selectedWorkout;
   state.pinnedPlanDateIso = snap.pinnedPlanDateIso;
+  state.pinnedWeekKey = snap.pinnedWeekKey;
   state.currentPhase = snap.currentPhase;
   state.currentExerciseIndex = snap.currentExerciseIndex;
   state.currentRound = snap.currentRound;
@@ -5930,6 +5986,7 @@ function resetState(): void {
   viewingLastClosedWeek = false;
   state.selectedWorkout = null;
   state.pinnedPlanDateIso = null;
+  state.pinnedWeekKey = null;
   state.capacityBefore = 5;
   state.capacityAfter = 5;
   state.moodBefore = 5;
@@ -6227,6 +6284,8 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     __wtWeekAttributionSummary?: typeof weekAttributionSummary;
     __wtStartWorkout?: typeof startWorkout;
     __wtInjectMarkerProgramWeek?: typeof injectMarkerProgramWeek;
+    __wtPlanKeyForLog?: typeof planKeyForLog;
+    __wtCurrentHowToWeekKey?: typeof currentHowToWeekKey;
   };
   w.__wtMergeRemoteSessions = mergeRemoteSessions;
   w.__wtIsValidLogEntry = isValidLogEntry;
@@ -6248,6 +6307,13 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   // the exact function a real tap already calls; reached here the same way.
   w.__wtStartWorkout = startWorkout;
   w.__wtInjectMarkerProgramWeek = injectMarkerProgramWeek;
+  // WK4 (Sep 27 2026): the saved-session plan lookup's own resolved KEY, for a
+  // test to assert directly — planForLog's plan CONTENT can't tell two weeks
+  // apart when one repeats the other's moves (see planKeyForLog's own comment).
+  w.__wtPlanKeyForLog = planKeyForLog;
+  // WK4 (Sep 27 2026): the "seen this week" how-to key, asserted directly
+  // rather than through a full pre-log → workout → how-to-card UI journey.
+  w.__wtCurrentHowToWeekKey = currentHowToWeekKey;
 }
 
 async function pullFromSupabase(): Promise<void> {
@@ -6931,6 +6997,51 @@ function planDateForLog(entry: LogEntry): Date {
     if (same(l)) return new Date(weekMs);
   }
   return new Date(entry.date);
+}
+
+/** WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.6 "Saved-session plan": the plan a
+ * SAVED session actually used. Before the launch (or a session dated before
+ * it — a real log's own date, not "now"), unchanged: planDateForLog's
+ * calendar/swing lookup. At/after it, resolves through the completion
+ * model's own `weekOf` map instead of round-tripping through a synthetic
+ * calendar date — the SAME key Home/pre-log/post-log showed her at the time,
+ * including a gap session counting backward (week.ts rule 3). sessionPayload
+ * can run BEFORE the save lands in loadLogs() (same "not saved yet" case
+ * planDateForLog's own comment names), so `entry` is folded into the walked
+ * list exactly like planDateForLog does. Falls back to the calendar lookup in
+ * the "shouldn't happen" case (an id-less entry, or a date the walk somehow
+ * never attached a key to) rather than guessing — fail-loud, not silent.
+ */
+// WK4 (Sep 27 2026): the completion-model WeekKey a saved session resolves
+// to — extracted from planForLog so a test can assert the KEY directly (via
+// the __wtPlanKeyForLog hook) rather than only the plan CONTENT, which two
+// adjacent weeks can share byte-for-byte (a repeat) and so can't tell apart.
+// null pre-launch (that path never uses a completion key at all) or in the
+// "shouldn't happen" case (see planForLog's own comment).
+function planKeyForLog(entry: LogEntry): WeekKey | null {
+  if (!isNowAfterCompletionLaunch(new Date(entry.date))) return null;
+  const same = (l: WeekSessionLite): boolean =>
+    entry.id ? l.id === entry.id : l.date === entry.date && l.workout === entry.workout;
+  const logs = loadLogs();
+  const all = logs.some((l) => (entry.id ? l.id === entry.id : false)) ? logs : [...logs, entry];
+  const { weekOf } = walkWeeks(
+    sessionsForWeekModel(all),
+    movesForWeekModel(),
+    roundStartsForWeekModel()
+  );
+  const matched = sessionsForWeekModel(all).find(same);
+  return matched ? (weekOf.get(matched.id) ?? null) : null;
+}
+
+function planForLog(entry: LogEntry): Workout {
+  const key = planKeyForLog(entry);
+  if (key) return planForWeekKey(key).plan.workouts[entry.workout];
+  if (isNowAfterCompletionLaunch(new Date(entry.date))) {
+    console.warn(
+      `[week] planForLog: no completion-model week found for session ${entry.id ?? entry.date}`
+    );
+  }
+  return getWorkoutById(entry.workout, planDateForLog(entry));
 }
 
 // WK2 fix r1 (Sep 27 2026, must #2): the offset-based dots every existing
@@ -7962,7 +8073,9 @@ function renderHowToCard(exerciseName: string): string {
   if (!howto && !guide) return '';
 
   // First-time-this-week → open by default. After that, collapsed.
-  const week = getProgramWeek();
+  // WK4 (Sep 27 2026): currentHowToWeekKey() branches pre/post-launch — see
+  // its own comment next to howToWeekKey.
+  const week = currentHowToWeekKey();
   const seenKey = `${HOWTO_SEEN_KEY_PREFIX}${howToWeekKey(week)}`;
   let seen: Record<string, boolean> = {};
   try {
@@ -8006,8 +8119,23 @@ function howToWeekKey(week: { num: number; round: number }): string {
   return week.round > 1 ? `r${week.round}-${week.num}` : `${week.num}`;
 }
 
+// WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.6 "Small ones": the week key the
+// "seen this week" how-to state keys off. Before the launch, unchanged
+// (getProgramWeek()'s calendar lookup). At/after it, the completion model's
+// currently OPEN week — or, mid-gap (nothing open yet), the week that just
+// closed (same fallback truth gapCountsBackToWeekKey/shownWeek already use
+// everywhere a "what does now count toward" question is asked) — so "seen
+// this week" tracks the week she's actually training, not a calendar week the
+// completion model no longer reads for "now".
+function currentHowToWeekKey(): { num: number; round: number } {
+  if (!isNowAfterCompletionLaunch()) return getProgramWeek();
+  const shown = shownWeek();
+  const key = shown.pending ? (gapCountsBackToWeekKey() ?? shown.key) : shown.key;
+  return { num: key.week, round: key.round };
+}
+
 function markHowToSeenThisWeek(exerciseName: string): void {
-  const week = getProgramWeek();
+  const week = currentHowToWeekKey();
   const seenKey = `${HOWTO_SEEN_KEY_PREFIX}${howToWeekKey(week)}`;
   let seen: Record<string, boolean> = {};
   try {
@@ -10734,8 +10862,10 @@ function renderHistoryDetail(): string {
     rows.push(detailRow('Cardio', escapeHtml(cardioText(cardio)), { id: 'detail-cardio' }));
   if (log.liteDay) {
     // Lite = one round less than the plan that week had. Swing fix (Sep 26
-    // 2026): the plan follows the week the session counted toward.
-    const rounds = Math.max(1, getWorkoutById(log.workout, planDateForLog(log)).rounds - 1);
+    // 2026): the plan follows the week the session counted toward. WK4 (Sep 27
+    // 2026): planForLog resolves through the completion model post-launch —
+    // see its own comment next to planDateForLog.
+    const rounds = Math.max(1, planForLog(log).rounds - 1);
     rows.push(detailRow('Lite', `${rounds} round${rounds === 1 ? '' : 's'}`));
   }
   const arms = armFeelText(log.armFeel);
@@ -10918,12 +11048,28 @@ type WeekSession = {
   durationStr: string;
 };
 
-function getWeekSessions(offset: number): WeekSession[] {
+// WK4 (Sep 27 2026): extracted so the completion-model pager (below) can ask
+// for a FIXED Saturday (legacySaturdayForOffset) instead of one relative to
+// "today" — every pre-launch caller passes saturdayForOffset(offset), same
+// today-relative Saturday the pre-WK4 getWeekSessions(offset) always used.
+function getWeekSessionsForSaturday(saturday: Date): WeekSession[] {
   // Swing-aware (v42): sessions COUNTED toward this Sat→Fri week, oldest first.
-  return sessionsAttributedTo(loadLogs(), saturdayForOffset(offset)).map((log) => ({
+  return sessionsAttributedTo(loadLogs(), saturday).map((log) => ({
     log,
     durationStr: log.durationSec ? formatDuration(log.durationSec) : '—',
   }));
+}
+
+// WK4 (Sep 27 2026): the completion model's own sessions for a span — its
+// `sessions` are week.ts's minimal SessionLite (id/date/workout only),
+// matched back to their full LogEntry by id, in the span's own chronological
+// order (WeekSpan's own guarantee).
+function getWeekSessionsForSpan(span: WeekSpan): WeekSession[] {
+  const byId = new Map(loadLogs().map((l) => [l.id, l] as const));
+  return span.sessions
+    .map((s) => byId.get(s.id))
+    .filter((l): l is LogEntry => !!l)
+    .map((log) => ({ log, durationStr: log.durationSec ? formatDuration(log.durationSec) : '—' }));
 }
 
 type WeekTotals = {
@@ -11060,27 +11206,154 @@ function firstProgramSaturday(): Date {
 
 // The review's title in home's words: "This week · R2 · Week 4 · Sep 19–25",
 // a past week "R2 · Week 3 · Sep 12–18", a held week "Sick week · Jul 11–17".
-function weekReviewTitle(offset: number): string {
-  const saturday = saturdayForOffset(offset);
+// WK4 (Sep 27 2026): extracted onto an explicit Saturday + "is this the live
+// page" flag so the same string logic serves both a pre-launch caller
+// (saturdayForOffset(offset), offset === 0) and a legacy page reached through
+// the post-launch pager (a FIXED Saturday, never "today minus N weeks" — see
+// legacySaturdayForOffset — and always past, never the live page).
+function weekReviewTitleForSaturday(saturday: Date, isCurrentPage: boolean): string {
   const friday = new Date(saturday);
   friday.setDate(saturday.getDate() + 6);
   const range = formatWeekRange(saturday, friday);
   const pw = getProgramWeek(saturday);
   if (pw.skippedLabel) return `${pw.skippedLabel} week · ${range}`;
   const week = `${pw.round > 1 ? `R${pw.round} · ` : ''}Week ${pw.num}`;
-  return offset === 0 ? `This week · ${week} · ${range}` : `${week} · ${range}`;
+  return isCurrentPage ? `This week · ${week} · ${range}` : `${week} · ${range}`;
+}
+
+// WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.4 "Weekly review ‹ ›": "it pages
+// through one list: the calendar weeks before the launch, then the program
+// weeks." The Saturday of the legacy calendar week `legacyOffset` weeks
+// before the last one the OLD swing model ever closed (Week 4, Sat Sep
+// 19–Fri Sep 25) — anchored to the FIXED instant LEGACY_LAST_CLOSED_WEEK_INSTANT
+// (already a Saturday — see that constant's own comment), never "today minus
+// N weeks", which would drift as today does (the same class of bug WK2 fix r1
+// already fixed for the home peek). legacyOffset 0 = Week 4 itself.
+function legacySaturdayForOffset(legacyOffset: number): Date {
+  const anchor = new Date(LEGACY_LAST_CLOSED_WEEK_INSTANT);
+  const saturday = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  saturday.setDate(saturday.getDate() - legacyOffset * 7);
+  return saturday;
+}
+
+// WK4 (Sep 27 2026): the pageable completion-model spans, newest-first — the
+// live OPEN span first (if one exists), then every CLOSED span, newest to
+// oldest. weekModel()'s own invariant (the launch instant always opens Week 1
+// immediately) means `open` and `spans` are never BOTH empty once "now" is
+// past the launch, so this is never `[]` in real post-launch use.
+function reviewCompletionPages(): WeekSpan[] {
+  const { spans, open } = weekModel();
+  return open ? [open, ...spans.slice().reverse()] : spans.slice().reverse();
+}
+
+// "Week 5 · Sep 26 – Oct 1 · 3 of 3" (closed); "Week 6 · Sep 26–Oct 1 · moved
+// on at 2 of 3" (moved_on); "Week 7 · since Sat Oct 3" (still open) — §2.4's
+// own exact strings. No "This week" prefix (unlike the legacy title above):
+// the week number + "since"/range already say which one is current, same as
+// Home's own header reads "Week N" plainly.
+function completionReviewTitle(span: WeekSpan): string {
+  // No "R{n} ·" prefix — unlike the legacy title below, §2.4's own literal
+  // strings ("Week 5 · Sep 26 – Oct 1 · 3 of 3", "since Sep 26") never carry
+  // one; Home already dropped "Round 2" the same way (§2.4: "It shows on
+  // Sessions, Progress and Settings" — this screen names it in its OWN
+  // header line already, via renderWeeklyReview's "R2 · Week 4" legacy pages).
+  const week = `Week ${span.key.week}`;
+  if (span.closedAt === null) {
+    return `${week} · since ${formatWeekdayDate(span.openedAt)}`;
+  }
+  const range = formatWeekRange(new Date(span.openedAt), new Date(span.closedAt));
+  const doneLine =
+    span.how === 'moved_on' ? `moved on at ${span.done.length} of 3` : `${span.done.length} of 3`;
+  return `${week} · ${range} · ${doneLine}`;
+}
+
+// WK4 (Sep 27 2026): the sessions at ANY combined pager offset, legacy or
+// completion — used only for the "vs previous week" comparison (the delta
+// card reads one offset further back than whatever page is showing).
+function reviewSessionsAt(offset: number): WeekSession[] {
+  if (!isNowAfterCompletionLaunch()) return getWeekSessionsForSaturday(saturdayForOffset(offset));
+  const completionPages = reviewCompletionPages();
+  if (offset < completionPages.length) return getWeekSessionsForSpan(completionPages[offset]!);
+  return getWeekSessionsForSaturday(legacySaturdayForOffset(offset - completionPages.length));
+}
+
+type ReviewWeekView = {
+  title: string;
+  skippedLabel: string | null;
+  sessions: WeekSession[];
+  prevSessions: WeekSession[];
+  // True only for the ONE page that's still actually live/open right now —
+  // gates the "vs previous week" card vs "Week still open." (see
+  // renderWeeklyReview). Pre-launch this is exactly `offset === 0` (the old
+  // model's own always-live "this week"); post-launch it's the completion
+  // model's live OPEN span specifically — a mid-gap page 0 (the last CLOSED
+  // span, week.ts's own "nothing has opened yet" fallback) is a real past
+  // week, not a live one, and reads that way.
+  isLiveOpen: boolean;
+};
+
+// WK4 (Sep 27 2026): the pager's one seam — everything renderWeeklyReview
+// draws comes off this view model, so the rest of that function never
+// branches on legacy-vs-completion itself.
+function reviewWeekViewAt(offset: number): ReviewWeekView {
+  if (!isNowAfterCompletionLaunch()) {
+    const saturday = saturdayForOffset(offset);
+    const pw = getProgramWeek(saturday);
+    return {
+      title: weekReviewTitleForSaturday(saturday, offset === 0),
+      skippedLabel: pw.skippedLabel,
+      sessions: getWeekSessionsForSaturday(saturday),
+      prevSessions: reviewSessionsAt(offset + 1),
+      isLiveOpen: offset === 0,
+    };
+  }
+  const completionPages = reviewCompletionPages();
+  if (offset < completionPages.length) {
+    const span = completionPages[offset]!;
+    return {
+      title: completionReviewTitle(span),
+      skippedLabel: null,
+      sessions: getWeekSessionsForSpan(span),
+      prevSessions: reviewSessionsAt(offset + 1),
+      isLiveOpen: offset === 0 && span.closedAt === null,
+    };
+  }
+  const saturday = legacySaturdayForOffset(offset - completionPages.length);
+  const pw = getProgramWeek(saturday);
+  return {
+    title: weekReviewTitleForSaturday(saturday, false), // always past, once reached from here
+    skippedLabel: pw.skippedLabel,
+    sessions: getWeekSessionsForSaturday(saturday),
+    prevSessions: reviewSessionsAt(offset + 1),
+    isLiveOpen: false,
+  };
+}
+
+// WK4 (Sep 27 2026): the ‹ arrow's stop condition across the combined pager —
+// pre-launch, unchanged (the calendar boundary). Post-launch, keep going while
+// either another completion page remains, or the next legacy Saturday hasn't
+// walked past the program's first week.
+function reviewCanGoBack(offset: number): boolean {
+  if (!isNowAfterCompletionLaunch()) {
+    return saturdayForOffset(offset + 1).getTime() >= firstProgramSaturday().getTime();
+  }
+  const completionPages = reviewCompletionPages();
+  const nextOffset = offset + 1;
+  if (nextOffset < completionPages.length) return true;
+  return (
+    legacySaturdayForOffset(nextOffset - completionPages.length).getTime() >=
+    firstProgramSaturday().getTime()
+  );
 }
 
 function renderWeeklyReview(): string {
   const offset = viewedWeekOffset;
-  const saturday = saturdayForOffset(offset);
-  const skipped = getProgramWeek(saturday).skippedLabel;
-  const canGoBack = saturdayForOffset(offset + 1).getTime() >= firstProgramSaturday().getTime();
+  const view = reviewWeekViewAt(offset);
+  const canGoBack = reviewCanGoBack(offset);
 
-  const sessions = getWeekSessions(offset);
+  const sessions = view.sessions;
   const totals = computeWeekTotals(sessions);
-  const prevSessions = getWeekSessions(offset + 1);
-  const prev = computeWeekTotals(prevSessions);
+  const prev = computeWeekTotals(view.prevSessions);
 
   // The ‹ › arrows sit around the title (moved from home, DECISIONS §5). The
   // live week has nothing after it, so › is hidden — not a dead button.
@@ -11088,7 +11361,7 @@ function renderWeeklyReview(): string {
     <div class="screen-header review-header">
       <div class="review-nav">
         <button class="review-arrow${canGoBack ? '' : ' review-arrow-off'}" id="prev-week" type="button" aria-label="Previous week"${canGoBack ? '' : ' disabled'}>‹</button>
-        <h2 class="review-title">${weekReviewTitle(offset)}</h2>
+        <h2 class="review-title">${view.title}</h2>
         <button class="review-arrow${offset > 0 ? '' : ' review-arrow-off'}" id="next-week" type="button" aria-label="Next week"${offset > 0 ? '' : ' disabled'}>›</button>
       </div>
       <button class="quit-link" id="back-home" type="button">× Back</button>
@@ -11096,7 +11369,7 @@ function renderWeeklyReview(): string {
 
   // A held week (sick / break) is not a miss (her Jul 19 rule): no "of 3".
   const sessionCountClass = totals.count >= 3 ? 'weekly-review-count-met' : 'weekly-review-count';
-  const subtitle = skipped
+  const subtitle = view.skippedLabel
     ? ''
     : `<div class="weekly-review-subtitle">
         Sessions: <span class="${sessionCountClass}"><strong>${totals.count}</strong> of 3</span>
@@ -11104,9 +11377,9 @@ function renderWeeklyReview(): string {
 
   // Empty state — single subtle line, no nudge.
   if (sessions.length === 0) {
-    const emptyLine = skipped
+    const emptyLine = view.skippedLabel
       ? 'Held the slot — doesn’t count.'
-      : offset === 0
+      : view.isLiveOpen
         ? 'No sessions this week.'
         : 'No sessions that week.';
     return `
@@ -11163,7 +11436,7 @@ function renderWeeklyReview(): string {
   // Thursday it showed "↓ -1" for a week she was on track to finish (uxui
   // weekly 4/5). The live week says so in one quiet line instead.
   const deltaCard =
-    offset > 0 && prev.count > 0
+    !view.isLiveOpen && prev.count > 0
       ? `
         <div class="card weekly-review-delta">
           <h3>vs previous week</h3>
@@ -11199,7 +11472,7 @@ function renderWeeklyReview(): string {
           </div>
         </div>
       `
-      : offset === 0
+      : view.isLiveOpen
         ? '<p class="weekly-review-open">Week still open.</p>'
         : '';
 
@@ -11503,6 +11776,11 @@ type PerWeekRow = {
   // v48 · fix r1: a 0-session week inside a sick/break stretch or after a
   // closed round's last session — shown as "—", not scored.
   held?: boolean;
+  // WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.4: a completion-model row's own
+  // "how" — "wk 6 · 2/3 · moved on" (never held's "—"; a moved-on week has a
+  // real count) and "wk 7 · 1/3 · open" (the live span, in place of the old
+  // "now" label).
+  suffix?: string;
 };
 
 // One sessions-per-week row. v48 · P6 (Sep 24 2026): HTML, not SVG — the
@@ -11514,11 +11792,12 @@ function renderPerWeekRow(r: PerWeekRow): string {
     return `<div class="spw-row spw-row-skipped"><span class="spw-label">${escapeHtml(r.label)}</span><span class="spw-skip">—</span></div>`;
   }
   const pct = Math.round(Math.min(1, r.value / SESSIONS_PER_WEEK_TARGET) * 100);
+  const suffix = r.suffix ? ` · ${escapeHtml(r.suffix)}` : '';
   return `
     <div class="spw-row${r.isCurrent ? ' spw-row-current' : ''}">
       <span class="spw-label">${escapeHtml(r.label)}</span>
       <span class="spw-track"><span class="spw-fill" style="width:${pct}%"></span></span>
-      <span class="spw-count">${r.value} / ${SESSIONS_PER_WEEK_TARGET}</span>
+      <span class="spw-count">${r.value} / ${SESSIONS_PER_WEEK_TARGET}${suffix}</span>
     </div>`;
 }
 
@@ -11527,6 +11806,13 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
   // current week.
   const firstSat = firstProgramSaturday();
 
+  // WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.4 "Progress · weeks card": the
+  // legacy calendar walk stops at the last week the OLD swing model ever
+  // closed (Week 4, the FIXED LEGACY_LAST_CLOSED_WEEK_INSTANT anchor) once
+  // "now" is past the real launch — never "today", which the completion
+  // model has already replaced for "now" (isNowAfterCompletionLaunch). Before
+  // the launch, unchanged: the walk still runs all the way to today's own
+  // calendar Saturday.
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayDow = today.getDay();
@@ -11534,16 +11820,28 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
   const thisSat = new Date(today);
   thisSat.setDate(today.getDate() - daysSinceSat);
   thisSat.setHours(0, 0, 0, 0);
+  const legacyWalkEnd = isNowAfterCompletionLaunch()
+    ? (() => {
+        const d = new Date(LEGACY_LAST_CLOSED_WEEK_INSTANT);
+        d.setHours(0, 0, 0, 0);
+        return d;
+      })()
+    : thisSat;
 
   const rows: PerWeekRow[] = [];
   const cursor = new Date(firstSat);
   // Swing-aware (v42): same attribution as the 3-slot rows and the week card.
   const attribution = attributeSessionsToWeeks(logs);
-  while (cursor.getTime() <= thisSat.getTime()) {
+  while (cursor.getTime() <= legacyWalkEnd.getTime()) {
     const weekStart = new Date(cursor);
     const count = sessionsAttributedTo(logs, weekStart, attribution).length;
     const pw = getProgramWeek(weekStart);
-    const isCurrent = weekStart.getTime() === thisSat.getTime();
+    // Pre-launch, the walk's own last iteration IS "now" — post-launch, the
+    // walk never reaches a live week at all (the completion rows below own
+    // "now" instead), so isCurrent is only ever true in the untouched
+    // pre-launch path.
+    const isCurrent =
+      !isNowAfterCompletionLaunch() && weekStart.getTime() === legacyWalkEnd.getTime();
     rows.push({
       label: isCurrent ? 'now' : pw.skippedLabel ? pw.skippedLabel.toLowerCase() : `wk ${pw.num}`,
       value: count,
@@ -11554,15 +11852,15 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
     cursor.setDate(cursor.getDate() + 7);
   }
 
-  if (rows.length === 0) return '';
-
   // v48 · fix r1 (Sep 24 2026): a 0-session week that sits next to a sick/break
   // week, or after a closed round's last session, is part of that stretch —
   // "—" with no track, never an empty "0 / 3" (her real Round 1: wk 11 sat
   // between "sick" and "break" scored 0/3; DECISIONS §5: "Skipped weeks show
   // '—' with no track"; her Jul 19 rule: a break is not a miss). The flag is
-  // worked out from the original rows, so it never chains across a run.
-  const currentRoundNum = getRoundFor(thisSat).num;
+  // worked out from the original rows, so it never chains across a run. This
+  // inference is scoped to the legacy rows only — a completion row already
+  // carries its own honest state (a real count + suffix), never inferred.
+  const legacyRoundNum = getRoundFor(legacyWalkEnd).num;
   const lastActiveIdx = new Map<number, number>();
   rows.forEach((r, i) => {
     if (r.value > 0) lastActiveIdx.set(r.round, i);
@@ -11571,12 +11869,44 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
     if (r.skipped || r.isCurrent || r.value > 0) return false;
     if (rows[i - 1]?.skipped || rows[i + 1]?.skipped) return true;
     const last = lastActiveIdx.get(r.round);
-    return r.round < currentRoundNum && last !== undefined && i > last;
+    return r.round < legacyRoundNum && last !== undefined && i > last;
   });
   held.forEach((h, i) => {
     const r = rows[i];
     if (h && r) r.held = true;
   });
+
+  // WK4 (Sep 27 2026): the completion-model rows, Week 5 on — one row per
+  // CLOSED span (numbered by its OWN key, never a recomputed calendar count),
+  // plus the live OPEN span if one exists ("wk 7 · 1/3 · open" — §2.4's own
+  // string, replacing the old "now" label; a mid-gap "now" is already
+  // honestly covered by the last closed span above it, so nothing extra is
+  // added then).
+  if (isNowAfterCompletionLaunch()) {
+    const { spans, open } = weekModel();
+    for (const span of spans) {
+      rows.push({
+        label: `wk ${span.key.week}`,
+        value: span.done.length,
+        round: span.key.round,
+        isCurrent: false,
+        skipped: false,
+        suffix: span.how === 'moved_on' ? 'moved on' : undefined,
+      });
+    }
+    if (open) {
+      rows.push({
+        label: `wk ${open.key.week}`,
+        value: open.done.length,
+        round: open.key.round,
+        isCurrent: true,
+        skipped: false,
+        suffix: 'open',
+      });
+    }
+  }
+
+  if (rows.length === 0) return '';
 
   // v46: only COMPLETED program weeks are counted. Break and sick weeks were
   // never a target and the week in progress isn't over. v48 · fix r1: the line
@@ -11593,8 +11923,11 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
 
   // v48 · P6 (Sep 24 2026): the current round's weeks open; each older round
   // folds into one closed row — her Aug 30 words: Round 1 is "a closed
-  // chapter" (archived, still one tap away).
-  const currentRound = currentRoundNum;
+  // chapter" (archived, still one tap away). WK4: the current round is
+  // whichever round the LAST row belongs to (chronological), so a completion
+  // row (always the true "now" once one exists) decides it the same way the
+  // old calendar walk's own last row used to.
+  const currentRound = rows[rows.length - 1]!.round;
   const older = ROUNDS.filter((r) => r.num < currentRound)
     .map((r) => {
       const roundRows = rows.filter((row) => row.round === r.num);
@@ -12132,6 +12465,25 @@ function renderSettings(): string {
   const howToOn = getHowToFirstExpand();
   const logCount = loadLogs().length;
   const latestRound = ROUNDS[ROUNDS.length - 1] ?? ROUNDS[0]!;
+  // WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.4 "Settings › About": before the
+  // launch, unchanged ("Program weeks: N" — a raw count she'd have to
+  // translate). At/after it, the same Round/Week she reads everywhere else on
+  // the completion model — the round's own start is still the calendar
+  // anchor pre-launch already used ("since Aug 29"); only the WEEK now comes
+  // from week.ts instead of a raw PROGRAM-row count.
+  const aboutWeekRow = isNowAfterCompletionLaunch()
+    ? (() => {
+        const key = shownWeek().key;
+        const round = ROUNDS.find((r) => r.num === key.round) ?? latestRound;
+        return {
+          title: `Round ${key.round} · Week ${key.week}`,
+          caption: `since ${formatMonthDay(round.start + 'T00:00:00')}`,
+        };
+      })()
+    : {
+        title: `Program weeks: ${getProgramWeekCount()}`,
+        caption: `Round ${latestRound.num} · from ${formatMonthDay(latestRound.start + 'T00:00:00')}`,
+      };
 
   return `
     <div class="screen-header">
@@ -12237,8 +12589,8 @@ function renderSettings(): string {
           <div class="settings-row-caption">Build ${APP_VERSION} · ${BUILD_DATE}.</div>
         </div>
         <div class="settings-about-row">
-          <div class="settings-row-title">Program weeks: ${getProgramWeekCount()}</div>
-          <div class="settings-row-caption">Round ${latestRound.num} · from ${formatMonthDay(latestRound.start + 'T00:00:00')}</div>
+          <div class="settings-row-title">${aboutWeekRow.title}</div>
+          <div class="settings-row-caption">${aboutWeekRow.caption}</div>
         </div>
         <div class="settings-about-row">
           <a class="settings-link" href="${GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub →</a>

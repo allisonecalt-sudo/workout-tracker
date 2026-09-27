@@ -2203,9 +2203,11 @@ test('ship 4: weekly review reachable from home button', async ({ page }) => {
   const reviewBtn = page.locator('#open-weekly-review');
   await expect(reviewBtn).toBeVisible();
   await reviewBtn.click();
-  // Header should now be the weekly-review screen header (v48 · P6: in home's
-  // words — "This week · … · Sep 19–25").
-  await expect(page.locator('h2').first()).toContainText('This week');
+  // Header should now be the weekly-review screen header. WK4 (Sep 27 2026):
+  // real "now" is always past the completion launch, so the live page reads
+  // the completion model's own title ("Week 5 · since Sat Sep 26", §2.4) —
+  // never "This week", which only the legacy calendar pages still say.
+  await expect(page.locator('h2').first()).toContainText('Week 5');
   // Subtitle reports session count.
   await expect(page.locator('.weekly-review-subtitle')).toContainText('Sessions:');
 });
@@ -2266,17 +2268,15 @@ test('ship 4: weekly review shows one-word verbatim including typos', async ({ p
   // Voice rule (CLAUDE.md): her one-word entries must appear VERBATIM, never
   // edited or omitted. Even if she typed a typo, render the typo.
   await page.addInitScript(() => {
-    // Seed inside the current Sat–Fri week (computed at runtime, not hardcoded)
-    // so the weekly-review screen actually surfaces this session.
-    const now = new Date();
-    const satOffset = (now.getDay() + 1) % 7; // Sat=0..Fri=6
-    const saturday = new Date(now);
-    saturday.setDate(now.getDate() - satOffset);
-    saturday.setHours(12, 0, 0, 0);
+    // WK4 (Sep 27 2026): dated at "now" itself (real "now" is always after
+    // the completion launch) instead of "this calendar week's Saturday" — the
+    // live weekly-review page is now the completion model's OPEN span, not a
+    // calendar Sat–Fri week, so the session must land inside THAT span, not
+    // just "sometime this week".
     const logs = [
       {
         id: 'verbatim',
-        date: saturday.toISOString(),
+        date: new Date().toISOString(),
         workout: 'A',
         capacityBefore: 4,
         capacityAfter: 6,
@@ -2782,7 +2782,29 @@ test('multi-week: "Coming next week" preview renders in Progress with diff', asy
   await expect(bBlock.locator('.next-week-block-list')).toContainText('14');
 });
 
-test('multi-week: Settings About shows Program weeks count (16)', async ({ page }) => {
+// WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.4 "Settings › About": "Program
+// weeks: 15" becomes "Round 2 · Week 5" once "now" is past the completion
+// launch — real "now" always is, so this replaces the old always-live
+// assertion; the pre-launch behavior it used to cover gets its own test
+// right below, with mockDate pinning "now" to before the launch.
+test('Settings About: post-launch shows the completion model’s own Round/Week, not a raw program-week count', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.locator('#open-settings').click();
+  await expect(page.locator('.settings-screen')).toBeVisible();
+  const row = page.locator('.settings-about-row').filter({ hasText: 'Round 2' });
+  await expect(row.locator('.settings-row-title')).toHaveText('Round 2 · Week 5');
+  await expect(row.locator('.settings-row-caption')).toHaveText('since Aug 29');
+  await expect(
+    page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
+  ).toHaveCount(0);
+});
+
+test('multi-week: Settings About shows Program weeks count (16) — pre-launch, unchanged', async ({
+  page,
+}) => {
+  await mockDate(page, '2026-09-22T10:00:00.000Z'); // Tue Sep 22 2026 — before the launch, Week 4
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
@@ -6716,7 +6738,10 @@ test.describe('v48 P4 home', () => {
   test('(f) the week card opens from the keyboard too', async ({ page }) => {
     await page.locator('#open-weekly-review').focus();
     await page.keyboard.press('Enter');
-    await expect(page.locator('h2').first()).toContainText('This week');
+    // WK4 (Sep 27 2026): real "now" (no mockDate here) reads the completion
+    // model's live page — "Week 5", never "This week" (see the ship-4 "reachable
+    // from home button" test's own comment).
+    await expect(page.locator('h2').first()).toContainText('Week 5');
   });
 
   test('(h) the walk row: "4,210 steps today" only when Fit answered; one row, no paragraph', async ({
@@ -8883,5 +8908,196 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
       { round: 2, week: 5, at: '2026-10-03T09:30:00+03:00', missing: 'C', synced: false },
       { round: 2, week: 6, at: '2026-10-11T00:00:00+03:00', missing: 'A', synced: true },
     ]);
+  });
+});
+
+// WK4 (Sep 27 2026) — PLAN-2026-09-26.md §2.6 "Remaining week sites": the
+// weekly review pager, the Progress "Sessions per week" card, Settings About
+// (its own test sits with the rest of Settings, above), the how-to "seen this
+// week" key, walksThisWeek, and the saved-session plan lookup (planForLog) —
+// everything §2.4/§7's own launch comment named as "WK4's job, not this
+// one's". Her words that drove the underlying model: 21:32 "it says week 5 on
+// top … I'm in week 4"; the launch instant is week.ts's own
+// COMPLETION_WEEKS_FROM (Sat Sep 26 2026 22:30).
+test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan', () => {
+  type Row = Record<string, unknown>;
+
+  const seedLogs = async (page: Page, logs: Row[]): Promise<void> => {
+    await page.addInitScript((rows) => {
+      window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+    }, logs);
+  };
+
+  const log = (id: string, date: string, workout: 'A' | 'B' | 'C'): Row => ({
+    id,
+    date,
+    workout,
+    capacityBefore: 6,
+    capacityAfter: 7,
+    wallSitSec: 0,
+    backPain: 0,
+    word: '',
+    synced: true,
+  });
+
+  test('weekly review pages from the legacy calendar week (Week 4) into the completion model (Week 5) — a FIXED anchor, never "today minus N weeks"', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      log('thu-a', '2026-09-24T15:56:00+03:00', 'A'),
+      log('fri-c', '2026-09-25T11:53:00+03:00', 'C'),
+      log('sat-b', '2026-09-26T19:14:51+03:00', 'B'), // 22:14 local — before the 22:30 launch, closes legacy Week 4
+      log('wk5-a', '2026-09-27T12:00:00+03:00', 'A'), // after the launch — Week 5's own first session
+    ]);
+    await mockDate(page, '2026-09-28T08:00:00+03:00'); // Mon Sep 28 — Week 5, day 3
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+
+    // Page 0: the live completion span, "since" (no range yet, still open).
+    await expect(page.locator('.review-title')).toHaveText('Week 5 · since Sat Sep 26');
+    await expect(page.locator('.weekly-review-sessions .session-row')).toHaveCount(1);
+    await expect(page.locator('#next-week')).toBeHidden();
+    await expect(page.locator('.weekly-review-open')).toHaveText('Week still open.');
+
+    // Page 1: the pager falls through into the LEGACY calendar model, at the
+    // FIXED Week-4 anchor — not whatever "today minus a week" would be.
+    await page.locator('#prev-week').click();
+    await expect(page.locator('.review-title')).toHaveText('R2 · Week 4 · Sep 19–25');
+    await expect(page.locator('.weekly-review-sessions .session-row')).toHaveCount(3);
+    await expect(page.locator('.weekly-review-subtitle')).toContainText('3');
+
+    // Back to page 0.
+    await page.locator('#next-week').click();
+    await expect(page.locator('.review-title')).toHaveText('Week 5 · since Sat Sep 26');
+  });
+
+  test('Progress · Sessions per week: a closed completion week reads "wk 5 · 3 / 3", never a recomputed calendar count', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
+      log('wk5-b', '2026-09-28T10:00:00+03:00', 'B'),
+      log('wk5-c', '2026-09-29T10:00:00+03:00', 'C'), // closes Week 5 on Tue, 3 of 3
+    ]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00'); // Wed, mid-gap (Week 6 pending until Sat Oct 3)
+    await page.goto('/');
+    await page.locator('#open-progress-link').click();
+    const spw = page.locator('.spw-card');
+    // Scoped to the CURRENT (unfolded) rows only — Round 1 has its own,
+    // unrelated "wk 5" folded under .spw-older, and an unscoped .spw-row
+    // filter matches both.
+    const wk5 = spw
+      .locator(':scope > .spw-rows > .spw-row')
+      .filter({ has: page.locator('.spw-label:text-is("wk 5")') });
+    await expect(wk5.locator('.spw-count')).toHaveText('3 / 3');
+    await expect(wk5.locator('.spw-track')).toHaveCount(1); // a real track, never held's "—"
+  });
+
+  test('Progress · Sessions per week: a moved-on week reads "moved on", the live week reads "open"', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
+      log('wk5-b', '2026-09-29T10:00:00+03:00', 'B'), // 2 of 3 — C never comes
+    ]);
+    // A move-on for Week 5, landing on the following Saturday (Oct 3, itself
+    // an anchor day — Week 6 opens the same instant, no gap). Seeded directly
+    // (bypassing the UI tap), same shape weekMovePayload writes.
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'workout-tracker:week-moves',
+        JSON.stringify([
+          { round: 2, week: 5, at: '2026-10-03T09:00:00+03:00', missing: 'C', synced: true },
+        ])
+      );
+    });
+    await mockDate(page, '2026-10-05T08:00:00+03:00'); // Mon, Week 6 open (day 3)
+    await page.goto('/');
+    await page.locator('#open-progress-link').click();
+    const spw = page.locator('.spw-card');
+    const wk5 = spw
+      .locator(':scope > .spw-rows > .spw-row')
+      .filter({ has: page.locator('.spw-label:text-is("wk 5")') });
+    await expect(wk5.locator('.spw-count')).toHaveText('2 / 3 · moved on');
+    const wk6 = spw
+      .locator(':scope > .spw-rows > .spw-row')
+      .filter({ has: page.locator('.spw-label:text-is("wk 6")') });
+    await expect(wk6.locator('.spw-count')).toHaveText('0 / 3 · open');
+  });
+
+  test('planForLog: a post-launch A resolves Week 5’s own key, not the old swing/calendar model’s', async ({
+    page,
+  }) => {
+    await seedLogs(page, [log('wk5-a', '2026-09-27T12:00:00+03:00', 'A')]);
+    await mockDate(page, '2026-09-28T08:00:00+03:00'); // Mon Sep 28, Week 5 day 3
+    await page.goto('/');
+    const key = await page.evaluate(() => {
+      const w = window as unknown as {
+        __wtPlanKeyForLog: (e: unknown) => unknown;
+      };
+      return w.__wtPlanKeyForLog({ id: 'wk5-a', date: '2026-09-27T12:00:00+03:00', workout: 'A' });
+    });
+    expect(key).toEqual({ round: 2, week: 5 });
+  });
+
+  test('planForLog: a session dated BEFORE the launch still resolves through the old calendar model (null key)', async ({
+    page,
+  }) => {
+    await seedLogs(page, [log('wk4-a', '2026-09-24T15:56:00+03:00', 'A')]);
+    await mockDate(page, '2026-09-24T15:00:00.000Z');
+    await page.goto('/');
+    const key = await page.evaluate(() => {
+      const w = window as unknown as {
+        __wtPlanKeyForLog: (e: unknown) => unknown;
+      };
+      return w.__wtPlanKeyForLog({ id: 'wk4-a', date: '2026-09-24T15:56:00+03:00', workout: 'A' });
+    });
+    expect(key).toBeNull();
+  });
+
+  test('the how-to "seen this week" key follows the completion model’s OPEN week post-launch, the calendar model pre-launch', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-28T08:00:00+03:00'); // Mon Sep 28 — Week 5, day 3
+    await page.goto('/');
+    const postLaunchKey = await page.evaluate(() =>
+      (
+        window as unknown as {
+          __wtCurrentHowToWeekKey: () => { num: number; round: number };
+        }
+      ).__wtCurrentHowToWeekKey()
+    );
+    expect(postLaunchKey).toEqual({ num: 5, round: 2 });
+
+    await mockDate(page, '2026-09-22T10:00:00.000Z'); // pre-launch, Tue — Week 4
+    await page.goto('/');
+    const preLaunchKey = await page.evaluate(() =>
+      (
+        window as unknown as {
+          __wtCurrentHowToWeekKey: () => { num: number; round: number };
+        }
+      ).__wtCurrentHowToWeekKey()
+    );
+    // The pre-launch branch returns getProgramWeek()'s FULL object (start/end/
+    // skippedLabel too, unchanged pre-existing shape) — only num/round matter
+    // to howToWeekKey, so this checks those two, not exact equality.
+    expect(preLaunchKey).toMatchObject({ num: 4, round: 2 });
+  });
+
+  test('walksThisWeek counts since the completion model’s own week start, not today’s calendar Saturday', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'workout-tracker:walks',
+        JSON.stringify([
+          { id: 'w1', date: '2026-09-20T10:00:00+03:00' }, // before Week 5 opened — doesn't count
+          { id: 'w2', date: '2026-09-27T10:00:00+03:00' }, // after — counts
+        ])
+      );
+    });
+    await mockDate(page, '2026-09-28T08:00:00+03:00'); // Mon Sep 28 — Week 5, day 3
+    await page.goto('/');
+    await expect(page.locator('.walk-row .walk-text')).toContainText('1 this week');
   });
 });
