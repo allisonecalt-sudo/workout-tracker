@@ -6067,3 +6067,204 @@ textarea:focus {
   padding: 16px 18px;
   margin-bottom: 16px;
 }
+
+/* ==========================================================================
+ * R1 (Sep 27 2026) — the ride-numbers screen's live "= 6.2 kcal a minute"
+ * line (PLAN-2026-09-26.md §4.3). Quiet, like every other reading caption on
+ * this screen — this is a live readout of what she just typed, not a verdict.
+ * ========================================================================== */
+.ell-live-line {
+  font-size: 20px;
+  color: var(--text);
+  margin: 2px 0 14px;
+}
+
+/* ==========================================================================
+ * THE RIDES PAGE (Sep 27 2026) — replaces plan items R1+R2 per her
+ * amendments (Sep 26 2026, 23:16-23:20): "Also I want elliptical data page."
+ * Reuses .progress-card, .progress-card-label, .progress-stat-big and
+ * .progress-card-empty as-is (same shell as every other Progress card); the
+ * classes below are only the page's own new pieces.
+ * ========================================================================== */
+
+/* The door row on Progress — same shell as .cycle-door just above. */
+.progress-card:has(.rides-door) {
+  padding: 0;
+}
+
+.rides-door .rides-door-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rides-door-title {
+  display: block;
+}
+
+.rides-door-sub {
+  display: block;
+  font-size: var(--font-small);
+  color: var(--text-dim);
+}
+
+/* The hero card: "Calories a minute" + the toggle + the toggle-projected
+ * line + the ride's own km/h · min/km · level · time · date. */
+.rides-hero-num {
+  margin-bottom: 10px;
+}
+
+.rides-toggle-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+/* Off sage on purpose — a toggle, not the screen's one primary action (same
+ * discipline as .ell-same-chip). */
+.rides-toggle-chip {
+  min-height: var(--tap);
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--edge);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-small);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.rides-toggle-chip.is-on {
+  border: 2px solid var(--text);
+}
+
+.rides-proj-line {
+  font-size: 19px;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.rides-sub-line {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.rides-detail-line {
+  font-size: var(--font-small);
+  color: var(--text-dim-2);
+}
+
+/* "Your usual" / "Your best" — plain numbers, no arrows, no verdict color. */
+.rides-usual-best-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rides-stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.rides-stat-lbl {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.rides-stat-val {
+  font-size: var(--font-small);
+  color: var(--text);
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Week + month totals. */
+.rides-totals-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.rides-totals-row + .rides-totals-row {
+  border-top: 1px solid var(--border-divider);
+}
+
+.rides-totals-lbl {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rides-totals-val {
+  font-size: var(--font-small);
+  color: var(--text);
+  text-align: right;
+}
+
+/* The chart: no axis, no legend, no gridlines (app-wide rule) — chart.ts
+ * draws the SVG; this just gives it a predictable box at 412px. */
+.rides-chart-wrap {
+  width: 100%;
+  margin: 4px 0 4px;
+}
+
+.rides-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.rides-chart-svg [data-ride-id] {
+  cursor: pointer;
+}
+
+.rides-chart-readout {
+  min-height: 20px;
+  font-size: var(--font-small);
+  color: var(--text);
+  margin-top: 6px;
+}
+
+/* The plain list — date · workout letter · min · km · kcal · level. */
+.rides-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.rides-list-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  font-size: var(--font-small);
+}
+
+.rides-list-row + .rides-list-row {
+  border-top: 1px solid var(--border-divider);
+}
+
+.rides-list-left {
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rides-list-right {
+  color: var(--text-dim);
+  text-align: right;
+}
+
+.rides-list-nonum {
+  color: var(--text-dim-2);
+  font-style: italic;
+}

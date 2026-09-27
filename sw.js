@@ -22,7 +22,11 @@
 // v53.1 (Sep 27 2026): T1 fix r1 — timing.js's own sync fixes (the phone
 // forgot her timing answers on pull; the PGRST204 retry was lossy beyond
 // v53's own group) — no new shell files, so only the cache name moves.
-const VERSION = 'workout-tracker-v53.1';
+// v54 (Sep 27 2026): THE RIDES PAGE, replacing plan items R1+R2 per her
+// amendments (23:16-23:20) — ride.js (kcal/min, km/h, usual, best, totals)
+// and chart.js (the one bar-chart module) are new shell files, same
+// treatment as week.js/timing.js above.
+const VERSION = 'workout-tracker-v54';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
@@ -60,6 +64,11 @@ const SHELL_ASSETS = [
   // v53 · T1 (Sep 27 2026): her start/finish "Right?" + breaks — timing.ts,
   // its own module the same way week.js is (app.js imports it statically).
   './dist/timing.js',
+  // v54 · THE RIDES PAGE (Sep 27 2026) — ride.js (kcal/min, km/h, usual,
+  // best, totals) and chart.js (the one bar-chart module), the same way
+  // timing.js is (app.js imports both statically).
+  './dist/ride.js',
+  './dist/chart.js',
   './manifest.webmanifest',
   // v49 · look (Sep 25 2026): self-hosted DM Sans (spec §3 "Font loading") —
   // precached so it renders offline on the floor, never a runtime Google
@@ -231,6 +240,9 @@ function isCodeRequest(url, request) {
     // v53 · T1 (Sep 27 2026): her start/finish "Right?" + breaks — same
     // reasoning as week.js just above.
     url.pathname.endsWith('/dist/timing.js') ||
+    // v54 · THE RIDES PAGE (Sep 27 2026) — same reasoning as timing.js above.
+    url.pathname.endsWith('/dist/ride.js') ||
+    url.pathname.endsWith('/dist/chart.js') ||
     url.pathname.endsWith('/index.html')
   );
 }

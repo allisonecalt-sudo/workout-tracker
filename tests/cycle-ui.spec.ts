@@ -162,8 +162,25 @@ test.describe('open and back (spec §2.2)', () => {
 
     // window.scrollTo, not a simulated mouse wheel: this only needs a real,
     // reproducible offset to leave and come back to — not to prove wheel
-    // input itself scrolls the page.
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    // input itself scrolls the page. THE RIDES PAGE (Sep 27 2026) fix: this
+    // used to scroll to the very bottom of the document, which only stayed a
+    // meaningful "leave and come back" offset while Progress was short. A
+    // new door row below #open-cycle (the rides door) makes the document
+    // taller every time a card is added here, and "the bottom" then scrolls
+    // #open-cycle itself out of view — a fragility in the CLASS of check
+    // (any future card added below it breaks the same way), not a real
+    // regression in the scroll restore this test exists to prove. Anchoring
+    // the target to #open-cycle's OWN position keeps a real, reproducible
+    // offset (still nonzero — the toBeGreaterThan(50) below still means
+    // something) without depending on how tall the rest of the page is.
+    await page.evaluate(() => {
+      const el = document.getElementById('open-cycle');
+      const top = el?.offsetTop ?? 0;
+      // Just above the button, not past it — a real nonzero offset (still
+      // >50 below) that also leaves #open-cycle itself on screen, whatever
+      // grows below it on the page.
+      window.scrollTo(0, Math.max(60, top - 150));
+    });
     const scrollBefore = await page.evaluate(() => window.scrollY);
     expect(scrollBefore).toBeGreaterThan(50);
 

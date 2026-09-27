@@ -8440,15 +8440,17 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v53.1 · <date, no year>", Settings "Build v53.1 · <full date>", sw.js v53.1', async ({
+  test('(d) the version: home "v54 · <date, no year>", Settings "Build v54 · <full date>", sw.js v54', async ({
     page,
   }) => {
     const src = await (await page.request.get('/app.ts')).text();
     const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
     const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
-    // T1 fix r1 (Sep 27 2026, checker's should #5): the bump this round
-    // (v53 -> v53.1), same dotted-sub-version shape as v51.1/v52.1/v52.2.
-    expect(version).toBe('v53.1');
+    // THE RIDES PAGE (Sep 27 2026): the bump this round (v53.1 -> v54) — a
+    // whole-number bump, not another dotted sub-version, since this ships a
+    // new screen (v51/v52/v53's own shape: sub-versions are same-day fixes,
+    // a new number is a new build).
+    expect(version).toBe('v54');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
       `${version} · ${built.replace(/,\s*\d{4}/, '')}`

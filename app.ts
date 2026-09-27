@@ -10,6 +10,22 @@ import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
 import { painFromFeel, feelFromPain } from './pain-feel.js';
 import { trainingMinutes, formatWorkoutTime, formatWorkoutMinutesTotal } from './timing.js';
 import {
+  hasRideNumbers,
+  rideRate,
+  projectedKcal,
+  projectedKm,
+  usualKcalPerMin,
+  bestRide,
+  rideTotals,
+  PROJECTION_LABEL,
+  type RideRecord,
+  type RideRate,
+  type BestRide,
+  type RideTotals,
+  type ProjectionWindow,
+} from './ride.js';
+import { barChartSvg, type ChartBar } from './chart.js';
+import {
   excludedUntouchedCount,
   todayCycleStatus,
   periodLogUrgency,
@@ -247,7 +263,13 @@ type AppScreen =
   | 'weekly-review'
   | 'progress'
   | 'settings'
-  | 'cycle';
+  | 'cycle'
+  // THE RIDES PAGE (Sep 27 2026), replacing plan items R1+R2 per her
+  // amendments (Sep 26 2026, 23:16-23:20): "Also I want elliptical data
+  // page." One door from Progress ("🚴 Your rides ›"), one way back
+  // ("‹ Progress") — simpler than Your cycle's two doors, since nothing
+  // else on Home opens it.
+  | 'rides';
 
 type Phase = 'warmup' | 'main' | 'upperBack' | 'cooldown';
 
@@ -560,8 +582,8 @@ const SUPABASE_ANON_KEY =
 // branch's ride numbers (Next -> "from the machine" entry screen) + Cue ->
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
-const APP_VERSION = 'v53.1';
-const BUILD_DATE = 'Sep 27, 2026 · 11:24';
+const APP_VERSION = 'v54';
+const BUILD_DATE = 'Sep 27, 2026 · 19:31';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -6867,6 +6889,16 @@ let cycleReturnTo: 'progress' | 'home' = 'progress';
 let cycleCompareMetric: CycleMetric = 'body';
 let progressScrollForCycle = 0;
 
+// THE RIDES PAGE (Sep 27 2026) — same transient, module-level shape as the
+// cycle page's own fields just above. `ridesWindow` is the hero's 3-chip
+// toggle ("per 10 min · 30 min · hour", her 23:16-23:20 ask); it resets to
+// 'tenMin' every time the page opens, same reset-on-open rule as
+// cycleCompareMetric. `ridesSelectedChartId` is which bar she last tapped (a
+// RideRecord id) — null means no readout is showing yet.
+let ridesWindow: ProjectionWindow = 'tenMin';
+let ridesSelectedChartId: string | null = null;
+let progressScrollForRides = 0;
+
 // v53 (Sep 26 2026) — the history-edit screen's draft (renderHistoryEdit,
 // openHistoryEdit, saveHistoryEdit). Transient, module-level, like the cycle
 // fields above — the screen is reached by an explicit tap (Edit, on the
@@ -10242,6 +10274,23 @@ function renderRideNumbersCard(ex: Exercise): string {
     laneDoneMinutes() !== null ? laneDoneMinutes()! * 60 : (ex.durationSec ?? null);
   const time = typedTime ?? (fallbackSec !== null ? formatMmSs(fallbackSec) : '');
   const timeFromApp = typedTime === null && fallbackSec !== null;
+  // THE RIDES PAGE / R1 (Sep 27 2026), PLAN-2026-09-26.md §4.3: "a live line,
+  // no extra screen" — appears once Time + Calories are filled, adds km/h
+  // once Distance is too. Computed through ride.ts's rideRate() so this line
+  // and the rides page's hero can never disagree on the math. Rendered here
+  // so a prefilled time (the app's own timer, laneDoneMinutes) already shows
+  // it before she types anything; updateRideLiveLine() (attachWorkoutHandlers)
+  // keeps it live per keystroke, same "no re-render, keeps focus" rule as
+  // every other reading on this screen.
+  const liveRate = rideRate({
+    kcal: parseKcalReading(kcal),
+    timeSec: time ? parseMmSs(time) : null,
+    km: km ? parseKmReading(km) : null,
+  });
+  const liveLine =
+    liveRate.kcalPerMin !== null
+      ? `= ${liveRate.kcalPerMin} kcal a minute${liveRate.kmh !== null ? ` · ${liveRate.kmh} km/h` : ''}`
+      : '';
   // "—" until she touches it: an untouched stepper saves null, never a guess.
   const sameChip =
     last !== null
@@ -10270,6 +10319,7 @@ function renderRideNumbersCard(ex: Exercise): string {
         ${readingRow('ell-km', 'Distance', km, 'km', { step: '0.01', min: '0' })}
         ${readingRow('ell-kcal', 'Calories', kcal, 'kcal', { step: '0.1', min: '0' })}
       </div>
+      <div class="ell-live-line" id="ride-live-line"${liveLine ? '' : ' hidden'}>${escapeHtml(liveLine)}</div>
       <div class="ell-field ell-field-level">
         <span class="ell-field-label">Level you rode at</span>
         <div class="ell-level-controls">
@@ -11162,6 +11212,33 @@ function sessionCardio(l: LogEntry): SessionCardio | null {
     };
   }
   return null;
+}
+
+// THE RIDES PAGE (Sep 27 2026) — every elliptical session, oldest -> newest,
+// as ride.ts's plain RideRecord shape. Reuses sessionCardio() (above) so a
+// legacy v47 row's notes-marker ride and a v48+ row's real columns build the
+// exact same record a v49+ row does — one source of "was this an elliptical
+// ride" for the whole app, never a second parallel reader of the columns.
+// An id-less log is dropped (same fail-loud rule as sessionsForWeekModel —
+// ride.ts's RideRecord.id is how the chart's tap and "usual"/"best" are
+// keyed back to a session).
+function ellipticalRideRecords(logs: LogEntry[]): RideRecord[] {
+  const records: RideRecord[] = [];
+  for (const l of logs) {
+    if (!l.id) continue;
+    const cardio = sessionCardio(l);
+    if (!cardio || cardio.lane !== 'elliptical') continue;
+    records.push({
+      id: l.id,
+      date: l.date,
+      workout: l.workout,
+      level: cardio.level,
+      km: cardio.km,
+      kcal: cardio.kcal,
+      timeSec: cardio.timeSec,
+    });
+  }
+  return records;
 }
 
 // "Elliptical 10 min · L7 · 1.4 km · 63.4 kcal · 10:02 · pulse 128" /
@@ -12868,6 +12945,250 @@ function renderCycleSettingsRow(): string {
     </div>`;
 }
 
+// ---------- THE RIDES PAGE (Sep 27 2026) ----------
+//
+// Replaces plan items R1+R2 per her amendments (Sep 26 2026, 23:16-23:20):
+// "Also I want elliptical data page" · "Elliptical calories per min, 10 min,
+// 30, hour I can toggle. Kph, anything that you can think of." One door on
+// Progress ("🚴 Your rides ›", same door pattern as "🌙 Your cycle" just
+// above), one way back ("‹ Progress") — no second entry point, unlike the
+// cycle page's Home row, since nothing else on Home shows a ride number.
+
+// "9/24" — compact enough that up to 10 of these fit under 340px of bars
+// (formatMonthDay's "Sep 24" is too wide at this density); used ONLY under
+// the chart's bars, never anywhere she reads a date as a fact.
+function shortChartDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function ridesDoorSub(rides: RideRecord[]): string {
+  if (rides.length === 0) return 'No rides yet';
+  const latest = rides[rides.length - 1]!;
+  const rate = rideRate(latest);
+  return rate.kcalPerMin !== null
+    ? `${formatMonthDay(latest.date)} · ${rate.kcalPerMin} kcal/min`
+    : `${formatMonthDay(latest.date)} · no numbers`;
+}
+
+// The one row that opens the page — lives on Progress, both the empty and
+// normal states (same placement rule as renderCycleDoorRow).
+function renderRidesDoorRow(logs: LogEntry[]): string {
+  const rides = ellipticalRideRecords(logs);
+  return `
+    <div class="card progress-card">
+      <button class="door-row rides-door" id="open-rides" type="button">
+        <span class="rides-door-text">
+          <span class="rides-door-title">🚴 Your rides</span>
+          <span class="rides-door-sub">${escapeHtml(ridesDoorSub(rides))}</span>
+        </span>
+        <span class="door-chev" aria-hidden="true">›</span>
+      </button>
+    </div>`;
+}
+
+// TOP card: the latest ride, big — her hero number is kcal a minute (§4.2's
+// own reasoning, carried over: "the one big number is kcal a minute ... it's
+// her own idea"). The 3-chip toggle changes only the projection line under
+// it; the hero digit itself never moves (it's what THIS ride was, not a
+// projection). A ride with no usable numbers (§4.2's exclusion) says so
+// honestly instead of showing a hero built from a guess.
+function renderRidesHeroCard(latest: RideRecord, rate: RideRate): string {
+  const dateStr = formatMonthDay(latest.date);
+  const timeStr = latest.timeSec !== null ? formatMmSs(latest.timeSec) : null;
+  if (!rate.rateEligible) {
+    return `
+      <div class="card progress-card rides-hero-card">
+        <div class="progress-card-label">Calories a minute</div>
+        <p class="progress-card-empty">No numbers for this ride${timeStr ? ` (${escapeHtml(timeStr)})` : ''} — ${escapeHtml(dateStr)}.</p>
+      </div>`;
+  }
+  const kcalPerMin = rate.kcalPerMin as number;
+  const chips = (['tenMin', 'thirtyMin', 'hour'] as ProjectionWindow[])
+    .map(
+      (w) =>
+        `<button class="rides-toggle-chip${ridesWindow === w ? ' is-on' : ''}" data-rides-window="${w}" type="button" aria-pressed="${ridesWindow === w}">${PROJECTION_LABEL[w]}</button>`
+    )
+    .join('');
+  const projKcal = projectedKcal(kcalPerMin, ridesWindow);
+  const projKm = rate.kmh !== null ? projectedKm(rate.kmh, ridesWindow) : null;
+  const projLine = `= ${projKcal} kcal${projKm !== null ? ` · ${projKm} km` : ''} in ${PROJECTION_LABEL[ridesWindow]}`;
+  const subLine = [
+    rate.kmh !== null ? `${rate.kmh} km/h` : '',
+    rate.paceMinPerKm !== null ? `${rate.paceMinPerKm} min/km` : '',
+  ]
+    .filter((s) => s !== '')
+    .join(' · ');
+  const detailLine = [latest.level !== null ? `level ${latest.level}` : '', timeStr ?? '', dateStr]
+    .filter((s) => s !== '')
+    .join(' · ');
+  return `
+    <div class="card progress-card rides-hero-card">
+      <div class="progress-card-label">Calories a minute</div>
+      <div class="progress-stat-big rides-hero-num" id="rides-hero-kcal">${kcalPerMin}</div>
+      <div class="rides-toggle-row" id="rides-toggle-row">${chips}</div>
+      <div class="rides-proj-line" id="rides-proj-line">${escapeHtml(projLine)}</div>
+      ${subLine ? `<div class="rides-sub-line">${escapeHtml(subLine)}</div>` : ''}
+      <div class="rides-detail-line">${escapeHtml(detailLine)}</div>
+    </div>`;
+}
+
+// "Your usual" (median of last 5 rides with numbers) and "Your best" (the
+// highest kcal/min on record) — one card, plain numbers, never a verdict
+// word (her rule, carried from §4.2: no "harder"/"easier", no arrows).
+function renderRidesUsualBestCard(
+  usual: number | null,
+  best: BestRide | null,
+  eligibleCount: number
+): string {
+  const usualLine =
+    usual !== null
+      ? `<div class="rides-stat-row"><span class="rides-stat-lbl">Your usual</span><span class="rides-stat-val">${usual} kcal/min</span></div>`
+      : `<p class="progress-card-empty">Your usual shows after 5 rides (${Math.min(eligibleCount, 5)} so far).</p>`;
+  const bestLine = best
+    ? `<div class="rides-stat-row"><span class="rides-stat-lbl">Your best</span><span class="rides-stat-val">${best.kcalPerMin} kcal/min · ${escapeHtml(formatMonthDay(best.ride.date))}</span></div>`
+    : `<p class="progress-card-empty">Your best shows after your first ride with numbers.</p>`;
+  return `
+    <div class="card progress-card rides-usual-best-card">
+      ${usualLine}
+      ${bestLine}
+    </div>`;
+}
+
+// Week + month totals — "week" is the SAME open completion week every other
+// screen in the app now uses (week.ts's weekModel(), her own rule "once all
+// three are done then it can go to the next week"), never a second, new
+// meaning of "week" the plan's whole §2 fought to remove. "Month" is the
+// plain calendar month to date — the app has no other "month" concept yet
+// to collide with.
+function renderRidesTotalsCard(rides: RideRecord[]): string {
+  const openIds = new Set((weekModel().open?.sessions ?? []).map((s) => s.id));
+  const weekRides = rides.filter((r) => openIds.has(r.id));
+  const monthPrefix = localIsoDate(new Date()).slice(0, 7);
+  const monthRides = rides.filter((r) => r.date.slice(0, 7) === monthPrefix);
+  const row = (label: string, t: RideTotals): string => `
+    <div class="rides-totals-row">
+      <span class="rides-totals-lbl">${escapeHtml(label)}</span>
+      <span class="rides-totals-val">${t.rides} ${t.rides === 1 ? 'ride' : 'rides'} · ${t.minutes} min · ${t.km} km · ${t.kcal} kcal</span>
+    </div>`;
+  return `
+    <div class="card progress-card rides-totals-card">
+      <div class="progress-card-label">Totals</div>
+      ${row('This week', rideTotals(weekRides))}
+      ${row('This month', rideTotals(monthRides))}
+    </div>`;
+}
+
+// One line under the chart when a bar is tapped — never shown until she taps
+// one (the hero above already covers the latest ride; this is deliberately
+// quiet until asked for).
+function renderRideReadoutLine(r: RideRecord): string {
+  const rate = rideRate(r);
+  const parts = [
+    formatMonthDay(r.date),
+    `Workout ${r.workout}`,
+    rate.kcalPerMin !== null ? `${rate.kcalPerMin} kcal/min` : '',
+    rate.kmh !== null ? `${rate.kmh} km/h` : '',
+    r.level !== null ? `level ${r.level}` : '',
+    r.timeSec !== null ? formatMmSs(r.timeSec) : '',
+  ].filter((s) => s !== '');
+  return escapeHtml(parts.join(' · '));
+}
+
+// ONE big bar chart (chart.ts, no library) — up to the last 10 rides that
+// have numbers, the latest highlighted, short dates under every bar, a tap
+// opens the one-line readout above. Rides with no numbers aren't charted
+// (§4.2/§4.5: nothing to plot).
+function renderRidesChartCard(rides: RideRecord[]): string {
+  const eligible = rides.filter(hasRideNumbers);
+  if (eligible.length < 2) {
+    return `
+      <div class="card progress-card rides-chart-card">
+        <div class="progress-card-label">Rides</div>
+        <p class="progress-card-empty">The chart starts at your 2nd ride with numbers.</p>
+      </div>`;
+  }
+  const last10 = eligible.slice(-10);
+  const bars: ChartBar[] = last10.map((r, i) => ({
+    id: r.id,
+    value: rideRate(r).kcalPerMin ?? 0,
+    label: shortChartDate(r.date),
+    highlighted: i === last10.length - 1,
+  }));
+  const svg = barChartSvg(bars, { ariaLabel: 'Calories a minute, by ride' });
+  const selected = ridesSelectedChartId ? rides.find((r) => r.id === ridesSelectedChartId) : null;
+  return `
+    <div class="card progress-card rides-chart-card">
+      <div class="progress-card-label">Rides</div>
+      <div class="rides-chart-wrap" id="rides-chart">${svg}</div>
+      <div class="rides-chart-readout" id="rides-chart-readout">${selected ? renderRideReadoutLine(selected) : ''}</div>
+    </div>`;
+}
+
+// The plain list — date · workout letter · min · km · kcal · level, newest
+// first. A ride excluded from rates (§4.2's rule: kcal 0 or missing time)
+// still gets its own row — "no numbers", never hidden (the archive rule:
+// don't disappear, just say honestly there's nothing to read here).
+function renderRidesListCard(rides: RideRecord[]): string {
+  const rows = [...rides]
+    .reverse()
+    .map((r) => {
+      const left = `${formatMonthDay(r.date)} · ${r.workout}`;
+      if (!hasRideNumbers(r)) {
+        return `
+          <div class="rides-list-row">
+            <span class="rides-list-left">${escapeHtml(left)}</span>
+            <span class="rides-list-nonum">no numbers</span>
+          </div>`;
+      }
+      const timeStr = r.timeSec !== null ? formatMmSs(r.timeSec) : '—';
+      const kmStr = r.km !== null ? `${r.km} km` : '—';
+      const kcalStr = r.kcal !== null ? `${r.kcal} kcal` : '—';
+      const levelStr = r.level !== null ? `L${r.level}` : '—';
+      return `
+        <div class="rides-list-row">
+          <span class="rides-list-left">${escapeHtml(left)}</span>
+          <span class="rides-list-right">${escapeHtml(`${timeStr} · ${kmStr} · ${kcalStr} · ${levelStr}`)}</span>
+        </div>`;
+    })
+    .join('');
+  return `
+    <div class="card progress-card rides-list-card">
+      <div class="progress-card-label">All rides</div>
+      <div class="rides-list">${rows}</div>
+    </div>`;
+}
+
+function renderRides(): string {
+  const logs = getChronologicalLogs(); // oldest → newest, by date
+  const rides = ellipticalRideRecords(logs);
+  const header = `
+    <div class="screen-header">
+      <h2>Your rides</h2>
+      <button class="quit-link" id="back-from-rides" type="button">‹ Progress</button>
+    </div>`;
+
+  if (rides.length === 0) {
+    return `
+      ${header}
+      <p class="progress-empty">Ride data shows here once you've ridden the elliptical.</p>`;
+  }
+
+  const latest = rides[rides.length - 1]!;
+  const latestRate = rideRate(latest);
+  const eligibleCount = rides.filter(hasRideNumbers).length;
+
+  return `
+    ${header}
+    <div class="progress-screen rides-screen">
+      ${renderRidesHeroCard(latest, latestRate)}
+      ${renderRidesUsualBestCard(usualKcalPerMin(rides), bestRide(rides), eligibleCount)}
+      ${renderRidesTotalsCard(rides)}
+      ${renderRidesChartCard(rides)}
+      ${renderRidesListCard(rides)}
+    </div>`;
+}
+
 function renderProgress(): string {
   const logs = getChronologicalLogs(); // oldest → newest, by date
   const count = logs.length;
@@ -12898,6 +13219,7 @@ function renderProgress(): string {
       ${subtitle}
       <p class="progress-empty">Progress shows once you have 2+ sessions logged.</p>
       ${renderCycleDoorRow()}
+      ${renderRidesDoorRow(logs)}
       ${renderProgramArchive()}
     `;
   }
@@ -12913,6 +13235,7 @@ function renderProgress(): string {
     <div class="progress-screen">
       ${renderStartNowCard(logs)}
       ${renderCycleDoorRow()}
+      ${renderRidesDoorRow(logs)}
       ${renderWallSitTrendCard(logs)}
       ${renderBackPainTrendCard(logs)}
       ${renderSessionsPerWeekCard(logs)}
@@ -13362,6 +13685,9 @@ function render(): void {
     case 'cycle':
       html = renderCycle();
       break;
+    case 'rides':
+      html = renderRides();
+      break;
   }
   // Pause affordance — the Pause button sits in each workout sub-view's header
   // (exercise, rest, cooldown; v46). When paused, a full overlay replaces it so
@@ -13529,6 +13855,9 @@ function attachHandlers(): void {
 
   // v50 · cycle: Progress card + Settings' quiet row.
   attachCycleHandlers();
+
+  // THE RIDES PAGE (Sep 27 2026): Progress's one door row + the page itself.
+  attachRidesHandlers();
 
   // Ship 4: open weekly-review screen. v48 · P4 (Sep 24 2026): home only ever
   // shows THIS week now, so it opens this week (offset 0). The whole week card is the one door to Weekly review (the
@@ -14108,16 +14437,20 @@ function attachHandlers(): void {
   });
   // Console readings (v44): saved per keystroke, no re-render (keeps focus).
   const ellKm = document.getElementById('ell-km') as HTMLInputElement | null;
-  ellKm?.addEventListener('input', () => setEllipticalReading(WW_ELLIPTICAL_KM_KEY, ellKm.value));
+  ellKm?.addEventListener('input', () => {
+    setEllipticalReading(WW_ELLIPTICAL_KM_KEY, ellKm.value);
+    updateRideLiveLine();
+  });
   const ellPulse = document.getElementById('ell-pulse') as HTMLInputElement | null;
   ellPulse?.addEventListener('input', () =>
     setEllipticalReading(WW_ELLIPTICAL_PULSE_KEY, ellPulse.value)
   );
   // v49: calories + time, same per-keystroke save, no re-render.
   const ellKcal = document.getElementById('ell-kcal') as HTMLInputElement | null;
-  ellKcal?.addEventListener('input', () =>
-    setEllipticalReading(WW_ELLIPTICAL_KCAL_KEY, ellKcal.value)
-  );
+  ellKcal?.addEventListener('input', () => {
+    setEllipticalReading(WW_ELLIPTICAL_KCAL_KEY, ellKcal.value);
+    updateRideLiveLine();
+  });
   const ellTime = document.getElementById('ell-time') as HTMLInputElement | null;
   ellTime?.addEventListener('input', () => {
     setEllipticalReading(WW_ELLIPTICAL_TIME_KEY, ellTime.value);
@@ -14125,6 +14458,7 @@ function attachHandlers(): void {
     // typed over the prefill — this field saves per-keystroke with no
     // re-render (keeps focus), so the caption never got the chance to drop.
     document.getElementById('ell-time-sub')?.remove();
+    updateRideLiveLine();
   });
 
   // v51 (Sep 25 2026): the ride-numbers screen's local Back — closes the
@@ -14424,6 +14758,76 @@ function attachCycleHandlers(): void {
       }
     });
   });
+}
+
+// R1 (Sep 27 2026), PLAN-2026-09-26.md §4.3 — the ride-numbers screen's
+// #ride-live-line, kept current per keystroke on ell-km/ell-kcal/ell-time
+// (no re-render, same rule as every other reading there — see
+// renderRideNumbersCard's own comment on why this reads through rideRate()).
+function updateRideLiveLine(): void {
+  const el = document.getElementById('ride-live-line');
+  if (!el) return;
+  const kcalRaw = (document.getElementById('ell-kcal') as HTMLInputElement | null)?.value ?? '';
+  const timeRaw = (document.getElementById('ell-time') as HTMLInputElement | null)?.value ?? '';
+  const kmRaw = (document.getElementById('ell-km') as HTMLInputElement | null)?.value ?? '';
+  const rate = rideRate({
+    kcal: parseKcalReading(kcalRaw),
+    timeSec: timeRaw ? parseMmSs(timeRaw) : null,
+    km: kmRaw ? parseKmReading(kmRaw) : null,
+  });
+  if (rate.kcalPerMin === null) {
+    el.textContent = '';
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  el.textContent = `= ${rate.kcalPerMin} kcal a minute${rate.kmh !== null ? ` · ${rate.kmh} km/h` : ''}`;
+}
+
+// THE RIDES PAGE (Sep 27 2026) — the one door (Progress -> Your rides), its
+// own back button, the toggle chips, and the chart's tap-to-read-out bars.
+function attachRidesHandlers(): void {
+  bindClick('open-rides', () => {
+    progressScrollForRides = window.scrollY;
+    ridesWindow = 'tenMin';
+    ridesSelectedChartId = null;
+    state.screen = 'rides';
+    render();
+  });
+  bindClick('back-from-rides', () => {
+    pendingScrollRestore = progressScrollForRides;
+    state.screen = 'progress';
+    render();
+  });
+  document.querySelectorAll<HTMLButtonElement>('button[data-rides-window]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const w = btn.dataset['ridesWindow'] as ProjectionWindow | undefined;
+      if (w) {
+        ridesWindow = w;
+        render();
+      }
+    });
+  });
+  // The chart's bars (chart.ts's <g data-ride-id>, one per ride) — a tap or
+  // Enter/Space opens the one-line readout under the chart (spec: "tap a bar
+  // -> a one-line readout of that ride under the chart").
+  document
+    .querySelectorAll<SVGGElement>('#rides-chart [data-ride-id]')
+    .forEach((el: SVGGElement) => {
+      const open = (): void => {
+        const id = el.dataset['rideId'];
+        if (!id) return;
+        ridesSelectedChartId = id;
+        render();
+      };
+      el.addEventListener('click', open);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open();
+        }
+      });
+    });
 }
 
 function bindClick(id: string, fn: () => void): void {
