@@ -182,7 +182,11 @@ test('golden cutover: composeWeekPlan(START_STATE) matches the R2W4 exercise set
         name: 'Prone row (bodyweight)',
         reps: '2 sets · 12 reps each side · bodyweight or 1–2 kg',
       },
-      { name: '1 kg biceps curl', reps: '2 sets · 12 reps' },
+      // v55 · fix r3 (Sep 28 2026, should #2): the curl rung reps text now
+      // says the range out loud too, matching the row right above it (the
+      // name key stays '1 kg biceps curl' — progression lookups, voice note,
+      // history — see the Exercise type's own comment).
+      { name: '1 kg biceps curl', reps: '2 sets · 12 reps · 1–2 kg (your pick)' },
       { name: 'Wall angels', reps: '2 sets · 10 slow reps' },
       { name: 'IWYT raises', reps: '2 sets · 8 each (I, W, Y, T)' },
       { name: 'Bird dog (legs only)', reps: '2 sets · 6 each side · 2-sec hold' },

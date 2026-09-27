@@ -447,11 +447,14 @@ type AppState = {
   // Folded into the same arm_feel string on save (armFeelString) for LOCAL
   // storage. v55 fix r2 (Sep 27 2026): the "no schema change" premise above
   // was wrong — the checker read the live workout_sessions.arm_feel CHECK
-  // (migrations/2026-09-24-v48-session-columns.sql) and it rejects any
-  // "@1kg"/"@2kg" suffix (400/23514). Until she says go on a constraint
-  // migration, stripArmFeelLoad strips the suffix before the string ever
-  // reaches sessionPayload, so the live DB always accepts it; the load
-  // itself stays local-only (this device's own default, not synced).
+  // (migrations/2026-09-24-v48-session-columns.sql) and it rejected any
+  // "@1kg"/"@2kg" suffix (400/23514), so fix r2 stripped it before send —
+  // meaning it lived local-only and was wiped on the next sync pull (fix r3's
+  // must). v55 fix r3 (Sep 28 2026): she said go; migrations/2026-09-28-v55-
+  // arm-feel-load.sql widened the CHECK to accept the suffix (additive — a
+  // pre-v55 row with no suffix still passes), applied live. The strip is
+  // gone (see sessionPayload) — this now round-trips through Supabase like
+  // every other field.
   armLoad: ArmLoadState;
   // v55 · fix r1 (Sep 27 2026): the HEAVIEST load actually tapped THIS
   // session, per key — separate from armLoad above (which is "current pick,"
@@ -627,7 +630,7 @@ const SUPABASE_ANON_KEY =
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
 const APP_VERSION = 'v55';
-const BUILD_DATE = 'Sep 28, 2026 · 00:15'; // v55 · fix r2 ship time
+const BUILD_DATE = 'Sep 28, 2026 · 00:39'; // v55 · fix r3 ship time
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -3047,9 +3050,16 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
     howTo:
       "Hold the 1 kg with your elbow tucked at your side, forearm hanging down, wrist neutral and straight. Curl the forearm up toward your shoulder, keeping the elbow pinned in place — only the forearm moves. Lower slowly under control. 2 sets of 12. Keep the wrist straight (neutral) the whole time — don't let it bend back. Common mistake: swinging the body or the elbow drifting forward for momentum. Slow and controlled is the work.",
   },
+  // v55 · fix r3 (Sep 28 2026, nice): the W/Y/T set was originally introduced
+  // as Lisa Cohen's move (Jun 18 2026) — attribution kept here in the
+  // comment, not in the user-visible howTo text below (this EXERCISE_GUIDE
+  // fallback only renders when EXERCISE_HOWTO has no entry for the name, so
+  // it isn't on screen today, but the Lisa-gating copy sweep should have
+  // caught it too — rule 8e is "get rid of Lisa" everywhere, not just what's
+  // currently reachable).
   'IWYT raises': {
     howTo:
-      "Lisa Cohen's move (Jun 18), plus the I position you added (Jul 4) — so: I, W, Y, T. Lie face DOWN on the mat with your forehead resting on a folded towel, so the neck stays long and relaxed. Thumbs point UP the entire time — that keeps the wrists neutral, zero palm pressure. One rep = put your arms in the letter's shape, lift them a few centimeters OFF the floor by squeezing your upper back, hold one breath, lower. Your hands touching the ground between reps is exactly right — the floor IS the rest position; you only lift for the squeeze. The letters: I — arms straight down along your sides, lift by drawing the shoulder blades down and together. W — elbows bent and pulled toward your ribs so your arms make a W; squeeze the blades together. Y — both arms overhead in a narrow V, like a referee calling goalposts. T — arms straight out to the sides at shoulder height. Do all reps of one letter, then move to the next. Small controlled lifts beat big swings — if your neck starts doing the work, the lift is too big. About 8 of each letter, 2 rounds, and keep the whole thing gentle for the neck.",
+      "The W, Y, T set, plus the I position you added (Jul 4) — so: I, W, Y, T. Lie face DOWN on the mat with your forehead resting on a folded towel, so the neck stays long and relaxed. Thumbs point UP the entire time — that keeps the wrists neutral, zero palm pressure. One rep = put your arms in the letter's shape, lift them a few centimeters OFF the floor by squeezing your upper back, hold one breath, lower. Your hands touching the ground between reps is exactly right — the floor IS the rest position; you only lift for the squeeze. The letters: I — arms straight down along your sides, lift by drawing the shoulder blades down and together. W — elbows bent and pulled toward your ribs so your arms make a W; squeeze the blades together. Y — both arms overhead in a narrow V, like a referee calling goalposts. T — arms straight out to the sides at shoulder height. Do all reps of one letter, then move to the next. Small controlled lifts beat big swings — if your neck starts doing the work, the lift is too big. About 8 of each letter, 2 rounds, and keep the whole thing gentle for the neck.",
   },
   // Week-10 addition (2026-07-04) — from the Jun-20 deep research.
   'Eccentric step-down': {
@@ -4478,10 +4488,15 @@ function sessionPayload(entry: LogEntry): Record<string, unknown> {
     elliptical_kcal: entry.ellipticalKcal ?? null,
     session_note: entry.sessionNote ?? null,
     lite_day: entry.liteDay ?? null,
-    // v55 fix r2 (Sep 27 2026): entry.armFeel may carry the "@1kg"/"@2kg"
-    // LOAD CHIP suffix (local storage shape) — strip it before it reaches
-    // the wire; the live CHECK 400s on it (see stripArmFeelLoad's comment).
-    arm_feel: stripArmFeelLoad(entry.armFeel ?? null),
+    // v55 fix r3 (Sep 28 2026): entry.armFeel may carry the "@1kg"/"@2kg"
+    // LOAD CHIP suffix — sent AS-IS now. fix r2's stripArmFeelLoad (deleted
+    // this pass) worked around a live CHECK that 400'd on the suffix, but
+    // that also meant mergeRemoteSessions overwrote the local row with the
+    // server's load-less copy on the very next sync (fix r3's must). She
+    // said go on the schema change instead (migrations/2026-09-28-v55-arm-
+    // feel-load.sql, applied live) — the suffix is additive to the CHECK, so
+    // a pre-v55 row with none still passes.
+    arm_feel: entry.armFeel ?? null,
     voice_plays: entry.voicePlays ?? null,
     steps_skipped: entry.stepsSkipped ?? null,
     // T1 (Sep 27 2026), §3: her own start/finish answers — see LogEntry's
@@ -5783,38 +5798,48 @@ function sanitizeSetsDoneFor(v: unknown): Record<string, number> {
   return out;
 }
 
+// v55 fix r3 (Sep 28 2026): reverse of ARM_FEEL_STEPS (name -> step) — so
+// armFeelString can read state.setsDoneFor (keyed by exercise name) off a
+// step key without a third hand-copy of the same two literal strings.
+const ARM_STEP_EXERCISE_NAME: Record<keyof ArmFeelState, string> = {
+  curl: '1 kg biceps curl',
+  row: 'Prone row (bodyweight)',
+};
+
 // "curl=easy@2kg;row=right@1kg" — the LOCAL storage shape (workout-tracker:
 // logs, this device's loadLogs()); null when none. v55 (Sep 27 2026): the
 // "@1kg"/"@2kg" suffix is new (the LOAD CHIP) — appended only when a load is
 // known, so a pre-v55 row (no suffix) and the existing reader (the rowcurl
 // "easy" substring match in progression.ts) still parse it exactly as
 // before.
-// v55 fix r2 (Sep 27 2026): this is NOT the shape the live arm_feel CHECK
-// accepts — the checker read the constraint (migrations/2026-09-24-v48-
-// session-columns.sql) and confirmed the "@load" suffix 400s (23514). The
-// "no schema change" premise she was told was wrong. stripArmFeelLoad below
-// is what actually goes to Supabase (via sessionPayload); this full string
-// is what's saved to disk, so this device's own defaultArmLoad /
-// lastUsedArmLoad keep working even though the load isn't synced.
-function armFeelString(f: ArmFeelState, loads: ArmLoadState): string | null {
+// v55 fix r2 (Sep 27 2026): the live arm_feel CHECK didn't accept the
+// suffix, so this used to diverge from what sessionPayload actually sent
+// (stripArmFeelLoad stripped it). v55 fix r3 (Sep 28 2026): she said go —
+// migrations/2026-09-28-v55-arm-feel-load.sql widened the CHECK, the strip
+// is deleted, and this is now exactly the wire shape too.
+// v55 fix r3, should #1 (checker's Probe B): a feel tap used to be the ONLY
+// thing that wrote anything. She can pick 2 kg, do both sets, never tap
+// Easy/Right/Hard, and Save wiped the load to null. `engaged` below is the
+// same "she was really here" signal the CHIP-AFTER-THE-LAST-SET UI already
+// waits on (state.setsDoneFor, keyed by exercise name) — at least one set
+// marked done THIS session on that move. Without it, every session (arm
+// block or not — defaultArmLoad runs at the start of ALL of them) would
+// write a bogus "curl=@1kg;row=@1kg" off armLoad's mere default.
+function armFeelString(
+  f: ArmFeelState,
+  loads: ArmLoadState,
+  setsDone: Record<string, number>
+): string | null {
   const part = (key: 'curl' | 'row', feel: ArmFeel | undefined): string => {
-    if (!feel) return '';
     const load = loads[key];
-    return `${key}=${feel}${load ? `@${load}` : ''}`;
+    const engaged = feel !== undefined || (setsDone[ARM_STEP_EXERCISE_NAME[key]] ?? 0) > 0;
+    if (!engaged) return '';
+    // feel-less load: 'curl=@2kg' — the widened CHECK allows the feel half
+    // to be empty (her pick still needs to be recorded).
+    return `${key}=${feel ?? ''}${load ? `@${load}` : ''}`;
   };
   const parts = [part('curl', f.curl), part('row', f.row)].filter((p) => p !== '');
   return parts.length > 0 ? parts.join(';') : null;
-}
-
-// v55 fix r2 (Sep 27 2026): drops the "@1kg"/"@2kg" suffix so the string
-// fits the live arm_feel CHECK ('^(curl=(easy|right|hard))?(;?row=(easy|
-// right|hard))?$', migrations/2026-09-24-v48-session-columns.sql) exactly —
-// used ONLY for the outgoing sessionPayload, never for local storage (see
-// armFeelString's comment).
-function stripArmFeelLoad(s: string | null): string | null {
-  if (!s) return s;
-  const stripped = s.replace(/@(1kg|2kg)/g, '');
-  return stripped === '' ? null : stripped;
 }
 
 // v55: the LOAD half of one saved "curl=easy@2kg" part, for one step key.
@@ -6004,13 +6029,16 @@ async function saveCompletedSession(): Promise<void> {
     sessionNote,
     liteDay: state.liteDay,
     // v48 · P5 (Sep 24 2026): "curl=easy@2kg;row=right@1kg" — only the parts
-    // she tapped, null when none. v55: the "@load" suffix carries her
-    // per-set weight pick — LOCAL storage shape only; sessionPayload strips
-    // it before send, since the live arm_feel CHECK doesn't accept it (v55
-    // fix r2, Sep 27 2026 — see stripArmFeelLoad's comment).
+    // she engaged with, null when none. v55: the "@load" suffix carries her
+    // per-set weight pick, sent to Supabase as-is since fix r3 (Sep 28 2026,
+    // migrations/2026-09-28-v55-arm-feel-load.sql — see sessionPayload's
+    // comment).
     // v55 · fix r1: armLoadMax (heaviest tapped this session), not armLoad
     // (current chip display) — see armLoadMax's own comment.
-    armFeel: armFeelString(state.armFeel, state.armLoadMax),
+    // v55 · fix r3, should #1: setsDoneFor is how armFeelString knows she was
+    // really on that step this session, so a load survives even without a
+    // feel tap (see armFeelString's own comment).
+    armFeel: armFeelString(state.armFeel, state.armLoadMax, state.setsDoneFor),
     voicePlays: state.voicePlays,
     stepsSkipped: w ? skippedStepsCount(w) : null,
   });
@@ -6752,6 +6780,15 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       ellipticalKcal: r.elliptical_kcal == null ? null : Number(r.elliptical_kcal),
       sessionNote: r.session_note ?? null,
       liteDay: r.lite_day ?? null,
+      // v55 fix r3 (Sep 28 2026, checker's must): plain passthrough, but this
+      // USED to be the bug — sessionPayload stripped the "@1kg"/"@2kg" LOAD
+      // CHIP suffix before send (fix r2's stripArmFeelLoad, since deleted),
+      // so r.arm_feel never had it, and this merge silently overwrote the
+      // phone's own local suffix with the server's load-less copy on every
+      // pull. Now that the suffix reaches Supabase as-is (the CHECK was
+      // widened, see sessionPayload's comment), it comes back the same way —
+      // no code change needed here, just the note for the next person who
+      // wonders why this looked fine already.
       armFeel: r.arm_feel ?? null,
       voicePlays: r.voice_plays ?? null,
       stepsSkipped: r.steps_skipped ?? null,
@@ -9141,16 +9178,18 @@ function renderPastWeeks(): string {
 // card (DECISIONS §5). The "tell Claude" lines are gone — the 2 kg trigger is
 // now a question the app asks on home, from her arm-feel taps (her Jul 3 ask).
 const GEAR_CHIPS: { have: boolean; text: string }[] = [
-  { have: true, text: '1 kg · A+B arm block' },
   { have: true, text: 'Yellow band · B clamshells' },
   { have: false, text: '2nd 1 kg' },
   // v55 (Sep 27 2026): she has the 2 kg now ("I have 2kg now", 20:08) — the
   // old "ask Lisa when the 1 kg feels easy" line is gone with the rest of
   // the Lisa-gating copy (rule 8e). The LOAD CHIP is where she uses it.
   // v55 · fix r1 (Sep 27 2026): dropped "pairs" — it implied two of each
-  // weight, which contradicts the unchecked "2nd 1 kg" chip right above it
-  // (don't know if she owns a second 1 kg; not this fix's call to assume).
-  { have: true, text: '1 kg + 2 kg · your pick by pain' },
+  // weight, which contradicted the unchecked "2nd 1 kg" chip below it.
+  // v55 · fix r3 (Sep 28 2026, nice): "pairs" is back — she does own a pair
+  // of each (that's what "your pick by pain" every set implies), and the
+  // separate checked "1 kg · A+B arm block" chip above was just this same
+  // fact said twice, so it's dropped instead of the word.
+  { have: true, text: '1 kg + 2 kg pairs · your pick by pain' },
   { have: false, text: 'Peanut (2 tennis balls in a sock)' },
 ];
 

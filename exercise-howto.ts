@@ -658,7 +658,9 @@ const SVG_PRONE_ROW_DOWN = s(`
   <!-- arm hanging straight down, weight at bottom -->
   <line x1="82" y1="126" x2="82" y2="150" stroke="var(--ink-2)" stroke-width="4" stroke-linecap="round" />
   <rect x="75" y="148" width="14" height="9" rx="2" fill="var(--ink)" stroke="#1a1f1c" stroke-width="1.5" />
-  <text x="40" y="44" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">start: arm hangs · 1 kg</text>
+  <!-- v55 · fix r3 (Sep 28 2026, should #2): "1 kg" -> "1–2 kg" — the LOAD
+       CHIP is her pick by pain, never a fixed weight (rule 8e). -->
+  <text x="40" y="44" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">start: arm hangs · 1–2 kg</text>
 `);
 
 const SVG_PRONE_ROW_UP = s(`
@@ -686,7 +688,9 @@ const SVG_BICEPS_CURL_DOWN = sNoMat(`
   <!-- Sep 24 2026, v48 P8: the caption sat at y=36, across the head (cy 40,
        r 13), unreadable in the final walk — it moves under the figure, where
        the UP frame keeps its own captions. -->
-  <text x="30" y="168" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">elbow tucked · start low · 1 kg</text>
+  <!-- v55 · fix r3 (Sep 28 2026, should #2): "1 kg" -> "1–2 kg" — same fix
+       as the prone row's SVG_PRONE_ROW_DOWN caption above. -->
+  <text x="30" y="168" fill="#a8a59c" font-size="12" font-family="sans-serif" font-weight="600">elbow tucked · start low · 1–2 kg</text>
 `);
 
 const SVG_BICEPS_CURL_UP = sNoMat(`

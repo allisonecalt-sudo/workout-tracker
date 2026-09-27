@@ -1069,6 +1069,49 @@ test('pull merge (T1 fix r1, must #1): her timing answers survive a push -> pull
   expect(result.preT1?.breakMinutes).toBeNull();
 });
 
+// v55 fix r3 (Sep 28 2026, checker's must): the same push -> pull proof as
+// the T1 test above, for the LOAD CHIP's "@1kg"/"@2kg" suffix. Before this
+// fix, sessionPayload's stripArmFeelLoad erased the suffix before it ever
+// reached Supabase (the live CHECK 400'd on it), so a synced row's own next
+// pull silently overwrote the phone's local "curl=easy@2kg" with the
+// server's load-less "curl=easy" — the load lived only until the next sync.
+// She said go on migrations/2026-09-28-v55-arm-feel-load.sql (widened CHECK,
+// applied live) instead, so the fix is: send it as-is, and it must still be
+// there after a round trip through the real push shape.
+test('pull merge (v55 fix r3, must): the "@2kg"/"@1kg" LOAD CHIP suffix survives a push -> pull round trip', async ({
+  page,
+}) => {
+  const result = await page.evaluate(() => {
+    type Entry = Record<string, unknown>;
+    const w = window as unknown as {
+      __wtSessionPayload: (e: Entry) => Record<string, unknown>;
+      __wtMergeRemoteSessions: (local: unknown[], remote: unknown[]) => Entry[];
+    };
+    const entry = {
+      id: 'with-load',
+      date: '2026-09-28T10:00:00.000Z',
+      workout: 'A',
+      capacityBefore: 6,
+      capacityAfter: 7,
+      wallSitSec: 0,
+      backPain: 0,
+      word: '',
+      armFeel: 'curl=easy@2kg;row=right@1kg',
+    };
+    // The exact row a save's POST sends.
+    const remoteRow = w.__wtSessionPayload(entry);
+    const merged = w.__wtMergeRemoteSessions([], [remoteRow]);
+    return {
+      payloadArmFeel: remoteRow['arm_feel'],
+      mergedArmFeel: merged.find((r) => r['id'] === 'with-load')?.['armFeel'],
+    };
+  });
+  // The wire carries the suffix now (no more stripArmFeelLoad).
+  expect(result.payloadArmFeel).toBe('curl=easy@2kg;row=right@1kg');
+  // And the pull hands it straight back — no silent erase on the next sync.
+  expect(result.mergedArmFeel).toBe('curl=easy@2kg;row=right@1kg');
+});
+
 // --- Round 2 Week 3: the band goes on the clamshells (v35, Sep 14 2026) ------
 // Her word: "build week 3". One change only — the yellow band, in B, looped.
 // These assert BOTH halves: the change landed, and nothing else moved.
@@ -1589,9 +1632,12 @@ test('R2 W3: gear card no longer says the band is waiting for a future week', as
   // chips — the band is a ✅ chip ("in the workout"), not a waiting line.
   await page.locator('#open-settings').click();
   const gear = page.locator('.gear-card');
+  // v55 · fix r3 (Sep 28 2026, nice): the redundant "1 kg · A+B arm block"
+  // chip is gone (the pairs chip below already says she has the 1 kg) —
+  // order shifts, Yellow band is have-chip #1 now.
   await expect(gear.locator('.gear-chip-have')).toContainText([
-    '1 kg',
     'Yellow band · B clamshells',
+    '1 kg + 2 kg pairs · your pick by pain',
   ]);
   await expect(gear).not.toContainText('Not in a workout yet');
   await expect(gear).not.toContainText('Booked for');
@@ -4568,15 +4614,19 @@ test.describe('v48 P1 data', () => {
     expect(p['arm_feel']).toBeNull();
   });
 
-  // v55 fix r2 (Sep 27 2026, checker's must #1): the live constraint, copied
-  // verbatim from migrations/2026-09-24-v48-session-columns.sql:32 — it does
-  // NOT accept an "@1kg"/"@2kg" suffix. Runs sessionPayload's arm_feel
-  // output through it for every feel/load combo on both moves, so a future
-  // change that lets the suffix leak back onto the wire fails loudly here
-  // instead of 400ing on her phone.
-  const LIVE_ARM_FEEL_CHECK = /^(curl=(easy|right|hard))?(;?row=(easy|right|hard))?$/;
+  // v55 fix r3 (Sep 28 2026, checker's must): the LIVE constraint, copied
+  // verbatim from migrations/2026-09-28-v55-arm-feel-load.sql — she said go,
+  // it's applied, and it now accepts the "@1kg"/"@2kg" suffix (additive: a
+  // pre-v55 row with no suffix still passes, same as a curl-only or row-only
+  // row with no feel at all, should #1's feel-less "curl=@2kg"). Runs
+  // sessionPayload's arm_feel output through it for every feel/load combo on
+  // both moves, so a future change that strips the suffix back off the wire
+  // fails loudly here instead of quietly losing her data on the next sync
+  // (fix r2's stripArmFeelLoad bug — see mergeRemoteSessions' own comment).
+  const LIVE_ARM_FEEL_CHECK =
+    /^(curl=(easy|right|hard)?(@[12]kg)?)?(;?row=(easy|right|hard)?(@[12]kg)?)?$/;
 
-  test('(a2) arm_feel sent to Supabase never carries the "@load" suffix — matches the live CHECK', async ({
+  test('(a2) arm_feel sent to Supabase carries the "@load" suffix as-is — matches the widened live CHECK', async ({
     page,
   }) => {
     const base = {
@@ -4603,17 +4653,21 @@ test.describe('v48 P1 data', () => {
         }
       }
     }
+    // should #1: a load with no feel at all — the format the feel-less save
+    // uses (armFeelString's `engaged` branch).
+    for (const cl of loads) cases.push(`curl=@${cl}`);
+    for (const cl of loads) for (const rl of loads) cases.push(`curl=@${cl};row=@${rl}`);
     for (const armFeel of cases) {
       const p = await payloadOf(page, { ...base, armFeel });
       const sent = p['arm_feel'] as string | null;
       expect(sent === null || LIVE_ARM_FEEL_CHECK.test(sent)).toBe(true);
-      // The suffix is gone, but which move/feel she tapped is not (null stays
-      // null — the base fixture's `null` case above has nothing to strip).
-      if (sent !== null) expect(sent).not.toMatch(/@/);
+      // The suffix is no longer stripped — the payload is exactly what was
+      // asked to be saved (null stays null; nothing invented, nothing cut).
+      expect(sent).toBe(armFeel);
     }
-    // Spot check the exact strip.
+    // Spot check: the exact string round-trips whole, "@" and all.
     const p2 = await payloadOf(page, { ...base, armFeel: 'curl=easy@2kg;row=right@1kg' });
-    expect(p2['arm_feel']).toBe('curl=easy;row=right');
+    expect(p2['arm_feel']).toBe('curl=easy@2kg;row=right@1kg');
   });
 
   test('(b) wall_sit_seconds is null on B and C (no wall sit), the number on A', async ({
@@ -7927,6 +7981,37 @@ test.describe('v48 P5 logs', () => {
     await expect(page.locator('.exercise-reps')).toContainText('1–2 kg (your pick)');
   });
 
+  // v55 · fix r3 (Sep 28 2026, should #2): the reps text said "1–2 kg" from
+  // fix r1, but the hand-coded how-to SVG (SVG_PRONE_ROW_DOWN,
+  // SVG_BICEPS_CURL_DOWN — getPrimaryStill's fallback still, always on
+  // screen for these two moves since EXERCISE_VISUALS has no `.loop` JPG for
+  // either) still drew "1 kg" right on the frame she's looking at while she
+  // picks her load — seen live under a curl step with 2 kg already picked.
+  // Checks the actual DOM text (SVG <text> content), not just the caption
+  // text beside it.
+  test('(f) v55 fix r3: the how-to still SVG drops the fixed "1 kg" caption too', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, 'Prone row');
+    const rowSvg = await page
+      .locator('.exercise-visual-still-svg')
+      .first()
+      .evaluate((el) => el.textContent ?? '');
+    expect(rowSvg).not.toMatch(/\b1 kg\b/);
+    expect(rowSvg).toContain('1–2 kg');
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
+    const curlSvg = await page
+      .locator('.exercise-visual-still-svg')
+      .first()
+      .evaluate((el) => el.textContent ?? '');
+    expect(curlSvg).not.toMatch(/\b1 kg\b/);
+    expect(curlSvg).toContain('1–2 kg');
+  });
+
   test('(f) arm feel: no tap on either move saves null; no chips (feel or load) on other moves', async ({
     page,
   }) => {
@@ -7974,6 +8059,29 @@ test.describe('v48 P5 logs', () => {
     await toPostLog(page);
     const log = await saveAndRead(page);
     expect(log['armFeel']).toBe('curl=right@1kg;row=easy@2kg');
+  });
+
+  // v55 · fix r3 (Sep 28 2026, should #1): the feel chip is optional; the
+  // load pick is not — before this fix they were saved by the same "did she
+  // tap a feel?" gate, so Probe B (checker) picked 2 kg, marked both sets
+  // done, never touched Easy/Right/Hard, and Save wiped armFeel to null. The
+  // 2 kg set left no trace and the next session silently defaulted back.
+  test('(f) LOAD CHIP: 2 kg + both sets done + no feel tap still saves the load ("curl=@2kg")', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
+    await page.locator('[data-arm-load-step="curl"][data-arm-load="2kg"]').click();
+    await page.locator('[data-mark-set="1 kg biceps curl"]').click();
+    await page.locator('[data-mark-set="1 kg biceps curl"]').click();
+    // Now on "How did it feel?" — skip it entirely, no chip tap.
+    await expect(page.locator('[data-arm-step="curl"][aria-pressed="true"]')).toHaveCount(0);
+    await toPostLog(page); // never visits the row's own chips either — row untouched
+    const log = await saveAndRead(page);
+    expect(log['armFeel']).toBe('curl=@2kg');
   });
 
   // v55 · fix r1 (Sep 27 2026): the pace rule says try 2 kg on set 1, then
@@ -8038,6 +8146,25 @@ test.describe('v48 P5 logs', () => {
     // Her last logged curl was @2kg — the default this session should pick
     // that up, per spec ("default = last used, initially 1 kg").
     await seedLogs(page, [logRow('s1', '2026-09-19T15:00:00.000Z', 'curl=easy@2kg')]);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
+    await expect(page.locator('[data-arm-load-step="curl"][data-arm-load="2kg"]')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  // v55 · fix r3 (Sep 28 2026, should #1): the feel-less save format
+  // ("curl=@2kg", no feel half at all) has to read back as a default too —
+  // lastUsedArmLoad's regex is `@(1kg|2kg)$`, which doesn't care whether
+  // anything comes before the "@".
+  test('(f) LOAD CHIP: a feel-less past load ("curl=@2kg") still sets the default', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await seedLogs(page, [logRow('s1', '2026-09-19T15:00:00.000Z', 'curl=@2kg')]);
     await page.goto('/');
     await page.locator('button[data-workout="A"]').click();
     await page.locator('#begin').click();
@@ -8485,12 +8612,17 @@ test.describe('v48 P6 mirror', () => {
     await page.locator('#open-settings').click();
     const app = page.locator('#app');
     await expect(app).not.toContainText(/auto-suggest/i);
-    await expect(page.locator('.gear-chip')).toHaveCount(5);
-    await expect(page.locator('.gear-chip').first()).toHaveText('✅ 1 kg · A+B arm block');
+    // v55 · fix r3 (Sep 28 2026, nice): dropped the redundant "1 kg · A+B
+    // arm block" chip (same fact as the pairs chip below, said twice) — 5
+    // chips down to 4, Yellow band moves up to first.
+    await expect(page.locator('.gear-chip')).toHaveCount(4);
+    await expect(page.locator('.gear-chip').first()).toHaveText('✅ Yellow band · B clamshells');
     // v55 (Sep 27 2026): she has the 2 kg now, and the Lisa-GATING copy is
     // retired everywhere (rule 8e) — the gear line says so, checked (have).
-    await expect(page.locator('.gear-chip').nth(3)).toHaveText(
-      '✅ 1 kg + 2 kg · your pick by pain'
+    // v55 · fix r3: "pairs" is back (she owns a pair of each) — see
+    // GEAR_CHIPS' own comment.
+    await expect(page.locator('.gear-chip').nth(2)).toHaveText(
+      '✅ 1 kg + 2 kg pairs · your pick by pain'
     );
     await expect(app).not.toContainText('tell Claude');
     // v55 · fix r1 (Sep 27 2026): the Settings neck card still said "Lisa" on

@@ -801,7 +801,13 @@ const deadbug: Ladder = {
           {
             name: 'Full dead bug',
             reps: '8 each side · 1 kg in the reaching hand',
-            notes: 'Still 1 kg — the ceiling everywhere else. Low back stays pressed to the mat.',
+            // v55 · fix r3 (Sep 28 2026, should #2): "the ceiling everywhere
+            // else" stopped being true once the LOAD CHIP let curl/row go to
+            // 2 kg (rule 8e) — dead bug's own 1 kg stays fixed (never one of
+            // the two LOAD CHIP moves), the false claim about the rest just
+            // needed to go.
+            notes:
+              'Still 1 kg for dead bug — curl and row are your pick by pain now. Low back stays pressed to the mat.',
           },
         ],
         B: [
@@ -1026,13 +1032,21 @@ const rowcurl: Ladder = {
             name: 'Prone row (bodyweight)',
             label: 'Prone row',
             reps: '2 sets · 12 reps each side · bodyweight or 1–2 kg',
+            // v55 · fix r3 (Sep 28 2026, should #2): cut the duplicate
+            // "— your call" — "(your pick)" right before it already says
+            // the same thing once.
             notes:
-              'Bodyweight or 1–2 kg (your pick) — your call. Arm hanging, wrist neutral, light grip. Head down. Drive the elbow up, squeeze the shoulder blade, lower slow. Pain tells — stop on any wrist signal.',
+              'Bodyweight or 1–2 kg (your pick). Arm hanging, wrist neutral, light grip. Head down. Drive the elbow up, squeeze the shoulder blade, lower slow. Pain tells — stop on any wrist signal.',
           },
           {
             name: '1 kg biceps curl',
             label: 'Biceps curl',
-            reps: '2 sets · 12 reps',
+            // v55 · fix r3 (Sep 28 2026, should #2): reps text picked up the
+            // same "· 1–2 kg (your pick)" the row already carried — the raw
+            // name key still literally says "1 kg" (progression lookups,
+            // voice note, history — see the type's own comment), so the reps
+            // line is where this rung says the real range out loud.
+            reps: '2 sets · 12 reps · 1–2 kg (your pick)',
             notes:
               'Hold 1–2 kg (your pick) lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging. Lower slow. Pain tells — stop on any wrist signal.',
           },
@@ -1043,7 +1057,11 @@ const rowcurl: Ladder = {
             label: 'Prone row',
             reps: '2 sets · 12 reps each side · bodyweight or 1–2 kg',
           },
-          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 12 reps' },
+          {
+            name: '1 kg biceps curl',
+            label: 'Biceps curl',
+            reps: '2 sets · 12 reps · 1–2 kg (your pick)',
+          },
         ],
       },
       minutesDelta: 0,
@@ -1062,7 +1080,11 @@ const rowcurl: Ladder = {
             notes:
               '1–2 kg is now the written default — you already do it, your pick by pain. Wrist neutral, light grip, head down.',
           },
-          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 15 reps' },
+          {
+            name: '1 kg biceps curl',
+            label: 'Biceps curl',
+            reps: '2 sets · 15 reps · 1–2 kg (your pick)',
+          },
         ],
         B: [
           {
@@ -1070,7 +1092,11 @@ const rowcurl: Ladder = {
             label: 'Prone row',
             reps: '2 sets · 15 reps each side · holding 1–2 kg (your pick)',
           },
-          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 15 reps' },
+          {
+            name: '1 kg biceps curl',
+            label: 'Biceps curl',
+            reps: '2 sets · 15 reps · 1–2 kg (your pick)',
+          },
         ],
       },
       minutesDelta: 0,
@@ -1087,7 +1113,11 @@ const rowcurl: Ladder = {
             label: 'Prone row',
             reps: '2 sets · 18 reps each side · holding 1–2 kg (your pick)',
           },
-          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 18 reps' },
+          {
+            name: '1 kg biceps curl',
+            label: 'Biceps curl',
+            reps: '2 sets · 18 reps · 1–2 kg (your pick)',
+          },
         ],
         B: [
           {
@@ -1095,7 +1125,11 @@ const rowcurl: Ladder = {
             label: 'Prone row',
             reps: '2 sets · 18 reps each side · holding 1–2 kg (your pick)',
           },
-          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 18 reps' },
+          {
+            name: '1 kg biceps curl',
+            label: 'Biceps curl',
+            reps: '2 sets · 18 reps · 1–2 kg (your pick)',
+          },
         ],
       },
       minutesDelta: 0,
@@ -1115,7 +1149,11 @@ const rowcurl: Ladder = {
             // engine could never reach — pure program bookkeeping, nothing
             // for her to read (no movement guidance left once it's dropped).
           },
-          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 20 reps' },
+          {
+            name: '1 kg biceps curl',
+            label: 'Biceps curl',
+            reps: '2 sets · 20 reps · 1–2 kg (your pick)',
+          },
         ],
         B: [
           {
@@ -1123,7 +1161,11 @@ const rowcurl: Ladder = {
             label: 'Prone row',
             reps: '2 sets · 20 reps each side · holding 1–2 kg (your pick)',
           },
-          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 20 reps' },
+          {
+            name: '1 kg biceps curl',
+            label: 'Biceps curl',
+            reps: '2 sets · 20 reps · 1–2 kg (your pick)',
+          },
         ],
       },
       minutesDelta: 0,

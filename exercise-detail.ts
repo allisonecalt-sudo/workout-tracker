@@ -1396,8 +1396,13 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
   'Prone row (bodyweight)': {
     exercise: 'Prone row (bodyweight)',
     voiceSrc: './assets/voice/prone-row-bodyweight.mp3',
+    // v55 · fix r3 (Sep 28 2026, should #2): "holding the one kilo — your
+    // call" -> "holding one or two kilos, whichever you pick" — the LOAD
+    // CHIP is her pick by pain, never a fixed weight (rule 8e). Regenerated
+    // assets/voice/prone-row-bodyweight.mp3 with the same edge-tts voice
+    // (en-US-AvaMultilingualNeural), same pipeline as the hinge mp3.
     voiceScript:
-      "Prone row. Lie face down on a bed or bench edge, or stand and hinge over, with your arm hanging straight down toward the floor and your wrist neutral and straight. Bodyweight, or holding the one kilo — your call. Keep your head down, don't lift it, because lifting strains the neck. Drive your elbow up toward the ceiling, leading with the elbow and squeezing your shoulder blade toward your spine, then lower slowly. Do the reps on your screen, each side. Keep the wrist straight and the grip light. Pain tells — stop on any wrist signal.",
+      "Prone row. Lie face down on a bed or bench edge, or stand and hinge over, with your arm hanging straight down toward the floor and your wrist neutral and straight. Bodyweight, or holding one or two kilos, whichever you pick. Keep your head down, don't lift it, because lifting strains the neck. Drive your elbow up toward the ceiling, leading with the elbow and squeezing your shoulder blade toward your spine, then lower slowly. Do the reps on your screen, each side. Keep the wrist straight and the grip light. Pain tells — stop on any wrist signal.",
     muscles: ['back'],
     muscleLabel: 'Lower trap + mid-back (shoulder blade)',
     steps: [
