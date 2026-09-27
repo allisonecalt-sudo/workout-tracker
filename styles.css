@@ -691,6 +691,46 @@ button:disabled {
   font-weight: 700;
   color: var(--bg);
   background: var(--surface-2);
+  position: relative; /* anchors .week-dot-count (WK2 fix r1, should #4) */
+}
+
+/* WK2 fix r1 (Sep 27 2026, checker's should #4): a small "2" on a day with a
+ * second session — an honest count, not its own tap target. */
+.week-dot-count {
+  position: absolute;
+  bottom: -3px;
+  right: -5px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  color: var(--ink-2);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+
+/* WK2 fix r1 (Sep 27 2026, checker's should #4): the folded "…" run of empty
+ * days between kept columns — same column rhythm as `.week-dot`, deliberately
+ * its own class (not `.week-dot`) so every existing "one dot per real day"
+ * count stays true. Plain, no tap. */
+.week-fold-col {
+  background: transparent;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  flex: 1;
+  height: 100%;
+}
+
+.week-fold-col .week-dot-label {
+  color: var(--ink-3);
 }
 
 /* Home only — the A/B/C identity colours stay on Sessions/Progress/Weekly
@@ -5087,8 +5127,11 @@ textarea:focus {
 }
 
 .home-header h1 {
-  font-size: 18px;
-  font-weight: var(--w-strong);
+  /* WK2 fix r1 (Sep 27 2026, checker's should #3): §2.4's #week-title spec —
+   * 28px/700 — "Week N" is the line she reads first; 18px/650 read like a
+   * caption, not the headline it is. */
+  font-size: 28px;
+  font-weight: 700;
   line-height: 1.25;
   white-space: nowrap;
   /* v48 · final (Sep 25 2026): with Android/Linux font metrics the Saturday
@@ -5198,6 +5241,10 @@ textarea:focus {
 .home-chips {
   display: flex;
   align-items: center;
+  /* WK2 fix r1 (Sep 27 2026, checker's should #1): "Week 6 ·" was wrapping
+   * mid-word at 412px because the row itself couldn't wrap — the CHIPS drop
+   * to a second line now instead of the lead text breaking. */
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 18px;
 }
@@ -5206,6 +5253,8 @@ textarea:focus {
   font-size: var(--font-meta);
   color: var(--text-dim);
   margin-right: 2px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .home-chip {
@@ -5286,7 +5335,10 @@ textarea:focus {
 
 .week-line {
   margin-top: 10px;
-  font-size: var(--font-small);
+  /* WK2 fix r1 (Sep 27 2026, checker's should #3): §2.4's #week-count spec —
+   * 19px, "the line she reads first" for the count itself — 15px read like
+   * every other secondary line on the card. */
+  font-size: 19px;
   color: var(--text);
   text-align: center;
 }
@@ -5301,7 +5353,12 @@ textarea:focus {
  * completion-model week header's own sub-line, under the h1. Same quiet
  * treatment as .app-version, one row down. */
 .week-sub-line {
-  font-size: var(--t-meta);
+  /* WK2 fix r1 (Sep 27 2026, checker's should #3): §2.4's #week-sub spec —
+   * 15px. This was --t-meta (13px), the smallest text ON THE SCREEN — the
+   * app's own --t-caption comment (14px) calls THAT the floor for anything
+   * she must read, and "since Sat Sep 26 · day 3" / the repeat line are both
+   * read, not decorative meta like the version tag. */
+  font-size: 15px;
   color: var(--ink-3);
   margin: -8px 0 12px;
 }

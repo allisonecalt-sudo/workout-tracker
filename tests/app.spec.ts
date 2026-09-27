@@ -6138,6 +6138,23 @@ test.describe('v48 P4 home', () => {
     // Her words that drove this: 21:32 "it says week 5 on top … I'm in week 4",
     // 22:18 "I need b back for 5", 23:08 "how do I see week four?".
 
+    test('a doneToday from BEFORE the launch reads the OLD model\'s line, not "0 of 3 in Week 5" (checker\'s nice #1)', async ({
+      page,
+    }) => {
+      // Her real Sat Sep 26 22:14 B closed the OLD model's Week 4 — but "now"
+      // here is 23:00, already past the 22:30 launch. Before the fix, the
+      // completion model (which filters this session out entirely) fell
+      // through to "0 of 3 in Week 5", a week the session never touched.
+      await mockDate(page, '2026-09-26T20:00:00.000Z'); // Sat Sep 26, 23:00 Israel
+      await seedLogs(page, [
+        swingLog('thu-a', '2026-09-24T15:56:00.000Z', 'A'),
+        swingLog('fri-c', '2026-09-25T11:53:00.000Z', 'C'),
+        swingLog('sat-b', '2026-09-26T19:14:51.000Z', 'B'), // 22:14 local — before the 22:30 launch
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-done-line')).toHaveText('Week 4 done · 3 of 3 ✓');
+    });
+
     test('Home on Week 5 day 3, one session (A) done: sub-line, count, Up next = B, one chip (C)', async ({
       page,
     }) => {
@@ -6177,6 +6194,38 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.home-done-line')).toHaveText('2 of 3 in Week 5 · C left');
     });
 
+    test('post-log line: a REPEAT letter (B again) still reads "1 of 3", never overcounts to "2 of 3"', async ({
+      page,
+    }) => {
+      // WK2 fix r1 (Sep 27 2026, checker's should #2): `.done.length + 1`
+      // always added one, so repeating B here used to say "2 of 3" while Home
+      // and the Done card (distinct-letter counters) both correctly say "1".
+      await movableClock(page, '2026-09-28T08:00:00.000Z'); // Mon, day 3
+      await seedLogs(page, [swingLog('wk5-b', '2026-09-27T15:00:00.000Z', 'B')]);
+      await page.goto('/');
+      // B already closed the week's own "done" set, so Home offers no button
+      // for it (§2.4: chips are the OTHER MISSING letters only) — the repeat
+      // is reached through startWorkout() directly, the same function a tap
+      // would call, via the test-only hook (see its own app.ts comment).
+      await page.evaluate(() =>
+        (window as unknown as { __wtStartWorkout: (id: string) => void }).__wtStartWorkout('B')
+      );
+      await page.locator('#begin').click();
+      await page.locator('#ww-elliptical').click();
+      await page.locator('#start-timed').click();
+      await advanceClock(page, 10 * 60_000 + 2_000);
+      await page.locator('#next').click();
+      await page.locator('#ell-km').fill('1.4');
+      for (let i = 0; i < 60; i++) {
+        if (await page.locator('text=Quick log').isVisible()) break;
+        if (!(await tapForward(page))) break;
+      }
+      await expect(page.locator('.postlog-witness')).toContainText('1 of 3 in Week 5');
+      await expect(page.locator('.postlog-witness')).not.toContainText('2 of 3');
+      await page.locator('#save-log').click();
+      await expect(page.locator('.home-done-line')).toHaveText('1 of 3 in Week 5 · A and C left');
+    });
+
     test('a closing save mid-week (Tue): "Week 5 done · 3 of 3 ✓" then "Week 6 opens" the next Sat/Sun', async ({
       page,
     }) => {
@@ -6192,10 +6241,45 @@ test.describe('v48 P4 home', () => {
         'Week 6 opens Sat Oct 3',
       ]);
       await expect(page.locator('.home-header h1')).toHaveText('Week 6');
-      await expect(page.locator('.week-sub-line').first()).toHaveText('opens Sat Oct 3');
+      // WK2 fix r1 (Sep 27 2026, checker's should #1): said ONCE, truthfully —
+      // a session logged before Week 6 actually opens counts back as an extra
+      // for Week 5 (week.ts rule 3), not toward Week 6's own count.
+      await expect(page.locator('.week-sub-line').first()).toHaveText(
+        'opens Sat Oct 3 · a session before then counts as an extra for Week 5'
+      );
       await expect(page.locator('.week-line')).toHaveText('0 of 3 · A, B and C to go');
       await expect(page.locator('.home-chips-lead')).toHaveText('Week 6 ·');
       await expect(page.locator('.home-chips .home-chip')).toHaveCount(3);
+    });
+
+    test('during the gap, pre-log and post-log say the truth: this session is an extra for the CLOSED week, not the pending one', async ({
+      page,
+    }) => {
+      // WK2 fix r1 (checker's should #1 exact repro): Week 5 closes Tue, it's
+      // now Thu — nothing logged yet today. Before the fix, pre-log/post-log
+      // both named the PENDING week ("Week 6 · same moves as Week 5", "1 of 3
+      // in Week 6") even though week.ts would actually count today's save
+      // backward into the already-closed Week 5 as an extra rep.
+      await mockDate(page, '2026-10-01T10:00:00.000Z'); // Thu Oct 1 — mid-gap
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-09-29T15:00:00.000Z', 'C'), // Tue — closed Week 5
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6');
+      await page.locator('button[data-workout="A"]').click();
+      // The Week 6 DATE is still said (when it opens) — what must never
+      // happen is a claim that this save counts TOWARD Week 6.
+      await expect(page.locator('.prelog-meta')).toContainText('Week 5 · an extra rep');
+      await expect(page.locator('.prelog-meta')).not.toContainText('in Week 6');
+      await page.locator('#begin').click();
+      for (let i = 0; i < 60; i++) {
+        if (await page.locator('text=Quick log').isVisible()) break;
+        if (!(await tapForward(page))) break;
+      }
+      await expect(page.locator('.postlog-witness')).toContainText('an extra for Week 5');
+      await expect(page.locator('.postlog-witness')).not.toContainText('in Week 6');
     });
 
     test('a closing save that lands ON a Sat/Sun: "Week 6 starts now", not a gap', async ({
@@ -6233,14 +6317,46 @@ test.describe('v48 P4 home', () => {
       const back = page.locator('#week-nav-back');
       await expect(back).toHaveText('‹ Week 4');
       await back.click();
-      await expect(page.locator('.home-header h1')).toHaveText('Week 4');
+      // WK2 fix r1 (checker's should #5): the peek is read-only — it changes
+      // only the week CARD's head, never the page title (the hero right below
+      // it is still offering Week 5's own workout the whole time).
+      await expect(page.locator('.home-header h1')).toHaveText('Week 5');
+      await expect(page.locator('.week-card-range')).toHaveText('Week 4');
       await expect(page.locator('.week-line')).toHaveText('3 of 3 ✓');
       await expect(page.locator('.week-card .week-dot')).toHaveCount(8);
       const forward = page.locator('#week-nav-forward');
       await expect(forward).toHaveText('Week 5 ›');
       await forward.click();
       await expect(page.locator('.home-header h1')).toHaveText('Week 5');
+      await expect(page.locator('.week-card-range')).toHaveText('Week 5');
       await expect(page.locator('#week-nav-back')).toHaveText('‹ Week 4');
+    });
+
+    test('"‹ Week 4" stays pinned to Week 4 even once "today" drifts past it (checker\'s must #2 repro)', async ({
+      page,
+    }) => {
+      // Her 42 live rows plus A on Mon Sep 28 and B on Wed Sep 30, clock set to
+      // Sat Oct 3 — Week 5 is still open at day 8 (canMoveOn's own threshold).
+      // Before the fix, the legacy fallback read `saturdayForOffset(1)` off
+      // THIS "today" (Oct 3), landing on Sep 26 = Week 5 itself, so the peek
+      // read "‹ Week 5" while she's still IN Week 5 — the exact confusion this
+      // model exists to fix. It must stay pinned to the real last-closed week
+      // (Week 4) regardless of how long Week 5 stays open.
+      await mockDate(page, '2026-10-03T13:00:00.000Z'); // Sat Oct 3, day 8
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-28T15:00:00.000Z', 'A'), // Mon
+        swingLog('wk5-b', '2026-09-30T15:00:00.000Z', 'B'), // Wed
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 5');
+      const back = page.locator('#week-nav-back');
+      await expect(back).toHaveText('‹ Week 4');
+      await back.click();
+      await expect(page.locator('.home-header h1')).toHaveText('Week 5'); // title never moves off the live week
+      await expect(page.locator('.week-card-range')).toHaveText('Week 4');
+      // No sessions were seeded IN Week 4 itself (Sep 19-25) this time — the
+      // fixed anchor still resolves it correctly, it just has nothing logged.
+      await expect(page.locator('.week-line')).toHaveText('0 of 3');
     });
 
     test('once a NEW week has closed, "‹ Week 4" becomes "‹ Week 5" (the completion model\'s own, not the legacy fallback)', async ({
@@ -6263,8 +6379,114 @@ test.describe('v48 P4 home', () => {
       const back = page.locator('#week-nav-back');
       await expect(back).toHaveText('‹ Week 5');
       await back.click();
-      await expect(page.locator('.home-header h1')).toHaveText('Week 5');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6'); // title stays on the live week
+      await expect(page.locator('.week-card-range')).toHaveText('Week 5');
       await expect(page.locator('.week-line')).toHaveText('3 of 3 ✓');
+    });
+
+    test('week strip: a repeat day gets a small "2" badge, and an 11-day short week folds its empty middle', async ({
+      page,
+    }) => {
+      // WK2 fix r1 (Sep 27 2026, checker's should #4). Week 5 opens Sat Sep 26
+      // (day 1, A logged) and is STILL short at day 11 (Tue Oct 6) — two
+      // sessions land on Oct 6 itself (B, then a repeat B). Before the fix,
+      // the strip capped at the last 10 days and simply dropped day 1 (an
+      // actual session day), and a repeat day showed only its first letter.
+      await mockDate(page, '2026-10-06T13:00:00.000Z'); // day 11
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-26T19:30:00.000Z', 'A'), // day 1 — must survive the fold
+        swingLog('wk5-b1', '2026-10-06T10:00:00.000Z', 'B'), // day 11, first
+        swingLog('wk5-b2', '2026-10-06T15:00:00.000Z', 'B'), // day 11, repeat
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 5');
+      await expect(page.locator('.week-line')).toHaveText('2 of 3 · C left');
+      // Day 1 (A) kept, ONE fold column for the empty middle, then the last
+      // 7 days (days 5-11) kept whole — 8 real day columns + 1 fold.
+      await expect(page.locator('#week-strip .week-dot')).toHaveCount(8);
+      await expect(page.locator('#week-strip .week-fold-col')).toHaveCount(1);
+      await expect(page.locator('#week-strip .dot-A').first()).toBeVisible();
+      const repeatDay = page.locator('#week-strip .week-dot.is-today');
+      await expect(repeatDay.locator('.week-dot-count')).toHaveText('2');
+    });
+
+    test("REAL parity (GATE 2, checker's should #6): her 14 real weeks are each exactly 3 of 3 under the LIVE attributeSessionsToWeeks", async ({
+      page,
+    }) => {
+      // WK2 fix r1 (Sep 27 2026). tests/week.test.ts's own "REAL parity" test
+      // can only prove week.ts never touches her pre-launch rows — app.ts
+      // isn't Node-importable (DOM + localStorage throughout), so it can't
+      // compare against the OLD model's real attribution from there. This
+      // runs the actual live attributeSessionsToWeeks (via the __wt test
+      // hook, same pattern as every other pure-function hook above) over her
+      // real 42 rows and freezes the per-week table GATE 2 asked for: 10
+      // Round-1 weeks + Round-2 Weeks 1-4, each 3 of 3, A→B→C.
+      const her42RealRows = [
+        { id: 'S1', date: '2026-05-02T19:00:00+00:00', workout: 'A' },
+        { id: 'S2', date: '2026-05-05T17:05:28.158+00:00', workout: 'B' },
+        { id: 'S3', date: '2026-05-08T12:40:19.438+00:00', workout: 'C' },
+        { id: 'S4', date: '2026-05-11T17:29:18.803+00:00', workout: 'A' },
+        { id: 'S5', date: '2026-05-14T16:54:22.183+00:00', workout: 'B' },
+        { id: 'S6', date: '2026-05-15T15:15:29.83+00:00', workout: 'C' },
+        { id: 'S7', date: '2026-05-19T16:53:03.373+00:00', workout: 'A' },
+        { id: 'S8', date: '2026-05-20T19:32:46.138+00:00', workout: 'B' },
+        { id: 'S9', date: '2026-05-21T14:31:56.384+00:00', workout: 'C' },
+        { id: 'S10', date: '2026-05-26T18:20:30.352+00:00', workout: 'A' },
+        { id: 'S11', date: '2026-05-28T17:00:00+00:00', workout: 'B' },
+        { id: 'S12', date: '2026-05-29T11:09:16.001+00:00', workout: 'C' },
+        { id: 'S13', date: '2026-06-03T15:04:22.483+00:00', workout: 'A' },
+        { id: 'S14', date: '2026-06-04T12:39:57.74+00:00', workout: 'B' },
+        { id: 'S15', date: '2026-06-05T15:05:47.998+00:00', workout: 'C' },
+        { id: 'S16', date: '2026-06-09T17:54:47.191+00:00', workout: 'A' },
+        { id: 'S17', date: '2026-06-11T17:29:07.923+00:00', workout: 'B' },
+        { id: 'S18', date: '2026-06-12T04:44:37.836+00:00', workout: 'C' },
+        { id: 'S19', date: '2026-06-16T15:31:58.887+00:00', workout: 'A' },
+        { id: 'S20', date: '2026-06-17T18:21:07.205+00:00', workout: 'B' },
+        { id: 'S21', date: '2026-06-19T14:46:30.22+00:00', workout: 'C' },
+        { id: 'S22', date: '2026-06-24T16:18:34.182+00:00', workout: 'A' },
+        { id: 'S23', date: '2026-06-25T15:42:11.092+00:00', workout: 'B' },
+        { id: 'S24', date: '2026-06-26T15:00:18.015+00:00', workout: 'C' },
+        { id: 'S25', date: '2026-07-01T17:25:08.83+00:00', workout: 'A' },
+        { id: 'S26', date: '2026-07-02T18:29:43.471+00:00', workout: 'B' },
+        { id: 'S27', date: '2026-07-03T14:55:26.462+00:00', workout: 'C' },
+        { id: 'S28', date: '2026-07-07T14:58:23.734+00:00', workout: 'A' },
+        { id: 'S29', date: '2026-07-09T19:13:21.69+00:00', workout: 'B' },
+        { id: 'S30', date: '2026-07-10T15:48:51.751+00:00', workout: 'C' },
+        { id: 'S31', date: '2026-08-30T16:48:14.744+00:00', workout: 'A' },
+        { id: 'S32', date: '2026-09-03T15:00:00+00:00', workout: 'B' },
+        { id: 'S33', date: '2026-09-04T14:22:39.062+00:00', workout: 'C' },
+        { id: 'S34', date: '2026-09-07T15:00:00+00:00', workout: 'A' },
+        { id: 'S35', date: '2026-09-11T15:07:03.104+00:00', workout: 'B' },
+        { id: 'S36', date: '2026-09-11T15:25:26.058+00:00', workout: 'C' },
+        { id: 'S37', date: '2026-09-14T15:50:35.507+00:00', workout: 'A' },
+        { id: 'S38', date: '2026-09-18T15:02:34.467+00:00', workout: 'B' },
+        { id: 'S39', date: '2026-09-19T19:21:30.241+00:00', workout: 'C' },
+        { id: 'S40', date: '2026-09-24T15:56:36.82+00:00', workout: 'A' },
+        { id: 'S41', date: '2026-09-25T11:53:48.879+00:00', workout: 'C' },
+        { id: 'S42', date: '2026-09-26T19:14:51.421+00:00', workout: 'B' },
+      ];
+
+      await page.goto('/');
+      const summary = await page.evaluate((logs) => {
+        const fn = (
+          window as unknown as {
+            __wtWeekAttributionSummary: (
+              l: { id: string; date: string; workout: string }[]
+            ) => { saturdayIso: string; count: number; letters: string[] }[];
+          }
+        ).__wtWeekAttributionSummary;
+        return fn(logs);
+      }, her42RealRows);
+
+      expect(summary).toHaveLength(14); // 10 Round-1 weeks + 4 Round-2 weeks
+      for (const week of summary) {
+        expect(week.count).toBe(3);
+        // Chronological order isn't always A-then-B-then-C (her real Round-2
+        // Week 4 did A, C, then the swung B) — what GATE 2 actually asks is
+        // that each week has all three DISTINCT letters, not a fixed order.
+        expect([...week.letters].sort()).toEqual(['A', 'B', 'C']);
+      }
+      expect(summary.reduce((sum, week) => sum + week.count, 0)).toBe(42);
     });
   });
 
