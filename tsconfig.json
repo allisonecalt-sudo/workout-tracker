@@ -24,7 +24,8 @@
     "progression.ts",
     "cycle.ts",
     "step-list.ts",
-    "week.ts"
+    "week.ts",
+    "timing.ts"
   ],
   "exclude": ["node_modules", "dist", "tests", "playwright.config.ts"]
 }

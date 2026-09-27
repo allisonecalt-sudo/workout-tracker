@@ -54,6 +54,9 @@ const SHELL_ASSETS = [
   // the same way cycle.js/step-list.js are (app.js imports it — see the W0
   // test's own comment above pain-feel.js).
   './dist/week.js',
+  // v53 · T1 (Sep 27 2026): her start/finish "Right?" + breaks — timing.ts,
+  // its own module the same way week.js is (app.js imports it statically).
+  './dist/timing.js',
   './manifest.webmanifest',
   // v49 · look (Sep 25 2026): self-hosted DM Sans (spec §3 "Font loading") —
   // precached so it renders offline on the floor, never a runtime Google
@@ -222,6 +225,9 @@ function isCodeRequest(url, request) {
     // imports it (see the W0 test in tests/app.spec.ts, which parses app.ts's
     // own import graph and fails this list drifts from it again).
     url.pathname.endsWith('/dist/week.js') ||
+    // v53 · T1 (Sep 27 2026): her start/finish "Right?" + breaks — same
+    // reasoning as week.js just above.
+    url.pathname.endsWith('/dist/timing.js') ||
     url.pathname.endsWith('/index.html')
   );
 }

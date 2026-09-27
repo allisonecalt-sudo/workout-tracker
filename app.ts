@@ -8,6 +8,7 @@ import { EXERCISE_VISUALS } from './exercise-visuals.js';
 import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
 import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
 import { painFromFeel, feelFromPain } from './pain-feel.js';
+import { trainingMinutes } from './timing.js';
 import {
   excludedUntouchedCount,
   todayCycleStatus,
@@ -195,6 +196,23 @@ type LogEntry = {
   // before the jump list existed (nothing was tracked to skip), 0 on a v50
   // session where everything got a Done tap. No verdict, just the count.
   stepsSkipped?: number | null;
+  // T1 (Sep 27 2026), PLAN-2026-09-26.md §3: her OWN start/finish answers —
+  // the "two tiers of time" (timing.ts). NEVER the app's own tap time
+  // (started_at/completed_at/durationSec above stay exactly what they were,
+  // kept for checking only). Optional AND nullable, same shape as the v51
+  // before/after fields: a session logged before T1 has no key at all.
+  // Confirmed can be true with a value she never touched — beginExercises()/
+  // saveCompletedSession() finalize the untouched case at false (her own
+  // "Untouched at Start" rule, §3.1) — so `Confirmed` is the only signal
+  // she actually said yes; timing.ts's trainingMinutes() reads it, not just
+  // whether a timestamp exists.
+  herStartAt?: string | null;
+  herStartConfirmed?: boolean | null;
+  herEndAt?: string | null;
+  herEndConfirmed?: boolean | null;
+  // 0/5/15/30, matching the migration's CHECK. null = untouched (unknown),
+  // never 0 — "None" is an explicit tap, not the default (§3.2).
+  breakMinutes?: number | null;
   // v53 (Sep 26 2026): this row's ride numbers were fixed AFTER it already
   // synced (renderHistoryEdit/saveHistoryEdit) — the server already has this
   // id, so the queued write is a PATCH, never another POST (postSession's
@@ -286,6 +304,22 @@ type AppState = {
   wristPainBefore: number;
   wristPainBeforeTouched: boolean;
   wristBeforeSomethingOpen: boolean;
+  // T1 (Sep 27 2026), PLAN-2026-09-26.md §3.1: null until she confirms (✓)
+  // or fixes (✎) it — the pre-log clock shows "now" live instead (computed
+  // at render, never stored while unconfirmed). beginExercises() finalizes
+  // an untouched one at Start-tap time, confirmed still false (§3.1's own
+  // "Untouched at Start" rule).
+  herStartAt: string | null;
+  herStartConfirmed: boolean;
+  herStartEditingOpen: boolean; // the ✎ time box + "N min ago" chips are open
+  // T1 §3.2: same shape, asked at the other end. saveCompletedSession()
+  // finalizes an untouched one the same way beginExercises() does above.
+  herEndAt: string | null;
+  herEndConfirmed: boolean;
+  herEndEditingOpen: boolean;
+  // T1 §3.2: 0/5/15/30 once she taps a chip; null = untouched (never 0 —
+  // "None" is its own explicit tap).
+  breakMinutes: number | null;
   // v49 · engine: the new-rung "Fine · Too much" tap. Transient, unset most
   // sessions (only offered when a rung changed recently — see
   // needsStepFeelPrompt()). Reset to null at the start of every session.
@@ -2978,6 +3012,13 @@ const state: AppState = {
   wristPainBefore: 0,
   wristPainBeforeTouched: false,
   wristBeforeSomethingOpen: false,
+  herStartAt: null,
+  herStartConfirmed: false,
+  herStartEditingOpen: false,
+  herEndAt: null,
+  herEndConfirmed: false,
+  herEndEditingOpen: false,
+  breakMinutes: null,
   stepFeel: null,
   capacityBeforeTouched: false,
   capacityAfterTouched: false,
@@ -3410,6 +3451,12 @@ const LEGACY_WALK_COUNTER_KEYS = ['workout-tracker:walk-meters', 'workout-tracke
 let walkWakeLock: { release: () => Promise<void> } | null = null;
 let walkTickId: number | null = null;
 
+// T1 (Sep 27 2026): the pre-log/post-log "is this the time?" minute ticks —
+// see beginPreLogClockTick/beginPostLogClockTick below, same shape as
+// walkTickId just above.
+let preLogTickId: number | null = null;
+let postLogTickId: number | null = null;
+
 function clearLegacyWalkCounters(): void {
   for (const k of LEGACY_WALK_COUNTER_KEYS) localStorage.removeItem(k);
 }
@@ -3468,6 +3515,53 @@ function endWalkTracking(): void {
   if (walkWakeLock) {
     void walkWakeLock.release().catch(() => undefined);
     walkWakeLock = null;
+  }
+}
+
+// T1 (Sep 27 2026), PLAN-2026-09-26.md §3.1: "the clock is the time the
+// pre-log opened, and it updates each minute until she touches it." Same
+// shape as updateWalkLiveLine/walkTickId above — a direct textContent patch
+// on its own id, never a full render() (a re-render mid-typing elsewhere on
+// the screen would be its own kind of bug). A no-op once she's confirmed/
+// fixed it (herStartConfirmed) or the element isn't on screen any more.
+function updatePreLogClockLine(): void {
+  if (state.herStartConfirmed) return;
+  const el = document.getElementById('time-start');
+  if (!el) return;
+  el.textContent = `Starting the workout · ${formatClock(new Date().toISOString())}. Right?`;
+}
+
+function beginPreLogClockTick(): void {
+  if (preLogTickId === null) {
+    preLogTickId = window.setInterval(updatePreLogClockLine, 60_000);
+  }
+}
+
+function endPreLogClockTick(): void {
+  if (preLogTickId !== null) {
+    window.clearInterval(preLogTickId);
+    preLogTickId = null;
+  }
+}
+
+// T1 §3.2: the post-log twin — "Finishing · 21:52. Right?" ticks the same way.
+function updatePostLogClockLine(): void {
+  if (state.herEndConfirmed) return;
+  const el = document.getElementById('time-end');
+  if (!el) return;
+  el.textContent = `Finishing · ${formatClock(new Date().toISOString())}. Right?`;
+}
+
+function beginPostLogClockTick(): void {
+  if (postLogTickId === null) {
+    postLogTickId = window.setInterval(updatePostLogClockLine, 60_000);
+  }
+}
+
+function endPostLogClockTick(): void {
+  if (postLogTickId !== null) {
+    window.clearInterval(postLogTickId);
+    postLogTickId = null;
   }
 }
 
@@ -4204,6 +4298,19 @@ const V50_SESSION_COLUMNS = ['steps_skipped'] as const;
 // The two columns added in v50 for mood (migrations/2026-09-25-v50-mood.sql).
 const V50_MOOD_SESSION_COLUMNS = ['mood_before', 'mood_after'] as const;
 
+// The five columns added in T1 for her start/finish "Right?" + breaks
+// (migrations/2026-09-27-v53-timing.sql). NOT YET APPLIED (§3.3's own note,
+// schema — her yes first) — this group is exactly what makes a save land
+// safely on today's schema in the meantime: the PGRST204 retry below strips
+// it and the session still saves, nothing lost.
+const V53_TIMING_SESSION_COLUMNS = [
+  'her_start_at',
+  'her_start_confirmed',
+  'her_end_at',
+  'her_end_confirmed',
+  'break_minutes',
+] as const;
+
 // The workout_sessions row for a saved entry — pure, so it's testable without a
 // network (v48, Sep 24 2026). Every structured number has its own column now;
 // `notes` carries only system annotations.
@@ -4249,6 +4356,13 @@ function sessionPayload(entry: LogEntry): Record<string, unknown> {
     arm_feel: entry.armFeel ?? null,
     voice_plays: entry.voicePlays ?? null,
     steps_skipped: entry.stepsSkipped ?? null,
+    // T1 (Sep 27 2026), §3: her own start/finish answers — see LogEntry's
+    // own comment on these five fields for the confirmed-vs-present rule.
+    her_start_at: entry.herStartAt ?? null,
+    her_start_confirmed: entry.herStartConfirmed ?? null,
+    her_end_at: entry.herEndAt ?? null,
+    her_end_confirmed: entry.herEndConfirmed ?? null,
+    break_minutes: entry.breakMinutes ?? null,
   };
 }
 
@@ -4264,6 +4378,7 @@ function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
   for (const col of V50_SESSION_COLUMNS) delete payload[col];
   for (const col of V50_MOOD_SESSION_COLUMNS) delete payload[col];
   for (const col of V51_BACK_WRIST_BEFORE_SESSION_COLUMNS) delete payload[col];
+  for (const col of V53_TIMING_SESSION_COLUMNS) delete payload[col];
   const noteParts = [legacyCardioMarker(entry), entry.sessionNote, entry.notes].filter(
     (p): p is string => typeof p === 'string' && p.trim() !== ''
   );
@@ -4586,7 +4701,13 @@ function startWorkout(id: WorkoutId): void {
   }
   state.screen = 'pre-log';
   state.liteDay = false; // fresh pick, full program until she says otherwise
+  // T1 (Sep 27 2026), §3.1: a fresh pick asks fresh — never carry yesterday's
+  // confirmed start time into a new session.
+  state.herStartAt = null;
+  state.herStartConfirmed = false;
+  state.herStartEditingOpen = false;
   render();
+  beginPreLogClockTick();
 }
 
 // v48 · P3 (Sep 24 2026): the cardio step's name on screen. The key stays
@@ -4612,6 +4733,15 @@ function lastCardioLane(): LogEntry['cardioLane'] {
 }
 
 function beginExercises(): void {
+  // T1 (Sep 27 2026), §3.1 "Untouched at Start": if she never tapped ✓ or ✎,
+  // the Start-tap instant becomes her_start_at — her_start_confirmed stays
+  // false either way (a guess is never promoted to a confirmed reading just
+  // because Start was tapped). Already-confirmed values pass straight
+  // through untouched.
+  if (!state.herStartConfirmed) {
+    state.herStartAt = new Date().toISOString();
+  }
+  endPreLogClockTick();
   state.screen = 'workout';
   state.currentRound = 1;
   state.currentPhase = 'warmup';
@@ -4661,6 +4791,28 @@ function beginExercises(): void {
   render();
 }
 
+// T1 (Sep 27 2026), §3.2: the one place post-log's own fields get reset —
+// every path that ends a session (cool-down's Done · Finish, the quit
+// panel's "Log what I did") runs this instead of setting state.screen by
+// hand, so the finish-time question and the breaks chip always start fresh.
+// No render()/tick here: advanceExercise's own final branch shares ONE
+// render() call across several outcomes, so it calls this then falls through
+// to that shared render (see its own comment) — enterPostLog() below is for
+// every OTHER caller, which owns its render timing outright.
+function resetPostLogFields(): void {
+  state.screen = 'post-log';
+  state.herEndAt = null;
+  state.herEndConfirmed = false;
+  state.herEndEditingOpen = false;
+  state.breakMinutes = null;
+}
+
+function enterPostLog(): void {
+  resetPostLogFields();
+  render();
+  beginPostLogClockTick();
+}
+
 // v50 · jump list (Sep 25 2026) — step-list.ts's flat, ordered move list needs
 // only the warmup/main/upperBack arrays (never cooldown: that's already its
 // own one-step checklist screen, see step-list.ts's module doc). Structural
@@ -4707,8 +4859,7 @@ function advanceExercise(): void {
   // Cool-down is one scrollable list (not stepped) — its single "Done · Finish"
   // button ends the session regardless of how many stretches it contains.
   if (state.currentPhase === 'cooldown') {
-    state.screen = 'post-log';
-    render();
+    enterPostLog();
     return;
   }
 
@@ -4806,9 +4957,13 @@ function advanceExercise(): void {
     state.currentPhase = 'cooldown';
     state.currentExerciseIndex = 0;
   } else {
-    state.screen = 'post-log';
+    resetPostLogFields();
   }
   render();
+  // T1 (Sep 27 2026): this render() is shared across several outcomes above —
+  // only start the finish-time tick when this particular call actually
+  // landed on post-log (the `else` branch just above).
+  if (state.screen === 'post-log') beginPostLogClockTick();
 }
 
 // v53 (Sep 26 2026): "from the timer I need to be able to go back like it
@@ -5225,8 +5380,7 @@ function logWhatIDid(): void {
   }
   state.isResting = false;
   state.roundBreak = false;
-  state.screen = 'post-log';
-  render();
+  enterPostLog();
 }
 
 function captureWallSitIfPending(): void {
@@ -5468,6 +5622,24 @@ async function saveCompletedSession(): Promise<void> {
   }
   const completedAt = new Date().toISOString();
   const startedAt = state.startedAt ?? completedAt;
+  // T1 (Sep 27 2026), §3.2 "Untouched at Start"'s own twin at the other end:
+  // if she never tapped ✓/✎ on the finish question, this Save-tap instant
+  // becomes her_end_at — her_end_confirmed stays false either way. Read
+  // BEFORE endPostLogClockTick() below so the tick's own textContent write
+  // race (if it somehow still fires this same tick) can't win against this.
+  endPostLogClockTick();
+  const herEndAtFinal = state.herEndConfirmed ? state.herEndAt : new Date().toISOString();
+  // §3.2 "If the finish is before the start: ... Save still works (never
+  // block a save), and the times save as not confirmed." A confirmed-but-
+  // backwards pair would otherwise let timing.ts's trainingMinutes() see two
+  // confirmed timestamps and compute a negative/nonsense duration — this is
+  // the one place that can never happen from, not a UI-only warning.
+  const timingBackwards =
+    state.herStartAt !== null &&
+    herEndAtFinal !== null &&
+    new Date(herEndAtFinal).getTime() < new Date(state.herStartAt).getTime();
+  const herStartConfirmedFinal = timingBackwards ? false : state.herStartConfirmed;
+  const herEndConfirmedFinal = timingBackwards ? false : state.herEndConfirmed;
   // Subtract any paused time — stepping away (dishes, a phone call) shouldn't
   // inflate the logged workout duration (Allison Jul 7 2026).
   const rawDurationSec = Math.max(
@@ -5546,6 +5718,14 @@ async function saveCompletedSession(): Promise<void> {
     word: state.word,
     startedAt,
     completedAt,
+    // T1 (Sep 27 2026), §3: her own start/finish answers — see the
+    // `timingBackwards` guard above, which is the only place these
+    // confirmed flags can differ from what's on state.
+    herStartAt: state.herStartAt,
+    herStartConfirmed: herStartConfirmedFinal,
+    herEndAt: herEndAtFinal,
+    herEndConfirmed: herEndConfirmedFinal,
+    breakMinutes: state.breakMinutes,
     ...(leftOpen ? {} : { durationSec: rawDurationSec }),
     walkMinutes: workoutWalk ? workoutWalk.minutes : null,
     walkSteps: walkFitSteps,
@@ -5600,6 +5780,14 @@ type ActiveSessionSnapshot = {
   backPainBeforeTouched: boolean;
   wristPainBefore: number;
   wristPainBeforeTouched: boolean;
+  // T1 (Sep 27 2026): her start/finish answers survive an app close the same
+  // way — beginExercises() already finalized herStartAt before 'workout' is
+  // ever a resumable screen, so it's always set by the time this is written.
+  herStartAt: string | null;
+  herStartConfirmed: boolean;
+  herEndAt: string | null;
+  herEndConfirmed: boolean;
+  breakMinutes: number | null;
   stepFeel: 'fine' | 'too_much' | null;
   // v46: which sliders she actually moved (see AppState). A snapshot written
   // before v46 has no flags and is read as "chosen", the way v45 saved it.
@@ -5663,6 +5851,11 @@ function saveActiveSession(): void {
       backPainBeforeTouched: state.backPainBeforeTouched,
       wristPainBefore: state.wristPainBefore,
       wristPainBeforeTouched: state.wristPainBeforeTouched,
+      herStartAt: state.herStartAt,
+      herStartConfirmed: state.herStartConfirmed,
+      herEndAt: state.herEndAt,
+      herEndConfirmed: state.herEndConfirmed,
+      breakMinutes: state.breakMinutes,
       stepFeel: state.stepFeel,
       capacityBeforeTouched: state.capacityBeforeTouched,
       capacityAfterTouched: state.capacityAfterTouched,
@@ -5762,6 +5955,24 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       backPainBeforeTouched: snap.backPainBeforeTouched ?? false,
       wristPainBefore: snap.wristPainBefore ?? 0,
       wristPainBeforeTouched: snap.wristPainBeforeTouched ?? false,
+      // T1: a pre-T1 snapshot has none of these → null/false, never a guess.
+      herStartAt:
+        typeof snap.herStartAt === 'string' && !Number.isNaN(new Date(snap.herStartAt).getTime())
+          ? snap.herStartAt
+          : null,
+      herStartConfirmed: snap.herStartConfirmed ?? false,
+      herEndAt:
+        typeof snap.herEndAt === 'string' && !Number.isNaN(new Date(snap.herEndAt).getTime())
+          ? snap.herEndAt
+          : null,
+      herEndConfirmed: snap.herEndConfirmed ?? false,
+      breakMinutes:
+        snap.breakMinutes === 0 ||
+        snap.breakMinutes === 5 ||
+        snap.breakMinutes === 15 ||
+        snap.breakMinutes === 30
+          ? snap.breakMinutes
+          : null,
       stepFeel: snap.stepFeel === 'fine' || snap.stepFeel === 'too_much' ? snap.stepFeel : null,
       // Pre-v46 snapshot (no flags) → the numbers were saved as chosen then;
       // keep that reading rather than blank a session already under way.
@@ -5848,6 +6059,13 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.backPainBeforeTouched = snap.backPainBeforeTouched;
   state.wristPainBefore = snap.wristPainBefore;
   state.wristPainBeforeTouched = snap.wristPainBeforeTouched;
+  state.herStartAt = snap.herStartAt;
+  state.herStartConfirmed = snap.herStartConfirmed;
+  state.herEndAt = snap.herEndAt;
+  state.herEndConfirmed = snap.herEndConfirmed;
+  state.breakMinutes = snap.breakMinutes;
+  state.herStartEditingOpen = false; // transient UI, never restored open
+  state.herEndEditingOpen = false;
   state.stepFeel = snap.stepFeel;
   state.capacityBeforeTouched = snap.capacityBeforeTouched;
   state.capacityAfterTouched = snap.capacityAfterTouched;
@@ -5883,6 +6101,9 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
   state.howToOpenFor = null;
+  // T1 (Sep 27 2026): an app close mid-post-log, still unconfirmed, resumes
+  // the finish-time tick too — same as any other resumed field above.
+  if (state.screen === 'post-log' && !state.herEndConfirmed) beginPostLogClockTick();
 }
 
 // A snapshot too old to resume silently (see STALE_SESSION_MS). Held here until
@@ -5927,6 +6148,11 @@ function logStaleSessionAsDone(): void {
     // happened, so it stays null like backPain above.
     backPainBefore: snap.backPainBeforeTouched ? snap.backPainBefore : null,
     wristPainBefore: snap.wristPainBeforeTouched ? snap.wristPainBefore : null,
+    // T1: the start half survives (beginExercises() finalized it before this
+    // session was ever resumable); the finish half never happened — no
+    // post-log means no her_end_at/confirmed, same as capacityAfter above.
+    herStartAt: snap.herStartAt,
+    herStartConfirmed: snap.herStartConfirmed,
     word: snap.word,
     startedAt,
     notes:
@@ -6005,6 +6231,15 @@ function resetState(): void {
   state.wristPainBefore = 0;
   state.wristPainBeforeTouched = false;
   state.wristBeforeSomethingOpen = false;
+  state.herStartAt = null;
+  state.herStartConfirmed = false;
+  state.herStartEditingOpen = false;
+  state.herEndAt = null;
+  state.herEndConfirmed = false;
+  state.herEndEditingOpen = false;
+  state.breakMinutes = null;
+  endPreLogClockTick();
+  endPostLogClockTick();
   state.stepFeel = null;
   state.capacityBeforeTouched = false;
   state.capacityAfterTouched = false;
@@ -9296,6 +9531,49 @@ function preLogWeekLabel(): string {
     : `Week ${shown.key.week} · same moves as Week ${planInfo.repeatsWeek}`;
 }
 
+// T1 (Sep 27 2026), PLAN-2026-09-26.md §3.1/§3.2: the "is this the time?"
+// confirm row — shared shape for the pre-log start question and the
+// post-log finish question, only the label/ids/kind differing. Live
+// (unconfirmed): a plain line + ✓ Right / ✎ Fix, plus the time box + "N min
+// ago" chips once ✎ is tapped. Confirmed: one dim line, no buttons.
+function renderTimeConfirmBlock(opts: {
+  kind: 'start' | 'end';
+  label: string;
+  at: string | null;
+  confirmed: boolean;
+  editingOpen: boolean;
+}): string {
+  const candidateIso = opts.confirmed && opts.at ? opts.at : new Date().toISOString();
+  const clock = formatClock(candidateIso);
+  if (opts.confirmed) {
+    const verb = opts.kind === 'start' ? 'Started' : 'Finished';
+    return `<p class="timing-line timing-confirmed" id="time-${opts.kind}">${verb} ${clock} ✓</p>`;
+  }
+  const editRow = opts.editingOpen
+    ? `<div class="timing-edit">
+        <input type="time" id="time-${opts.kind}-input" value="${clock}" />
+        <div class="timing-ago-row">
+          ${[5, 10, 15]
+            .map(
+              (m) =>
+                `<button class="timing-ago-chip" type="button" data-time-chip="${opts.kind}" data-mins="${m}">${m} min ago</button>`
+            )
+            .join('')}
+        </div>
+      </div>`
+    : '';
+  return `
+    <div class="timing-row">
+      <p class="timing-line" id="time-${opts.kind}">${escapeHtml(opts.label)} · ${clock}. Right?</p>
+      <div class="timing-actions">
+        <button class="timing-btn" type="button" id="time-${opts.kind}-ok">✓ Right</button>
+        <button class="timing-btn" type="button" id="time-${opts.kind}-fix">✎ Fix</button>
+      </div>
+    </div>
+    ${editRow}
+  `;
+}
+
 function renderPreLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
@@ -9354,6 +9632,13 @@ function renderPreLog(): string {
       </div>
       <button class="quit-link" id="back-home" type="button">× Back</button>
     </div>
+    ${renderTimeConfirmBlock({
+      kind: 'start',
+      label: 'Starting the workout',
+      at: state.herStartAt,
+      confirmed: state.herStartConfirmed,
+      editingOpen: state.herStartEditingOpen,
+    })}
     <p class="prelog-meta">${escapeHtml(meta)}</p>
 
     ${renderWorkoutOverview(w)}
@@ -10436,6 +10721,59 @@ function postLogWitnessLine(w: Workout): string {
   return parts.join(' · ');
 }
 
+// T1 §3.2: "Breaks?": None · ~5 min · ~15 min · ~30+, data-break = 0/5/15/30.
+// Same toggle-again-to-clear shape as the 1-10 body chips (attachHandlers'
+// [data-body-chip] block) — untouched/cleared reads back as null, never 0;
+// "None" is its own explicit tap that means a real, confirmed zero.
+function renderBreakChips(value: number | null): string {
+  const chips: { label: string; mins: number }[] = [
+    { label: 'None', mins: 0 },
+    { label: '~5 min', mins: 5 },
+    { label: '~15 min', mins: 15 },
+    { label: '~30+', mins: 30 },
+  ];
+  const row = chips
+    .map((c) => {
+      const on = value === c.mins;
+      return `<button class="timing-break-chip${on ? ' timing-break-chip-on' : ''}" type="button" data-break="${c.mins}" aria-pressed="${on ? 'true' : 'false'}">${c.label}</button>`;
+    })
+    .join('');
+  return `
+    <div class="field timing-break-field">
+      <span class="label-text">Breaks?</span>
+      <div class="timing-break-row" id="break-chips">${row}</div>
+    </div>`;
+}
+
+// T1 §3.2: "only when both are confirmed: `About 45 min of training`,
+// rounded to 5." Reads state directly (not formatWorkoutTime — that's T2's
+// universal "about N min" string; this card's own wording is its own).
+function renderTimeResult(): string {
+  if (!state.herStartConfirmed || !state.herEndConfirmed) return '';
+  const minutes = trainingMinutes({
+    herStartAt: state.herStartAt,
+    herStartConfirmed: state.herStartConfirmed,
+    herEndAt: state.herEndAt,
+    herEndConfirmed: state.herEndConfirmed,
+    breakMinutes: state.breakMinutes,
+  });
+  if (minutes === null) return '';
+  const rounded = Math.max(5, Math.round(minutes / 5) * 5);
+  return `<p class="timing-result" id="time-result">About ${rounded} min of training</p>`;
+}
+
+// T1 §3.2: "If the finish is before the start: an inline ... Save still
+// works (never block a save)." herStartAt is always set by this screen
+// (beginExercises() finalized it) — only herEndConfirmed gates this, so the
+// warning appears the moment she answers the finish question, before Save.
+function finishBeforeStartWarning(): string {
+  if (!state.herEndConfirmed || !state.herStartAt || !state.herEndAt) return '';
+  const backwards = new Date(state.herEndAt).getTime() < new Date(state.herStartAt).getTime();
+  return backwards
+    ? `<p class="timing-warning" id="time-warning">Finish is before the start — check the times.</p>`
+    : '';
+}
+
 function renderPostLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
@@ -10511,6 +10849,19 @@ function renderPostLog(): string {
     ${skippedLine}
     <p class="subtitle">Quick log — or just Save.</p>
 
+    <div class="card timing-card">
+      ${renderTimeConfirmBlock({
+        kind: 'end',
+        label: 'Finishing',
+        at: state.herEndAt,
+        confirmed: state.herEndConfirmed,
+        editingOpen: state.herEndEditingOpen,
+      })}
+      ${renderBreakChips(state.breakMinutes)}
+      ${finishBeforeStartWarning()}
+      ${renderTimeResult()}
+    </div>
+
     <div class="card postlog-card">
       ${renderBodyChips('cap-after', state.capacityAfter, state.capacityAfterTouched, 'Your BODY now, not your mood')}
       ${renderBodyChips('mood-after', state.moodAfter, state.moodAfterTouched, 'Mood', '1 irritable · 10 happy / calm')}
@@ -10534,6 +10885,7 @@ function renderPostLog(): string {
 // v48 · P5 (Sep 24 2026): the one screen v47's Back missed — her words: "i need
 // to be able to go back". Returns to the cool-down list; nothing is logged.
 function backToStretches(): void {
+  endPostLogClockTick(); // T1: leaving post-log — the finish-time question isn't showing any more
   state.screen = 'workout';
   state.currentPhase = 'cooldown';
   state.currentExerciseIndex = 0;
@@ -10547,6 +10899,7 @@ function backToStretches(): void {
 // stop (marker cleared, Lite back to what it was). logWhatIDid left the phase,
 // round and step untouched, so the workout picks up exactly there.
 function backToWorkoutFromStop(): void {
+  endPostLogClockTick(); // T1: leaving post-log — see backToStretches's own comment
   if (state.stoppedEarlyLitePrev !== null) state.liteDay = state.stoppedEarlyLitePrev;
   state.stoppedEarlyAt = null;
   state.stoppedEarlyLitePrev = null;
@@ -10597,6 +10950,28 @@ function formatMonthDay(iso: string): string {
 function formatClock(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// T1 (Sep 27 2026), §3.1's ✎ time box — formatClock's inverse. Takes the
+// calendar day from `baseIso` (the candidate she's fixing — always tonight,
+// never a date she has to also type) and the clock from the native
+// `<input type=time>`'s own "HH:MM" value.
+function combineDateAndClock(baseIso: string, hhmm: string): string {
+  const m = /^(\d{2}):(\d{2})$/.exec(hhmm);
+  if (!m) return baseIso;
+  const base = new Date(baseIso);
+  const hours = Number(m[1]);
+  const minutes = Number(m[2]);
+  const combined = new Date(
+    base.getFullYear(),
+    base.getMonth(),
+    base.getDate(),
+    hours,
+    minutes,
+    0,
+    0
+  );
+  return combined.toISOString();
 }
 
 // "40 min" on a row; a sub-minute session keeps its seconds.
@@ -13307,6 +13682,89 @@ function attachHandlers(): void {
     const raw = parseInt(wallsitInput.value, 10);
     state.wallSitSec = Math.max(0, Math.min(600, Number.isFinite(raw) ? raw : 0));
     saveActiveSession();
+  });
+
+  // T1 (Sep 27 2026), §3.1/§3.2: the start/finish confirm row — ✓ Right
+  // fixes it at whatever the live clock is showing RIGHT NOW (not the
+  // possibly-stale last-tick value); ✎ Fix opens the time box + "N min ago"
+  // chips instead. One handler pair, `kind` picked from the button's own id.
+  const confirmTimeNow = (kind: 'start' | 'end'): void => {
+    const iso = new Date().toISOString();
+    if (kind === 'start') {
+      state.herStartAt = iso;
+      state.herStartConfirmed = true;
+      state.herStartEditingOpen = false;
+      endPreLogClockTick();
+    } else {
+      state.herEndAt = iso;
+      state.herEndConfirmed = true;
+      state.herEndEditingOpen = false;
+      endPostLogClockTick();
+    }
+    render();
+  };
+  bindClick('time-start-ok', () => confirmTimeNow('start'));
+  bindClick('time-end-ok', () => confirmTimeNow('end'));
+  bindClick('time-start-fix', () => {
+    state.herStartEditingOpen = true;
+    endPreLogClockTick(); // she's deciding now — the live "now" line stops moving under her
+    render();
+  });
+  bindClick('time-end-fix', () => {
+    state.herEndEditingOpen = true;
+    endPostLogClockTick();
+    render();
+  });
+  // "N min ago" — fixes AND confirms in one tap (§3.1: "Picking a time sets
+  // it straight away").
+  document.querySelectorAll<HTMLButtonElement>('[data-time-chip]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset['timeChip'];
+      const mins = Number(btn.dataset['mins']);
+      if (!Number.isFinite(mins)) return;
+      const iso = new Date(Date.now() - mins * 60_000).toISOString();
+      if (kind === 'start') {
+        state.herStartAt = iso;
+        state.herStartConfirmed = true;
+        state.herStartEditingOpen = false;
+      } else if (kind === 'end') {
+        state.herEndAt = iso;
+        state.herEndConfirmed = true;
+        state.herEndEditingOpen = false;
+      }
+      render();
+    });
+  });
+  // The time box itself (native picker) — same "sets it straight away" rule,
+  // combined with the candidate's own calendar day (she's fixing a time
+  // earlier tonight, not typing a date).
+  const timeStartInput = document.getElementById('time-start-input') as HTMLInputElement | null;
+  timeStartInput?.addEventListener('change', () => {
+    if (!timeStartInput.value) return;
+    state.herStartAt = combineDateAndClock(new Date().toISOString(), timeStartInput.value);
+    state.herStartConfirmed = true;
+    state.herStartEditingOpen = false;
+    render();
+  });
+  const timeEndInput = document.getElementById('time-end-input') as HTMLInputElement | null;
+  timeEndInput?.addEventListener('change', () => {
+    if (!timeEndInput.value) return;
+    state.herEndAt = combineDateAndClock(new Date().toISOString(), timeEndInput.value);
+    state.herEndConfirmed = true;
+    state.herEndEditingOpen = false;
+    render();
+  });
+  // Breaks?: None · ~5 min · ~15 min · ~30+ — tap again clears to null
+  // (untouched/unknown), same toggle shape as the 1-10 body chips below.
+  // "None" is data-break="0", a real confirmed zero, never the default.
+  document.querySelectorAll<HTMLButtonElement>('[data-break]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mins = Number(btn.dataset['break']);
+      if (!Number.isFinite(mins)) return;
+      const again = btn.getAttribute('aria-pressed') === 'true';
+      state.breakMinutes = again ? null : mins;
+      render();
+    });
   });
 
   // v48 · P5: the 1-10 body/back chips. Tap = that number; tap the chosen one
