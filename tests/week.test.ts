@@ -327,6 +327,28 @@ test.describe('#4 — "Move on without it" closes the week; a duplicate tap is i
   });
 });
 
+test.describe('#4a — a move for the open week at 0 done is ignored, not accepted', () => {
+  // Sep 27 2026 · WK3 fix r1 (checker should #2). canMoveOn already gates the
+  // real button on done.length > 0, so a real tap can't produce this — but a
+  // hand-inserted row, a second phone, or a resurrected remote row could.
+  // Her rule: a 0-done week never needs moving on.
+  test('a move for Week 5 at 0 done warns and leaves Week 5 open', () => {
+    const moves: MoveOn[] = [{ round: 2, week: 5, at: '2026-10-02T12:00:00+03:00' }];
+
+    withWarnSpy((warnings) => {
+      const { spans, open } = walkWeeks([], moves, []);
+
+      expect(spans).toEqual([]);
+      expect(open?.key).toEqual({ round: 2, week: 5 });
+      expect(open?.closedAt).toBeNull();
+      expect(open?.done).toEqual([]);
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('0 done');
+    });
+  });
+});
+
 test.describe('#4b — a gap session counting back into a moved-on week updates its done/missing too', () => {
   // Sep 27 2026 · WK1 fix r1 (checker should: week.ts:244-246). A gap session
   // landing in `.sessions` while `.done`/`.missing` stayed frozen from the

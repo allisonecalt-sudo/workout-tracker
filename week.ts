@@ -364,7 +364,23 @@ export function walkWeeks(
 
     if (ev.kind === 'move') {
       if (open && open.key.round === ev.move.round && open.key.week === ev.move.week) {
-        closeOpen(ev.move.at, 'moved_on');
+        // WK3 fix r1 (checker should #2, Sep 27 2026): a move for the open
+        // week at 0 done is accepted the same as one at 1-2 done — but the
+        // rule (§2.4, canMoveOn) is "1 or 2 done", never 0: a 0-done week
+        // never needs moving on. The UI's own canMoveOn already gates the
+        // button on done.length > 0, so a real tap can never produce this —
+        // but a hand-inserted row, a second phone racing a fresh Round/week
+        // boundary, or a resurrected (un-tombstoned) remote row could. Ignore
+        // it exactly like a stale move: warn, never throw, never close an
+        // empty week.
+        if (openDone.size === 0) {
+          console.warn(
+            `[week] ignoring a "move on" for R${ev.move.round}W${ev.move.week} at ${ev.move.at}` +
+              ` — the week has 0 done (never needs moving on)`
+          );
+        } else {
+          closeOpen(ev.move.at, 'moved_on');
+        }
       } else {
         // Stale: Undo, a second phone, a duplicate tap, or a move for a week
         // that already closed some other way. §2.1: warn, never throw.

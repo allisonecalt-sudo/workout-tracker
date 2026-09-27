@@ -8648,7 +8648,44 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
     await expect(page.locator('#week-undo')).toBeVisible();
   });
 
-  test('Undo → back to Week 5 open, "Move on" reappears', async ({ page }) => {
+  test('a WEEKDAY tap: Week 6 is next but stays a gap until the coming Saturday — the note says so', async ({
+    page,
+  }) => {
+    // Checker's should #3: every other WK3 test in this file taps on a
+    // Saturday (DAY_8 itself is an anchor day, so Week 6 opens immediately).
+    // canMoveOn only requires day 8+, not day 8 exactly — a tap on day 10
+    // (still ≥8, but a Monday) is exactly as real. week.ts's own anchor rule
+    // (her rule 1, "a week always has to start Sat or Sun") means the close
+    // still happens right on her tap, but Week 6 doesn't OPEN until the next
+    // Sat/Sun — this is NOT a decided-here behavior change (that's the
+    // checker's "ask her": should a tap instead open immediately, like a
+    // Round start?) — this test locks in what's actually built today and
+    // proves the gap sub-label is honest about the wait, so nothing here
+    // silently promises an immediate Week 6 that isn't real yet.
+    const MONDAY_DAY_10 = '2026-10-05T12:00:00+03:00'; // Mon, day 10 (≥ day 8)
+    await seedLogs(page, TWO_DONE);
+    await mockDate(page, MONDAY_DAY_10);
+    await page.goto('/');
+    await expect(page.locator('#week-move-on')).toHaveText('Move on to Week 6 without C');
+    await page.locator('#week-move-on').click();
+    await expect(page.locator('.home-header h1')).toContainText('Week 6');
+    // Week 6's NUMBER is assigned, but it's a gap, not a live open week —
+    // the sub-label must say when it actually opens and where a session
+    // logged now would count.
+    await expect(page.locator('#week-sub')).toContainText('opens Sat');
+    await expect(page.locator('#week-sub')).toContainText('counts as an extra for Week 5');
+    await expect(page.locator('.week-line')).toContainText('0 of 3');
+    // The button itself only ever renders on a LIVE open week (canMoveOn
+    // needs a span) — during the gap there's nothing left to move on from.
+    await expect(page.locator('#week-move-on')).toHaveCount(0);
+    // The moved-note is still about today's real close (Week 5, moved_on) —
+    // that part doesn't change just because Week 6 hasn't opened yet.
+    await expect(page.locator('#week-moved-note')).toContainText('Week 5 closed at 2 of 3');
+  });
+
+  test('Undo → back to Week 5 open, "Move on" reappears (tombstone queued, not silently dropped)', async ({
+    page,
+  }) => {
     await seedLogs(page, TWO_DONE);
     await mockDate(page, DAY_8);
     await page.goto('/');
@@ -8659,7 +8696,76 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
     await expect(page.locator('.week-line')).toContainText('2 of 3');
     await expect(page.locator('#week-move-on')).toHaveText('Move on to Week 6 without C');
     await expect(page.locator('#week-moved-note')).toHaveCount(0);
-    expect(await readWeekMoves(page)).toEqual([]);
+    // WK3 fix r1 (checker must #1): Undo no longer just empties the row —
+    // it queues a delete tombstone the same way any other write in this app
+    // queues offline (real sync is off under automation). See the dedicated
+    // race test right below for why a plain empty-out was the actual bug.
+    const moves = await readWeekMoves(page);
+    expect(moves).toHaveLength(1);
+    expect(moves[0]?.['round']).toBe(2);
+    expect(moves[0]?.['week']).toBe(5);
+    expect(moves[0]?.['deleted']).toBe(true);
+    expect(moves[0]?.['synced']).toBe(false);
+  });
+
+  test('Undo holds even after a pull still carrying the row it undid — the tombstone outranks it', async ({
+    page,
+    context,
+  }) => {
+    // Checker's exact race (must #1): "If she tapped Move on while online (so
+    // the row reached Supabase), then taps Undo while offline, or the DELETE
+    // fails, the next pull ... merges the remote row back in as
+    // synced:true. The week moves on again with no tap." Simulate the
+    // "reached Supabase" half by hand (real sync is off under automation),
+    // then prove the merge + a reopen both still show Week 5.
+    await seedLogs(page, TWO_DONE);
+    await mockDate(page, DAY_8);
+    await page.goto('/');
+    await page.locator('#week-move-on').click();
+    await expect(page.locator('.home-header h1')).toContainText('Week 6');
+
+    // Mark the row synced — as if the push had already reached Supabase
+    // before she tapped Undo.
+    await page.evaluate(() => {
+      const raw = localStorage.getItem('workout-tracker:week-moves');
+      const moves = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>;
+      moves[0]!['synced'] = true;
+      localStorage.setItem('workout-tracker:week-moves', JSON.stringify(moves));
+    });
+
+    await page.locator('#week-undo').click();
+    await expect(page.locator('.home-header h1')).toContainText('Week 5');
+    const afterUndo = await readWeekMoves(page);
+    expect(afterUndo).toHaveLength(1);
+    expect(afterUndo[0]?.['deleted']).toBe(true);
+    expect(afterUndo[0]?.['synced']).toBe(false);
+
+    // Feed a remote pull that STILL has the row (the DELETE hadn't landed
+    // yet) through the real, pure merge function — the tombstone must win,
+    // exactly like any other unsynced local write already does.
+    const merged = await page.evaluate((local) => {
+      const w = window as unknown as {
+        __wtMergeWeekMoves: (local: unknown[], remote: unknown[]) => unknown[];
+      };
+      return w.__wtMergeWeekMoves(local, [
+        { round: 2, week: 5, moved_at: (local[0] as { at: string }).at, missing: 'C' },
+      ]);
+    }, afterUndo);
+    expect(merged).toEqual(afterUndo); // the tombstone, not the resurrected remote row
+
+    // Write that merged (still-tombstoned) result to localStorage and open a
+    // fresh page (this file's beforeEach clears storage on ITS OWN page's
+    // navigations only — a new page in the same context sees real storage,
+    // same trick the offline-queue test above uses) — Week 5, not a
+    // silently-resurrected Week 6.
+    await page.evaluate((m) => {
+      localStorage.setItem('workout-tracker:week-moves', JSON.stringify(m));
+    }, merged);
+    const reopened = await context.newPage();
+    await mockDate(reopened, DAY_8);
+    await reopened.goto('/');
+    await expect(reopened.locator('.home-header h1')).toContainText('Week 5');
+    await expect(reopened.locator('.week-line')).toContainText('2 of 3');
   });
 
   test('a stale move (a week that was never the open one) is ignored, not thrown', async ({
@@ -8680,12 +8786,21 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
       );
     });
     const errors: string[] = [];
+    const warnings: string[] = [];
+    // WK3 fix r1 (checker should #4): the listeners used to attach AFTER
+    // page.goto() — a throw during the very first render would have already
+    // happened and the test would still pass. Attach both before goto, and
+    // actually assert the console.warn §2.1 requires, not just "no throw".
+    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('console', (msg) => {
+      if (msg.type() === 'warning') warnings.push(msg.text());
+    });
     await mockDate(page, DAY_8);
     await page.goto('/');
-    page.on('pageerror', (e) => errors.push(String(e)));
     await expect(page.locator('.home-header h1')).toContainText('Week 5');
     await expect(page.locator('.week-line')).toContainText('2 of 3');
     expect(errors).toEqual([]);
+    expect(warnings.some((w) => w.includes('ignoring a stale "move on"'))).toBe(true);
   });
 
   test('an offline tap queues (synced:false), survives a reload, and reconnecting never throws or drops it', async ({

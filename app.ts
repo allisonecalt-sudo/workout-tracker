@@ -6534,8 +6534,17 @@ async function flushPendingSyncs(): Promise<void> {
   // WK3 (Sep 27 2026): a "Move on without it" tap made offline, or one whose
   // POST failed, retries here too — same fail-loud reasoning as pendingPeriods
   // above (an unsynced week_moves row is a row Claude can't see either).
-  const pendingWeekMoves = loadWeekMoves().filter((m) => !m.synced);
-  if (pendingLogs.length === 0 && pendingPeriods.length === 0 && pendingWeekMoves.length === 0) {
+  // WK3 fix r1 (checker must #1): split into live moves (retry the POST) and
+  // Undo tombstones (retry the DELETE instead) — pushing a tombstone would
+  // re-create on Supabase the exact row she just undid.
+  const pendingWeekMoves = loadWeekMoves().filter((m) => !m.synced && !m.deleted);
+  const pendingWeekMoveDeletes = loadWeekMoves().filter((m) => !m.synced && m.deleted);
+  if (
+    pendingLogs.length === 0 &&
+    pendingPeriods.length === 0 &&
+    pendingWeekMoves.length === 0 &&
+    pendingWeekMoveDeletes.length === 0
+  ) {
     state.syncStatus = 'synced';
     updateSyncIndicator();
     return;
@@ -6556,6 +6565,9 @@ async function flushPendingSyncs(): Promise<void> {
   if (loadCyclePeriods().some((p) => !p.synced)) allOk = false;
   for (const move of pendingWeekMoves) {
     await pushWeekMove(move); // marks synced:true in localStorage on success
+  }
+  for (const tombstone of pendingWeekMoveDeletes) {
+    await deleteWeekMove(tombstone.round, tombstone.week); // drops the tombstone in localStorage on success
   }
   if (loadWeekMoves().some((m) => !m.synced)) allOk = false;
   state.syncStatus = allOk ? 'synced' : 'offline';
@@ -7067,6 +7079,18 @@ type StoredWeekMove = {
   at: string;
   missing: string;
   synced?: boolean;
+  // WK3 fix r1 (checker must #1, Sep 27 2026): Undo tombstone. `undoWeekMove`
+  // used to just filter the row out of local storage and fire a DELETE whose
+  // result nobody checked — a still-in-flight push, or a DELETE that failed
+  // or never even fires (offline, or syncDisabled() under automation), let
+  // the NEXT pull merge the remote row straight back in as synced:true, and
+  // the week moved on again with no tap of hers, silently. A tombstone
+  // (deleted:true, synced:false) is a normal pending-write instead: it
+  // outranks a remote pull the same way any other unsynced row already does
+  // (mergeWeekMoves), it's excluded from movesForWeekModel()/todaysWeekMove()
+  // immediately, and flushPendingSyncs retries the real DELETE until
+  // Supabase confirms it — only then is the tombstone itself dropped.
+  deleted?: boolean;
 };
 
 function loadWeekMoves(): StoredWeekMove[] {
@@ -7161,7 +7185,13 @@ async function pushWeekMove(m: StoredWeekMove): Promise<void> {
     if (res.ok) {
       const moves = loadWeekMoves();
       const idx = moves.findIndex((x) => x.round === m.round && x.week === m.week);
-      if (idx >= 0) {
+      // WK3 fix r1 (checker must #1): a push still in flight when she taps
+      // Undo must not resurrect the row. If what's now in local storage for
+      // this key is a delete tombstone, leave it exactly as pending-delete —
+      // flushPendingSyncs' retry loop (or the Undo tap's own deleteWeekMove
+      // call) picks it up and removes the row for real. Only mark synced
+      // when it's still the same live (non-deleted) move.
+      if (idx >= 0 && !moves[idx]!.deleted) {
         moves[idx] = { ...moves[idx]!, synced: true };
         writeWeekMoves(moves);
       }
@@ -7176,10 +7206,24 @@ async function pushWeekMove(m: StoredWeekMove): Promise<void> {
 async function deleteWeekMove(round: number, week: number): Promise<void> {
   if (syncDisabled()) return;
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/week_moves?round=eq.${round}&week=eq.${week}`, {
-      method: 'DELETE',
-      headers: supabaseHeaders(),
-    });
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/week_moves?round=eq.${round}&week=eq.${week}`,
+      {
+        method: 'DELETE',
+        headers: supabaseHeaders(),
+      }
+    );
+    // WK3 fix r1 (checker must #1): the result used to go unchecked — a
+    // failed DELETE left the remote row in place with nothing local to say
+    // so. Only drop the tombstone once Supabase actually confirms it's gone;
+    // otherwise leave it (still synced:false) for the next retry.
+    if (res.ok) {
+      writeWeekMoves(
+        loadWeekMoves().filter((m) => !(m.round === round && m.week === week && m.deleted === true))
+      );
+    } else {
+      console.warn('[sync] delete week_moves failed:', res.status);
+    }
   } catch (err) {
     console.warn('[sync] delete week_moves threw:', err);
   }
@@ -7213,16 +7257,29 @@ function moveOnWithoutIt(key: WeekKey, missing: readonly string[]): void {
   render();
 }
 
-/** §2.4's Undo — a plain delete. Live only "for the rest of that day"
- * (todaysWeekMove below is date-driven, not a timer), so there's no undo
- * window to manage: the button simply stops rendering once local midnight
- * passes, same as the note above it. */
+/** §2.4's Undo. Live only "for the rest of that day" (todaysWeekMove below is
+ * date-driven, not a timer), so there's no undo window to manage: the button
+ * simply stops rendering once local midnight passes, same as the note above
+ * it.
+ *
+ * WK3 fix r1 (checker must #1, Sep 27 2026): this used to just filter the row
+ * out locally and fire-and-forget a DELETE. If she'd tapped Move on while
+ * online (row already reached Supabase), or the DELETE failed, or a push was
+ * still in flight, the next pull merged the remote row straight back in as
+ * synced:true — the week moved on again with no tap of hers, and past
+ * midnight there was no Undo left to fix it. Now it queues like any other
+ * offline write: a tombstone (deleted:true, synced:false) replaces the row
+ * instead of just removing it, so a pull can't resurrect what she just
+ * undid, and the real DELETE keeps retrying (flushPendingSyncs) until
+ * Supabase confirms it — only then does the tombstone itself disappear. */
 function undoWeekMove(move: StoredWeekMove): void {
-  writeWeekMoves(
-    loadWeekMoves().filter(
+  const tombstone: StoredWeekMove = { ...move, deleted: true, synced: false };
+  writeWeekMoves([
+    tombstone,
+    ...loadWeekMoves().filter(
       (m) => weekMoveKey(m.round, m.week) !== weekMoveKey(move.round, move.week)
-    )
-  );
+    ),
+  ]);
   void deleteWeekMove(move.round, move.week);
   render();
 }
@@ -7232,12 +7289,20 @@ function undoWeekMove(move: StoredWeekMove): void {
  * once local midnight passes, with no timer to leak or clear. */
 function todaysWeekMove(): StoredWeekMove | null {
   const today = localIsoDate(new Date());
-  return loadWeekMoves().find((m) => localIsoDate(new Date(m.at)) === today) ?? null;
+  // WK3 fix r1: a pending Undo tombstone is not "today's move" — it's the
+  // opposite (a move being un-done). Skipping it here means the moved-note +
+  // its own Undo button both disappear the instant she taps Undo, not just
+  // once the real DELETE eventually confirms.
+  return loadWeekMoves().find((m) => !m.deleted && localIsoDate(new Date(m.at)) === today) ?? null;
 }
 
 /** week.ts's MoveOn events, from the synced local week_moves table (WK3). */
 function movesForWeekModel(): WeekMoveOn[] {
-  return loadWeekMoves().map((m) => ({ round: m.round, week: m.week, at: m.at }));
+  // WK3 fix r1: a pending Undo tombstone must not count as a move — that's
+  // the whole point of the tombstone (see StoredWeekMove.deleted's comment).
+  return loadWeekMoves()
+    .filter((m) => !m.deleted)
+    .map((m) => ({ round: m.round, week: m.week, at: m.at }));
 }
 
 /** Is "now" (or a caller-supplied instant — tests mock the clock) at/after
@@ -8703,7 +8768,20 @@ function renderHome(): string {
     // own once local midnight passes (todaysWeekMove is date-driven, not a
     // timer, §2.4's "for the rest of that day").
     const todaysMove = todaysWeekMove();
-    if (todaysMove) {
+    // WK3 fix r1 (checker nice): a move dated today that week.ts itself
+    // ignored (stale, or a 0-done move — see week.ts's move branch) closed
+    // NOTHING — showing "Week 99 closed at N of 3 · Undo" for it would be
+    // pure fiction. Only show the note when it matches a real 'moved_on'
+    // span for that same key.
+    const todaysMoveSpan = todaysMove
+      ? (model.spans.find(
+          (s) =>
+            s.how === 'moved_on' &&
+            s.key.round === todaysMove.round &&
+            s.key.week === todaysMove.week
+        ) ?? null)
+      : null;
+    if (todaysMove && todaysMoveSpan) {
       const doneCount = 3 - todaysMove.missing.length;
       movedNoteHtml =
         `<div class="week-moved-note" id="week-moved-note">Week ${todaysMove.week} closed at ${doneCount} of 3 · ` +
