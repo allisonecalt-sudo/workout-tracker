@@ -3925,6 +3925,14 @@ test('Workout D survives a second read: Done card, Sessions, the rides page and 
   await expect(reopened.locator('.rides-list-row')).toHaveCount(1);
   await expect(reopened.locator('.rides-list-row')).toContainText('D');
   await expect(reopened.locator('.rides-list-row')).toContainText('3 km');
+
+  // v54 fix r2 (Sep 27 2026), checker's must #2: "This week" was filtered by
+  // weekModel().open.sessions, and week.ts drops D from that on purpose (it's
+  // extra, never one of the three) — so this exact D ride, saved inside Week
+  // 5, read "This week 0 rides · 0 min · 0 km · 0 kcal" while "This month"
+  // already said 1. Now it counts by date against the week's own start.
+  const weekRow = reopened.locator('.rides-totals-row').filter({ hasText: 'This week' });
+  await expect(weekRow).toContainText('1 ride · 30 min · 3 km · 180 kcal');
 });
 
 test('elliptical: the next ride opens on the elliptical and offers the last level again', async ({

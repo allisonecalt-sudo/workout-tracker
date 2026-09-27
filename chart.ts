@@ -9,16 +9,18 @@
 // `barChartSvg(bars, opts)` that R2, P2 and P3 and the weeks card can reuse."
 //
 // WHY THE SHAPE IS THIS PLAIN: her rule (§0b, carried through every chart in
-// this app) — no axis, no gridlines, no legend, nothing under 15px except the
-// date labels (13px floor here, per the rides-page task spec), bars and dots
-// only. A tap opens a one-line readout OUTSIDE this module (app.ts owns that
-// — this file only draws the hit targets, `data-ride-id` on each bar's <g>).
+// this app) — no axis, no gridlines, no legend, nothing under 15px, bars and
+// dots only. (v54 fix r2, Sep 27 2026: the date labels started life at a 13px
+// floor "per the rides-page task spec" — that broke her actual rule, "too
+// small I can't read them"; both label rows are 15px now.) A tap opens a
+// one-line readout OUTSIDE this module (app.ts owns that — this file only
+// draws the hit targets, `data-ride-id` on each bar's <g>).
 
 export type ChartBar = {
   id: string; // matched back to a ride/session by the caller's click handler
   value: number; // already the number to plot (e.g. kcal a minute) — this
   // module never derives anything, only draws
-  label: string; // short text under the bar (a short date, "9/24")
+  label: string; // short text under the bar (a short date, "24")
   highlighted?: boolean; // the one bar drawn in --text instead of --text-dim-2
   // v54 fix r1 (Sep 27 2026), checker's should #3 / §4.5: an optional level
   // line under the bar (e.g. "L5") — gives the rides page a level trend
@@ -76,7 +78,10 @@ export function barChartSvg(bars: ChartBar[], opts: BarChartOptions): string {
       const valueLabel = b.highlighted
         ? `<text x="${(barX + barWidth / 2).toFixed(1)}" y="${Math.max(13, barY - 6).toFixed(1)}" font-size="17" font-weight="700" fill="var(--text)" text-anchor="middle">${escapeXml(String(b.value))}</text>`
         : '';
-      const dateLabel = `<text x="${(slotX + slot / 2).toFixed(1)}" y="${(plotHeight + sublabelHeight + LABEL_ROW_HEIGHT - 5).toFixed(1)}" font-size="13" fill="var(--text-dim)" text-anchor="middle">${escapeXml(b.label)}</text>`;
+      // v54 fix r2 (Sep 27 2026), checker's should #4: 13px broke her own
+      // §4.5 rule ("nothing on that card under 15px" — "too small I can't
+      // read them"). 15px, matching the sublabel row's own size just above it.
+      const dateLabel = `<text x="${(slotX + slot / 2).toFixed(1)}" y="${(plotHeight + sublabelHeight + LABEL_ROW_HEIGHT - 5).toFixed(1)}" font-size="15" fill="var(--text-dim)" text-anchor="middle">${escapeXml(b.label)}</text>`;
       // v54 fix r1: the level line ("L5"), between the bar and the date —
       // 15px, dim, per §4.5 — only when THIS bar has one.
       const sublabelText = b.sublabel

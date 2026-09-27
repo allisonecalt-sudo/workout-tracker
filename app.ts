@@ -601,7 +601,7 @@ const SUPABASE_ANON_KEY =
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
 const APP_VERSION = 'v54';
-const BUILD_DATE = 'Sep 27, 2026 · 21:02';
+const BUILD_DATE = 'Sep 27, 2026 · 21:36';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -9867,9 +9867,15 @@ function renderPreLog(): string {
   // A low body reading SUGGESTS Lite with a gentle outline; it never switches
   // itself on (agency rule: ask or suggest, never tell).
   const suggestLite = !state.liteDay && state.capacityBeforeTouched && state.capacityBefore <= 3;
-  const liteChip = state.liteDay
-    ? `<button class="lite-chip lite-toggle-on" id="lite-toggle" type="button" aria-pressed="true">✓ Lite · ${liteRounds} round${liteRounds === 1 ? '' : 's'} today · tap to undo</button>`
-    : `<button class="lite-chip${suggestLite ? ' lite-suggest' : ''}" id="lite-toggle" type="button" aria-pressed="false">🪫 Hard day? Lite — ${liteWord}, still counts</button>`;
+  // v54 fix r2 (Sep 27 2026), checker's should #2: D always has one step and
+  // one round already (getWorkoutD()) — "Lite — one round, still counts"
+  // read as an offer to CUT something D never had two of. No Lite row on D.
+  const liteChip =
+    w.id === 'D'
+      ? ''
+      : state.liteDay
+        ? `<button class="lite-chip lite-toggle-on" id="lite-toggle" type="button" aria-pressed="true">✓ Lite · ${liteRounds} round${liteRounds === 1 ? '' : 's'} today · tap to undo</button>`
+        : `<button class="lite-chip${suggestLite ? ' lite-suggest' : ''}" id="lite-toggle" type="button" aria-pressed="false">🪫 Hard day? Lite — ${liteWord}, still counts</button>`;
   // v51 (Sep 25 2026): the pre-log Back & wrist reading — same "Fine · Back ·
   // Wrist" combined control as post-log (renderBackWristControl), its own ids
   // ("-pre" suffix) and its own state fields (backPainBefore/wristPainBefore)
@@ -11859,6 +11865,25 @@ function getWeekSessionsForSpan(span: WeekSpan): WeekSession[] {
     .map((log) => ({ log }));
 }
 
+// v54 fix r2 (Sep 27 2026), checker's should #1: span.sessions never has a
+// 'D' (week.ts drops it from the completion model on purpose, same as
+// buildWeeklyTargetRows) — so a D ride that week made the review say "0 of
+// 3 · No sessions this week" even though she'd just ridden. D still isn't
+// one of the three; this only finds D logs whose DATE falls inside the
+// span so the review can list them as an honest extra, same reasoning as
+// renderRidesTotalsCard's "This week" fix above.
+function getExtraDSessionsForSpan(span: WeekSpan): LogEntry[] {
+  const sinceMs = new Date(span.openedAt).getTime();
+  const untilMs = span.closedAt ? new Date(span.closedAt).getTime() : Infinity;
+  return loadLogs()
+    .filter((l) => l.workout === 'D')
+    .filter((l) => {
+      const t = new Date(l.date).getTime();
+      return t >= sinceMs && t <= untilMs;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 type WeekTotals = {
   count: number;
   // T2 fix r1 (Sep 27 2026, checker's "must"): this used to be `totalSec`,
@@ -12068,6 +12093,10 @@ type ReviewWeekView = {
   skippedLabel: string | null;
   sessions: WeekSession[];
   prevSessions: WeekSession[];
+  // v54 fix r2 (Sep 27 2026), checker's should #1: D logs that date inside
+  // this week but never count toward `sessions` (see
+  // getExtraDSessionsForSpan). Empty pre-launch (D didn't exist yet).
+  extraSessions: LogEntry[];
   // True only for the ONE page that's still actually live/open right now —
   // gates the "vs previous week" card vs "Week still open." (see
   // renderWeeklyReview). Pre-launch this is exactly `offset === 0` (the old
@@ -12090,6 +12119,7 @@ function reviewWeekViewAt(offset: number): ReviewWeekView {
       skippedLabel: pw.skippedLabel,
       sessions: getWeekSessionsForSaturday(saturday),
       prevSessions: reviewSessionsAt(offset + 1),
+      extraSessions: [], // pre-launch: D didn't exist yet
       isLiveOpen: offset === 0,
     };
   }
@@ -12101,6 +12131,7 @@ function reviewWeekViewAt(offset: number): ReviewWeekView {
       skippedLabel: null,
       sessions: getWeekSessionsForSpan(span),
       prevSessions: reviewSessionsAt(offset + 1),
+      extraSessions: getExtraDSessionsForSpan(span),
       isLiveOpen: offset === 0 && span.closedAt === null,
     };
   }
@@ -12111,6 +12142,7 @@ function reviewWeekViewAt(offset: number): ReviewWeekView {
     skippedLabel: pw.skippedLabel,
     sessions: getWeekSessionsForSaturday(saturday),
     prevSessions: reviewSessionsAt(offset + 1),
+    extraSessions: [], // legacy pre-launch weeks: D didn't exist yet
     isLiveOpen: false,
   };
 }
@@ -12161,6 +12193,17 @@ function renderWeeklyReview(): string {
         Sessions: <span class="${sessionCountClass}"><strong>${totals.count}</strong> of 3</span>
       </div>`;
 
+  // v54 fix r2 (Sep 27 2026), checker's should #1: D never counts toward
+  // "N of 3" (it isn't one of the three), but a D ride that week is real and
+  // hiding it made the page say something untrue ("No sessions this week"
+  // right after she rode one). Listed as its own honest extra line, under
+  // the count, never folded into it.
+  const extraRows = view.extraSessions
+    .map(
+      (l) => `<div class="weekly-review-extra-row">D · ${formatRowDate(l.date)} · extra ride</div>`
+    )
+    .join('');
+
   // Empty state — single subtle line, no nudge.
   if (sessions.length === 0) {
     const emptyLine = view.skippedLabel
@@ -12172,6 +12215,7 @@ function renderWeeklyReview(): string {
       ${header}
       ${subtitle}
       <p class="weekly-review-empty">${emptyLine}</p>
+      ${extraRows ? `<div class="weekly-review-extras">${extraRows}</div>` : ''}
       ${renderWeeklyTargetGrid('Week by week')}
     `;
   }
@@ -12280,6 +12324,7 @@ function renderWeeklyReview(): string {
     <div class="card weekly-review-sessions session-list">
       ${sessionRows}
     </div>
+    ${extraRows ? `<div class="weekly-review-extras">${extraRows}</div>` : ''}
     ${totalsCard}
     ${deltaCard}
     ${
@@ -13180,12 +13225,18 @@ function renderCycleSettingsRow(): string {
 // above), one way back ("‹ Progress") — no second entry point, unlike the
 // cycle page's Home row, since nothing else on Home shows a ride number.
 
-// "9/24" — compact enough that up to 10 of these fit under 340px of bars
-// (formatMonthDay's "Sep 24" is too wide at this density); used ONLY under
-// the chart's bars, never anywhere she reads a date as a fact.
+// "24" — just the day-of-month, compact enough that up to 10 of these fit
+// under 340px of bars at a readable size (formatMonthDay's "Sep 24" is too
+// wide at this density); used ONLY under the chart's bars, never anywhere
+// she reads a date as a fact (the tap readout above gives the full date).
+// v54 fix r2 (Sep 27 2026), checker's should #4: this used to be "9/24" —
+// US month/day order, which nowhere else in the app uses ("Sep 24" is the
+// house format) — and it lived at a 13px floor the chart drew below her
+// §4.5 "nothing under 15px" rule. Dropping the month (not abbreviating it)
+// keeps the label plain digits, so there's no mm/dd-vs-dd/mm reading at all.
 function shortChartDate(iso: string): string {
   const d = new Date(iso);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
+  return `${d.getDate()}`;
 }
 
 function ridesDoorSub(rides: RideRecord[]): string {
@@ -13288,8 +13339,22 @@ function renderRidesUsualBestCard(
 // plain calendar month to date — the app has no other "month" concept yet
 // to collide with.
 function renderRidesTotalsCard(rides: RideRecord[]): string {
-  const openIds = new Set((weekModel().open?.sessions ?? []).map((s) => s.id));
-  const weekRides = rides.filter((r) => openIds.has(r.id));
+  // v54 fix r2 (Sep 27 2026), checker's must #2: "This week" was filtered by
+  // weekModel().open.sessions — but week.ts excludes 'D' from the completion
+  // model ON PURPOSE (D is extra, never one of the three; see
+  // buildWeeklyTargetRows above). That made a D ride real Sun Sep 27 2026 —
+  // her own data, 42 rows -> 43 after saving it — read "This week 0 rides"
+  // while "This month" already said 4. Same fix as walksThisWeek() (another
+  // extra-outside-the-three count): count by DATE against the week's own
+  // start, not by session membership, so a D ride lands in the week it
+  // actually happened in even though it's not one of the three slots.
+  const { open, spans } = weekModel();
+  const since = open
+    ? new Date(open.openedAt).getTime()
+    : spans.length
+      ? new Date(spans[spans.length - 1]!.openedAt).getTime()
+      : new Date(COMPLETION_WEEKS_FROM.at).getTime();
+  const weekRides = rides.filter((r) => new Date(r.date).getTime() >= since);
   const monthPrefix = localIsoDate(new Date()).slice(0, 7);
   const monthRides = rides.filter((r) => r.date.slice(0, 7) === monthPrefix);
   const row = (label: string, t: RideTotals): string => `

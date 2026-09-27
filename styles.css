@@ -2604,6 +2604,21 @@ textarea:focus {
   margin-bottom: 16px;
 }
 
+/* v54 fix r2 (Sep 27 2026), checker's should #1: D never counts toward the
+ * week's "N of 3", but hiding it made the review say "No sessions this
+ * week" the same day she rode one. A quiet extra line, not a session row —
+ * it never looks like a 4th counted session. */
+.weekly-review-extras {
+  margin: -4px 0 16px;
+}
+
+.weekly-review-extra-row {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  text-align: center;
+  padding: 4px 0;
+}
+
 /* The ‹ › arrows around the title (moved from home). The hidden arrow keeps
  * its space so the title doesn't jump when the live week has no ›. */
 .review-header {
