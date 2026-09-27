@@ -440,6 +440,13 @@ type AppState = {
   // trigger is her Jul 3 ask, and until now it depended on her "telling
   // Claude" (DECISIONS §4). Optional; a step she doesn't tap stays unset.
   armFeel: ArmFeelState;
+  // v55 (Sep 27 2026) — LOAD CHIP: which weight she picked for THIS session's
+  // curl / row, her own call by pain, never Lisa's ("no Lisa approval, I
+  // decide based on pain", Sep 26 23:15). Defaults to whatever she used last
+  // (lastUsedArmLoad reads her real logs), 1 kg if she's never logged one.
+  // Folded into the same arm_feel string on save (armFeelString) — no schema
+  // change (her Sep 27 20:08: "I have 2kg now").
+  armLoad: ArmLoadState;
   // v54 (Sep 27 2026) — CHIP AFTER THE LAST SET: how many sets of a multi-set
   // arm-feel move (curl, prone row) she's marked done THIS visit, keyed by
   // exercise name (upperBack runs once per session — see Workout's own
@@ -476,6 +483,9 @@ type AppState = {
 
 type ArmFeel = 'easy' | 'right' | 'hard';
 type ArmFeelState = { curl?: ArmFeel; row?: ArmFeel };
+// v55 (Sep 27 2026) — the two dumbbells she owns now; her pick, per set.
+type ArmLoad = '1kg' | '2kg';
+type ArmLoadState = { curl?: ArmLoad; row?: ArmLoad };
 
 const STORAGE_KEY = 'workout-tracker:logs';
 const HOWTO_SEEN_KEY_PREFIX = 'workout-tracker:howto-seen-week-';
@@ -601,8 +611,8 @@ const SUPABASE_ANON_KEY =
 // branch's ride numbers (Next -> "from the machine" entry screen) + Cue ->
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
-const APP_VERSION = 'v54';
-const BUILD_DATE = 'Sep 27, 2026 · 22:04';
+const APP_VERSION = 'v55';
+const BUILD_DATE = 'Sep 27, 2026 · 22:59';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -920,15 +930,21 @@ const UPPER_BACK_W7: Exercise[] = [
   ...UPPER_BACK,
   {
     name: 'Prone row (bodyweight)',
-    reps: '2 sets · 12 reps each side',
+    // v55 (Sep 27 2026): "1–2 kg (your pick)" replaces a fixed "1 kg" in the
+    // reps line — the LOAD CHIP on the step is where she actually picks it,
+    // by pain, every set (rule 8e).
+    reps: '2 sets · 12 reps each side · 1–2 kg (your pick)',
     // PROGRAM: the "(Lisa, Jun 18: lifting strains the neck)" attribution is
     // clinical bookkeeping — the instruction itself ("don't lift it") stays.
+    // v55: "NO weight yet" / "add the 1 kg only when you say you are ready"
+    // retired — the LOAD CHIP is that same "when you say" call, made live.
     notes:
-      'NO weight yet — building toward the 1 kg. Arm hanging, wrist NEUTRAL/straight. Keep your HEAD DOWN — do NOT lift it. Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal. Add the 1 kg only when you say you are ready.',
+      'Arm hanging, wrist NEUTRAL/straight. Keep your HEAD DOWN — do NOT lift it. Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal.',
   },
   {
     name: '1 kg biceps curl',
-    reps: '2 sets · 12 reps',
+    // v55: same "1–2 kg (your pick)" note — see the prone row comment above.
+    reps: '2 sets · 12 reps · 1–2 kg (your pick)',
     // PROGRAM: the "(Lisa, Jun 18: ... caused that)" attribution dropped —
     // the instruction ("hold lightly") stays.
     notes:
@@ -2633,9 +2649,11 @@ const R2W4_LOADED_ARMS: Exercise[] = (() => {
       // that says 1 kg — mid-set she couldn't tell which. Display only; the key
       // stays so the voice note, detail card and history still match.
       label: 'Prone row',
-      reps: '2 sets · 12 reps each side · bodyweight or 1 kg',
+      // v55 (Sep 27 2026): the old "bodyweight or 1 kg" / "your call" text
+      // predates the LOAD CHIP and the 2 kg — dropped in favor of `row`'s own
+      // reps/notes (already "1–2 kg (your pick)"), one wording, not two.
       notes:
-        'Bodyweight or holding the 1 kg — your call. Arm hanging, wrist neutral, light grip. Head down — do not lift it. Drive the elbow up, squeeze the shoulder blade toward your spine, lower slow. Pain tells — stop on any wrist signal.',
+        'Arm hanging, wrist neutral, light grip. Head down — do not lift it. Drive the elbow up, squeeze the shoulder blade toward your spine, lower slow. Pain tells — stop on any wrist signal.',
     },
     {
       ...curl,
@@ -3117,6 +3135,7 @@ const state: AppState = {
   stoppedEarlyLitePrev: null,
   heldSecFor: {},
   armFeel: {},
+  armLoad: {},
   setsDoneFor: {},
   backSomethingOpen: false,
   stretchTicks: {},
@@ -4884,6 +4903,7 @@ function beginExercises(): void {
   state.stoppedEarlyLitePrev = null;
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
+  state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
   state.setsDoneFor = {}; // v54: sets-done belongs to one session, same as armFeel
   state.stretchTicks = {}; // v48 · P7: ticks belong to one session
   state.completedSteps = {}; // v50 · jump list: done-marks belong to one session
@@ -5318,7 +5338,13 @@ function workoutStepPosition(w: Workout): { index: number; total: number } {
   const main = w.main.length;
   const rounds = effectiveRounds(w);
   const upper = w.upperBack?.length ?? 0;
-  const total = warm + main * rounds + upper + 1;
+  // v55 (Sep 27 2026) — CHECK round1/2/3 N1: the trailing "+1" stood for the
+  // cool-down step, so a workout with none (Workout D: warmup:[ride], main:[],
+  // cooldown:[]) still counted a step that never happens — "Warm-up · 1 of 2"
+  // on a genuinely one-step ride. Only add it when there's a real cool-down
+  // to reach.
+  const hasCooldown = (w.cooldown ?? []).length > 0;
+  const total = warm + main * rounds + upper + (hasCooldown ? 1 : 0);
   if (state.currentPhase === 'cooldown') {
     return { index: total, total };
   }
@@ -5348,13 +5374,17 @@ function skippedStepsCount(w: Workout): number {
 
 function phaseLabelFor(w: Workout): string {
   const base =
-    state.currentPhase === 'main'
-      ? `Main · Round ${state.currentRound} of ${effectiveRounds(w)}`
-      : state.currentPhase === 'warmup'
-        ? 'Warm-up'
-        : state.currentPhase === 'upperBack'
-          ? 'Upper back'
-          : cooldownChipLabel(w);
+    // v55 (Sep 27 2026) — CHECK N1/N3: Workout D's one step is the ride
+    // itself, not a "Warm-up" leading up to something else. "Ride · 1 of 1".
+    w.id === 'D' && state.currentPhase === 'warmup'
+      ? 'Ride'
+      : state.currentPhase === 'main'
+        ? `Main · Round ${state.currentRound} of ${effectiveRounds(w)}`
+        : state.currentPhase === 'warmup'
+          ? 'Warm-up'
+          : state.currentPhase === 'upperBack'
+            ? 'Upper back'
+            : cooldownChipLabel(w);
   return `${base}${state.liteDay ? ' · lite' : ''}`;
 }
 
@@ -5651,18 +5681,21 @@ function loadLastDone(): LastDone | null {
   }
 }
 
-// ---------- v48 · P5 (Sep 24 2026): arm feel + the 2 kg question ----------
-// The 2 kg trigger is her Jul 3 buy-bigger ask; until now it waited on her
-// "telling Claude" (gear card), and the app logs no arm reps (assumptions, 19).
-// One optional tap on the two 1 kg moves — inside her 2-tap line — and home
-// ASKS once two sessions in a row felt easy. A question, never a tell: the
-// program is Lisa's call (DECISIONS §4).
+// ---------- v48 · P5 (Sep 24 2026): arm feel + the LOAD CHIP ----------
+// The 2 kg trigger was her Jul 3 buy-bigger ask, and the app logs no arm reps
+// (assumptions, 19). One optional tap on the two 1 kg moves — inside her
+// 2-tap line — read her feel.
+//
+// v55 (Sep 27 2026): the old "Ask Lisa about 2 kg?" card is RETIRED — her
+// rule 8e, "Get rid of Lisa. I decide based on pain" (Sep 26 23:15), and she
+// has 2 kg now (20:08). The LOAD CHIP replaces it: she picks 1 kg or 2 kg
+// herself, every set, no question asked.
 const ARM_FEEL_STEPS: Record<string, keyof ArmFeelState> = {
   '1 kg biceps curl': 'curl',
   'Prone row (bodyweight)': 'row',
 };
 const ARM_FEEL_VALUES: readonly ArmFeel[] = ['easy', 'right', 'hard'];
-const TWO_KG_NOTED_KEY = 'workout-tracker:twokg-noted';
+const ARM_LOAD_VALUES: readonly ArmLoad[] = ['1kg', '2kg'];
 
 function isArmFeel(v: unknown): v is ArmFeel {
   return typeof v === 'string' && (ARM_FEEL_VALUES as readonly string[]).includes(v);
@@ -5688,6 +5721,21 @@ function sanitizeArmFeel(v: unknown): ArmFeelState {
   return out;
 }
 
+function isArmLoad(v: unknown): v is ArmLoad {
+  return v === '1kg' || v === '2kg';
+}
+
+// v55 (Sep 27 2026): a pre-v55 snapshot has no load → {} (defaultArmLoad
+// fills it in at session start, same convention as armFeel).
+function sanitizeArmLoad(v: unknown): ArmLoadState {
+  if (!v || typeof v !== 'object') return {};
+  const o = v as { curl?: unknown; row?: unknown };
+  const out: ArmLoadState = {};
+  if (isArmLoad(o.curl)) out.curl = o.curl;
+  if (isArmLoad(o.row)) out.row = o.row;
+  return out;
+}
+
 // v54 (Sep 27 2026): a corrupt/out-of-range value is dropped, never crashed
 // on (same convention as sanitizeStretchTicks) — a resumed count is clamped
 // to a plausible range rather than trusted as-is.
@@ -5700,54 +5748,50 @@ function sanitizeSetsDoneFor(v: unknown): Record<string, number> {
   return out;
 }
 
-// "curl=easy;row=right" — the shape the arm_feel CHECK accepts; null when none.
-function armFeelString(f: ArmFeelState): string | null {
-  const parts = [f.curl ? `curl=${f.curl}` : '', f.row ? `row=${f.row}` : ''].filter(
-    (p) => p !== ''
-  );
+// "curl=easy@2kg;row=right@1kg" — the shape the arm_feel CHECK accepts; null
+// when none. v55 (Sep 27 2026): the "@1kg"/"@2kg" suffix is new (the LOAD
+// CHIP) — appended only when a load is known, so a pre-v55 row (no suffix)
+// and the existing reader (the rowcurl "easy" substring match in
+// progression.ts) still parses it exactly as before. No schema change (her
+// Sep 27 20:08: "I have 2kg now").
+function armFeelString(f: ArmFeelState, loads: ArmLoadState): string | null {
+  const part = (key: 'curl' | 'row', feel: ArmFeel | undefined): string => {
+    if (!feel) return '';
+    const load = loads[key];
+    return `${key}=${feel}${load ? `@${load}` : ''}`;
+  };
+  const parts = [part('curl', f.curl), part('row', f.row)].filter((p) => p !== '');
   return parts.length > 0 ? parts.join(';') : null;
 }
 
-// Every value in a saved "curl=easy;row=right" (unknown parts are ignored).
-function armFeelValues(s: string): string[] {
-  return s
-    .split(';')
-    .map((part) => part.split('=')[1] ?? '')
-    .filter((v) => v !== '');
-}
-
-// The two newest sessions that carry a feel: both exist and every value in
-// both is "easy" → the newer one's id (the "Noted" key). Otherwise null.
-function twoKgQuestionDue(logs: LogEntry[]): string | null {
-  const felt = logs
-    .filter((l) => typeof l.armFeel === 'string' && l.armFeel.trim() !== '')
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 2);
-  if (felt.length < 2) return null;
-  const allEasy = felt.every((l) => {
-    const values = armFeelValues(l.armFeel ?? '');
-    return values.length > 0 && values.every((v) => v === 'easy');
-  });
-  return allEasy ? (felt[0]?.id ?? null) : null;
-}
-
-function twoKgNotedId(): string | null {
-  try {
-    return localStorage.getItem(TWO_KG_NOTED_KEY);
-  } catch {
-    return null;
+// v55: the LOAD half of one saved "curl=easy@2kg" part, for one step key.
+// null when that key isn't in the string, or carries no "@load" at all
+// (every row saved before v55).
+function armFeelLoad(s: string | null | undefined, key: 'curl' | 'row'): ArmLoad | null {
+  if (!s) return null;
+  for (const part of s.split(';')) {
+    const [k, rest] = part.split('=');
+    if (k !== key) continue;
+    const m = /@(1kg|2kg)$/.exec(rest ?? '');
+    return m ? (m[1] as ArmLoad) : null;
   }
+  return null;
 }
 
-// A quiet question card, never sage (the hero keeps the one sage).
-function renderTwoKgQuestion(logs: LogEntry[]): string {
-  const due = twoKgQuestionDue(logs);
-  if (!due || twoKgNotedId() === due) return '';
-  return `
-    <div class="card twokg-card" id="twokg-card">
-      <p class="twokg-text">The 1 kg felt easy twice. Ask Lisa about 2 kg?</p>
-      <button class="btn-chip twokg-noted" id="twokg-noted" type="button" data-twokg-id="${escapeHtml(due)}">Noted</button>
-    </div>`;
+// v55 — "default = last used, initially 1 kg" (her spec): the newest past
+// log that actually recorded a load for this move, newest-first; 1 kg when
+// she's never recorded one (a fresh install, or every row predates v55).
+function lastUsedArmLoad(logs: LogEntry[], key: 'curl' | 'row'): ArmLoad {
+  const sorted = [...logs].sort((a, b) => b.date.localeCompare(a.date));
+  for (const l of sorted) {
+    const load = armFeelLoad(l.armFeel, key);
+    if (load) return load;
+  }
+  return '1kg';
+}
+
+function defaultArmLoad(logs: LogEntry[]): ArmLoadState {
+  return { curl: lastUsedArmLoad(logs, 'curl'), row: lastUsedArmLoad(logs, 'row') };
 }
 
 // v45: one save at a time. The walk lane awaits Google Fit (up to 5 s) before
@@ -5899,9 +5943,10 @@ async function saveCompletedSession(): Promise<void> {
     ellipticalKcal: onElliptical ? ellipticalKcal() : null,
     sessionNote,
     liteDay: state.liteDay,
-    // v48 · P5 (Sep 24 2026): "curl=easy;row=right" — only the parts she
-    // tapped, null when none (matches the arm_feel CHECK).
-    armFeel: armFeelString(state.armFeel),
+    // v48 · P5 (Sep 24 2026): "curl=easy@2kg;row=right@1kg" — only the parts
+    // she tapped, null when none (matches the arm_feel CHECK). v55: the
+    // "@load" suffix carries her per-set weight pick.
+    armFeel: armFeelString(state.armFeel, state.armLoad),
     voicePlays: state.voicePlays,
     stepsSkipped: w ? skippedStepsCount(w) : null,
   });
@@ -5973,6 +6018,8 @@ type ActiveSessionSnapshot = {
   stoppedEarlyLitePrev: boolean | null; // v48 · fix r1: Back to the workout
   // v48 · P5: the arm-feel taps so far survive an app close.
   armFeel: ArmFeelState;
+  // v55: her load pick so far survives an app close too, same as armFeel.
+  armLoad: ArmLoadState;
   // v54: how many sets of a multi-set move she's marked done survive an app
   // close too, same as armFeel — an app close mid-set shouldn't reset her
   // spot back to "Set 1".
@@ -6038,6 +6085,7 @@ function saveActiveSession(): void {
       stoppedEarlyAt: state.stoppedEarlyAt,
       stoppedEarlyLitePrev: state.stoppedEarlyLitePrev,
       armFeel: state.armFeel,
+      armLoad: state.armLoad,
       setsDoneFor: state.setsDoneFor,
       stretchTicks: state.stretchTicks,
       completedSteps: state.completedSteps,
@@ -6168,6 +6216,9 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
           : null,
       // v48 · P5: a pre-P5 snapshot has no feel → none, never a guess.
       armFeel: sanitizeArmFeel(snap.armFeel),
+      // v55: a pre-v55 snapshot has no load → {}; renderArmLoadChips already
+      // falls back to '1kg' per key, so a mid-session resume never crashes.
+      armLoad: sanitizeArmLoad(snap.armLoad),
       // v54: a pre-v54 snapshot has no sets-done → {} (nothing marked yet).
       setsDoneFor: sanitizeSetsDoneFor(snap.setsDoneFor),
       // v48 · P7: a pre-P7 snapshot has no ticks → {} (nothing ticked).
@@ -6248,6 +6299,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.stoppedEarlyLitePrev = snap.stoppedEarlyLitePrev;
   state.heldSecFor = {}; // v48: display-only, not carried across a close
   state.armFeel = snap.armFeel;
+  state.armLoad = snap.armLoad;
   state.setsDoneFor = snap.setsDoneFor;
   state.stretchTicks = snap.stretchTicks;
   state.completedSteps = snap.completedSteps;
@@ -6436,6 +6488,7 @@ function resetState(): void {
   state.stoppedEarlyLitePrev = null;
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5
+  state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
   state.setsDoneFor = {}; // v54
   state.backSomethingOpen = false;
   state.wristPain = 0;
@@ -9009,7 +9062,10 @@ const GEAR_CHIPS: { have: boolean; text: string }[] = [
   { have: true, text: '1 kg · A+B arm block' },
   { have: true, text: 'Yellow band · B clamshells' },
   { have: false, text: '2nd 1 kg' },
-  { have: false, text: '2 kg · ask Lisa when the 1 kg feels easy' },
+  // v55 (Sep 27 2026): she has the 2 kg now ("I have 2kg now", 20:08) — the
+  // old "ask Lisa when the 1 kg feels easy" line is gone with the rest of
+  // the Lisa-gating copy (rule 8e). The LOAD CHIP is where she uses it.
+  { have: true, text: '1 kg + 2 kg pairs · your pick by pain' },
   { have: false, text: 'Peanut (2 tennis balls in a sock)' },
 ];
 
@@ -9121,9 +9177,21 @@ function tonightNames(
   return out;
 }
 
-// "B · Glutes" — the letter and the first word of the workout's name.
+// v55 (Sep 27 2026) — her words: "exercise B has a lot of upper body, is it
+// only glutes?" (Sep 27 20:30). The old label was just the workout's first
+// word ("Glutes"), which undersold the upper-back block A and B BOTH carry
+// (UPPER_BACK_W7 etc.) — a fixed short label per letter instead, so the chip
+// itself says what's really in there.
+const WORKOUT_SHORT_LABEL: Record<AnyWorkoutId, string> = {
+  A: 'Lower + back',
+  B: 'Glutes + back',
+  C: 'Cardio',
+  D: 'Cardio 30', // matches renderWorkoutDChip's own hardcoded "D · Cardio 30"
+};
+
+// "B · Glutes + back" — the letter and its fixed short label.
 function workoutChipLabel(w: Workout): string {
-  return `${w.id} · ${w.name.split(/[\s+]+/)[0] ?? ''}`;
+  return `${w.id} · ${WORKOUT_SHORT_LABEL[w.id]}`;
 }
 
 function renderWorkoutChips(exclude: WorkoutId | null, lead = 'or do'): string {
@@ -9184,7 +9252,7 @@ function renderUpNextHero(id: WorkoutId): string {
     <button class="workout-card workout-card-pick home-hero" data-workout="${id}" type="button">
       <span class="hero-label">Up next</span>
       <span class="hero-title">Workout ${id}</span>
-      <span class="hero-line">${escapeHtml(`${w.name} · ${rounds} · ${workoutMinutesLabel(w)}`)}</span>
+      <span class="hero-line">${escapeHtml(`${WORKOUT_SHORT_LABEL[id]} · ${rounds} · ${workoutMinutesLabel(w)}`)}</span>
       ${fresh.length ? `<span class="hero-line hero-new">New tonight: ${escapeHtml(fresh.join(' · '))}</span>` : ''}
       ${back.length ? `<span class="hero-line hero-back">Again tonight: ${escapeHtml(back.join(' · '))}</span>` : ''}
       ${cardio ? `<span class="hero-line">${escapeHtml(cardio)}</span>` : ''}
@@ -9223,10 +9291,29 @@ function renderDoneTodayCard(log: LogEntry, weekLines: string[]): string {
   const weekLinesHtml = weekLines
     .map((l) => `<div class="home-done-line">${escapeHtml(l)}</div>`)
     .join('');
+  // v55 (Sep 27 2026) — CHECK N3: the D Done card read flat (just the title +
+  // "0 of 3 in Week 5 · A, B and C left", no ride data at all). A real ride
+  // line — same numbers the rides page shows — same as firstsLine's km above.
+  const rideMin = (() => {
+    const s = rideTimeSec(log);
+    return s !== null ? Math.round(s / 60) : null;
+  })();
+  const rideLine =
+    log.workout === 'D'
+      ? [
+          rideMin !== null ? `${rideMin} min` : '',
+          rideKm(log) !== null ? `${rideKm(log)} km` : '',
+          typeof log.ellipticalKcal === 'number' ? `${log.ellipticalKcal} kcal` : '',
+          rideLevel(log) !== null ? `L${rideLevel(log)}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ')
+      : '';
   return `
     <div class="card home-done-card" id="home-done-card"${detailAttrs}>
       <div class="home-done-title">Done ✓ · Workout ${log.workout}</div>
       ${weekLinesHtml}
+      ${rideLine ? `<div class="home-done-ride" dir="auto">${escapeHtml(rideLine)}</div>` : ''}
       ${firstsLine ? `<div class="home-done-firsts" dir="auto">${escapeHtml(firstsLine)}</div>` : ''}
       ${backLine ? `<div class="home-done-back" dir="auto">${escapeHtml(backLine)}</div>` : ''}
     </div>`;
@@ -9550,11 +9637,6 @@ function renderHome(): string {
     ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : renderUpNextHero(pick)}
     ${chipsHtml}
     ${renderWorkoutDChip()}
-    ${
-      // v48 · P5: the 2 kg question sits right under the hero + its chips (the
-      // chips read as part of the hero, so the card goes after them).
-      renderTwoKgQuestion(logs)
-    }
 
     <div class="card week-card" id="open-weekly-review" role="button" tabindex="0" aria-label="Open weekly review for this week">
       <div class="week-card-head">
@@ -9642,7 +9724,17 @@ function renderHomeStartNowCard(logs: LogEntry[]): string {
     ]);
   }
 
-  rows.push(['Sessions', `<span class="sn-last">${logs.length}</span>`]);
+  // v55 (Sep 27 2026) — CHECK N2: "43 sessions" after one D ride read as if D
+  // were a 4th letter — it never counts toward "3 of 3" (the 19:17 decision).
+  // Her call (picked here, stated so): A/B/C only, with D folded in as its
+  // own "+N rides" tag when she's ridden at all.
+  const abcSessionCount = logs.filter((l) => l.workout !== 'D').length;
+  const dRideCount = logs.length - abcSessionCount;
+  const sessionsVal =
+    dRideCount > 0
+      ? `${abcSessionCount} <span class="sn-extra">+${dRideCount} ride${dRideCount === 1 ? '' : 's'}</span>`
+      : `${abcSessionCount}`;
+  rows.push(['Sessions', `<span class="sn-last">${sessionsVal}</span>`]);
 
   return `
     <div class="card hero-card home-startnow-card">
@@ -10969,15 +11061,48 @@ function multiSetCount(reps: string | undefined): number {
 // X done" tap instead, and the chip itself waits for the LAST one: it never
 // asks the question after only set 1. A single-set move (multiSetCount <= 1)
 // is unchanged — chip shows immediately, exactly as before.
+// v55 (Sep 27 2026) — LOAD CHIP: "1 kg · 2 kg" per SET, her pick by pain
+// ("no Lisa approval, I decide based on pain", Sep 26 23:15). Default is
+// whatever state.armLoad already holds (set at session start by
+// defaultArmLoad — last used, else 1 kg); tapping just selects, never clears.
+function renderArmLoadChips(step: 'curl' | 'row'): string {
+  const current = state.armLoad[step] ?? '1kg';
+  const chips = ARM_LOAD_VALUES.map((load) => {
+    const on = current === load;
+    const label = load === '1kg' ? '1 kg' : '2 kg';
+    return `<button class="arm-load-chip${on ? ' arm-load-chip-on' : ''}" type="button" data-arm-load-step="${step}" data-arm-load="${load}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
+  }).join('');
+  return `<div class="arm-load-row" role="group" aria-label="Load">${chips}</div>`;
+}
+
+// v55 — the pace rule from training-review v2 item 5, said ONCE (ever, this
+// device) right on the step, not repeated every set/session: "Easy twice at
+// 15 slow reps + pain gone by morning → try 2 kg on the first set." Marks
+// itself seen the first time it renders; storage blocked → it just shows
+// every time (never crashes, never blocks the step).
+const PACE_RULE_SEEN_KEY = 'workout-tracker:pace-rule-seen';
+function renderPaceRuleOnce(): string {
+  try {
+    if (localStorage.getItem(PACE_RULE_SEEN_KEY) === '1') return '';
+    localStorage.setItem(PACE_RULE_SEEN_KEY, '1');
+  } catch {
+    // storage blocked — fall through and show it this render
+  }
+  return `<p class="arm-load-pace-rule">Easy twice at 15 slow reps + pain gone by morning → try 2 kg on the first set.</p>`;
+}
+
 function renderArmFeel(ex: Exercise): string {
   const step = ARM_FEEL_STEPS[ex.name];
   if (!step) return '';
   const total = multiSetCount(ex.reps);
   const done = Math.min(state.setsDoneFor[ex.name] ?? 0, total);
+  const loadRow = renderArmLoadChips(step);
   if (total > 1 && done < total) {
     return `
       <div class="arm-feel arm-feel-sets" role="group" aria-label="Sets">
         <span class="arm-feel-label">Set ${done + 1} of ${total}</span>
+        ${loadRow}
+        ${step === 'curl' ? renderPaceRuleOnce() : ''}
         <button class="arm-set-btn" type="button" data-mark-set="${escapeHtml(ex.name)}">Set ${done + 1} done</button>
       </div>`;
   }
@@ -10990,6 +11115,8 @@ function renderArmFeel(ex: Exercise): string {
   return `
     <div class="arm-feel" role="group" aria-label="How did it feel?">
       ${total > 1 ? `<span class="arm-feel-label arm-feel-sets-done">${total} sets ✓</span>` : ''}
+      ${loadRow}
+      ${step === 'curl' ? renderPaceRuleOnce() : ''}
       <span class="arm-feel-label">How did it feel?</span>
       <div class="arm-feel-chips">${chips}</div>
     </div>`;
@@ -11873,14 +12000,25 @@ function getWeekSessionsForSpan(span: WeekSpan): WeekSession[] {
 // one of the three; this only finds D logs whose DATE falls inside the
 // span so the review can list them as an honest extra, same reasoning as
 // renderRidesTotalsCard's "This week" fix above.
-function getExtraDSessionsForSpan(span: WeekSpan): LogEntry[] {
+//
+// v55 (Sep 27 2026) — CHECK round 3 N1: bounding by this span's OWN closedAt
+// dropped a "gap-dated" D ride on the floor — one ridden after a weekday
+// close but before the next Saturday, when nothing has opened yet to claim
+// it either. The true boundary is "up to whenever the NEXT span opened" (or
+// forever, for the newest span/the live one) — a date in that gap belongs to
+// no other week, so it belongs to the one it follows. `nextSpanOpenedAt` is
+// the span chronologically after this one (reviewCompletionPages is
+// newest-first, so that's completionPages[offset-1]); null for the newest.
+function getExtraDSessionsForSpan(span: WeekSpan, nextSpanOpenedAt: string | null): LogEntry[] {
   const sinceMs = new Date(span.openedAt).getTime();
-  const untilMs = span.closedAt ? new Date(span.closedAt).getTime() : Infinity;
+  const untilMs = nextSpanOpenedAt ? new Date(nextSpanOpenedAt).getTime() : Infinity;
   return loadLogs()
     .filter((l) => l.workout === 'D')
     .filter((l) => {
       const t = new Date(l.date).getTime();
-      return t >= sinceMs && t <= untilMs;
+      // Exclusive upper bound: a ride exactly at the next span's openedAt IS
+      // the session that opened it, so it belongs there, not here.
+      return t >= sinceMs && t < untilMs;
     })
     .sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -12132,7 +12270,12 @@ function reviewWeekViewAt(offset: number): ReviewWeekView {
       skippedLabel: null,
       sessions: getWeekSessionsForSpan(span),
       prevSessions: reviewSessionsAt(offset + 1),
-      extraSessions: getExtraDSessionsForSpan(span),
+      // v55: completionPages is newest-first, so index-1 is the span that
+      // opened right after this one — null (→ Infinity) only for the newest.
+      extraSessions: getExtraDSessionsForSpan(
+        span,
+        offset > 0 ? (completionPages[offset - 1]?.openedAt ?? null) : null
+      ),
       isLiveOpen: offset === 0 && span.closedAt === null,
     };
   }
@@ -12244,24 +12387,30 @@ function renderWeeklyReview(): string {
         ? formatAvg(totals.avgCapBefore)
         : `${formatAvg(totals.avgCapBefore)} → ${formatAvg(totals.avgCapAfter)}`;
   const painWarn = totals.avgBackPain !== null && totals.avgBackPain >= BACK_PAIN_STOP_AT;
+  // v55 (Sep 27 2026) — CHECK N4 (round 1): "TOTAL TIME —" was showing on
+  // every week before her confirmed-timing rows existed (T2 removed the old
+  // app-time fallback correctly; nothing replaced the tile). Fix per the
+  // checker's own words: hide the tile until a week has a confirmed time,
+  // rather than show an honest but permanent "—".
+  const totalTimeTile =
+    totals.trainingKnownCount > 0
+      ? `
+        <div class="weekly-review-total">
+          <div class="weekly-review-total-num">${formatWorkoutMinutesTotal(totals.trainingMinSum)}</div>
+          <div class="weekly-review-total-lbl">${
+            totals.trainingKnownCount < totals.count
+              ? `total time · ${totals.trainingKnownCount} of ${totals.count} sessions`
+              : 'total time'
+          }</div>
+        </div>`
+      : '';
   // Four tiles, an even grid (v48 · P6: one "Capacity 5.5 → 6.0" tile replaced
   // the two average tiles; back pain always has its tile — "none" when no pain).
   const totalsCard = `
     <div class="card weekly-review-totals">
       <h3>Week totals</h3>
       <div class="weekly-review-totals-grid">
-        <div class="weekly-review-total">
-          <div class="weekly-review-total-num">${
-            totals.trainingKnownCount === 0 ? '—' : formatWorkoutMinutesTotal(totals.trainingMinSum)
-          }</div>
-          <div class="weekly-review-total-lbl">${
-            totals.trainingKnownCount === 0
-              ? 'total time'
-              : totals.trainingKnownCount < totals.count
-                ? `total time · ${totals.trainingKnownCount} of ${totals.count} sessions`
-                : 'total time'
-          }</div>
-        </div>
+        ${totalTimeTile}
         <div class="weekly-review-total">
           <div class="weekly-review-total-num">${capTile}</div>
           <div class="weekly-review-total-lbl">capacity</div>
@@ -13300,7 +13449,12 @@ function renderRidesHeroCard(latest: RideRecord, rate: RideRate): string {
     )
     .join('');
   const projKcal = projectedKcal(kcalPerMin, ridesWindow);
-  const projKm = rate.kmh !== null ? projectedKm(rate.kmh, ridesWindow) : null;
+  // v55 (Sep 27 2026) — CHECK N1: raw km/timeSec now, not the rounded km/h
+  // (see ride.ts's projectedKm comment).
+  const projKm =
+    latest.km !== null && latest.km > 0 && latest.timeSec !== null && latest.timeSec > 0
+      ? projectedKm(latest.km, latest.timeSec, ridesWindow)
+      : null;
   const projLine = `= ${projKcal} kcal${projKm !== null ? ` · ${projKm} km` : ''} in ${PROJECTION_LABEL[ridesWindow]}`;
   const subLine = [
     rate.kmh !== null ? `${rate.kmh} km/h` : '',
@@ -13383,7 +13537,14 @@ function renderRidesTotalsCard(rides: RideRecord[]): string {
     (r) => openIds.has(r.id) || (r.workout === 'D' && new Date(r.date).getTime() >= since)
   );
   const monthPrefix = localIsoDate(new Date()).slice(0, 7);
-  const monthRides = rides.filter((r) => r.date.slice(0, 7) === monthPrefix);
+  // v55 (Sep 27 2026) — CHECK N4 (round 2): `r.date` is a UTC ISO timestamp;
+  // slicing it straight gave the UTC month, one off from the local one for a
+  // ride logged after local midnight but before UTC midnight (or the reverse
+  // near local midnight in Israel, UTC+2/+3). Read the month off the LOCAL
+  // date, same as monthPrefix itself.
+  const monthRides = rides.filter(
+    (r) => localIsoDate(new Date(r.date)).slice(0, 7) === monthPrefix
+  );
   const row = (label: string, t: RideTotals): string => `
     <div class="rides-totals-row">
       <span class="rides-totals-lbl">${escapeHtml(label)}</span>
@@ -14702,6 +14863,19 @@ function attachHandlers(): void {
       render();
     });
   });
+  // v55 (Sep 27 2026) — LOAD CHIP: which weight for the NEXT set. Always one
+  // selected (no clear — a set needs a weight), her pick by pain, never a
+  // question the app asks.
+  document.querySelectorAll<HTMLButtonElement>('[data-arm-load]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const step = btn.dataset['armLoadStep'];
+      const load = btn.dataset['armLoad'];
+      if ((step !== 'curl' && step !== 'row') || !isArmLoad(load)) return;
+      state.armLoad = { ...state.armLoad, [step]: load };
+      saveActiveSession();
+      render();
+    });
+  });
   // v54 (Sep 27 2026) — CHIP AFTER THE LAST SET: "Set N done" on a multi-set
   // arm-feel move. One-way per session (no untap — a real set doesn't undo
   // itself); capped at the move's own total in renderArmFeel so a stray extra
@@ -14733,19 +14907,6 @@ function attachHandlers(): void {
       render();
     });
   });
-  // v48 · P5: the 2 kg question's "Noted" — hidden until two NEW easy sessions.
-  // If storage is blocked the card simply stays (nothing else depends on it).
-  bindClick('twokg-noted', () => {
-    const id = document.getElementById('twokg-noted')?.dataset['twokgId'];
-    if (!id) return;
-    try {
-      localStorage.setItem(TWO_KG_NOTED_KEY, id);
-    } catch {
-      // storage blocked — the question stays up
-    }
-    render();
-  });
-
   // Explicit Start for the in-workout walk — nothing tracks until she taps it
   // (Allison Jul 9 2026: being on the page ≠ walking started).
   bindClick('ww-start', () => {

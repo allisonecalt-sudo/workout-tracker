@@ -493,8 +493,12 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
   'Bodyweight hip hinge': {
     exercise: 'Bodyweight hip hinge',
     voiceSrc: './assets/voice/bodyweight-hip-hinge.mp3',
+    // v55 (Sep 27 2026): the old line ended "nothing heavier without Lisa" —
+    // her rule 8e, "Get rid of Lisa. I decide based on pain" (Sep 26 23:15).
+    // Regenerated with edge-tts (same voice, en-US-AvaMultilingualNeural) —
+    // see VOICE NOTES above.
     voiceScript:
-      "Bodyweight hip hinge. Stand tall, feet hip-width, with soft, unlocked knees and your hands resting on the front of your thighs. Now hinge at the hips — push your butt back as your hands slide down your thighs toward your knees. Keep your spine flat and neutral the whole way, and you'll feel it in your hamstrings and glutes. Then stand back up by driving your hips forward and squeezing your glutes. The main thing: push your hips back, don't squat down. And don't round your low back — keep it flat the whole way. Bodyweight, or holding the one kilo — nothing heavier without Lisa.",
+      "Bodyweight hip hinge. Stand tall, feet hip-width, with soft, unlocked knees and your hands resting on the front of your thighs. Now hinge at the hips — push your butt back as your hands slide down your thighs toward your knees. Keep your spine flat and neutral the whole way, and you'll feel it in your hamstrings and glutes. Then stand back up by driving your hips forward and squeezing your glutes. The main thing: push your hips back, don't squat down. And don't round your low back — keep it flat the whole way. Bodyweight, or holding one or two kilos, whichever you pick. A little pain is OK, keep moving — but sharp pain, climbing pain, or pain still there the next morning means back off.",
     muscles: ['hamstrings', 'glutes', 'hips'],
     muscleLabel: 'Hamstrings + glutes (hip hinge)',
     steps: [
@@ -514,8 +518,10 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       "Don't squat down — the move is hips back, not knees forward.",
       "Don't lock your knees.",
       // Sep 24 2026, v48 P8: the one rule, said once — the card's steps and the
-      // screen's reps already say "bodyweight or the 1 kg".
-      'Nothing heavier than the 1 kg without Lisa.',
+      // screen's reps already say "bodyweight or the 1 kg". v55 (Sep 27 2026):
+      // "nothing heavier without Lisa" retired (rule 8e) — the pain rule
+      // replaces it: her own call, by how it feels.
+      'A little pain is OK, keep moving; sharp, climbing, or still there next morning — back off.',
     ],
     mistakes: [
       {
