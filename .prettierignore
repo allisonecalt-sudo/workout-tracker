@@ -4,3 +4,9 @@ test-results/
 playwright-report/
 package-lock.json
 archive/
+# code-shape R1a (Sep 27 2026): generated golden-HTML fixtures — Prettier's
+# own HTML reflow/reindent corrupts them (they're deliberately collapsed to
+# one line by tests/golden.spec.ts's normalize(), which is what the live
+# capture is compared against). Never format these; regenerate with
+# `npm run golden:update` instead.
+tests/golden/
