@@ -226,6 +226,25 @@ test.describe('the chart + tap readout', () => {
     await expect(page.locator('#rides-chart-readout')).toContainText('Workout B');
   });
 
+  // v54 fix r1 (Sep 27 2026), checker's should #3 / PLAN §4.5: "level over
+  // time" without a second chart — an "L5"/"L3" line under each bar, 15px dim
+  // (chart.ts's ChartBar.sublabel). Level otherwise only showed in the list.
+  test('each bar carries its level ("L5"/"L3") under the date, from ChartBar.sublabel', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      rideLog('r1', '2026-09-20', { ...RIDE_A, workout: 'A' }), // L5
+      rideLog('r2', '2026-09-23', { ...RIDE_C, workout: 'C' }), // L3
+      rideLog('r3', '2026-09-25', { ...RIDE_B, workout: 'B' }), // L5
+    ]);
+    await page.goto('/');
+    await openRides(page);
+
+    const chartText = await page.locator('#rides-chart').evaluate((el) => el.textContent ?? '');
+    expect(chartText).toContain('L5');
+    expect(chartText).toContain('L3');
+  });
+
   test('fewer than 2 rides with numbers: an honest gap line, no chart', async ({ page }) => {
     await seedLogs(page, [rideLog('r1', '2026-09-24', RIDE_A)]);
     await page.goto('/');

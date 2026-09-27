@@ -20,6 +20,12 @@ export type ChartBar = {
   // module never derives anything, only draws
   label: string; // short text under the bar (a short date, "9/24")
   highlighted?: boolean; // the one bar drawn in --text instead of --text-dim-2
+  // v54 fix r1 (Sep 27 2026), checker's should #3 / §4.5: an optional level
+  // line under the bar (e.g. "L5") — gives the rides page a level trend
+  // without a second chart. Only reserves the extra row when at least one
+  // bar in the set supplies it, so a caller that doesn't (a future weeks
+  // card, per this module's own header comment) keeps the old height.
+  sublabel?: string;
 };
 
 export type BarChartOptions = {
@@ -31,6 +37,7 @@ export type BarChartOptions = {
 const DEFAULT_WIDTH = 340;
 const DEFAULT_PLOT_HEIGHT = 120;
 const LABEL_ROW_HEIGHT = 22; // the one date-label row under the bars
+const SUBLABEL_ROW_HEIGHT = 18; // v54 fix r1: the optional level row, above the date row
 
 function escapeXml(s: string): string {
   return s
@@ -49,7 +56,10 @@ export function barChartSvg(bars: ChartBar[], opts: BarChartOptions): string {
   if (bars.length === 0) return '';
   const width = opts.width ?? DEFAULT_WIDTH;
   const plotHeight = opts.plotHeight ?? DEFAULT_PLOT_HEIGHT;
-  const totalHeight = plotHeight + LABEL_ROW_HEIGHT;
+  // v54 fix r1: only reserve the sublabel row when a bar actually has one.
+  const hasSublabels = bars.some((b) => !!b.sublabel);
+  const sublabelHeight = hasSublabels ? SUBLABEL_ROW_HEIGHT : 0;
+  const totalHeight = plotHeight + sublabelHeight + LABEL_ROW_HEIGHT;
   const n = bars.length;
   const slot = width / n;
   const barWidth = Math.max(6, Math.min(22, slot * 0.6));
@@ -66,13 +76,19 @@ export function barChartSvg(bars: ChartBar[], opts: BarChartOptions): string {
       const valueLabel = b.highlighted
         ? `<text x="${(barX + barWidth / 2).toFixed(1)}" y="${Math.max(13, barY - 6).toFixed(1)}" font-size="17" font-weight="700" fill="var(--text)" text-anchor="middle">${escapeXml(String(b.value))}</text>`
         : '';
-      const dateLabel = `<text x="${(slotX + slot / 2).toFixed(1)}" y="${(plotHeight + LABEL_ROW_HEIGHT - 5).toFixed(1)}" font-size="13" fill="var(--text-dim)" text-anchor="middle">${escapeXml(b.label)}</text>`;
+      const dateLabel = `<text x="${(slotX + slot / 2).toFixed(1)}" y="${(plotHeight + sublabelHeight + LABEL_ROW_HEIGHT - 5).toFixed(1)}" font-size="13" fill="var(--text-dim)" text-anchor="middle">${escapeXml(b.label)}</text>`;
+      // v54 fix r1: the level line ("L5"), between the bar and the date —
+      // 15px, dim, per §4.5 — only when THIS bar has one.
+      const sublabelText = b.sublabel
+        ? `<text x="${(slotX + slot / 2).toFixed(1)}" y="${(plotHeight + sublabelHeight - 5).toFixed(1)}" font-size="15" fill="var(--text-dim)" text-anchor="middle">${escapeXml(b.sublabel)}</text>`
+        : '';
       // The hit target is the FULL slot (not just the visible bar) — a 34px
       // column is easy to tap; the bar itself is often much narrower.
       return `<g data-ride-id="${escapeXml(b.id)}" tabindex="0" role="button" aria-label="${escapeXml(b.label)}: ${escapeXml(String(b.value))}">
         <rect x="${slotX.toFixed(1)}" y="0" width="${slot.toFixed(1)}" height="${totalHeight}" fill="transparent" />
         ${valueLabel}
         <rect x="${barX.toFixed(1)}" y="${barY.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barH.toFixed(1)}" rx="3" fill="${fill}" />
+        ${sublabelText}
         ${dateLabel}
       </g>`;
     })

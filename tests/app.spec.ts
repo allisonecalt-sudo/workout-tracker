@@ -1878,7 +1878,17 @@ test('backup restore (v34): a row with null after-capacity / back pain survives 
     const fn = (window as unknown as { __wtIsValidLogEntry: (x: unknown) => boolean })
       .__wtIsValidLogEntry;
     return [
-      fn({ date: '2026-09-07', workout: 'D', capacityBefore: 5, wallSitSec: 0 }),
+      // v54 fix r1 (Sep 27 2026): 'D' joined the valid letters (Workout D, the
+      // elliptical extra) — this fixture used to be 'D' as a stand-in for "an
+      // unknown workout letter", which the fix would otherwise have silently
+      // started accepting. 'E' is a letter the app has never had.
+      fn({
+        date: '2026-09-07',
+        workout: 'E',
+        capacityBefore: 5,
+        capacityAfter: null,
+        wallSitSec: 0,
+      }),
       fn({ date: '2026-09-07', workout: 'A', capacityBefore: 'six', wallSitSec: 0 }),
       fn({ workout: 'A', capacityBefore: 5, wallSitSec: 0 }),
       fn({
@@ -3849,6 +3859,72 @@ test('Workout D: straight onto the 30-min ride, no lane picker, no cool-down, sa
   // D is extra — the week still reads 0 of 3 (A, B and C still all to go).
   await expect(page.locator('.week-line')).toContainText('0 of 3');
   await expect(page.locator('.week-line')).not.toContainText('D');
+});
+
+// v54 fix r1 (Sep 27 2026) — checker's must #1: isValidLogEntry accepted only
+// A/B/C, and loadLogs() runs every read through it, so a saved D row vanished
+// the moment anything re-read storage (a reload, Save's own re-render of Home,
+// the next writeLogs rewriting storage without it). The test above never
+// caught this because it only ever reads localStorage raw and renders once —
+// this one forces a second read the same way a reload does.
+test('Workout D survives a second read: Done card, Sessions, the rides page and the push queue all still see it, and Week 5 still reads 0 of 3', async ({
+  page,
+  context,
+}) => {
+  await movableClock(page, '2026-09-27T08:00:00.000Z'); // Sunday, after the completion-model launch
+  await page.goto('/');
+  await page.locator('button[data-workout="D"]').click();
+  await page.locator('#begin').click();
+  await page.locator('#start-timed').click();
+  await advanceClock(page, 30 * 60_000 + 2_000);
+  await expect(page.locator('.timer-done')).toHaveText('✓ 30 min done');
+  await page.locator('#next').click(); // opens the ride-numbers screen
+  await expect(page.locator('#ell-time')).toBeVisible();
+  await page.locator('#ell-km').fill('3.0');
+  await page.locator('#ell-kcal').fill('180');
+  await page.locator('#ell-pulse').fill('120');
+  await page.locator('#next').click();
+  await expect(page.locator('text=Quick log')).toBeVisible();
+  await page.locator('#save-log').click();
+  await expect(page.locator('#home-done-card .home-done-title')).toHaveText('Done ✓ · Workout D');
+
+  // Still in the push queue (synced:false) — under automation (navigator.
+  // webdriver) sync never actually fires (syncDisabled), so this is the
+  // honest state a real phone would retry from; it must not have been
+  // dropped by the next writeLogs() the way loadLogs()'s D-rejecting filter
+  // used to drop it.
+  const stored = await page.evaluate(() => {
+    const rows = JSON.parse(localStorage.getItem('workout-tracker:logs') ?? '[]') as Array<
+      Record<string, unknown>
+    >;
+    return rows.find((r) => r['workout'] === 'D');
+  });
+  expect(stored).toBeTruthy();
+  expect(stored?.['synced']).toBe(false);
+
+  // A fresh page, same context/storage — a real reload (see "reload on the
+  // numbers screen" test's own comment on why context.newPage() is used
+  // instead of page.reload() in this file).
+  const reopened = await context.newPage();
+  await movableClock(reopened, '2026-09-27T08:00:00.000Z');
+  await reopened.goto('/');
+
+  await expect(reopened.locator('#home-done-card .home-done-title')).toHaveText(
+    'Done ✓ · Workout D'
+  );
+  // Week 5 still reads 0 of 3 — D never counts toward it, on the SECOND read
+  // same as the first.
+  await expect(reopened.locator('.week-line')).toContainText('0 of 3');
+
+  await reopened.locator('#view-history').click();
+  await expect(reopened.locator('.session-list .history-workout-badge')).toHaveText('D');
+  await reopened.locator('#back-home').click();
+
+  await reopened.locator('#open-progress-link').click();
+  await reopened.locator('#open-rides').click();
+  await expect(reopened.locator('.rides-list-row')).toHaveCount(1);
+  await expect(reopened.locator('.rides-list-row')).toContainText('D');
+  await expect(reopened.locator('.rides-list-row')).toContainText('3 km');
 });
 
 test('elliptical: the next ride opens on the elliptical and offers the last level again', async ({

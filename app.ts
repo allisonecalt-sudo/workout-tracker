@@ -601,7 +601,7 @@ const SUPABASE_ANON_KEY =
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
 const APP_VERSION = 'v54';
-const BUILD_DATE = 'Sep 27, 2026 · 19:31';
+const BUILD_DATE = 'Sep 27, 2026 · 21:02';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -9849,8 +9849,11 @@ function renderPreLog(): string {
   // v48 · fix r1: returning moves are "back", not "new" (Round 1 had them).
   const back = tonightNames(w, w.id, 'back');
   const hasCardio = w.warmup.some((e) => e.name === 'Outdoor walk');
+  // v54 fix r1 (Sep 27 2026), checker's nice #6: "Week 5" read as though D
+  // counted toward the week (it never does — see postLogWitnessLine's own
+  // D branch). "Extra" says the true thing here too.
   const meta = [
-    preLogWeekLabel(),
+    w.id === 'D' ? 'Extra' : preLogWeekLabel(),
     fresh.length ? `new tonight: ${fresh.join(' · ')}` : '',
     back.length ? `again: ${back.join(' · ')}` : '',
     hasCardio && lastCardioLane() === 'elliptical' ? 'elliptical' : '',
@@ -11007,6 +11010,14 @@ function postLogWitnessLine(w: Workout): string {
   if (rounds === 2) parts.push(state.currentRound >= 2 ? 'both rounds' : '1 round');
   else if (rounds > 2) parts.push(`${state.currentRound} of ${rounds} rounds`);
   else parts.push('1 round'); // effectiveRounds 1 — e.g. Lite on a 2-round day (C)
+  // v54 fix r1 (Sep 27 2026): D is extra, never one of the 3 letters — the
+  // checker caught this line still doing `doneLetters.add('D')`, which
+  // inflated the count and contradicted the 19:17 decision that D never
+  // counts toward 3 of 3. Say what's true instead of a week fraction.
+  if (state.selectedWorkout === 'D') {
+    parts.push('extra, on top of A/B/C');
+    return parts.join(' · ');
+  }
   // WK2 (Sep 27 2026): post-launch, "this week" becomes "in Week N" — the
   // completion model's own week, not the calendar's (§2.4 "Post-log line":
   // "1 round · 2 of 3 in Week 5"). Pre-launch (or a mocked earlier date)
@@ -11152,9 +11163,16 @@ function renderPostLog(): string {
   // v48 · final (Sep 25 2026): "Logged what you did" claimed a save before
   // Save was tapped — if she backed out, nothing was stored. Say what IS true.
   const title = stopped ? `Stopped early · Workout ${w.id}` : `Nice. Workout ${w.id} done.`;
+  // v54 fix r1 (Sep 27 2026): D has no cooldown (warmup: [ellipticalStep(30)],
+  // main: [], cooldown: []) — "‹ Back to the stretches" used to open an empty
+  // cool-down screen ("~1 min · 0 of 0"). D's only step is the ride itself, so
+  // the way back is to the ride-numbers screen (backToStretches special-cases
+  // w.id === 'D' the same way).
   const backLink = stopped
     ? `<button class="back-link postlog-back" id="back-to-workout" type="button">‹ Back to the workout</button>`
-    : `<button class="back-link postlog-back" id="back-to-stretches" type="button">‹ Back to the stretches</button>`;
+    : w.id === 'D'
+      ? `<button class="back-link postlog-back" id="back-to-stretches" type="button">‹ Back to the ride</button>`
+      : `<button class="back-link postlog-back" id="back-to-stretches" type="button">‹ Back to the stretches</button>`;
   // v49 · look (Sep 25 2026): the witness line — spec §5 frame 5, "41 min ·
   // both rounds · 1 of 3 this week", movement with no verdict (guide §2).
   // Never shown on a stopped session: its duration and round count are both
@@ -11215,8 +11233,17 @@ function renderPostLog(): string {
 function backToStretches(): void {
   endPostLogClockTick(); // T1: leaving post-log — the finish-time question isn't showing any more
   state.screen = 'workout';
-  state.currentPhase = 'cooldown';
-  state.currentExerciseIndex = 0;
+  // v54 fix r1 (Sep 27 2026): D's cooldown is empty (getWorkoutD: main: [],
+  // cooldown: []) — the button read "‹ Back to the ride" for D (see its own
+  // comment), so land back on the ride-numbers screen, not an empty cool-down.
+  if (state.selectedWorkout === 'D') {
+    state.currentPhase = 'warmup';
+    state.currentExerciseIndex = 0;
+    state.rideNumbersOpen = true;
+  } else {
+    state.currentPhase = 'cooldown';
+    state.currentExerciseIndex = 0;
+  }
   state.isResting = false;
   state.roundBreak = false;
   render();
@@ -11609,7 +11636,10 @@ function renderHistoryDetail(): string {
     rows.push(detailRow('Wall sit', log.wallSitSec > 0 ? `${log.wallSitSec} s` : '—'));
   }
   rows.push(detailRow('Back pain', log.backPain === null ? '—' : `${log.backPain}/10`));
-  rows.push(detailRow('Wrist pain', log.wristPain === null ? '—' : `${log.wristPain}/10`));
+  // v54 fix r1 (Sep 27 2026), checker's nice #7: wristPain is optional AND
+  // nullable (a pre-v49 row has no key at all) — `=== null` missed the
+  // undefined case and printed "undefined/10". `== null` catches both.
+  rows.push(detailRow('Wrist pain', log.wristPain == null ? '—' : `${log.wristPain}/10`));
   const cardio = sessionCardio(log);
   if (cardio)
     rows.push(detailRow('Cardio', escapeHtml(cardioText(cardio)), { id: 'detail-cardio' }));
@@ -13310,6 +13340,10 @@ function renderRidesChartCard(rides: RideRecord[]): string {
     value: rideRate(r).kcalPerMin ?? 0,
     label: shortChartDate(r.date),
     highlighted: i === last10.length - 1,
+    // v54 fix r1 (Sep 27 2026), checker's should #3: "L5" under the bar — the
+    // level trend, without a second chart. null level (no reading that ride)
+    // just leaves the bar with no sublabel, same as any other missing field.
+    sublabel: r.level !== null ? `L${r.level}` : undefined,
   }));
   const svg = barChartSvg(bars, { ariaLabel: 'Calories a minute, by ride' });
   const selected = ridesSelectedChartId ? rides.find((r) => r.id === ridesSelectedChartId) : null;
@@ -13661,7 +13695,12 @@ function isValidLogEntry(x: unknown): x is LogEntry {
   const lane = o['cardioLane'];
   return (
     typeof o['date'] === 'string' &&
-    (o['workout'] === 'A' || o['workout'] === 'B' || o['workout'] === 'C') &&
+    // v54 fix r1 (Sep 27 2026): 'D' (the elliptical extra) was dropped by every
+    // loadLogs() read — the checker caught a saved D row vanishing on reload.
+    (o['workout'] === 'A' ||
+      o['workout'] === 'B' ||
+      o['workout'] === 'C' ||
+      o['workout'] === 'D') &&
     isNullableNumber(o['capacityBefore']) &&
     isNullableNumber(o['capacityAfter']) &&
     typeof o['wallSitSec'] === 'number' &&
