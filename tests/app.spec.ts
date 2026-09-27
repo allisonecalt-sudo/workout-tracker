@@ -1265,10 +1265,12 @@ test('R2 W4: split squat replaces the squat in A only, wall sit reads 45, the 1 
   const bodyA = page.locator('body');
   await expect(bodyA).toContainText('Supported split squat');
   await expect(bodyA).not.toContainText('Bodyweight squats');
-  await expect(bodyA).toContainText('1 kg biceps curl');
+  // v55 fix r2: the overview renders displayName(), same as the running
+  // step — 'Biceps curl' (label), not the '1 kg biceps curl' name key. Reps
+  // like "holding the 1 kg" are checked on the running step in the
+  // walk-the-steps test below.
+  await expect(bodyA).toContainText('Biceps curl');
   await expect(bodyA).toContainText('Prone row');
-  // (The overview lists NAMES only — reps like "holding the 1 kg" are checked on
-  // the running step in the walk-the-steps test below.)
   // Holds: bird dog still legs-only; wall lean still last.
   await expect(bodyA).toContainText('Bird dog (legs only)');
   await expect(bodyA).toContainText('Wall lean');
@@ -1278,7 +1280,7 @@ test('R2 W4: split squat replaces the squat in A only, wall sit reads 45, the 1 
   await page.locator('button[data-workout="B"]').click();
   const bodyB = page.locator('body');
   await expect(bodyB).not.toContainText('Supported split squat');
-  await expect(bodyB).toContainText('1 kg biceps curl');
+  await expect(bodyB).toContainText('Biceps curl');
   await expect(bodyB).toContainText('Prone row');
   await expect(bodyB).toContainText('Side-lying clamshells');
   await page.locator('.quit-link, #back-home').first().click();
@@ -1288,7 +1290,7 @@ test('R2 W4: split squat replaces the squat in A only, wall sit reads 45, the 1 
   const bodyC = page.locator('body');
   await expect(bodyC).toContainText('Bodyweight squats');
   await expect(bodyC).not.toContainText('Supported split squat');
-  await expect(bodyC).not.toContainText('1 kg biceps curl');
+  await expect(bodyC).not.toContainText('Biceps curl');
   await expect(bodyC).not.toContainText('yellow band');
 });
 
@@ -4051,6 +4053,43 @@ test("rides \"This week\": the Saturday-closing ride doesn't leak into the new w
   await expect(sunWeekRow).toContainText('1 ride');
 });
 
+// v55 fix r2 (Sep 27 2026, checker's should #5): renderRidesTotalsCard reads
+// "This month" off localIsoDate(r.date), not a raw UTC-prefix slice — but
+// nothing exercised the exact case that distinction matters: a ride logged
+// at LOCAL 00:30 on the 1st is still UTC 21:30 the DAY BEFORE (Israel is
+// UTC+3 in Oct 2026), so a UTC-prefix reading would put it in the wrong,
+// earlier month. "Now" is mocked well into October so the assertion can only
+// pass if the ride's own month is read locally.
+test('rides "This month" reads the LOCAL date: a ride at local Oct 1 00:30 (+03:00) counts in October, not September', async ({
+  page,
+}) => {
+  await movableClock(page, '2026-10-15T10:00:00+03:00'); // "now" — safely inside October, local and UTC
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      'workout-tracker:logs',
+      JSON.stringify([
+        {
+          id: 'r-midnight-d',
+          date: '2026-09-30T21:30:00.000Z', // = 2026-10-01T00:30:00+03:00 local
+          workout: 'D',
+          capacityBefore: 8,
+          capacityAfter: 8,
+          wallSitSec: 0,
+          backPain: 0,
+          word: '',
+          synced: true,
+          notes: 'cardio: elliptical 30 min · level 6 · 3.0 km · pulse 120',
+        },
+      ])
+    );
+  });
+  await page.goto('/');
+  await page.locator('#open-progress-link').click();
+  await page.locator('#open-rides').click();
+  const monthRow = page.locator('.rides-totals-row').filter({ hasText: 'This month' });
+  await expect(monthRow).toContainText('1 ride');
+});
+
 test('elliptical: the next ride opens on the elliptical and offers the last level again', async ({
   page,
 }) => {
@@ -4527,6 +4566,54 @@ test.describe('v48 P1 data', () => {
     expect(p['lite_day']).toBe(false);
     expect(p['voice_plays']).toBe(0);
     expect(p['arm_feel']).toBeNull();
+  });
+
+  // v55 fix r2 (Sep 27 2026, checker's must #1): the live constraint, copied
+  // verbatim from migrations/2026-09-24-v48-session-columns.sql:32 — it does
+  // NOT accept an "@1kg"/"@2kg" suffix. Runs sessionPayload's arm_feel
+  // output through it for every feel/load combo on both moves, so a future
+  // change that lets the suffix leak back onto the wire fails loudly here
+  // instead of 400ing on her phone.
+  const LIVE_ARM_FEEL_CHECK = /^(curl=(easy|right|hard))?(;?row=(easy|right|hard))?$/;
+
+  test('(a2) arm_feel sent to Supabase never carries the "@load" suffix — matches the live CHECK', async ({
+    page,
+  }) => {
+    const base = {
+      id: 'x',
+      date: '2026-09-24T14:00:00.000Z',
+      workout: 'A' as const,
+      capacityBefore: 6,
+      capacityAfter: 7,
+      wallSitSec: 45,
+      backPain: null,
+      word: '',
+    };
+    const feels = ['easy', 'right', 'hard'] as const;
+    const loads = ['1kg', '2kg'] as const;
+    const cases: (string | null)[] = [null];
+    for (const cf of feels) {
+      cases.push(`curl=${cf}`); // pre-v55 row, no suffix at all
+      for (const cl of loads) cases.push(`curl=${cf}@${cl}`);
+      for (const rf of feels) {
+        for (const cl of loads) {
+          for (const rl of loads) {
+            cases.push(`curl=${cf}@${cl};row=${rf}@${rl}`);
+          }
+        }
+      }
+    }
+    for (const armFeel of cases) {
+      const p = await payloadOf(page, { ...base, armFeel });
+      const sent = p['arm_feel'] as string | null;
+      expect(sent === null || LIVE_ARM_FEEL_CHECK.test(sent)).toBe(true);
+      // The suffix is gone, but which move/feel she tapped is not (null stays
+      // null — the base fixture's `null` case above has nothing to strip).
+      if (sent !== null) expect(sent).not.toMatch(/@/);
+    }
+    // Spot check the exact strip.
+    const p2 = await payloadOf(page, { ...base, armFeel: 'curl=easy@2kg;row=right@1kg' });
+    expect(p2['arm_feel']).toBe('curl=easy;row=right');
   });
 
   test('(b) wall_sit_seconds is null on B and C (no wall sit), the number on A', async ({
@@ -5363,7 +5450,7 @@ test.describe('v48 P2 shell', () => {
     await seedLogs(page, [aLog('last-week-a', '2026-09-17T15:00:00.000Z', 43)]);
     await page.goto('/');
     await startA(page);
-    await goToStep(page, '1 kg biceps curl');
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
     await expect(page.locator('.new-tonight-badge')).toHaveText('Again tonight');
   });
 
@@ -6440,7 +6527,9 @@ test.describe('v48 P4 home', () => {
       // v48 · fix r1: only the true first is "New"; Round 1's arm moves are "Back".
       await expect(hero.locator('.hero-new')).toHaveText('New tonight: supported split squat');
       await expect(hero.locator('.hero-back')).toHaveText(
-        'Again tonight: prone row · 1 kg biceps curl'
+        // v55 fix r2: displayName() now reads 'Biceps curl' (label), not the
+        // '1 kg biceps curl' name key — see the app.ts UPPER_BACK_W7 entry.
+        'Again tonight: prone row · biceps curl'
       );
       await expect(hero).toContainText('Cardio: 10 min, your pick'); // no lane on the seeds
       await expect(hero.locator('.hero-start')).toHaveText('Start');
@@ -6608,7 +6697,8 @@ test.describe('v48 P4 home', () => {
     // returns, not firsts. They get their own "Back:" line.
     await expect(firsts).not.toContainText('biceps curl');
     await expect(firsts).not.toContainText('prone row');
-    await expect(done.locator('.home-done-back')).toHaveText('Again: prone row · 1 kg biceps curl');
+    // v55 fix r2: displayName() label 'Biceps curl', lowercased same as prone row.
+    await expect(done.locator('.home-done-back')).toHaveText('Again: prone row · biceps curl');
     await expect(page.locator('.home-hero')).toHaveCount(0);
     expect(await sageFills(page)).toHaveLength(0);
     // The chips stay — the other two workouts, one tap each.
@@ -7810,7 +7900,7 @@ test.describe('v48 P5 logs', () => {
     );
     // Quiet: Done · Next is still the one sage on the step.
     await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
-    await goToStep(page, '1 kg biceps curl');
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
     // v54: same two-set gate on the curl.
     await page.locator('[data-mark-set="1 kg biceps curl"]').click();
     await page.locator('[data-mark-set="1 kg biceps curl"]').click();
@@ -7833,7 +7923,7 @@ test.describe('v48 P5 logs', () => {
     await page.locator('#begin').click();
     await goToStep(page, 'Prone row');
     await expect(page.locator('.exercise-reps')).toContainText('1–2 kg (your pick)');
-    await goToStep(page, '1 kg biceps curl');
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
     await expect(page.locator('.exercise-reps')).toContainText('1–2 kg (your pick)');
   });
 
@@ -7877,7 +7967,7 @@ test.describe('v48 P5 logs', () => {
     );
     await page.locator('[data-mark-set="Prone row (bodyweight)"]').click();
     await page.locator('[data-arm-step="row"][data-arm-feel="easy"]').click();
-    await goToStep(page, '1 kg biceps curl');
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
     await page.locator('[data-mark-set="1 kg biceps curl"]').click();
     await page.locator('[data-mark-set="1 kg biceps curl"]').click();
     await page.locator('[data-arm-step="curl"][data-arm-feel="right"]').click();
@@ -7897,7 +7987,7 @@ test.describe('v48 P5 logs', () => {
     await page.goto('/');
     await page.locator('button[data-workout="A"]').click();
     await page.locator('#begin').click();
-    await goToStep(page, '1 kg biceps curl');
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
     await page.locator('[data-arm-load-step="curl"][data-arm-load="2kg"]').click();
     await page.locator('[data-mark-set="1 kg biceps curl"]').click();
     // Drop back to 1 kg for set 2 — the CHIP itself now shows 1 kg (her
@@ -7924,7 +8014,7 @@ test.describe('v48 P5 logs', () => {
     await page.goto('/');
     await page.locator('button[data-workout="A"]').click();
     await page.locator('#begin').click();
-    await goToStep(page, '1 kg biceps curl');
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
     const styles = await page.evaluate(() => {
       const on = document.querySelector('.arm-load-chip.arm-load-chip-on');
       const off = document.querySelector('.arm-load-chip:not(.arm-load-chip-on)');
@@ -7951,7 +8041,7 @@ test.describe('v48 P5 logs', () => {
     await page.goto('/');
     await page.locator('button[data-workout="A"]').click();
     await page.locator('#begin').click();
-    await goToStep(page, '1 kg biceps curl');
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
     await expect(page.locator('[data-arm-load-step="curl"][data-arm-load="2kg"]')).toHaveAttribute(
       'aria-pressed',
       'true'
@@ -7985,7 +8075,7 @@ test.describe('v48 P5 logs', () => {
     await goToStep(page, 'Prone row');
     // Not the curl's own rule — the row step never shows it.
     await expect(page.locator('.arm-load-pace-rule')).toHaveCount(0);
-    await goToStep(page, '1 kg biceps curl');
+    await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
     await expect(page.locator('.arm-load-pace-rule')).toHaveText(
       'Easy twice at 15 slow reps + pain gone by morning → try 2 kg on the first set.'
     );

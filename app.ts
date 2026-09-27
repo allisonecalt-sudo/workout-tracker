@@ -444,8 +444,14 @@ type AppState = {
   // curl / row, her own call by pain, never Lisa's ("no Lisa approval, I
   // decide based on pain", Sep 26 23:15). Defaults to whatever she used last
   // (lastUsedArmLoad reads her real logs), 1 kg if she's never logged one.
-  // Folded into the same arm_feel string on save (armFeelString) — no schema
-  // change (her Sep 27 20:08: "I have 2kg now").
+  // Folded into the same arm_feel string on save (armFeelString) for LOCAL
+  // storage. v55 fix r2 (Sep 27 2026): the "no schema change" premise above
+  // was wrong — the checker read the live workout_sessions.arm_feel CHECK
+  // (migrations/2026-09-24-v48-session-columns.sql) and it rejects any
+  // "@1kg"/"@2kg" suffix (400/23514). Until she says go on a constraint
+  // migration, stripArmFeelLoad strips the suffix before the string ever
+  // reaches sessionPayload, so the live DB always accepts it; the load
+  // itself stays local-only (this device's own default, not synced).
   armLoad: ArmLoadState;
   // v55 · fix r1 (Sep 27 2026): the HEAVIEST load actually tapped THIS
   // session, per key — separate from armLoad above (which is "current pick,"
@@ -621,7 +627,7 @@ const SUPABASE_ANON_KEY =
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
 const APP_VERSION = 'v55';
-const BUILD_DATE = 'Sep 27, 2026 · 22:59';
+const BUILD_DATE = 'Sep 28, 2026 · 00:15'; // v55 · fix r2 ship time
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -952,6 +958,12 @@ const UPPER_BACK_W7: Exercise[] = [
   },
   {
     name: '1 kg biceps curl',
+    // v55 fix r2 (Sep 27 2026, checker's should #2): `name` stays the key
+    // (progression lookups, voice note, history — see the type's own
+    // comment), but the title she SEES still read "1 kg biceps curl" right
+    // above the LOAD CHIP — the same fixed-weight contradiction spec item 1
+    // was supposed to remove. `label` is what displayName() shows instead.
+    label: 'Biceps curl',
     // v55: same "1–2 kg (your pick)" note — see the prone row comment above.
     reps: '2 sets · 12 reps · 1–2 kg (your pick)',
     // PROGRAM: the "(Lisa, Jun 18: ... caused that)" attribution dropped —
@@ -4466,7 +4478,10 @@ function sessionPayload(entry: LogEntry): Record<string, unknown> {
     elliptical_kcal: entry.ellipticalKcal ?? null,
     session_note: entry.sessionNote ?? null,
     lite_day: entry.liteDay ?? null,
-    arm_feel: entry.armFeel ?? null,
+    // v55 fix r2 (Sep 27 2026): entry.armFeel may carry the "@1kg"/"@2kg"
+    // LOAD CHIP suffix (local storage shape) — strip it before it reaches
+    // the wire; the live CHECK 400s on it (see stripArmFeelLoad's comment).
+    arm_feel: stripArmFeelLoad(entry.armFeel ?? null),
     voice_plays: entry.voicePlays ?? null,
     steps_skipped: entry.stepsSkipped ?? null,
     // T1 (Sep 27 2026), §3: her own start/finish answers — see LogEntry's
@@ -5768,12 +5783,19 @@ function sanitizeSetsDoneFor(v: unknown): Record<string, number> {
   return out;
 }
 
-// "curl=easy@2kg;row=right@1kg" — the shape the arm_feel CHECK accepts; null
-// when none. v55 (Sep 27 2026): the "@1kg"/"@2kg" suffix is new (the LOAD
-// CHIP) — appended only when a load is known, so a pre-v55 row (no suffix)
-// and the existing reader (the rowcurl "easy" substring match in
-// progression.ts) still parses it exactly as before. No schema change (her
-// Sep 27 20:08: "I have 2kg now").
+// "curl=easy@2kg;row=right@1kg" — the LOCAL storage shape (workout-tracker:
+// logs, this device's loadLogs()); null when none. v55 (Sep 27 2026): the
+// "@1kg"/"@2kg" suffix is new (the LOAD CHIP) — appended only when a load is
+// known, so a pre-v55 row (no suffix) and the existing reader (the rowcurl
+// "easy" substring match in progression.ts) still parse it exactly as
+// before.
+// v55 fix r2 (Sep 27 2026): this is NOT the shape the live arm_feel CHECK
+// accepts — the checker read the constraint (migrations/2026-09-24-v48-
+// session-columns.sql) and confirmed the "@load" suffix 400s (23514). The
+// "no schema change" premise she was told was wrong. stripArmFeelLoad below
+// is what actually goes to Supabase (via sessionPayload); this full string
+// is what's saved to disk, so this device's own defaultArmLoad /
+// lastUsedArmLoad keep working even though the load isn't synced.
 function armFeelString(f: ArmFeelState, loads: ArmLoadState): string | null {
   const part = (key: 'curl' | 'row', feel: ArmFeel | undefined): string => {
     if (!feel) return '';
@@ -5782,6 +5804,17 @@ function armFeelString(f: ArmFeelState, loads: ArmLoadState): string | null {
   };
   const parts = [part('curl', f.curl), part('row', f.row)].filter((p) => p !== '');
   return parts.length > 0 ? parts.join(';') : null;
+}
+
+// v55 fix r2 (Sep 27 2026): drops the "@1kg"/"@2kg" suffix so the string
+// fits the live arm_feel CHECK ('^(curl=(easy|right|hard))?(;?row=(easy|
+// right|hard))?$', migrations/2026-09-24-v48-session-columns.sql) exactly —
+// used ONLY for the outgoing sessionPayload, never for local storage (see
+// armFeelString's comment).
+function stripArmFeelLoad(s: string | null): string | null {
+  if (!s) return s;
+  const stripped = s.replace(/@(1kg|2kg)/g, '');
+  return stripped === '' ? null : stripped;
 }
 
 // v55: the LOAD half of one saved "curl=easy@2kg" part, for one step key.
@@ -5971,8 +6004,10 @@ async function saveCompletedSession(): Promise<void> {
     sessionNote,
     liteDay: state.liteDay,
     // v48 · P5 (Sep 24 2026): "curl=easy@2kg;row=right@1kg" — only the parts
-    // she tapped, null when none (matches the arm_feel CHECK). v55: the
-    // "@load" suffix carries her per-set weight pick.
+    // she tapped, null when none. v55: the "@load" suffix carries her
+    // per-set weight pick — LOCAL storage shape only; sessionPayload strips
+    // it before send, since the live arm_feel CHECK doesn't accept it (v55
+    // fix r2, Sep 27 2026 — see stripArmFeelLoad's comment).
     // v55 · fix r1: armLoadMax (heaviest tapped this session), not armLoad
     // (current chip display) — see armLoadMax's own comment.
     armFeel: armFeelString(state.armFeel, state.armLoadMax),

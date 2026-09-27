@@ -256,6 +256,17 @@ export function armFeelPart(
   return null;
 }
 
+// v55 fix r2 (Sep 27 2026, checker's should #4): armFeelPart returns
+// {feel, load}, but positiveFeel below reads ONLY .feel — "easy" at 1 kg and
+// "easy" at 2 kg advance the ladder exactly the same. That's a DELIBERATE
+// choice for now, not an oversight: the rung reps (e.g. "2 sets · 12 reps")
+// were written before the LOAD CHIP existed, so "easy" already means "easy
+// at whatever she picked" under the existing convention, and the engine has
+// no rung that means "advance only once she's at 2 kg." Reported to her —
+// if she wants easy-at-1kg and easy-at-2kg to advance differently (e.g. not
+// counting a 1 kg "easy" as ready to raise reps once 2 kg is her normal),
+// this is the function to change; `curl.load`/`row.load` are already parsed
+// and sitting right here, unused on purpose.
 function positiveFeel(s: SessionSignal, ladderId: string): boolean {
   if (s.stepFeel === 'fine') return true;
   if (ladderId === 'rowcurl') {

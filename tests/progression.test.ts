@@ -742,6 +742,44 @@ test('v55 · fix r1: armFeelPart reads "curl=easy@2kg" — feel AND load, per ke
   expect(armFeelPart(null, 'curl')).toBeNull();
 });
 
+// v55 fix r2 (Sep 27 2026, checker's should #4): documents the DELIBERATE
+// choice on positiveFeel — see its own comment in progression.ts. The load
+// is parsed (armFeelPart proves that above) but not read by the engine, so
+// two otherwise-identical histories that differ ONLY in "@1kg" vs "@2kg"
+// must decide the exact same week. If this ever starts failing because
+// someone made positiveFeel load-sensitive, that's a real product decision
+// to report to her, not a bug to silently "fix" by updating this test.
+test('v55 fix r2: the engine decides identically for easy@1kg and easy@2kg (load recorded, not read)', () => {
+  const weekWithArmFeel = (
+    weekStart: string,
+    dates: [string, string, string],
+    armFeel: string
+  ): WeekHistory => ({
+    weekStart,
+    sessions: [
+      s('A', dates[0], { armFeel }),
+      s('B', dates[1], { armFeel }),
+      s('C', dates[2], { armFeel }),
+    ],
+  });
+  const weeksAt = (load: '1kg' | '2kg'): WeekHistory[] => [
+    R2W4_WEEK,
+    weekWithArmFeel(
+      '2026-09-26',
+      ['2026-09-29', '2026-09-30', '2026-10-01'],
+      `curl=easy@${load};row=easy@${load}`
+    ),
+    weekWithArmFeel(
+      '2026-10-03',
+      ['2026-10-06', '2026-10-07', '2026-10-08'],
+      `curl=easy@${load};row=easy@${load}`
+    ),
+  ];
+  const d1kg = decideWeek(baseInput({ weekStart: '2026-10-10', priorWeeks: weeksAt('1kg') }));
+  const d2kg = decideWeek(baseInput({ weekStart: '2026-10-10', priorWeeks: weeksAt('2kg') }));
+  expect(d1kg).toEqual(d2kg);
+});
+
 // ---------------------------------------------------------------------------
 // Lisa gating (the hard guard)
 // ---------------------------------------------------------------------------
