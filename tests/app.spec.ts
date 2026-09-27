@@ -35,8 +35,11 @@ test('home screen shows three workout options and zero sessions', async ({ page 
   await expect(page.locator('.home-header h1')).toBeVisible();
   await expect(page.locator('button[data-workout]')).toHaveCount(4);
   await expect(page.locator('.home-hero')).toContainText('Workout A');
-  await expect(page.locator('.home-hero')).toContainText('Lower Body + Core');
-  await expect(page.locator('button.btn-chip[data-workout="B"]')).toHaveText('B · Glutes');
+  // v55 (Sep 27 2026): the hero line + chips read her fixed short label
+  // ("Lower + back", not the workout's own longer `name`) — see
+  // WORKOUT_SHORT_LABEL's comment (her Sep 27 20:30 "is it only glutes?").
+  await expect(page.locator('.home-hero')).toContainText('Lower + back');
+  await expect(page.locator('button.btn-chip[data-workout="B"]')).toHaveText('B · Glutes + back');
   await expect(page.locator('button.btn-chip[data-workout="C"]')).toHaveText('C · Cardio');
   await expect(page.locator('button.btn-chip[data-workout="D"]')).toHaveText('D · Cardio 30');
   // WK2 (Sep 27 2026): "now" (no mockDate here) is permanently past the real
@@ -3830,6 +3833,11 @@ test('Workout D: straight onto the 30-min ride, no lane picker, no cool-down, sa
   await page.locator('button[data-workout="D"]').click();
   await expect(page.locator('h2')).toContainText('Workout D');
   await page.locator('#begin').click();
+  // v55 (Sep 27 2026) — CHECK N1/N3 (round 1-3): D's one step used to read
+  // "Warm-up · 1 of 2" (the trailing "+1" stood for a cool-down D never has).
+  // It's the ride itself — "Ride · 1 of 1".
+  await expect(page.locator('.round-indicator')).toHaveText('Ride');
+  await expect(page.locator('.step-count')).toHaveText('1 of 1');
   // Straight onto the ride face — no "▶ Elliptical / Walk / Apartment" choice,
   // and no "↩ Walk or apartment instead" link (D has no lane to swap into).
   await expect(page.locator('#ww-elliptical')).toHaveCount(0);
@@ -3887,6 +3895,11 @@ test('Workout D survives a second read: Done card, Sessions, the rides page and 
   await expect(page.locator('text=Quick log')).toBeVisible();
   await page.locator('#save-log').click();
   await expect(page.locator('#home-done-card .home-done-title')).toHaveText('Done ✓ · Workout D');
+  // v55 (Sep 27 2026) — CHECK N3: the D Done card used to read flat (title +
+  // week lines, no ride numbers at all). Now it carries a real ride line.
+  await expect(page.locator('#home-done-card .home-done-ride')).toContainText('30 min');
+  await expect(page.locator('#home-done-card .home-done-ride')).toContainText('3 km');
+  await expect(page.locator('#home-done-card .home-done-ride')).toContainText('180 kcal');
 
   // Still in the push queue (synced:false) — under automation (navigator.
   // webdriver) sync never actually fires (syncDisabled), so this is the
@@ -3915,6 +3928,12 @@ test('Workout D survives a second read: Done card, Sessions, the rides page and 
   // Week 5 still reads 0 of 3 — D never counts toward it, on the SECOND read
   // same as the first.
   await expect(reopened.locator('.week-line')).toContainText('0 of 3');
+  // v55 (Sep 27 2026) — CHECK N2 (round 1/2): the Home "Sessions" count used
+  // to read "1" here as if D were a 4th A/B/C session. Her call: A/B/C only
+  // (0, none yet), D folded in as its own "+1 ride".
+  const sessionsRow = reopened.locator('.home-startnow-card .start-now-row').last();
+  await expect(sessionsRow).toContainText('0');
+  await expect(sessionsRow).toContainText('+1 ride');
 
   await reopened.locator('#view-history').click();
   await expect(reopened.locator('.session-list .history-workout-badge')).toHaveText('D');
@@ -6383,7 +6402,9 @@ test.describe('v48 P4 home', () => {
       const hero = page.locator('button.workout-card.workout-card-pick[data-workout="A"]');
       await expect(hero).toContainText('Up next');
       await expect(hero.locator('.hero-title')).toHaveText('Workout A');
-      await expect(hero).toContainText('Lower Body + Core · 2 rounds · ~30 min');
+      // v55: the hero line reads her fixed short label now, not the workout's
+      // own longer `name` (see WORKOUT_SHORT_LABEL's comment).
+      await expect(hero).toContainText('Lower + back · 2 rounds · ~30 min');
       // v48 · fix r1: only the true first is "New"; Round 1's arm moves are "Back".
       await expect(hero.locator('.hero-new')).toHaveText('New tonight: supported split squat');
       await expect(hero.locator('.hero-back')).toHaveText(
@@ -6455,7 +6476,7 @@ test.describe('v48 P4 home', () => {
     await expect(page.locator('.home-chips')).toContainText('or do');
     for (const id of ['B', 'C'] as const) {
       const chip = page.locator(`button.btn-chip[data-workout="${id}"]`);
-      await expect(chip).toHaveText(id === 'B' ? 'B · Glutes' : 'C · Cardio');
+      await expect(chip).toHaveText(id === 'B' ? 'B · Glutes + back' : 'C · Cardio');
       await chip.click();
       await expect(page.locator('.screen-header h2')).toContainText(`Workout ${id}`);
       await page.locator('#begin').click();
@@ -7729,7 +7750,7 @@ test.describe('v48 P5 logs', () => {
     expect(log['sessionNote']).toBe('almost done');
   });
 
-  test('(f) arm feel: Right on the row and Easy on the curl save "curl=easy;row=right"', async ({
+  test('(f) arm feel: Right on the row and Easy on the curl save "curl=easy@1kg;row=right@1kg" (v55: default load)', async ({
     page,
   }) => {
     await mockDate(page, TUE_WEEK4);
@@ -7741,6 +7762,11 @@ test.describe('v48 P5 logs', () => {
     // the Easy/Right/Hard chip waits for both "Set N done" taps first.
     await expect(page.locator('.arm-feel-label')).toHaveText('Set 1 of 2');
     await expect(page.locator('[data-arm-step]')).toHaveCount(0);
+    // v55: the LOAD CHIP is there from set 1 — never logged before, so 1 kg.
+    await expect(page.locator('[data-arm-load-step="row"][data-arm-load="1kg"]')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
     await page.locator('[data-mark-set="Prone row (bodyweight)"]').click();
     await expect(page.locator('.arm-feel-label').first()).toHaveText('Set 2 of 2');
     await page.locator('[data-mark-set="Prone row (bodyweight)"]').click();
@@ -7763,10 +7789,23 @@ test.describe('v48 P5 logs', () => {
     await page.locator('[data-arm-step="curl"][data-arm-feel="easy"]').click();
     await toPostLog(page);
     const log = await saveAndRead(page);
-    expect(log['armFeel']).toBe('curl=easy;row=right');
+    expect(log['armFeel']).toBe('curl=easy@1kg;row=right@1kg');
   });
 
-  test('(f) arm feel: no tap on either move saves null; no chips on other moves', async ({
+  test('(f) v55: reps text says "1–2 kg (your pick)", never a fixed 1 kg, for both loaded moves', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, 'Prone row');
+    await expect(page.locator('.exercise-reps')).toContainText('1–2 kg (your pick)');
+    await goToStep(page, '1 kg biceps curl');
+    await expect(page.locator('.exercise-reps')).toContainText('1–2 kg (your pick)');
+  });
+
+  test('(f) arm feel: no tap on either move saves null; no chips (feel or load) on other moves', async ({
     page,
   }) => {
     await mockDate(page, TUE_WEEK4);
@@ -7775,58 +7814,95 @@ test.describe('v48 P5 logs', () => {
     await page.locator('#begin').click();
     await goToStep(page, 'Wall angels');
     await expect(page.locator('.arm-feel')).toHaveCount(0);
+    await expect(page.locator('.arm-load-row')).toHaveCount(0);
     await toPostLog(page);
     const log = await saveAndRead(page);
     expect(log['armFeel']).toBeNull();
   });
 
-  test('(g) two easy sessions in a row: home asks about 2 kg; "Noted" hides it, also after a reload', async ({
+  // v55 (Sep 27 2026) — LOAD CHIP replaces the retired "Ask Lisa about 2 kg?"
+  // card (her rule 8e, "Get rid of Lisa. I decide based on pain."). She has
+  // 2 kg now (20:08).
+  test('(f) LOAD CHIP: tap 2 kg on the row saves "@2kg"; the curl stays at its own default (1 kg)', async ({
     page,
-    context,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, 'Prone row');
+    await page.locator('[data-arm-load-step="row"][data-arm-load="2kg"]').click();
+    await expect(page.locator('[data-arm-load-step="row"][data-arm-load="2kg"]')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    // Still selected on set 2 — one pick carries through both sets, not
+    // reset per tap.
+    await page.locator('[data-mark-set="Prone row (bodyweight)"]').click();
+    await expect(page.locator('[data-arm-load-step="row"][data-arm-load="2kg"]')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await page.locator('[data-mark-set="Prone row (bodyweight)"]').click();
+    await page.locator('[data-arm-step="row"][data-arm-feel="easy"]').click();
+    await goToStep(page, '1 kg biceps curl');
+    await page.locator('[data-mark-set="1 kg biceps curl"]').click();
+    await page.locator('[data-mark-set="1 kg biceps curl"]').click();
+    await page.locator('[data-arm-step="curl"][data-arm-feel="right"]').click();
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    expect(log['armFeel']).toBe('curl=right@1kg;row=easy@2kg');
+  });
+
+  test('(f) LOAD CHIP: defaults to last used, not always 1 kg', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    // Her last logged curl was @2kg — the default this session should pick
+    // that up, per spec ("default = last used, initially 1 kg").
+    await seedLogs(page, [logRow('s1', '2026-09-19T15:00:00.000Z', 'curl=easy@2kg')]);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, '1 kg biceps curl');
+    await expect(page.locator('[data-arm-load-step="curl"][data-arm-load="2kg"]')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  test('(f) v55: no "Ask Lisa" card exists any more, no matter how many easy sessions in a row', async ({
+    page,
   }) => {
     await mockDate(page, THU_WEEK4);
     await seedLogs(page, [
-      logRow('s1', '2026-09-19T15:00:00.000Z', 'curl=easy'),
-      logRow('s2', '2026-09-22T15:00:00.000Z', 'curl=easy;row=easy'),
-      logRow('s3', '2026-09-23T15:00:00.000Z', null), // a session with no feel — skipped
+      logRow('s1', '2026-09-19T15:00:00.000Z', 'curl=easy@1kg'),
+      logRow('s2', '2026-09-22T15:00:00.000Z', 'curl=easy@1kg;row=easy@1kg'),
+      logRow('s3', '2026-09-23T15:00:00.000Z', null),
     ]);
     await page.goto('/');
-    const card = page.locator('#twokg-card');
-    await expect(card).toContainText('The 1 kg felt easy twice. Ask Lisa about 2 kg?');
-    await expect(card.locator('#twokg-noted')).toHaveText('Noted');
-    // A question, never a second primary: the hero keeps the one sage.
-    await expect(card.locator('.btn-primary')).toHaveCount(0);
-    await page.locator('#twokg-noted').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
     await expect(page.locator('#twokg-card')).toHaveCount(0);
-    expect(await page.evaluate(() => localStorage.getItem('workout-tracker:twokg-noted'))).toBe(
-      's2'
+    await expect(page.locator('#app')).not.toContainText('Ask Lisa');
+  });
+
+  // v55 — the pace rule from training-review v2 item 5, said once (this
+  // device, ever), only on the curl step (the one it's actually about).
+  test('(f) the pace-rule caption shows once on the curl step, then never again', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, 'Prone row');
+    // Not the curl's own rule — the row step never shows it.
+    await expect(page.locator('.arm-load-pace-rule')).toHaveCount(0);
+    await goToStep(page, '1 kg biceps curl');
+    await expect(page.locator('.arm-load-pace-rule')).toHaveText(
+      'Easy twice at 15 slow reps + pain gone by morning → try 2 kg on the first set.'
     );
-    // A fresh page in the same context (`page` clears storage on every load).
-    const reopened = await context.newPage();
-    await mockDate(reopened, THU_WEEK4);
-    await reopened.goto('/');
-    await expect(reopened.locator('.home-header h1')).toBeVisible();
-    await expect(reopened.locator('#twokg-card')).toHaveCount(0);
-    await reopened.close();
-  });
-
-  test('(g) one easy + one right: no 2 kg question', async ({ page }) => {
-    await mockDate(page, THU_WEEK4);
-    await seedLogs(page, [
-      logRow('s1', '2026-09-19T15:00:00.000Z', 'curl=easy'),
-      logRow('s2', '2026-09-22T15:00:00.000Z', 'curl=right'),
-    ]);
-    await page.goto('/');
-    await expect(page.locator('.home-header h1')).toBeVisible();
-    await expect(page.locator('#twokg-card')).toHaveCount(0);
-  });
-
-  test('(g) only one session with a feel: no 2 kg question yet', async ({ page }) => {
-    await mockDate(page, THU_WEEK4);
-    await seedLogs(page, [logRow('s1', '2026-09-22T15:00:00.000Z', 'curl=easy;row=easy')]);
-    await page.goto('/');
-    await expect(page.locator('.home-header h1')).toBeVisible();
-    await expect(page.locator('#twokg-card')).toHaveCount(0);
+    // Any interaction re-renders the step — it's seen now, so it's gone.
+    await page.locator('[data-mark-set="1 kg biceps curl"]').click();
+    await expect(page.locator('.arm-load-pace-rule')).toHaveCount(0);
   });
 });
 
@@ -7883,13 +7959,14 @@ test.describe('v48 P6 mirror', () => {
     await expect(page.locator('.weekly-review-sessions .session-row')).toHaveCount(2);
     await expect(page.locator('.weekly-review-delta')).toHaveCount(0);
     await expect(page.locator('.weekly-review-open')).toHaveText('Week still open.');
-    // Four even tiles; one capacity tile ("6.0 → 7.0"), not two averages.
-    await expect(page.locator('.weekly-review-total')).toHaveCount(4);
+    // v55 (Sep 27 2026) — CHECK N4 (round 1): "total time —" used to be a
+    // permanent 4th tile even with zero confirmed sessions. Now that tile is
+    // HIDDEN until a week has a confirmed time, so this week (none) shows
+    // only the other three (capacity, max wall sit, back pain).
+    await expect(page.locator('.weekly-review-total')).toHaveCount(3);
+    await expect(page.locator('.weekly-review-totals')).not.toContainText('total time');
     await expect(page.locator('.weekly-review-totals')).toContainText('6.0 → 7.0');
     await expect(page.locator('.weekly-review-totals')).not.toContainText('avg capacity');
-    // T2 fix r1 (Sep 27 2026): no session here confirmed her start/finish, so
-    // the "total time" tile is an honest dash, never durationSec's minutes.
-    await expect(page.locator('.weekly-review-total-num').first()).toHaveText('—');
     // The live week has nothing after it: › is hidden.
     await expect(page.locator('#next-week')).toBeHidden();
 
@@ -8231,10 +8308,14 @@ test.describe('v48 P6 mirror', () => {
     await expect(app).not.toContainText(/auto-suggest/i);
     await expect(page.locator('.gear-chip')).toHaveCount(5);
     await expect(page.locator('.gear-chip').first()).toHaveText('✅ 1 kg · A+B arm block');
+    // v55 (Sep 27 2026): she has the 2 kg now, and the Lisa-GATING copy is
+    // retired everywhere (rule 8e) — the gear line says so, checked (have).
+    // "Neck release · Lisa" stays — that's attribution, not a gate.
     await expect(page.locator('.gear-chip').nth(3)).toHaveText(
-      '⬜ 2 kg · ask Lisa when the 1 kg feels easy'
+      '✅ 1 kg + 2 kg pairs · your pick by pain'
     );
     await expect(app).not.toContainText('tell Claude');
+    await expect(app).not.toContainText(/ask lisa/i);
     await expect(page.locator('.neck-card')).toContainText('Two tennis balls in a sock');
     const data = page.locator('details.settings-data');
     await expect(data).toHaveJSProperty('open', false);
@@ -8681,17 +8762,16 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v54 · <date, no year>", Settings "Build v54 · <full date>", sw.js v54', async ({
+  test('(d) the version: home "v55 · <date, no year>", Settings "Build v55 · <full date>", sw.js v55', async ({
     page,
   }) => {
     const src = await (await page.request.get('/app.ts')).text();
     const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
     const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
-    // THE RIDES PAGE (Sep 27 2026): the bump this round (v53.1 -> v54) — a
-    // whole-number bump, not another dotted sub-version, since this ships a
-    // new screen (v51/v52/v53's own shape: sub-versions are same-day fixes,
-    // a new number is a new build).
-    expect(version).toBe('v54');
+    // v55 (Sep 27 2026): the LOAD CHIP + no-Lisa-copy batch — a whole-number
+    // bump (v51/v52/v53's own shape: sub-versions are same-day fixes, a new
+    // number is a new build).
+    expect(version).toBe('v55');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
       `${version} · ${built.replace(/,\s*\d{4}/, '')}`
@@ -9593,6 +9673,54 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     await expect(page.locator('.weekly-review-empty')).toHaveText('None of A, B, C yet.');
     await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
     await expect(page.locator('.weekly-review-extra-row')).toContainText('D');
+    await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
+  });
+
+  // v55 (Sep 27 2026) — CHECK round 3 N1: a D ride dated in the GAP after a
+  // weekday close (before the next Saturday) fell between every span's own
+  // window — the closed week's own closedAt cut it off, and nothing had
+  // opened yet to claim it either. It belongs to the week it follows, both
+  // while still mid-gap and after the next week genuinely opens.
+  test('a gap-dated D ride is listed under the CLOSED week it follows, mid-gap and after the next week opens', async ({
+    page,
+  }) => {
+    const week5Rows = [
+      log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
+      log('wk5-b', '2026-09-28T10:00:00+03:00', 'B'),
+      log('wk5-c', '2026-09-29T10:00:00+03:00', 'C'), // closes Week 5 on Tue, 3 of 3
+      {
+        id: 'wk5-d',
+        date: '2026-09-30T10:00:00+03:00', // Wed — the gap, before Sat Oct 3
+        workout: 'D' as const,
+        capacityBefore: 6,
+        capacityAfter: 7,
+        wallSitSec: 0,
+        backPain: 0,
+        word: '',
+        synced: true,
+      },
+    ];
+    await seedLogs(page, week5Rows);
+    await mockDate(page, '2026-10-01T08:00:00+03:00'); // Thu — mid-gap, Week 6 still pending
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await expect(page.locator('.review-title')).toContainText('Week 5');
+    await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
+    await expect(page.locator('.weekly-review-extra-row')).toContainText('D');
+    await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
+
+    // Week 6 genuinely opens now (a real session on/after Sat Oct 3) — the
+    // gap ride must STAY on Week 5's page, and Week 6's own page must not
+    // pick it up just because it's now the "next" span.
+    await seedLogs(page, [...week5Rows, log('wk6-a', '2026-10-03T10:00:00+03:00', 'A')]);
+    await mockDate(page, '2026-10-05T08:00:00+03:00'); // Mon — Week 6 open, day 3
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await expect(page.locator('.review-title')).toContainText('Week 6');
+    await expect(page.locator('.weekly-review-extra-row')).toHaveCount(0);
+    await page.locator('#prev-week').click();
+    await expect(page.locator('.review-title')).toContainText('Week 5');
+    await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
     await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
   });
 

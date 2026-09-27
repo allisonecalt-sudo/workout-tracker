@@ -137,7 +137,12 @@ test.describe('the hero + its 3-chip toggle', () => {
     await expect(page.locator('#rides-proj-line')).toHaveText('= 189 kcal · 2.15 km in 30 min');
 
     await page.locator('button[data-rides-window="hour"]').click();
-    await expect(page.locator('#rides-proj-line')).toHaveText('= 378 kcal · 4.3 km in an hour');
+    // v55 (Sep 27 2026) — CHECK N1: projectedKm now uses the raw km/time
+    // ratio (0.72 km / 602 s), not the pre-rounded 4.3 km/h sub-line above —
+    // 0.72 * 3600 / 602 = 4.305648…, which rounds to 4.31, not 4.3. The old
+    // 4.3 here was itself the rounding artifact the fix removes (same class
+    // of bug as her real 0.69 km ride projecting as 0.68).
+    await expect(page.locator('#rides-proj-line')).toHaveText('= 378 kcal · 4.31 km in an hour');
     // The hero digit itself never moves with the toggle — it's what THIS
     // ride was, not a projection (PLAN §4.2's own rule).
     await expect(page.locator('#rides-hero-kcal')).toHaveText('6.3');

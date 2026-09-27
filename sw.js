@@ -26,7 +26,11 @@
 // amendments (23:16-23:20) — ride.js (kcal/min, km/h, usual, best, totals)
 // and chart.js (the one bar-chart module) are new shell files, same
 // treatment as week.js/timing.js above.
-const VERSION = 'workout-tracker-v54';
+// v55 (Sep 27 2026): the LOAD CHIP (1 kg/2 kg, her pick by pain) + all Lisa-
+// gating copy retired (rule 8e) + chip labels + the v54 CHECK's nice items —
+// no new shell files (ride.js/app.js are already cached), so only the cache
+// name moves.
+const VERSION = 'workout-tracker-v55';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 

@@ -85,8 +85,12 @@ export function rideRate(r: {
   if (typeof r.km === 'number' && r.km > 0 && typeof r.timeSec === 'number' && r.timeSec > 0) {
     kmh = round1(r.km / (r.timeSec / 3600));
     const secPerKm = r.timeSec / r.km;
-    const mm = Math.floor(secPerKm / 60);
-    const ss = Math.round(secPerKm % 60);
+    // v55 (Sep 27 2026) — CHECK N2 (round 1): rounding mm and ss SEPARATELY
+    // could carry ss to 60 ("14:60") when secPerKm's fraction rounded up.
+    // Round the total seconds once, then split — ss is always 0-59.
+    const totalSec = Math.round(secPerKm);
+    const mm = Math.floor(totalSec / 60);
+    const ss = totalSec % 60;
     paceMinPerKm = `${mm}:${String(ss).padStart(2, '0')}`;
   }
   return { kcalPerMin, kmh, paceMinPerKm, rateEligible };
@@ -112,8 +116,14 @@ export function projectedKcal(kcalPerMin: number, window: ProjectionWindow): num
   return round1(kcalPerMin * PROJECTION_MINUTES[window]);
 }
 
-export function projectedKm(kmh: number, window: ProjectionWindow): number {
-  return round2(kmh * (PROJECTION_MINUTES[window] / 60));
+// v55 (Sep 27 2026) — CHECK N1 (round 1-3): this used to take the already-
+// ROUNDED km/h (1 decimal) and multiply, so her real 0.69 km / 10 min ride
+// (true km/h 4.14, rounded to 4.1) projected back as 0.68 km for its own
+// window. Raw km ÷ raw seconds, rounded only here at the end — the fix is
+// literally "compute from raw, round only for display" (the checker's own
+// words).
+export function projectedKm(km: number, timeSec: number, window: ProjectionWindow): number {
+  return round2((km / timeSec) * PROJECTION_MINUTES[window] * 60);
 }
 
 export function median(nums: number[]): number | null {

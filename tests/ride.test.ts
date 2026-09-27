@@ -76,6 +76,15 @@ test.describe('rideRate: her three real rides', () => {
     // 602s / 0.72km = 836.1s/km = 13:56
     expect(rideRate(RIDE_A).paceMinPerKm).toBe('13:56');
   });
+
+  test('v55 fix — pace never rolls to ":60" seconds (CHECK N2)', () => {
+    // 898 s / 5 km = 179.6 s/km exactly. Rounding minutes and seconds
+    // SEPARATELY gave floor(179.6/60)=2 and round(179.6%60)=round(59.6)=60
+    // — the old "2:60" bug. Rounding the total seconds once first carries
+    // it correctly: 180 s = 3:00.
+    const r: RideRecord = { ...RIDE_A, km: 5, timeSec: 898, kcal: 50 };
+    expect(rideRate(r).paceMinPerKm).toBe('3:00');
+  });
 });
 
 test.describe("hasRideNumbers / rateEligible: §4.2's exact exclusion rule", () => {
@@ -121,9 +130,19 @@ test.describe('projections: her toggle — "10 min, 30, hour"', () => {
   test('an hour at 6.3 kcal/min -> 378 kcal', () => {
     expect(projectedKcal(6.3, 'hour')).toBe(378);
   });
-  test('projectedKm scales km/h by the same window', () => {
-    expect(projectedKm(4.3, 'tenMin')).toBe(0.72); // 4.3 * (10/60)
-    expect(projectedKm(4.3, 'hour')).toBe(4.3);
+  test('projectedKm scales the raw km/time ratio by the window', () => {
+    // 4.3 km in 3600 s (1 hour) = exactly 4.3 km/h — round numbers, so the
+    // raw-ratio fix and the old rounded-km/h approach agree here.
+    expect(projectedKm(4.3, 3600, 'tenMin')).toBe(0.72); // 4.3 * (10/60)
+    expect(projectedKm(4.3, 3600, 'hour')).toBe(4.3);
+  });
+  test('v55 fix — uses the raw ratio, not a pre-rounded km/h (CHECK N1)', () => {
+    // Her real ride: 0.69 km in 600 s (10 min). True km/h is 4.14, which
+    // ROUNDS to 4.1 — the old code multiplied that rounded 4.1 by the
+    // window and gave 0.68 km for her own 10-min ride. The raw ratio must
+    // give back exactly what she rode.
+    expect(projectedKm(0.69, 600, 'tenMin')).toBe(0.69);
+    expect(projectedKm(0.69, 600, 'hour')).toBe(4.14);
   });
 });
 
