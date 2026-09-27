@@ -64,12 +64,32 @@ export function trainingMinutes(entry: TimingEntry): number | null {
   return rawMinutes;
 }
 
+// Shared rounding: nearest 5, floor 5 — the one rule for every "about N min"
+// shown to her, whether it's one entry's trainingMinutes or a week's summed
+// confirmed minutes (T2 fix r1, Sep 27 2026 — the weekly review's total-time
+// tile below). One function, so a week total and a single session can never
+// disagree on how the number rounds.
+function roundWorkoutMinutes(minutes: number): number {
+  return Math.max(5, Math.round(minutes / 5) * 5);
+}
+
 // §3.4: "formatWorkoutTime(entry) -> `about 45 min`, or ''." Rounded to the
 // nearest 5, same rounding §3.2's `#time-result` uses on the post-log card
 // itself — one rounding rule, not two that could ever disagree by a minute.
 export function formatWorkoutTime(entry: TimingEntry): string {
   const minutes = trainingMinutes(entry);
   if (minutes === null) return '';
-  const rounded = Math.max(5, Math.round(minutes / 5) * 5);
-  return `about ${rounded} min`;
+  return `about ${roundWorkoutMinutes(minutes)} min`;
+}
+
+// T2 fix r1 (Sep 27 2026, checker "must"): the weekly review's "Week totals"
+// tile used to sum `durationSec` — the app's own open/close tap-time — into a
+// "total time" number with a higher-better arrow on it. That's app time shown
+// as her training (§3.4's own rule broken in the one place it names: "It's
+// used by ... the weekly review"). The fix sums CONFIRMED `trainingMinutes`
+// per session instead (app.ts's computeWeekTotals) and formats that sum here,
+// through the exact same rounding as a single entry — never a bare number.
+export function formatWorkoutMinutesTotal(totalMinutes: number): string {
+  if (totalMinutes <= 0) return '';
+  return `about ${roundWorkoutMinutes(totalMinutes)} min`;
 }

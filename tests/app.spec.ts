@@ -1948,13 +1948,17 @@ test('isValidLogEntry (v51): backPainBefore/wristPainBefore are optional, nullab
   expect(out.junkBefore).toBe(false);
 });
 
-test('weekly total (v34): a week with an unrecorded duration says how many sessions it counted', async ({
+test('weekly total (v34, rebased on confirmed timing T2 fix r1): a week with an unconfirmed session says how many it counted', async ({
   page,
 }) => {
-  // `totalSec += log.durationSec ?? 0` folded a missing duration in as zero
-  // minutes, so a 3-session week reported the total of 2 as if it were all 3.
+  // T2 fix r1 (Sep 27 2026, checker's "must"): this used to fold `durationSec`
+  // — the app's own tap-time — into the total, so a plain `durationSec` on an
+  // otherwise-unconfirmed row silently counted as workout time. The total now
+  // comes ONLY from confirmed her_start/her_end pairs (timing.ts's
+  // trainingMinutes); a row with `durationSec` but no confirm contributes
+  // nothing, same as one with neither.
   const out = await page.evaluate(() => {
-    const mk = (id: string, date: string, durationSec?: number) => ({
+    const mk = (id: string, date: string, timing?: { herStartAt: string; herEndAt: string }) => ({
       log: {
         id,
         date,
@@ -1964,34 +1968,48 @@ test('weekly total (v34): a week with an unrecorded duration says how many sessi
         wallSitSec: 0,
         backPain: 0,
         word: '',
-        ...(durationSec === undefined ? {} : { durationSec }),
+        durationSec: 1951, // app tap-time present either way — must be ignored
+        herStartAt: timing ? timing.herStartAt : null,
+        herStartConfirmed: !!timing,
+        herEndAt: timing ? timing.herEndAt : null,
+        herEndConfirmed: !!timing,
       },
-      durationStr: '—',
     });
     const fn = (
       window as unknown as {
         __wtComputeWeekTotals: (s: unknown[]) => {
           count: number;
-          totalSec: number;
-          durationKnownCount: number;
+          trainingMinSum: number;
+          trainingKnownCount: number;
         };
       }
     ).__wtComputeWeekTotals;
     const partial = fn([
-      mk('a', '2026-09-07T15:00:00.000Z'), // no duration — logged after the fact
-      mk('b', '2026-09-11T15:07:00.000Z', 1951),
-      mk('c', '2026-09-11T15:25:00.000Z', 1099),
+      mk('a', '2026-09-07T15:00:00.000Z'), // no confirm — logged after the fact
+      mk('b', '2026-09-11T15:07:00.000Z', {
+        herStartAt: '2026-09-11T15:07:00.000Z',
+        herEndAt: '2026-09-11T15:52:00.000Z', // 45 min
+      }),
+      mk('c', '2026-09-11T15:25:00.000Z', {
+        herStartAt: '2026-09-11T15:25:00.000Z',
+        herEndAt: '2026-09-11T15:45:00.000Z', // 20 min
+      }),
     ]);
-    const complete = fn([mk('b', '2026-09-11T15:07:00.000Z', 1951)]);
+    const complete = fn([
+      mk('b', '2026-09-11T15:07:00.000Z', {
+        herStartAt: '2026-09-11T15:07:00.000Z',
+        herEndAt: '2026-09-11T15:52:00.000Z',
+      }),
+    ]);
     return { partial, complete };
   });
-  // The zero-duration session must NOT drag the total down, and must be declared.
-  expect(out.partial.totalSec).toBe(1951 + 1099);
+  // The unconfirmed session must NOT drag the total down, and must be declared.
+  expect(out.partial.trainingMinSum).toBe(45 + 20);
   expect(out.partial.count).toBe(3);
-  expect(out.partial.durationKnownCount).toBe(2);
+  expect(out.partial.trainingKnownCount).toBe(2);
   // A complete week says nothing extra.
   expect(out.complete.count).toBe(1);
-  expect(out.complete.durationKnownCount).toBe(1);
+  expect(out.complete.trainingKnownCount).toBe(1);
 });
 
 // The Done safety net: "Keep going" on a 5-hour-old C, walk it to Save, and the
@@ -5170,6 +5188,31 @@ test.describe('v48 P2 shell', () => {
     await expect(page.locator('.round-indicator')).toHaveText('Main · Round 1 of 2');
   });
 
+  // T2 fix r1 (Sep 27 2026, checker's should #1): T1 fix r1 already took app
+  // time out of postLogWitnessLine, but nothing checked it — reaching the
+  // post-log right after Start (a session a few seconds long, via "Finish
+  // here" at the first round break) must never show her a duration built
+  // from the app's own open/close tap-time, only the round count. #time-
+  // result stays hidden too: nothing confirmed her start/finish in this flow.
+  test('(should) T2 fix r1: the post-log right after Start shows no app-time duration', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await toRoundBreak(page);
+    await page.locator('#finish-here').click();
+    await page.locator('#next').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await expect(page.locator('#time-result')).toHaveCount(0);
+    const witness = (await page.locator('.postlog-witness').textContent()) ?? '';
+    const title = (await page.locator('h2').first().textContent()) ?? '';
+    expect(witness).not.toMatch(/\b\d+\s?s\b/);
+    expect(witness).not.toMatch(/\bmin\b/);
+    expect(title).not.toMatch(/\b\d+\s?s\b/);
+    expect(title).not.toMatch(/\bmin\b/);
+  });
+
   // v49 · look fix (Sep 25 2026): the post-log witness line used to read
   // w.rounds (the full program) instead of the day's EFFECTIVE rounds, so it
   // said "both rounds" even on a day she only did one — exactly the two paths
@@ -7603,6 +7646,9 @@ test.describe('v48 P6 mirror', () => {
     await expect(page.locator('.weekly-review-total')).toHaveCount(4);
     await expect(page.locator('.weekly-review-totals')).toContainText('6.0 → 7.0');
     await expect(page.locator('.weekly-review-totals')).not.toContainText('avg capacity');
+    // T2 fix r1 (Sep 27 2026): no session here confirmed her start/finish, so
+    // the "total time" tile is an honest dash, never durationSec's minutes.
+    await expect(page.locator('.weekly-review-total-num').first()).toHaveText('—');
     // The live week has nothing after it: › is hidden.
     await expect(page.locator('#next-week')).toBeHidden();
 
@@ -7611,9 +7657,12 @@ test.describe('v48 P6 mirror', () => {
     const delta = page.locator('.weekly-review-delta');
     await expect(delta).toBeVisible();
     await expect(page.locator('.weekly-review-open')).toHaveCount(0);
-    // 3 × 45 min vs 2 × 40 min: +55 minutes, printed with its unit.
+    // T2 fix r1 (Sep 27 2026, checker's "must"): none of these seeded rows
+    // has a confirmed her_start/her_end (only the app's own `durationSec`,
+    // a red herring) — the weekly review must never turn that into a "total
+    // time" number or arrow. The row is dropped entirely, not shown as ±0.
     const time = delta.locator('.weekly-review-delta-row').filter({ hasText: 'total time' });
-    await expect(time.locator('.weekly-review-delta-num')).toHaveText('↑ +55m');
+    await expect(time).toHaveCount(0);
     const wall = delta.locator('.weekly-review-delta-row').filter({ hasText: 'max wall sit' });
     await expect(wall.locator('.weekly-review-delta-num')).toHaveText('↑ +3s');
     // › steps forward again.
@@ -7744,9 +7793,11 @@ test.describe('v48 P6 mirror', () => {
     ]);
     await page.goto('/');
     await page.locator('#view-history').click();
-    // Said once, at the top — not per row.
+    // Said once, at the top — not per row. T2 fix r1 (Sep 27 2026, checker's
+    // nice): reworded to the real mechanism (her confirmed start/finish),
+    // not a bare date claim.
     await expect(page.locator('.history-length-note')).toHaveText(
-      "Workout length shows from Sep 27 2026 — before that the app didn't ask."
+      "Workout length shows once you've said your start and finish times — from Sep 27 2026."
     );
     const confirmedRow = page.locator('[data-detail="confirmed"]');
     const unconfirmedRow = page.locator('[data-detail="unconfirmed"]');
@@ -7806,11 +7857,14 @@ test.describe('v48 P6 mirror', () => {
     await expect(card).toContainText('Arms');
     await expect(card).toContainText('curl easy · row right');
     await expect(page.locator('#detail-session-note')).toHaveText('Knee fine');
-    // T2 (Sep 27 2026): this row has no her_start/her_end confirm, so the
-    // Time row is the honest dash — the app's own open/close tap-time moved
-    // to its own dim "not workout time" line below the card (§3.4).
+    // T2 fix r1 (Sep 27 2026, checker's should #2): this row has no
+    // her_start/her_end confirm, so there's no Time row at all — the once-
+    // only Sessions note already said an old row shows no length, and this
+    // card's own "carries nothing" rule drops a row with nothing to show.
+    // The app's own open/close tap-time is on its own dim "not workout time"
+    // line below the card (§3.4).
     const time = card.locator('.detail-row').filter({ hasText: 'Time' });
-    await expect(time).toHaveText('Time—');
+    await expect(time).toHaveCount(0);
     await expect(page.locator('#detail-app-time')).toHaveText(
       /^App open \d\d:\d\d–\d\d:\d\d — not workout time$/
     );

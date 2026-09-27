@@ -8,7 +8,7 @@ import { EXERCISE_VISUALS } from './exercise-visuals.js';
 import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
 import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
 import { painFromFeel, feelFromPain } from './pain-feel.js';
-import { trainingMinutes, formatWorkoutTime } from './timing.js';
+import { trainingMinutes, formatWorkoutTime, formatWorkoutMinutesTotal } from './timing.js';
 import {
   excludedUntouchedCount,
   todayCycleStatus,
@@ -7015,13 +7015,6 @@ function formatTime(iso: string): string {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDuration(sec: number): string {
-  if (sec < 60) return `${sec}s`;
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return s === 0 ? `${m} min` : `${m}m ${s}s`;
-}
-
 // The big countdown face. Holds are all under a minute so they keep reading as
 // bare seconds; the apartment-cardio timer runs 10-25 minutes, where a raw
 // "600" reads as nonsense — those show as m:ss.
@@ -11273,7 +11266,11 @@ function renderHistory(): string {
   // T2 §3.4: said once, here, not per-row — a row before the launch just
   // shows no "· N min" (formatWorkoutTime returns '' for it), which would
   // otherwise read as a silent gap instead of an honest "the app didn't ask".
-  const lengthNote = `<p class="history-length-note">Workout length shows from ${TIMING_LAUNCH_LABEL} — before that the app didn't ask.</p>`;
+  // T2 fix r1 (Sep 27 2026, checker's nice): the old wording ("shows from
+  // Sep 27 2026") named a hard date, but the real mechanism is whether SHE
+  // confirmed her start/finish — a plain fact she can check, not a promise
+  // about which rows are old.
+  const lengthNote = `<p class="history-length-note">Workout length shows once you've said your start and finish times — from ${TIMING_LAUNCH_LABEL}.</p>`;
   return `${header}${lengthNote}<div class="card session-list">${logs.map((l) => renderSessionRow(l, logs)).join('')}</div>`;
 }
 
@@ -11307,15 +11304,23 @@ function renderHistoryDetail(): string {
   // startedAt/completedAt) is kept for CHECKING only from here down — it
   // used to be glued onto this same "Time" row as if it were how long she
   // trained ("TIME 21:48–22:14 · 26 min", her 22:33 "it really doesn't know
-  // timing"). The row now shows only her confirmed workout time (or the
-  // honest dash); `span` moves to its own dim line below the card.
+  // timing"). The row now shows only her confirmed workout time; `span`
+  // moves to its own dim line below the card.
   const span =
     log.startedAt && log.completedAt
       ? `${formatClock(log.startedAt)}–${formatClock(log.completedAt)}`
       : log.startedAt
         ? `from ${formatClock(log.startedAt)}`
         : '';
-  rows.push(detailRow('Time', formatWorkoutTime(log) || '—'));
+  // T2 fix r1 (Sep 27 2026, checker's should #2): an unconfirmed row used to
+  // push a "Time —" row here — the Sessions list above already says once,
+  // at the top, that an old row shows no length, so a dash on every detail
+  // repeated a gap she already knows about, and it's a row that "carries
+  // nothing" (this card's own rule). Push it only when there's a real,
+  // confirmed workout time to show; the dim "App open … — not workout time"
+  // line below stays the one place an unconfirmed row is acknowledged.
+  const workoutTime = formatWorkoutTime(log);
+  if (workoutTime) rows.push(detailRow('Time', workoutTime));
   if (log.capacityBefore !== null || log.capacityAfter !== null) {
     rows.push(
       detailRow(
@@ -11528,7 +11533,6 @@ function saveHistoryEdit(): void {
 
 type WeekSession = {
   log: LogEntry;
-  durationStr: string;
 };
 
 // WK4 (Sep 27 2026): extracted so the completion-model pager (below) can ask
@@ -11537,10 +11541,7 @@ type WeekSession = {
 // today-relative Saturday the pre-WK4 getWeekSessions(offset) always used.
 function getWeekSessionsForSaturday(saturday: Date): WeekSession[] {
   // Swing-aware (v42): sessions COUNTED toward this Sat→Fri week, oldest first.
-  return sessionsAttributedTo(loadLogs(), saturday).map((log) => ({
-    log,
-    durationStr: log.durationSec ? formatDuration(log.durationSec) : '—',
-  }));
+  return sessionsAttributedTo(loadLogs(), saturday).map((log) => ({ log }));
 }
 
 // WK4 (Sep 27 2026): the completion model's own sessions for a span — its
@@ -11552,15 +11553,22 @@ function getWeekSessionsForSpan(span: WeekSpan): WeekSession[] {
   return span.sessions
     .map((s) => byId.get(s.id))
     .filter((l): l is LogEntry => !!l)
-    .map((log) => ({ log, durationStr: log.durationSec ? formatDuration(log.durationSec) : '—' }));
+    .map((log) => ({ log }));
 }
 
 type WeekTotals = {
   count: number;
-  totalSec: number;
-  // How many of `count` sessions contributed to totalSec (v34). Less than
-  // count → the total is partial and must say so.
-  durationKnownCount: number;
+  // T2 fix r1 (Sep 27 2026, checker's "must"): this used to be `totalSec`,
+  // summed straight from `durationSec` — the app's own open/close tap-time,
+  // not her training (§3.4's own list names "the weekly review" as a place
+  // that must go through the confirmed-timing formatter). It's now the sum of
+  // each CONFIRMED session's `trainingMinutes` (timing.ts) only — a session
+  // she never confirmed start/finish for contributes nothing here, same rule
+  // as the Sessions row and the Session detail's Time row.
+  trainingMinSum: number;
+  // How many of `count` sessions contributed to trainingMinSum. Less than
+  // count → the total is partial and must say so; zero → nothing to show.
+  trainingKnownCount: number;
   avgCapBefore: number | null;
   avgCapAfter: number | null;
   maxWallSit: number;
@@ -11571,21 +11579,21 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
   if (sessions.length === 0) {
     return {
       count: 0,
-      totalSec: 0,
-      durationKnownCount: 0,
+      trainingMinSum: 0,
+      trainingKnownCount: 0,
       avgCapBefore: null,
       avgCapAfter: null,
       maxWallSit: 0,
       avgBackPain: null,
     };
   }
-  let totalSec = 0;
-  // v34: count how many of the week's sessions actually HAVE a duration. A
-  // session logged after the fact has none, and `?? 0` quietly folded it in as
-  // zero minutes — so a real 3-session week reported the total of 2 as if it
-  // were the total of 3. Fail-loud rule: say the total is partial, never
-  // present a hole as a number.
-  let durationKnownCount = 0;
+  let trainingMinSum = 0;
+  // v34 (kept under the new name, T2 fix r1): count how many of the week's
+  // sessions actually HAVE a confirmed workout time. A session with no
+  // confirmed start/finish contributes nothing, and folding it in as zero
+  // minutes would silently under-report a real week's total. Fail-loud rule:
+  // say the total is partial, never present a hole as a number.
+  let trainingKnownCount = 0;
   let capBeforeSum = 0;
   let capBeforeCount = 0; // v39: before-capacity can be missing on old rows too
   let capAfterSum = 0;
@@ -11594,9 +11602,10 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
   let backPainSum = 0;
   let backPainCount = 0;
   for (const { log } of sessions) {
-    if (typeof log.durationSec === 'number') {
-      totalSec += log.durationSec;
-      durationKnownCount += 1;
+    const minutes = trainingMinutes(log);
+    if (minutes !== null) {
+      trainingMinSum += minutes;
+      trainingKnownCount += 1;
     }
     if (log.capacityBefore !== null) {
       capBeforeSum += log.capacityBefore;
@@ -11614,8 +11623,8 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
   }
   return {
     count: sessions.length,
-    totalSec,
-    durationKnownCount,
+    trainingMinSum,
+    trainingKnownCount,
     avgCapBefore: capBeforeCount > 0 ? capBeforeSum / capBeforeCount : null,
     avgCapAfter: capAfterCount > 0 ? capAfterSum / capAfterCount : null,
     maxWallSit,
@@ -11626,15 +11635,6 @@ function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
 function formatAvg(n: number | null, digits = 1): string {
   if (n === null) return '—';
   return n.toFixed(digits);
-}
-
-function formatTotalDuration(sec: number): string {
-  if (sec <= 0) return '0m';
-  const m = Math.floor(sec / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  const rem = m % 60;
-  return rem === 0 ? `${h}h` : `${h}h ${rem}m`;
 }
 
 // Calmly directional delta. NOT shouty — per agency rule. Show direction with
@@ -11892,11 +11892,15 @@ function renderWeeklyReview(): string {
       <h3>Week totals</h3>
       <div class="weekly-review-totals-grid">
         <div class="weekly-review-total">
-          <div class="weekly-review-total-num">${formatTotalDuration(totals.totalSec)}</div>
+          <div class="weekly-review-total-num">${
+            totals.trainingKnownCount === 0 ? '—' : formatWorkoutMinutesTotal(totals.trainingMinSum)
+          }</div>
           <div class="weekly-review-total-lbl">${
-            totals.durationKnownCount < totals.count
-              ? `total time · ${totals.durationKnownCount} of ${totals.count} sessions`
-              : 'total time'
+            totals.trainingKnownCount === 0
+              ? 'total time'
+              : totals.trainingKnownCount < totals.count
+                ? `total time · ${totals.trainingKnownCount} of ${totals.count} sessions`
+                : 'total time'
           }</div>
         </div>
         <div class="weekly-review-total">
@@ -11929,11 +11933,19 @@ function renderWeeklyReview(): string {
               <span class="weekly-review-delta-vals">${prev.count} → ${totals.count}</span>
               ${renderDelta(totals.count, prev.count, 'higher-better')}
             </div>
-            <div class="weekly-review-delta-row">
-              <span class="weekly-review-delta-lbl">total time</span>
-              <span class="weekly-review-delta-vals">${formatTotalDuration(prev.totalSec)} → ${formatTotalDuration(totals.totalSec)}</span>
-              ${renderDelta(Math.round(totals.totalSec / 60), Math.round(prev.totalSec / 60), 'higher-better', 'm')}
-            </div>
+            ${
+              // T2 fix r1 (Sep 27 2026, checker's "must"): only compare
+              // confirmed training minutes, and only when BOTH weeks have at
+              // least one confirmed session — no arrow drawn from a week (or
+              // two) with nothing confirmed, and never from durationSec again.
+              prev.trainingKnownCount > 0 && totals.trainingKnownCount > 0
+                ? `<div class="weekly-review-delta-row">
+                    <span class="weekly-review-delta-lbl">total time</span>
+                    <span class="weekly-review-delta-vals">${formatWorkoutMinutesTotal(prev.trainingMinSum)} → ${formatWorkoutMinutesTotal(totals.trainingMinSum)}</span>
+                    ${renderDelta(Math.round(totals.trainingMinSum), Math.round(prev.trainingMinSum), 'higher-better', 'm')}
+                  </div>`
+                : ''
+            }
             ${
               prev.maxWallSit > 0 || totals.maxWallSit > 0
                 ? `<div class="weekly-review-delta-row weekly-review-delta-row-emph">
