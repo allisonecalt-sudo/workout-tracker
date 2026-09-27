@@ -447,6 +447,15 @@ type AppState = {
   // Folded into the same arm_feel string on save (armFeelString) — no schema
   // change (her Sep 27 20:08: "I have 2kg now").
   armLoad: ArmLoadState;
+  // v55 · fix r1 (Sep 27 2026): the HEAVIEST load actually tapped THIS
+  // session, per key — separate from armLoad above (which is "current pick,"
+  // driving the chip's on/off display and the default for her NEXT tap). Her
+  // pace rule says try 2 kg on set 1, then drop back if it's too much — with
+  // only armLoad, that drop-back silently erased the 2 kg attempt from the
+  // save ("last tap wins"). This tracks the max instead, so "curl=easy@2kg"
+  // survives even if set 2 was 1 kg. Starts equal to armLoad at session start
+  // (defaultArmLoad), same convention.
+  armLoadMax: ArmLoadState;
   // v54 (Sep 27 2026) — CHIP AFTER THE LAST SET: how many sets of a multi-set
   // arm-feel move (curl, prone row) she's marked done THIS visit, keyed by
   // exercise name (upperBack runs once per session — see Workout's own
@@ -2625,11 +2634,17 @@ const HIP_HINGE_R2W4: Exercise = {
   // v48 (Sep 24 2026): she does 2 sets in EACH of the 2 rounds; "2 sets · 12
   // reps" inside "Round 1/2" read as 2 in total (same class as the v45 split-
   // squat label). Label only — the prescription is unchanged.
-  reps: '12 reps · 2 sets each round · holding the 1 kg',
+  // v55 · fix r1 (Sep 27 2026): was "holding the 1 kg" — contradicted the
+  // regenerated voice note on this same step, which already says "holding one
+  // or two kilos, whichever you pick" (exercise-detail.ts). Her-pick language
+  // now, matching the LOAD CHIP everywhere else.
+  reps: '12 reps · 2 sets each round · holding 1–2 kg (your pick)',
   // PROGRAM: "anything heavier is a Lisa question" (clearance bookkeeping)
-  // dropped — the 1 kg ceiling itself stays as a real safety limit.
+  // dropped — and so is the "1 kg ceiling" left behind it (rule 8e: no Lisa
+  // gate, her pick by pain). The pain rule replaces it, same wording as the
+  // voice note.
   notes:
-    'Same hinge, now HOLDING the 1 kg the way you already do — it hangs from the hands, wrists neutral, light grip. Hinge at the hips, soft knees, flat/neutral spine; feel it in hamstrings + glutes. Do NOT round the low back. 1 kg is the ceiling for now.',
+    'Same hinge, now HOLDING 1–2 kg (your pick) the way you already do — it hangs from the hands, wrists neutral, light grip. Hinge at the hips, soft knees, flat/neutral spine; feel it in hamstrings + glutes. Do NOT round the low back. A little pain is OK, keep moving; sharp, climbing, or still there next morning — back off.',
 };
 
 // The Jun-18 loaded pair, pulled from UPPER_BACK_W7 by name so the cues are the
@@ -2659,8 +2674,11 @@ const R2W4_LOADED_ARMS: Exercise[] = (() => {
       ...curl,
       // PROGRAM: the 2 kg progression trigger (easy at 3×20, two sessions
       // running) is engine bookkeeping, not hers to read.
+      // v55 · fix r1 (Sep 27 2026): this override still said "the 1 kg" —
+      // stale next to the LOAD CHIP, same class of bug as the row override
+      // above already fixed. Weight-neutral now; the chip is where she picks.
       notes:
-        'Hold the 1 kg lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging; only the forearm moves. Lower slow. Pain tells — stop on any wrist signal.',
+        'Hold the weight lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging; only the forearm moves. Lower slow. Pain tells — stop on any wrist signal.',
     },
   ];
 })();
@@ -3136,6 +3154,7 @@ const state: AppState = {
   heldSecFor: {},
   armFeel: {},
   armLoad: {},
+  armLoadMax: {},
   setsDoneFor: {},
   backSomethingOpen: false,
   stretchTicks: {},
@@ -4904,6 +4923,7 @@ function beginExercises(): void {
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
   state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
+  state.armLoadMax = { ...state.armLoad }; // v55 · fix r1: starts equal, then only climbs
   state.setsDoneFor = {}; // v54: sets-done belongs to one session, same as armFeel
   state.stretchTicks = {}; // v48 · P7: ticks belong to one session
   state.completedSteps = {}; // v50 · jump list: done-marks belong to one session
@@ -5794,6 +5814,13 @@ function defaultArmLoad(logs: LogEntry[]): ArmLoadState {
   return { curl: lastUsedArmLoad(logs, 'curl'), row: lastUsedArmLoad(logs, 'row') };
 }
 
+// v55 · fix r1: the heavier of two loads (or the one that's set, if only one
+// is) — armLoadMax's own update rule. '2kg' always wins over '1kg'.
+function heavierArmLoad(a: ArmLoad | undefined, b: ArmLoad | undefined): ArmLoad | undefined {
+  if (a === '2kg' || b === '2kg') return '2kg';
+  return a ?? b;
+}
+
 // v45: one save at a time. The walk lane awaits Google Fit (up to 5 s) before
 // saving, and a second tap on "Save & finish" in that window wrote a 2nd row.
 let savingLog = false;
@@ -5946,7 +5973,9 @@ async function saveCompletedSession(): Promise<void> {
     // v48 · P5 (Sep 24 2026): "curl=easy@2kg;row=right@1kg" — only the parts
     // she tapped, null when none (matches the arm_feel CHECK). v55: the
     // "@load" suffix carries her per-set weight pick.
-    armFeel: armFeelString(state.armFeel, state.armLoad),
+    // v55 · fix r1: armLoadMax (heaviest tapped this session), not armLoad
+    // (current chip display) — see armLoadMax's own comment.
+    armFeel: armFeelString(state.armFeel, state.armLoadMax),
     voicePlays: state.voicePlays,
     stepsSkipped: w ? skippedStepsCount(w) : null,
   });
@@ -6020,6 +6049,9 @@ type ActiveSessionSnapshot = {
   armFeel: ArmFeelState;
   // v55: her load pick so far survives an app close too, same as armFeel.
   armLoad: ArmLoadState;
+  // v55 · fix r1: the heaviest-so-far tracker survives an app close too, same
+  // reason as armLoad — see armLoadMax's own comment on AppState.
+  armLoadMax: ArmLoadState;
   // v54: how many sets of a multi-set move she's marked done survive an app
   // close too, same as armFeel — an app close mid-set shouldn't reset her
   // spot back to "Set 1".
@@ -6086,6 +6118,7 @@ function saveActiveSession(): void {
       stoppedEarlyLitePrev: state.stoppedEarlyLitePrev,
       armFeel: state.armFeel,
       armLoad: state.armLoad,
+      armLoadMax: state.armLoadMax,
       setsDoneFor: state.setsDoneFor,
       stretchTicks: state.stretchTicks,
       completedSteps: state.completedSteps,
@@ -6219,6 +6252,18 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       // v55: a pre-v55 snapshot has no load → {}; renderArmLoadChips already
       // falls back to '1kg' per key, so a mid-session resume never crashes.
       armLoad: sanitizeArmLoad(snap.armLoad),
+      // v55 · fix r1: a pre-fix-r1 snapshot has no separate max → fall back to
+      // the (sanitized) armLoad itself, so a mid-session resume from just
+      // before this shipped doesn't lose the heaviest-so-far tracking; take
+      // the heavier of the two when both exist, same rule as a live tap.
+      armLoadMax: (() => {
+        const max = sanitizeArmLoad(snap.armLoadMax);
+        const load = sanitizeArmLoad(snap.armLoad);
+        return {
+          curl: heavierArmLoad(max.curl, load.curl),
+          row: heavierArmLoad(max.row, load.row),
+        };
+      })(),
       // v54: a pre-v54 snapshot has no sets-done → {} (nothing marked yet).
       setsDoneFor: sanitizeSetsDoneFor(snap.setsDoneFor),
       // v48 · P7: a pre-P7 snapshot has no ticks → {} (nothing ticked).
@@ -6300,6 +6345,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.heldSecFor = {}; // v48: display-only, not carried across a close
   state.armFeel = snap.armFeel;
   state.armLoad = snap.armLoad;
+  state.armLoadMax = snap.armLoadMax;
   state.setsDoneFor = snap.setsDoneFor;
   state.stretchTicks = snap.stretchTicks;
   state.completedSteps = snap.completedSteps;
@@ -6489,6 +6535,7 @@ function resetState(): void {
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5
   state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
+  state.armLoadMax = { ...state.armLoad }; // v55 · fix r1
   state.setsDoneFor = {}; // v54
   state.backSomethingOpen = false;
   state.wristPain = 0;
@@ -9065,7 +9112,10 @@ const GEAR_CHIPS: { have: boolean; text: string }[] = [
   // v55 (Sep 27 2026): she has the 2 kg now ("I have 2kg now", 20:08) — the
   // old "ask Lisa when the 1 kg feels easy" line is gone with the rest of
   // the Lisa-gating copy (rule 8e). The LOAD CHIP is where she uses it.
-  { have: true, text: '1 kg + 2 kg pairs · your pick by pain' },
+  // v55 · fix r1 (Sep 27 2026): dropped "pairs" — it implied two of each
+  // weight, which contradicts the unchecked "2nd 1 kg" chip right above it
+  // (don't know if she owns a second 1 kg; not this fix's call to assume).
+  { have: true, text: '1 kg + 2 kg · your pick by pain' },
   { have: false, text: 'Peanut (2 tennis balls in a sock)' },
 ];
 
@@ -9080,8 +9130,13 @@ function renderGearCard(): string {
       <div class="gear-chips">${chips}</div>
     </div>
     <div class="card settings-card neck-card">
-      <div class="settings-section-label">Neck release · Lisa · ~10 min</div>
-      <p class="gear-note">Two tennis balls in a sock at the base of your skull — where the skull meets the neck, one ball either side of your spine. Lie back, let your head’s weight rest on them, breathe slow (3 deep breaths), and relax ~10 min. Releases the neck/shoulder tension Lisa flagged. Do it separately from your session.</p>
+      <div class="settings-section-label">Neck release · ~10 min</div>
+      <!-- v55 · fix r1 (Sep 27 2026): "Lisa" was still in this user-visible
+           label + copy (checked live at 412x915). A source grep for "Lisa"
+           as a user-visible string is the rule (rule 8e, "Get rid of Lisa");
+           the attribution moves here, in a comment, not on screen — this
+           release traces to Lisa Cohen's original flag, kept for history. -->
+      <p class="gear-note">Two tennis balls in a sock at the base of your skull — where the skull meets the neck, one ball either side of your spine. Lie back, let your head’s weight rest on them, breathe slow (3 deep breaths), and relax ~10 min. Releases the neck/shoulder tension. Do it separately from your session.</p>
     </div>
   `;
 }
@@ -11077,18 +11132,29 @@ function renderArmLoadChips(step: 'curl' | 'row'): string {
 
 // v55 — the pace rule from training-review v2 item 5, said ONCE (ever, this
 // device) right on the step, not repeated every set/session: "Easy twice at
-// 15 slow reps + pain gone by morning → try 2 kg on the first set." Marks
-// itself seen the first time it renders; storage blocked → it just shows
-// every time (never crashes, never blocks the step).
+// 15 slow reps + pain gone by morning → try 2 kg on the first set."
+// v55 · fix r1 (Sep 27 2026): used to mark itself seen INSIDE render() — so
+// it vanished on the very next re-render, including her first tap on a load
+// chip, before she'd necessarily read it. Now it only reads the flag here;
+// markPaceRuleSeen() (below) sets it, called from the "Set N done" tap —
+// same convention as the CHIP AFTER THE LAST SET timing already uses.
+// Storage blocked → it just shows every time (never crashes, never blocks).
 const PACE_RULE_SEEN_KEY = 'workout-tracker:pace-rule-seen';
 function renderPaceRuleOnce(): string {
   try {
     if (localStorage.getItem(PACE_RULE_SEEN_KEY) === '1') return '';
-    localStorage.setItem(PACE_RULE_SEEN_KEY, '1');
   } catch {
     // storage blocked — fall through and show it this render
   }
   return `<p class="arm-load-pace-rule">Easy twice at 15 slow reps + pain gone by morning → try 2 kg on the first set.</p>`;
+}
+
+function markPaceRuleSeen(): void {
+  try {
+    localStorage.setItem(PACE_RULE_SEEN_KEY, '1');
+  } catch {
+    // non-fatal — the rule just keeps showing every time
+  }
 }
 
 function renderArmFeel(ex: Exercise): string {
@@ -14872,6 +14938,12 @@ function attachHandlers(): void {
       const load = btn.dataset['armLoad'];
       if ((step !== 'curl' && step !== 'row') || !isArmLoad(load)) return;
       state.armLoad = { ...state.armLoad, [step]: load };
+      // v55 · fix r1: armLoadMax only ever climbs — a drop back to 1 kg after
+      // trying 2 kg doesn't erase the 2 kg attempt from what gets saved.
+      state.armLoadMax = {
+        ...state.armLoadMax,
+        [step]: heavierArmLoad(state.armLoadMax[step], load),
+      };
       saveActiveSession();
       render();
     });
@@ -14885,6 +14957,10 @@ function attachHandlers(): void {
       const name = btn.dataset['markSet'];
       if (!name) return;
       state.setsDoneFor = { ...state.setsDoneFor, [name]: (state.setsDoneFor[name] ?? 0) + 1 };
+      // v55 · fix r1: the pace rule now marks itself seen HERE (her first
+      // "Set N done" tap on the curl), not inside render() — see
+      // renderPaceRuleOnce's own comment.
+      if (ARM_FEEL_STEPS[name] === 'curl') markPaceRuleSeen();
       saveActiveSession();
       render();
     });

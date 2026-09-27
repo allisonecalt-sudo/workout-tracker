@@ -25,6 +25,7 @@ import {
   composeWeekPlan,
   foldDecisions,
   allEmittableNames,
+  armFeelPart,
   ENGINE_VERSION,
   type DecideWeekInput,
   type WeekHistory,
@@ -32,7 +33,14 @@ import {
   type WeekDecision,
   type WorkoutId,
 } from '../progression';
-import { LADDERS, START_STATE, START_LANE_QUEUE, type Exercise, type WeekPlan } from '../ladders';
+import {
+  LADDERS,
+  START_STATE,
+  START_LANE_QUEUE,
+  getLadder,
+  type Exercise,
+  type WeekPlan,
+} from '../ladders';
 import { EXERCISE_VISUALS } from '../exercise-visuals';
 import { EXERCISE_DETAIL } from '../exercise-detail';
 import { EXERCISE_HOWTO } from '../exercise-howto';
@@ -131,7 +139,10 @@ test('golden cutover: composeWeekPlan(START_STATE) matches the R2W4 exercise set
   expect(summarize(plan.workouts.A.main)).toEqual(
     summarize([
       { name: 'Supported split squat', reps: '6-8 each side · one set per round' },
-      { name: 'Bodyweight hip hinge', reps: '12 reps · 2 sets each round · holding the 1 kg' },
+      {
+        name: 'Bodyweight hip hinge',
+        reps: '12 reps · 2 sets each round · holding 1–2 kg (your pick)',
+      },
       { name: 'Glute bridges', reps: '12 reps · 2-sec hold at top' },
       { name: 'Wall sit', reps: '45 sec hold', durationSec: 45 },
       { name: 'Full dead bug', reps: '8 each side' },
@@ -141,7 +152,10 @@ test('golden cutover: composeWeekPlan(START_STATE) matches the R2W4 exercise set
 
   expect(summarize(plan.workouts.B.main)).toEqual(
     summarize([
-      { name: 'Bodyweight hip hinge', reps: '12 reps · 2 sets each round · holding the 1 kg' },
+      {
+        name: 'Bodyweight hip hinge',
+        reps: '12 reps · 2 sets each round · holding 1–2 kg (your pick)',
+      },
       { name: 'Side-lying leg raises', reps: '12 each side' },
       { name: 'Side-lying clamshells', reps: '10 each side · yellow band (tied into a loop)' },
       { name: 'Single-leg glute bridges', reps: '10 each side' },
@@ -164,7 +178,10 @@ test('golden cutover: composeWeekPlan(START_STATE) matches the R2W4 exercise set
 
   expect(summarize(plan.workouts.A.upperBack)).toEqual(
     summarize([
-      { name: 'Prone row (bodyweight)', reps: '2 sets · 12 reps each side · bodyweight or 1 kg' },
+      {
+        name: 'Prone row (bodyweight)',
+        reps: '2 sets · 12 reps each side · bodyweight or 1–2 kg',
+      },
       { name: '1 kg biceps curl', reps: '2 sets · 12 reps' },
       { name: 'Wall angels', reps: '2 sets · 10 slow reps' },
       { name: 'IWYT raises', reps: '2 sets · 8 each (I, W, Y, T)' },
@@ -696,6 +713,33 @@ test('length gate: 44 min (under the 45-min brake) does not block; a 90-min runa
     baseInput({ weekStart: '2026-10-17', priorWeeks: [R2W4_WEEK, okWeek, runawayWeek] })
   );
   expect(d.mode).toBe('STEP'); // engine still runs; the point is it doesn't wrongly block on the excluded row
+});
+
+// ---------------------------------------------------------------------------
+// v55 · fix r1 (Sep 27 2026) — no Lisa gate on the 2 kg rowcurl rungs, and the
+// engine reads the load off armFeel per key instead of a loose /easy/ match.
+// ---------------------------------------------------------------------------
+
+test('v55 · fix r1: rowcurl.r4/r5 (the 2 kg rungs) are no longer kind LISA', () => {
+  const rowcurl = getLadder('rowcurl');
+  expect(rowcurl.rungs.find((r) => r.id === 'rowcurl.r4.lisa.curl2kg')!.kind).toBe('T');
+  expect(rowcurl.rungs.find((r) => r.id === 'rowcurl.r5.lisa.row2kg')!.kind).toBe('T');
+});
+
+test('v55 · fix r1: armFeelPart reads "curl=easy@2kg" — feel AND load, per key, not a loose match', () => {
+  expect(armFeelPart('curl=easy@2kg;row=right@1kg', 'curl')).toEqual({
+    feel: 'easy',
+    load: '2kg',
+  });
+  expect(armFeelPart('curl=easy@2kg;row=right@1kg', 'row')).toEqual({
+    feel: 'right',
+    load: '1kg',
+  });
+  // Pre-v55 rows (no "@load" suffix at all) still parse — feel only.
+  expect(armFeelPart('curl=easy;row=right', 'curl')).toEqual({ feel: 'easy', load: null });
+  // A key that isn't in the string at all → null, never a guess.
+  expect(armFeelPart('curl=easy@2kg', 'row')).toBeNull();
+  expect(armFeelPart(null, 'curl')).toBeNull();
 });
 
 // ---------------------------------------------------------------------------

@@ -253,21 +253,23 @@ const hinge: Ladder = {
           {
             name: 'Bodyweight hip hinge',
             label: 'Hip hinge',
-            reps: '12 reps · 2 sets each round · holding the 1 kg',
-            // PROGRAM: "anything heavier is a Lisa question" (clearance
-            // bookkeeping) dropped from the visible line — the 1 kg ceiling
-            // itself stays, since that's a real safety limit, not program talk.
+            // v55 · fix r1 (Sep 27 2026): same class of bug as app.ts's
+            // HIP_HINGE_R2W4 (fixed the same day) — "holding the 1 kg" / "1 kg
+            // is the ceiling" contradicted the LOAD CHIP and the regenerated
+            // voice note ("holding one or two kilos, whichever you pick"). No
+            // Lisa gate, her pick by pain (rule 8e).
+            reps: '12 reps · 2 sets each round · holding 1–2 kg (your pick)',
             notes:
-              'Same hinge, now HOLDING the 1 kg the way you already do — it hangs from the hands, wrists neutral, light grip. Hinge at the hips, soft knees, flat/neutral spine. Do NOT round the low back. 1 kg is the ceiling for now.',
+              'Same hinge, now HOLDING 1–2 kg (your pick) the way you already do — it hangs from the hands, wrists neutral, light grip. Hinge at the hips, soft knees, flat/neutral spine. Do NOT round the low back. A little pain is OK, keep moving; sharp, climbing, or still there next morning — back off.',
           },
         ],
         B: [
           {
             name: 'Bodyweight hip hinge',
             label: 'Hip hinge',
-            reps: '12 reps · 2 sets each round · holding the 1 kg',
+            reps: '12 reps · 2 sets each round · holding 1–2 kg (your pick)',
             notes:
-              'Same hinge, now HOLDING the 1 kg — it hangs from the hands, wrists neutral, light grip. Do NOT round the low back. 1 kg is the ceiling for now.',
+              'Same hinge, now HOLDING 1–2 kg (your pick) — it hangs from the hands, wrists neutral, light grip. Do NOT round the low back. A little pain is OK, keep moving; sharp, climbing, or still there next morning — back off.',
           },
         ],
       },
@@ -283,16 +285,16 @@ const hinge: Ladder = {
           {
             name: 'Bodyweight hip hinge',
             label: 'Hip hinge',
-            reps: '10 reps · 2 sets each round · 3-sec lowering · holding the 1 kg',
-            notes: 'Same hinge, now a slow 3-second lower. 1 kg is still the ceiling.',
+            reps: '10 reps · 2 sets each round · 3-sec lowering · holding 1–2 kg (your pick)',
+            notes: 'Same hinge, now a slow 3-second lower. Still 1–2 kg, your pick.',
           },
         ],
         B: [
           {
             name: 'Bodyweight hip hinge',
             label: 'Hip hinge',
-            reps: '10 reps · 2 sets each round · 3-sec lowering · holding the 1 kg',
-            notes: 'Same hinge, now a slow 3-second lower. 1 kg is still the ceiling.',
+            reps: '10 reps · 2 sets each round · 3-sec lowering · holding 1–2 kg (your pick)',
+            notes: 'Same hinge, now a slow 3-second lower. Still 1–2 kg, your pick.',
           },
         ],
       },
@@ -308,14 +310,14 @@ const hinge: Ladder = {
           {
             name: 'Bodyweight hip hinge',
             label: 'Hip hinge',
-            reps: '12 reps · 2 sets each round · 3-sec lowering · holding the 1 kg',
+            reps: '12 reps · 2 sets each round · 3-sec lowering · holding 1–2 kg (your pick)',
           },
         ],
         B: [
           {
             name: 'Bodyweight hip hinge',
             label: 'Hip hinge',
-            reps: '12 reps · 2 sets each round · 3-sec lowering · holding the 1 kg',
+            reps: '12 reps · 2 sets each round · 3-sec lowering · holding 1–2 kg (your pick)',
           },
         ],
       },
@@ -1023,24 +1025,25 @@ const rowcurl: Ladder = {
           {
             name: 'Prone row (bodyweight)',
             label: 'Prone row',
-            reps: '2 sets · 12 reps each side · bodyweight or 1 kg',
+            reps: '2 sets · 12 reps each side · bodyweight or 1–2 kg',
             notes:
-              'Bodyweight or holding the 1 kg — your call. Arm hanging, wrist neutral, light grip. Head down. Drive the elbow up, squeeze the shoulder blade, lower slow. Pain tells — stop on any wrist signal.',
+              'Bodyweight or 1–2 kg (your pick) — your call. Arm hanging, wrist neutral, light grip. Head down. Drive the elbow up, squeeze the shoulder blade, lower slow. Pain tells — stop on any wrist signal.',
           },
           {
             name: '1 kg biceps curl',
+            label: 'Biceps curl',
             reps: '2 sets · 12 reps',
             notes:
-              'Hold the 1 kg lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging. Lower slow. Pain tells — stop on any wrist signal.',
+              'Hold 1–2 kg (your pick) lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging. Lower slow. Pain tells — stop on any wrist signal.',
           },
         ],
         B: [
           {
             name: 'Prone row (bodyweight)',
             label: 'Prone row',
-            reps: '2 sets · 12 reps each side · bodyweight or 1 kg',
+            reps: '2 sets · 12 reps each side · bodyweight or 1–2 kg',
           },
-          { name: '1 kg biceps curl', reps: '2 sets · 12 reps' },
+          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 12 reps' },
         ],
       },
       minutesDelta: 0,
@@ -1055,19 +1058,19 @@ const rowcurl: Ladder = {
           {
             name: 'Prone row (bodyweight)',
             label: 'Prone row',
-            reps: '2 sets · 15 reps each side · holding the 1 kg',
+            reps: '2 sets · 15 reps each side · holding 1–2 kg (your pick)',
             notes:
-              'The 1 kg is now the written default — you already do it. Wrist neutral, light grip, head down.',
+              '1–2 kg is now the written default — you already do it, your pick by pain. Wrist neutral, light grip, head down.',
           },
-          { name: '1 kg biceps curl', reps: '2 sets · 15 reps' },
+          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 15 reps' },
         ],
         B: [
           {
             name: 'Prone row (bodyweight)',
             label: 'Prone row',
-            reps: '2 sets · 15 reps each side · holding the 1 kg',
+            reps: '2 sets · 15 reps each side · holding 1–2 kg (your pick)',
           },
-          { name: '1 kg biceps curl', reps: '2 sets · 15 reps' },
+          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 15 reps' },
         ],
       },
       minutesDelta: 0,
@@ -1082,17 +1085,17 @@ const rowcurl: Ladder = {
           {
             name: 'Prone row (bodyweight)',
             label: 'Prone row',
-            reps: '2 sets · 18 reps each side · holding the 1 kg',
+            reps: '2 sets · 18 reps each side · holding 1–2 kg (your pick)',
           },
-          { name: '1 kg biceps curl', reps: '2 sets · 18 reps' },
+          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 18 reps' },
         ],
         B: [
           {
             name: 'Prone row (bodyweight)',
             label: 'Prone row',
-            reps: '2 sets · 18 reps each side · holding the 1 kg',
+            reps: '2 sets · 18 reps each side · holding 1–2 kg (your pick)',
           },
-          { name: '1 kg biceps curl', reps: '2 sets · 18 reps' },
+          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 18 reps' },
         ],
       },
       minutesDelta: 0,
@@ -1107,20 +1110,20 @@ const rowcurl: Ladder = {
           {
             name: 'Prone row (bodyweight)',
             label: 'Prone row',
-            reps: '2 sets · 20 reps each side · holding the 1 kg',
+            reps: '2 sets · 20 reps each side · holding 1–2 kg (your pick)',
             // PROGRAM: this rung replaces the old 3×20 trigger, which the
             // engine could never reach — pure program bookkeeping, nothing
             // for her to read (no movement guidance left once it's dropped).
           },
-          { name: '1 kg biceps curl', reps: '2 sets · 20 reps' },
+          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 20 reps' },
         ],
         B: [
           {
             name: 'Prone row (bodyweight)',
             label: 'Prone row',
-            reps: '2 sets · 20 reps each side · holding the 1 kg',
+            reps: '2 sets · 20 reps each side · holding 1–2 kg (your pick)',
           },
-          { name: '1 kg biceps curl', reps: '2 sets · 20 reps' },
+          { name: '1 kg biceps curl', label: 'Biceps curl', reps: '2 sets · 20 reps' },
         ],
       },
       minutesDelta: 0,
@@ -1128,8 +1131,15 @@ const rowcurl: Ladder = {
       contentReady: true,
     },
     {
+      // v55 · fix r1 (Sep 27 2026): was kind 'LISA' — gated a rung called
+      // "2 kg" behind a Lisa clearance she'll never grant ("no Lisa approval,
+      // I decide based on pain", Sep 26 23:15), even though the LOAD CHIP on
+      // r0-r3 already lets her pick 1 kg or 2 kg herself every set. Kind 'T'
+      // now (her-pick, no clearance question); contentReady stays false — the
+      // card/visual/voice for a dedicated 2 kg-only rung were never built, and
+      // the chip already does this rung's job, so it's still never reached.
       id: 'rowcurl.r4.lisa.curl2kg',
-      kind: 'LISA',
+      kind: 'T',
       slots: {
         A: [{ name: '2 kg biceps curl', reps: '2 sets · 8-10 reps' }],
         B: [{ name: '2 kg biceps curl', reps: '2 sets · 8-10 reps' }],
@@ -1139,8 +1149,10 @@ const rowcurl: Ladder = {
       contentReady: false,
     },
     {
+      // v55 · fix r1: same as r4 above — no Lisa gate on a weight she picks
+      // herself.
       id: 'rowcurl.r5.lisa.row2kg',
-      kind: 'LISA',
+      kind: 'T',
       slots: {
         A: [{ name: '2 kg prone row', reps: '2 sets · 8-10 reps each side' }],
         B: [{ name: '2 kg prone row', reps: '2 sets · 8-10 reps each side' }],

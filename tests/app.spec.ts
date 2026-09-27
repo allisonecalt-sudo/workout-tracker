@@ -1558,9 +1558,10 @@ test('R2 W4: the wall sit step itself reads 45 sec (the earned nudge from 40)', 
       await expect(page.locator('.exercise-reps')).toContainText('6-8 each side');
     }
     // v48 · fix r2 (Sep 25 2026): Week 4 titles it "Hip hinge" (label only).
+    // v55 · fix r1 (Sep 27 2026): "holding the 1 kg" (fixed weight) → "holding
+    // 1–2 kg (your pick)" — no Lisa gate, her pick by pain (rule 8e).
     if (/hip hinge/i.test(name)) {
-      // Catch-up, not a raise: the hinge now says she holds the 1 kg.
-      await expect(page.locator('.exercise-reps')).toContainText('holding the 1 kg');
+      await expect(page.locator('.exercise-reps')).toContainText('holding 1–2 kg (your pick)');
     }
     const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
@@ -2685,7 +2686,7 @@ test('ship 6: settings reachable from gear icon in home header', async ({ page }
     'Display',
     'Cycle',
     'Gear',
-    'Neck release · Lisa · ~10 min',
+    'Neck release · ~10 min',
     'About',
   ]);
   await expect(page.locator('details.settings-data')).toHaveJSProperty('open', false);
@@ -4790,12 +4791,43 @@ test.describe('v48 P1 data', () => {
       const name = (await page.locator('.exercise-name').textContent()) ?? '';
       if (/hip hinge/i.test(name)) {
         await expect(page.locator('.exercise-reps')).toContainText(
-          '12 reps · 2 sets each round · holding the 1 kg'
+          '12 reps · 2 sets each round · holding 1–2 kg (your pick)'
         );
         // v48 · fix r2 (Sep 25 2026): the title no longer says "Bodyweight"
-        // over "holding the 1 kg" — display label only, the key is unchanged.
+        // over "holding the 1 kg" (v55 · fix r1: now "1–2 kg, your pick") —
+        // display label only, the key is unchanged.
         await expect(page.locator('.exercise-name')).toHaveText('Hip hinge');
         expect(name).not.toContain('Bodyweight');
+        return;
+      }
+      await page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip').click();
+    }
+    throw new Error('never reached the hip hinge');
+  });
+
+  // v55 · fix r1 (Sep 27 2026): the regenerated hip-hinge voice note says
+  // "holding one or two kilos, whichever you pick" — but the step's own reps
+  // and notes still said "holding the 1 kg" / "1 kg is the ceiling for now",
+  // contradicting it on the same screen. Fixed to "1–2 kg (your pick)" +
+  // the pain rule; this asserts neither stale phrase survives.
+  test('(h) the hip-hinge step contradicts nothing: no "ceiling", no fixed "1 kg"', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-09-24T14:00:00.000Z');
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    for (let i = 0; i < 20; i++) {
+      const name = (await page.locator('.exercise-name').textContent()) ?? '';
+      if (/hip hinge/i.test(name)) {
+        await openCue(page);
+        const reps = (await page.locator('.exercise-reps').textContent()) ?? '';
+        const notes = (await page.locator('.exercise-notes').first().textContent()) ?? '';
+        expect(reps).not.toMatch(/ceiling/i);
+        expect(reps).not.toContain('the 1 kg');
+        expect(notes).not.toMatch(/ceiling/i);
+        expect(notes).not.toContain('the 1 kg');
+        expect(reps).toContain('1–2 kg (your pick)');
         return;
       }
       await page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip').click();
@@ -7854,6 +7886,63 @@ test.describe('v48 P5 logs', () => {
     expect(log['armFeel']).toBe('curl=right@1kg;row=easy@2kg');
   });
 
+  // v55 · fix r1 (Sep 27 2026): the pace rule says try 2 kg on set 1, then
+  // drop back if it's too much. Before this fix, armLoad was "last tap wins"
+  // — dropping to 1 kg for set 2 silently erased the 2 kg attempt from the
+  // save. Now it records the HEAVIEST load tapped this session.
+  test('(f) LOAD CHIP: 2 kg on set 1, back to 1 kg for set 2 — the save still remembers the 2 kg', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, '1 kg biceps curl');
+    await page.locator('[data-arm-load-step="curl"][data-arm-load="2kg"]').click();
+    await page.locator('[data-mark-set="1 kg biceps curl"]').click();
+    // Drop back to 1 kg for set 2 — the CHIP itself now shows 1 kg (her
+    // current pick), but the save should still carry the 2 kg attempt.
+    await page.locator('[data-arm-load-step="curl"][data-arm-load="1kg"]').click();
+    await expect(page.locator('[data-arm-load-step="curl"][data-arm-load="1kg"]')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await page.locator('[data-mark-set="1 kg biceps curl"]').click();
+    await page.locator('[data-arm-step="curl"][data-arm-feel="easy"]').click();
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    expect(log['armFeel']).toBe('curl=easy@2kg');
+  });
+
+  // v55 · fix r1 (Sep 27 2026): shipped with no CSS at all — the picked chip
+  // and the other one had the same computed border/background, so mid-set
+  // she couldn't tell which load was recorded (a headless check + the
+  // shipped screenshot both showed it). Same recipe as .arm-chip/.arm-chip-on
+  // already gets — this asserts the on/off chips are visually distinct.
+  test('(f) LOAD CHIP: the picked chip looks different from the other one', async ({ page }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, '1 kg biceps curl');
+    const styles = await page.evaluate(() => {
+      const on = document.querySelector('.arm-load-chip.arm-load-chip-on');
+      const off = document.querySelector('.arm-load-chip:not(.arm-load-chip-on)');
+      if (!on || !off) return null;
+      const csOn = getComputedStyle(on);
+      const csOff = getComputedStyle(off);
+      return {
+        onBorder: csOn.borderColor,
+        offBorder: csOff.borderColor,
+        onBg: csOn.backgroundColor,
+        offBg: csOff.backgroundColor,
+      };
+    });
+    expect(styles).not.toBeNull();
+    const distinct = styles!.onBorder !== styles!.offBorder || styles!.onBg !== styles!.offBg;
+    expect(distinct).toBe(true);
+  });
+
   test('(f) LOAD CHIP: defaults to last used, not always 1 kg', async ({ page }) => {
     await mockDate(page, TUE_WEEK4);
     // Her last logged curl was @2kg — the default this session should pick
@@ -8310,12 +8399,15 @@ test.describe('v48 P6 mirror', () => {
     await expect(page.locator('.gear-chip').first()).toHaveText('✅ 1 kg · A+B arm block');
     // v55 (Sep 27 2026): she has the 2 kg now, and the Lisa-GATING copy is
     // retired everywhere (rule 8e) — the gear line says so, checked (have).
-    // "Neck release · Lisa" stays — that's attribution, not a gate.
     await expect(page.locator('.gear-chip').nth(3)).toHaveText(
-      '✅ 1 kg + 2 kg pairs · your pick by pain'
+      '✅ 1 kg + 2 kg · your pick by pain'
     );
     await expect(app).not.toContainText('tell Claude');
-    await expect(app).not.toContainText(/ask lisa/i);
+    // v55 · fix r1 (Sep 27 2026): the Settings neck card still said "Lisa" on
+    // screen ("Neck release · Lisa · ~10 min" + "...tension Lisa flagged").
+    // Broadened from the old /ask lisa/i to /lisa/i everywhere in #app — rule
+    // 8e is "Get rid of Lisa", not just the word "ask".
+    await expect(app).not.toContainText(/lisa/i);
     await expect(page.locator('.neck-card')).toContainText('Two tennis balls in a sock');
     const data = page.locator('details.settings-data');
     await expect(data).toHaveJSProperty('open', false);

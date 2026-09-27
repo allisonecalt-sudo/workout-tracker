@@ -64,7 +64,9 @@ export type SessionSignal = {
   backPainBefore: number | null;
   wristPainBefore: number | null;
   stepFeel: 'fine' | 'too_much' | null;
-  /** "curl=easy;row=right" (v48 shape) — only read for the rowcurl ladder's V-rule. */
+  /** "curl=easy@2kg;row=right@1kg" (v48 shape, v55 adds the optional "@1kg"/
+   *  "@2kg" load suffix — the LOAD CHIP) — only read for the rowcurl ladder's
+   *  V-rule. A pre-v55 row has no suffix; armFeelLoad reads that as no load. */
   armFeel: string | null;
   wallSitSec: number | null;
   /** Minutes actually ridden this session, however she logged it (elliptical_time_sec ?? cardio_minutes). */
@@ -231,9 +233,36 @@ function isCleanSession(s: SessionSignal, ladderId: string, rung: Rung): boolean
   return true;
 }
 
+// v55 · fix r1 (Sep 27 2026): parses "curl=easy@2kg;row=right@1kg" per key,
+// the same shape app.ts's armFeelLoad reads — so positiveFeel (below) can see
+// which load "easy" was recorded at, instead of the old /easy/.test() that
+// matched the whole string regardless of which key or load it belonged to.
+export type ArmFeelKey = 'curl' | 'row';
+export function armFeelPart(
+  s: string | null,
+  key: ArmFeelKey
+): { feel: 'easy' | 'right' | 'hard'; load: '1kg' | '2kg' | null } | null {
+  if (!s) return null;
+  for (const part of s.split(';')) {
+    const [k, rest] = part.split('=');
+    if (k !== key || !rest) continue;
+    const m = /^(easy|right|hard)(?:@(1kg|2kg))?$/.exec(rest);
+    if (!m) continue;
+    return {
+      feel: m[1] as 'easy' | 'right' | 'hard',
+      load: (m[2] as '1kg' | '2kg' | undefined) ?? null,
+    };
+  }
+  return null;
+}
+
 function positiveFeel(s: SessionSignal, ladderId: string): boolean {
   if (s.stepFeel === 'fine') return true;
-  if (ladderId === 'rowcurl' && s.armFeel && /easy/.test(s.armFeel)) return true;
+  if (ladderId === 'rowcurl') {
+    const curl = armFeelPart(s.armFeel, 'curl');
+    const row = armFeelPart(s.armFeel, 'row');
+    if (curl?.feel === 'easy' || row?.feel === 'easy') return true;
+  }
   return false;
 }
 

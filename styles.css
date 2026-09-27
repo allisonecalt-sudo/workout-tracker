@@ -5888,6 +5888,39 @@ textarea:focus {
   background: color-mix(in srgb, var(--accent-progress) 18%, transparent);
 }
 
+/* v55 · fix r1 (Sep 27 2026): the load chip (1 kg · 2 kg) shipped with no CSS
+ * at all — the picked one and the other one rendered identically (same
+ * transparent bg, same border, same weight-600 text), so mid-set she
+ * couldn't tell which load was recorded (headless check + the shipped
+ * arm-step-load-chip.png both showed it). Same quiet-pill/selected recipe as
+ * .arm-chip / .arm-chip.arm-chip-on above, just under its own row class. */
+.arm-load-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+}
+
+.arm-load-chip {
+  min-width: 56px;
+  min-height: 44px;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-meta);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.arm-load-chip.arm-load-chip-on {
+  color: var(--text);
+  border-color: var(--accent-progress);
+  background: color-mix(in srgb, var(--accent-progress) 18%, transparent);
+}
+
 /* v54 (Sep 27 2026) — CHIP AFTER THE LAST SET: the "Set N done" row a
  * multi-set move shows before the Easy/Right/Hard chip is allowed to appear.
  * Same quiet, outlined register as .arm-chip (not sage — Done · Next stays
@@ -5907,27 +5940,6 @@ textarea:focus {
   font-size: var(--font-meta);
   font-weight: 500;
   cursor: pointer;
-}
-
-/* The 2 kg question on home: a quiet card, never sage. */
-.twokg-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-}
-
-.twokg-text {
-  margin: 0;
-  color: var(--text);
-  font-size: var(--font-small);
-  line-height: 1.4;
-}
-
-.twokg-noted {
-  flex-shrink: 0;
-  min-height: 44px;
 }
 
 /* ---- v48 · P8 (Sep 24 2026) — the consistency sweep, appended only -------- */

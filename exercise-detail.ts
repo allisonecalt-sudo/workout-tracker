@@ -214,7 +214,10 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     muscles: ['forearms'],
     muscleLabel: 'Biceps (arm)',
     steps: [
-      'Hold the 1 kg lightly, elbow tucked at your side, forearm hanging down, wrist and fingers neutral and straight.',
+      // v55 · fix r1 (Sep 27 2026): "the 1 kg" → "the weight" — the LOAD CHIP
+      // is where she picks 1 or 2 kg now (rule 8e). Text only; voiceScript/
+      // voiceSrc above are unchanged (the mp3 wasn't re-recorded this pass).
+      'Hold the weight lightly, elbow tucked at your side, forearm hanging down, wrist and fingers neutral and straight.',
       'Curl the forearm up toward your shoulder, keeping the elbow pinned in place so only the forearm moves.',
       'Lower slowly under control.',
       'Do the reps on your screen. Pain tells — stop on any wrist signal.',
@@ -1399,11 +1402,14 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     muscleLabel: 'Lower trap + mid-back (shoulder blade)',
     steps: [
       'Lie face-down on a bed or bench edge (or stand and hinge over), arm hanging straight down toward the floor.',
-      'Set the wrist neutral and straight — light grip if you hold the 1 kg.',
+      // v55 · fix r1 (Sep 27 2026): "the 1 kg" → "the weight" — the LOAD CHIP
+      // is where she picks 1 or 2 kg now (rule 8e). Text only; voiceScript/
+      // voiceSrc above are unchanged (the mp3 wasn't re-recorded this pass).
+      'Set the wrist neutral and straight — light grip if you hold the weight.',
       'Keep your head DOWN — do not lift it (lifting strains the neck).',
       'Drive your elbow UP toward the ceiling, leading with the elbow.',
       'Squeeze your shoulder blade toward your spine, then lower slowly.',
-      'Do the reps on your screen, each side. Bodyweight or holding the 1 kg — your call.',
+      'Do the reps on your screen, each side. Bodyweight or holding the weight — your call.',
     ],
     dos: [
       'Lead with the elbow, driving it up toward the ceiling',

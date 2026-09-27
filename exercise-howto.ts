@@ -1764,7 +1764,9 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
     frames: [
       {
         svg: SVG_PRONE_ROW_DOWN,
-        do: 'Face down, arm hanging straight, NO weight yet, wrist neutral.',
+        // v55 · fix r1 (Sep 27 2026): "NO weight yet" predates the LOAD
+        // CHIP — she picks 1–2 kg or none herself now, every set (rule 8e).
+        do: 'Face down, arm hanging straight, holding 1–2 kg or none — your pick, wrist neutral.',
         avoid: "Don't bear weight through the palm — let the arm just hang.",
       },
       {
@@ -1782,7 +1784,9 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
     frames: [
       {
         svg: SVG_BICEPS_CURL_DOWN,
-        do: 'Elbow tucked at your side, forearm down, holding the 1 kg.',
+        // v55 · fix r1 (Sep 27 2026): "the 1 kg" → "1–2 kg (your pick)" — no
+        // fixed weight now the LOAD CHIP is where she picks (rule 8e).
+        do: 'Elbow tucked at your side, forearm down, holding 1–2 kg (your pick).',
         avoid: "Don't let the wrist bend back — keep it straight (neutral).",
       },
       {
