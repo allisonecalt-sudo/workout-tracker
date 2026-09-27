@@ -24,12 +24,13 @@
 -- already cover new columns (the Oct-30 2026 PostgREST flip is about new
 -- TABLES, not new columns on an already-exposed table).
 --
--- NOT YET APPLIED: PLAN-2026-09-26.md marks this item (T1) **schema** —
--- her yes comes first (CLAUDE.md's schema-change rule), then Claude applies
--- it via the Supabase Management API. Until then, app.ts's V53_TIMING_
--- SESSION_COLUMNS strip group (legacySessionPayload) already keeps every
--- save landing safely on the columns that exist today — the PGRST204
--- retry drops these five and the session still saves, no data lost.
+-- APPLIED: Sep 27 2026, 10:49 — her yes (PLAN-2026-09-26.md marked this item
+-- (T1) **schema**, CLAUDE.md's schema-change rule), applied via the Supabase
+-- Management API. T1 fix r1 (same day): app.ts's V53_TIMING_SESSION_COLUMNS
+-- strip group still exists (timingStrippedSessionPayload / legacySessionPayload)
+-- as a safety net for any build that's somehow still ahead of an older
+-- mirror/branch of this schema — the PGRST204 retry drops these five and
+-- the session still saves, no data lost.
 
 ALTER TABLE public.workout_sessions
   ADD COLUMN IF NOT EXISTS her_start_at timestamptz,

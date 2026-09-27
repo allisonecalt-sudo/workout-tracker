@@ -560,8 +560,8 @@ const SUPABASE_ANON_KEY =
 // branch's ride numbers (Next -> "from the machine" entry screen) + Cue ->
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
-const APP_VERSION = 'v53';
-const BUILD_DATE = 'Sep 27, 2026 · 02:24';
+const APP_VERSION = 'v53.1';
+const BUILD_DATE = 'Sep 27, 2026 · 11:24';
 
 function supabaseHeaders(): HeadersInit {
   return {
@@ -4299,10 +4299,11 @@ const V50_SESSION_COLUMNS = ['steps_skipped'] as const;
 const V50_MOOD_SESSION_COLUMNS = ['mood_before', 'mood_after'] as const;
 
 // The five columns added in T1 for her start/finish "Right?" + breaks
-// (migrations/2026-09-27-v53-timing.sql). NOT YET APPLIED (§3.3's own note,
-// schema — her yes first) — this group is exactly what makes a save land
-// safely on today's schema in the meantime: the PGRST204 retry below strips
-// it and the session still saves, nothing lost.
+// (migrations/2026-09-27-v53-timing.sql). APPLIED Sep 27 2026 (her 10:49
+// yes) — kept as its own strip group anyway (T1 fix r1, checker's should
+// #6) so a build that's somehow still ahead of an older mirror/branch of
+// the schema keeps landing safely: the PGRST204 retry below strips it and
+// the session still saves, nothing lost.
 const V53_TIMING_SESSION_COLUMNS = [
   'her_start_at',
   'her_start_confirmed',
@@ -4389,6 +4390,20 @@ function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
   return payload;
 }
 
+// T1 fix r1 (Sep 27 2026, checker's must #2): the middle tier between
+// sessionPayload and legacySessionPayload — strips ONLY the T1 timing
+// columns. A server that has run every migration up to v51 but not yet v53
+// (the state most of today's rows describe, per the migration file's own
+// "her yes first" note) keeps mood_before, wrist_pain_0_10, the ride numbers
+// and everything else; legacySessionPayload used to be the ONLY retry and
+// wiped ALL of that too on one unknown column, which the missing PGRST204
+// test below would have caught.
+function timingStrippedSessionPayload(entry: LogEntry): Record<string, unknown> {
+  const payload = sessionPayload(entry);
+  for (const col of V53_TIMING_SESSION_COLUMNS) delete payload[col];
+  return payload;
+}
+
 async function postSession(payload: Record<string, unknown>): Promise<Response> {
   return fetch(`${SUPABASE_URL}/rest/v1/workout_sessions`, {
     method: 'POST',
@@ -4404,24 +4419,48 @@ async function postSession(payload: Record<string, unknown>): Promise<Response> 
   });
 }
 
-async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
-  if (syncDisabled()) return false;
+// T1 fix r1 (Sep 27 2026, checker's must #2): the tiered retry itself,
+// factored out of pushLogToSupabase and taking `post` so a test can drive it
+// with faked responses instead of a real network call — real sync stays off
+// under automation everywhere else (syncDisabled, checked by the caller
+// below, never by this function). Three tiers, each one PGRST204 further
+// than the last: full row -> drop only the v53 timing columns -> the full
+// v47-shaped legacy row. A save is never dropped for being ahead of ANY
+// subset of the schema, and it only falls back as far as it has to.
+async function pushSessionTiered(
+  entry: LogEntry,
+  post: (payload: Record<string, unknown>) => Promise<Response> = postSession
+): Promise<boolean> {
   if (!entry.id) return false;
   try {
-    let res = await postSession(sessionPayload(entry));
+    let res = await post(sessionPayload(entry));
     if (res.status === 400) {
       const body = await res.text().catch(() => '');
       if (!body.includes('PGRST204')) {
         console.warn('[sync] push failed:', res.status, body);
         return false;
       }
-      // v48: the phone is ahead of the schema (an unknown column). Say so, then
-      // retry ONCE with the v47 shape so the session still lands.
+      // The v53 timing columns are missing on the server — try dropping
+      // JUST those five before giving up every other group too.
       console.warn(
-        '[sync] v48 columns missing on the server — retrying with the legacy row:',
+        '[sync] v53 timing columns missing on the server — retrying without them:',
         body
       );
-      res = await postSession(legacySessionPayload(entry));
+      res = await post(timingStrippedSessionPayload(entry));
+      if (res.status === 400) {
+        const body2 = await res.text().catch(() => '');
+        if (!body2.includes('PGRST204')) {
+          console.warn('[sync] push failed (timing-stripped retry):', res.status, body2);
+          return false;
+        }
+        // Still missing columns beyond the v53 group — fall all the way
+        // back to the v47 shape (v48: the phone is ahead of the schema).
+        console.warn(
+          '[sync] more columns missing on the server — retrying with the legacy row:',
+          body2
+        );
+        res = await post(legacySessionPayload(entry));
+      }
     }
     if (res.ok) {
       markLogSynced(entry.id);
@@ -4433,6 +4472,11 @@ async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
     console.warn('[sync] push threw:', err);
     return false;
   }
+}
+
+async function pushLogToSupabase(entry: LogEntry): Promise<boolean> {
+  if (syncDisabled()) return false;
+  return pushSessionTiered(entry);
 }
 
 function markLogEdited(id: string): void {
@@ -6334,6 +6378,18 @@ type RemoteSession = {
   // v50 · jump list (Sep 25 2026): optional — a server that hasn't run the
   // migration, or a pre-v50 row, simply doesn't carry it.
   steps_skipped?: number | null;
+  // T1 fix r1 (Sep 27 2026, checker's must #1): her own start/finish answers
+  // — optional the same way as every other group above. Before this fix,
+  // RemoteSession simply didn't declare these 5 columns, so the pull
+  // (select=*) silently swapped a synced row for a remote-built LogEntry
+  // with none of them — the phone forgot what she'd answered, the same bug
+  // class v45 fixed for the cardio numbers. The migration IS applied (her
+  // 10:49 yes, Sep 27 2026) — a pre-T1 row simply has no keys at all.
+  her_start_at?: string | null;
+  her_start_confirmed?: boolean | null;
+  her_end_at?: string | null;
+  her_end_confirmed?: boolean | null;
+  break_minutes?: number | null;
 };
 
 // How many sessions a pull fetches (newest first) and the phone keeps. The
@@ -6439,6 +6495,22 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       armFeel: r.arm_feel ?? null,
       voicePlays: r.voice_plays ?? null,
       stepsSkipped: r.steps_skipped ?? null,
+      // T1 fix r1 (Sep 27 2026, checker's must #1): round-trips the same way
+      // as every other v50/v51 group — null stays null, a pre-T1 row (no
+      // keys at all) merges as null, never invented. break_minutes is only
+      // ever 0/5/15/30 (the migration's own CHECK) — anything else merges
+      // as null rather than trusting a value the schema itself would reject.
+      herStartAt: r.her_start_at ?? null,
+      herStartConfirmed: r.her_start_confirmed ?? null,
+      herEndAt: r.her_end_at ?? null,
+      herEndConfirmed: r.her_end_confirmed ?? null,
+      breakMinutes:
+        r.break_minutes === 0 ||
+        r.break_minutes === 5 ||
+        r.break_minutes === 15 ||
+        r.break_minutes === 30
+          ? r.break_minutes
+          : null,
       synced: true,
     });
   }
@@ -6514,6 +6586,8 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     __wtComputeWeekTotals?: typeof computeWeekTotals;
     __wtSessionPayload?: typeof sessionPayload;
     __wtLegacySessionPayload?: typeof legacySessionPayload;
+    __wtTimingStrippedSessionPayload?: typeof timingStrippedSessionPayload;
+    __wtPushSessionTiered?: typeof pushSessionTiered;
     __wtPatchSessionRequest?: typeof patchSessionRequest;
     __wtPatchMatchedARow?: typeof patchMatchedARow;
     __wtWeekAttributionSummary?: typeof weekAttributionSummary;
@@ -6528,6 +6602,13 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   // v48: the push payloads are pure — tested here since sync is off in tests.
   w.__wtSessionPayload = sessionPayload;
   w.__wtLegacySessionPayload = legacySessionPayload;
+  // T1 fix r1 (Sep 27 2026, checker's must #2): the middle retry tier, and
+  // the tiered retry ITSELF (network + markLogSynced included) — real sync
+  // stays off (syncDisabled gates the caller, pushLogToSupabase, never this
+  // function), so a test drives it by passing its own `post` in place of the
+  // real fetch-backed postSession.
+  w.__wtTimingStrippedSessionPayload = timingStrippedSessionPayload;
+  w.__wtPushSessionTiered = pushSessionTiered;
   // v53: the edit PATCH request is pure too (url + body, no fetch) — same
   // reasoning, tested the same way.
   w.__wtPatchSessionRequest = patchSessionRequest;
@@ -10662,19 +10743,18 @@ function renderArmFeel(name: string): string {
 
 // v49 · look (Sep 25 2026): "41 min · both rounds · 1 of 3 this week" — every
 // value already exists on state/the week count (spec §6 "Post-log sub-lines").
-// Duration and round count are both honest previews (the real save recomputes
-// them); the week count includes the session about to be saved (+1), since
-// that's the number she's about to see on Home the moment she taps Save.
+// Round count is an honest preview (the real save recomputes it); the week
+// count includes the session about to be saved (+1), since that's the number
+// she's about to see on Home the moment she taps Save.
+// T1 fix r1 (Sep 27 2026, checker's should #4): the app-time minutes (the
+// tap-to-tap clock, from state.startedAt) used to open this line too — once
+// she answers the new Finishing "Right?" question, renderTimeResult's own
+// "About N min of training" (HER times) shows up a few lines below it,
+// contradicting this line's app-time minutes on the same screen (T1's own
+// §3: "app time is never shown as workout time again"). Dropped here —
+// her confirmed timing is the only duration this screen states now.
 function postLogWitnessLine(w: Workout): string {
-  const startedAt = state.startedAt;
   const parts: string[] = [];
-  if (startedAt) {
-    const elapsedSec = Math.max(
-      0,
-      Math.round((Date.now() - new Date(startedAt).getTime() - totalPausedMs()) / 1000)
-    );
-    if (elapsedSec < MAX_PLAUSIBLE_DURATION_SEC) parts.push(formatDuration(elapsedSec));
-  }
   // v49 · look fix (Sep 25 2026): the round count has to be the day's EFFECTIVE
   // rounds — Lite, or "Finish here — it still counts" (finishAtRoundOne sets
   // liteDay too) — not the full program's w.rounds. The line was saying "both
@@ -10721,15 +10801,19 @@ function postLogWitnessLine(w: Workout): string {
   return parts.join(' · ');
 }
 
-// T1 §3.2: "Breaks?": None · ~5 min · ~15 min · ~30+, data-break = 0/5/15/30.
+// T1 §3.2: "Breaks?": None · ~5 · ~15 · ~30+, data-break = 0/5/15/30.
 // Same toggle-again-to-clear shape as the 1-10 body chips (attachHandlers'
 // [data-body-chip] block) — untouched/cleared reads back as null, never 0;
 // "None" is its own explicit tap that means a real, confirmed zero.
 function renderBreakChips(value: number | null): string {
+  // T1 fix r1 (Sep 27 2026, checker's nice #3): "~5 min"/"~15 min" wrapped
+  // onto two lines in the 4-column grid at 412px — "min" is redundant next
+  // to the "Breaks?" label right above, so it's dropped instead of shrinking
+  // the tap-target font.
   const chips: { label: string; mins: number }[] = [
     { label: 'None', mins: 0 },
-    { label: '~5 min', mins: 5 },
-    { label: '~15 min', mins: 15 },
+    { label: '~5', mins: 5 },
+    { label: '~15', mins: 15 },
     { label: '~30+', mins: 30 },
   ];
   const row = chips

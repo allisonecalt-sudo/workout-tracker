@@ -5534,7 +5534,12 @@ textarea:focus {
 /* Pre-log header: "Workout A" with the name under it; × Back never wraps. */
 .prelog-header {
   align-items: flex-start;
-  margin-bottom: 6px;
+  /* T1 fix r1 (Sep 27 2026, checker's should #3): 6px -> 4px, one of several
+   * small margin cuts (see .prelog-meta and .prelog-overview below) that
+   * together win back the height the timing "Right?" row costs — the exact
+   * floor (lite chip bottom <= action-bar top) instead of the +24px the
+   * original T1 commit widened the test by. */
+  margin-bottom: 4px;
 }
 
 .prelog-title {
@@ -5561,12 +5566,19 @@ textarea:focus {
   color: var(--text-dim);
   font-size: var(--font-meta);
   line-height: 1.45;
-  margin: 0 0 14px;
+  /* T1 fix r1 (Sep 27 2026, checker's should #3): 14px -> 6px — see
+   * .prelog-header's own comment. */
+  margin: 0 0 6px;
 }
 
 /* "What's in it ▸" — one closed row; open, each phase lists its moves. */
 .prelog-overview {
   padding: 0;
+  /* T1 fix r1 (Sep 27 2026, checker's should #3): this is still a .card, so
+   * it inherits the base 18px margin-bottom — cut to 8px here (only this
+   * details element, in the pre-log screen alone) to help win back the
+   * timing row's height. See .prelog-header's own comment. */
+  margin-bottom: 8px;
 }
 
 .prelog-overview-summary {
@@ -5611,6 +5623,10 @@ textarea:focus {
 /* Body reading: 1-10 tap chips, two rows of five, none chosen until tapped. */
 .body-card {
   padding: 16px 18px;
+  /* T1 fix r1 (Sep 27 2026, checker's should #3): this is the pre-log's own
+   * .card (only used here — see .prelog-overview's own comment), cut from
+   * the base 18px the same way to help win back the timing row's height. */
+  margin-bottom: 10px;
 }
 
 .body-field {

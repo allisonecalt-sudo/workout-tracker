@@ -983,6 +983,86 @@ test('pull merge (v51): back_pain_before/wrist_pain_before round-trip; a pre-v51
   expect(result.preV51?.wristPainBefore).toBeNull();
 });
 
+// T1 fix r1 (Sep 27 2026, checker's must #1): the same round-trip PROVEN
+// through the real push shape, not a hand-built remote row — sessionPayload
+// (a save's own POST body) fed straight into mergeRemoteSessions (a pull's
+// own mapper), the way a push-then-pull actually happens. Before this fix,
+// RemoteSession simply didn't declare the 5 columns, so this exact round
+// trip lost herStartAt/herStartConfirmed/herEndAt/herEndConfirmed/
+// breakMinutes on the very next pull. A pre-T1 row (no keys at all,
+// same shape mergeRemoteSessions has always had to handle) must still
+// merge with all 5 as null, never invented.
+test('pull merge (T1 fix r1, must #1): her timing answers survive a push -> pull round trip; a pre-T1 row merges as null', async ({
+  page,
+}) => {
+  const result = await page.evaluate(() => {
+    type Row = {
+      id: string;
+      herStartAt?: string | null;
+      herStartConfirmed?: boolean | null;
+      herEndAt?: string | null;
+      herEndConfirmed?: boolean | null;
+      breakMinutes?: number | null;
+    };
+    type Entry = Record<string, unknown>;
+    const w = window as unknown as {
+      __wtSessionPayload: (e: Entry) => Record<string, unknown>;
+      __wtMergeRemoteSessions: (local: unknown[], remote: unknown[]) => Row[];
+    };
+    const entry = {
+      id: 'with-timing',
+      date: '2026-09-27T10:00:00.000Z',
+      workout: 'A',
+      capacityBefore: 6,
+      capacityAfter: 7,
+      wallSitSec: 0,
+      backPain: 0,
+      word: '',
+      herStartAt: '2026-09-27T09:04:00.000Z',
+      herStartConfirmed: true,
+      herEndAt: '2026-09-27T09:52:00.000Z',
+      herEndConfirmed: true,
+      breakMinutes: 5,
+    };
+    // The exact row a save's POST sends — id/date/workout_type match a real
+    // remote row's shape (sessionPayload already names them that way).
+    const remoteRow = w.__wtSessionPayload(entry);
+    // A pre-T1 row: no her_*/break_minutes keys at all, same as any server
+    // row saved before this migration existed.
+    const preT1Remote = {
+      id: 'pre-t1',
+      date: '2026-09-20T10:00:00+00:00',
+      workout_type: 'A',
+      capacity_before_1_10: null,
+      capacity_after_1_10: null,
+      wall_sit_seconds: 0,
+      pain_back_0_10: null,
+      one_word: null,
+      started_at: null,
+      completed_at: null,
+      duration_seconds: null,
+      notes: null,
+    };
+    const merged = w.__wtMergeRemoteSessions([], [remoteRow, preT1Remote]);
+    return {
+      withTiming: merged.find((r) => r.id === 'with-timing'),
+      preT1: merged.find((r) => r.id === 'pre-t1'),
+    };
+  });
+
+  expect(result.withTiming?.herStartAt).toBe('2026-09-27T09:04:00.000Z');
+  expect(result.withTiming?.herStartConfirmed).toBe(true);
+  expect(result.withTiming?.herEndAt).toBe('2026-09-27T09:52:00.000Z');
+  expect(result.withTiming?.herEndConfirmed).toBe(true);
+  expect(result.withTiming?.breakMinutes).toBe(5);
+  // Never false/0 for a row that simply never had the keys.
+  expect(result.preT1?.herStartAt).toBeNull();
+  expect(result.preT1?.herStartConfirmed).toBeNull();
+  expect(result.preT1?.herEndAt).toBeNull();
+  expect(result.preT1?.herEndConfirmed).toBeNull();
+  expect(result.preT1?.breakMinutes).toBeNull();
+});
+
 // --- Round 2 Week 3: the band goes on the clamshells (v35, Sep 14 2026) ------
 // Her word: "build week 3". One change only — the yellow band, in B, looped.
 // These assert BOTH halves: the change landed, and nothing else moved.
@@ -4530,8 +4610,10 @@ test.describe('v48 P1 data', () => {
         sessionNote: 'knee fine',
         liteDay: true,
         voicePlays: 2,
-        // T1 (Sep 27 2026): also stripped for a server that hasn't run the
-        // v53 timing migration yet (it's NOT YET APPLIED — §3.3's own note).
+        // T1 (Sep 27 2026): also stripped — legacySessionPayload is the full
+        // v47-shaped fallback, so it drops these 5 too even though the v53
+        // migration is APPLIED now (T1 fix r1, checker's should #6); a
+        // server on an older mirror/branch of the schema still lands safely.
         herStartAt: '2026-09-24T13:04:00.000Z',
         herStartConfirmed: true,
         herEndAt: '2026-09-24T13:52:00.000Z',
@@ -4564,6 +4646,146 @@ test.describe('v48 P1 data', () => {
     );
     expect(p['walk_minutes']).toBe(10);
     expect(p['wall_sit_seconds']).toBe(45);
+  });
+
+  // T1 fix r1 (Sep 27 2026, checker's must #2): the spec'd PGRST204 test —
+  // "a faked PGRST204 -> the retry drops the new groups and still saves" —
+  // proven as a TIERED retry (checker's own fix suggestion), so a server
+  // that's ahead by only the 5 T1 columns keeps every other group instead of
+  // the old single-retry losing mood/wrist/ride numbers along with them.
+  // pushSessionTiered takes `post` so this drives it with faked Response
+  // objects — real sync stays off under automation everywhere else
+  // (syncDisabled gates pushLogToSupabase, never pushSessionTiered itself).
+  test('push (T1 fix r1, must #2): a faked PGRST204 retries with ONLY the timing columns dropped; mood/wrist/ride numbers survive', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'workout-tracker:logs',
+        JSON.stringify([
+          {
+            id: 'tiered-1',
+            date: '2026-09-27T10:00:00.000Z',
+            workout: 'A',
+            capacityBefore: 6,
+            capacityAfter: 7,
+            wallSitSec: 0,
+            backPain: 0,
+            word: '',
+            synced: false,
+          },
+        ])
+      );
+    });
+    await page.goto('/');
+    const result = await page.evaluate(async () => {
+      const w = window as unknown as {
+        __wtPushSessionTiered: (
+          e: unknown,
+          post: (payload: Record<string, unknown>) => Promise<Response>
+        ) => Promise<boolean>;
+      };
+      const entry = {
+        id: 'tiered-1',
+        date: '2026-09-27T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 6,
+        capacityAfter: 7,
+        moodBefore: 5,
+        moodAfter: 3,
+        wallSitSec: 0,
+        backPain: 0,
+        wristPain: 4,
+        word: '',
+        ellipticalKcal: 88.5,
+        herStartAt: '2026-09-27T09:04:00.000Z',
+        herStartConfirmed: true,
+        herEndAt: '2026-09-27T09:52:00.000Z',
+        herEndConfirmed: true,
+        breakMinutes: 5,
+      };
+      const bodies: Record<string, unknown>[] = [];
+      const post = async (payload: Record<string, unknown>): Promise<Response> => {
+        bodies.push(payload);
+        if (bodies.length === 1) {
+          return new Response(JSON.stringify({ code: 'PGRST204', message: 'unknown column' }), {
+            status: 400,
+          });
+        }
+        return new Response(null, { status: 201 });
+      };
+      const ok = await w.__wtPushSessionTiered(entry, post);
+      const rawLogs = window.localStorage.getItem('workout-tracker:logs');
+      const logs = JSON.parse(rawLogs ?? '[]') as { id: string; synced?: boolean }[];
+      return { ok, bodies, synced: logs.find((l) => l.id === 'tiered-1')?.synced };
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.bodies.length).toBe(2); // one PGRST204, one retry that lands
+    expect(result.synced).toBe(true); // the local log ends synced
+    const retried = result.bodies[1] as Record<string, unknown>;
+    for (const col of [
+      'her_start_at',
+      'her_start_confirmed',
+      'her_end_at',
+      'her_end_confirmed',
+      'break_minutes',
+    ]) {
+      expect(col in retried).toBe(false);
+    }
+    // Not lossy beyond the T1 group — mood, wrist and the ride number all
+    // survive the FIRST retry (this is exactly what the single-tier legacy
+    // retry used to wipe, per the checker's finding).
+    expect(retried['mood_before']).toBe(5);
+    expect(retried['wrist_pain_0_10']).toBe(4);
+    expect(retried['elliptical_kcal']).toBe(88.5);
+  });
+
+  // T1 fix r1: the THIRD tier — a server missing even MORE than the T1
+  // group still saves, falling all the way back to the v47-shaped legacy
+  // row (unchanged behavior from before T1, just reached one step later now).
+  test('push (T1 fix r1): two PGRST204s in a row fall back to the full legacy row and still save', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const result = await page.evaluate(async () => {
+      const w = window as unknown as {
+        __wtPushSessionTiered: (
+          e: unknown,
+          post: (payload: Record<string, unknown>) => Promise<Response>
+        ) => Promise<boolean>;
+      };
+      const entry = {
+        id: 'tiered-2',
+        date: '2026-09-27T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 6,
+        capacityAfter: 7,
+        moodBefore: 5,
+        wallSitSec: 0,
+        backPain: 0,
+        word: '',
+        sessionNote: 'knee fine',
+        herStartConfirmed: true,
+      };
+      const bodies: Record<string, unknown>[] = [];
+      const post = async (payload: Record<string, unknown>): Promise<Response> => {
+        bodies.push(payload);
+        if (bodies.length < 3) {
+          return new Response(JSON.stringify({ code: 'PGRST204', message: 'unknown column' }), {
+            status: 400,
+          });
+        }
+        return new Response(null, { status: 201 });
+      };
+      const ok = await w.__wtPushSessionTiered(entry, post);
+      return { ok, count: bodies.length, third: bodies[2] };
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.count).toBe(3);
+    expect('mood_before' in result.third).toBe(false);
+    expect('her_start_confirmed' in result.third).toBe(false);
   });
 
   test('session detail shows her note verbatim under "Note", apart from system notes', async ({
@@ -6883,20 +7105,20 @@ test.describe('v48 P5 logs', () => {
           const begin = (await page.locator('#begin').boundingBox())!;
           expect(begin.y + begin.height).toBeLessThanOrEqual(915);
           // Everything she decides on sits above the pinned bar, no scroll.
-          // T1 (Sep 27 2026): the start-time "Right?" row (§3.1) adds real,
-          // intended height here — two 44px tap-target buttons next to a
-          // 19px line that has to share width with them, so it wraps to 2
-          // lines (measured: the row costs ~48px on every workout). On A
-          // specifically, that stacks with a PRE-EXISTING, unrelated wrap
-          // (its own longer "new tonight: X · again: Y" meta line runs ~20px
-          // taller than B/C's) — together they land ~17px past the old
-          // exact-826 floor (measured 843.375). +24px covers that plus a
-          // little rendering slack, on every workout, rather than loosening
-          // it per-workout. A real overflow this size is a legitimate flag
-          // for her/Claude to compact further later, not a silent pass.
+          // T1 (Sep 27 2026): the start-time "Right?" row (§3.1) added real,
+          // intended height here, enough to push the Lite chip ~17px past
+          // the exact floor below on Workout A specifically (its own longer
+          // "new tonight: X · again: Y" meta line stacked with the new row).
+          // T1 fix r1 (checker's should #3): the original commit widened
+          // this floor by +24px instead of finding the height back — that
+          // hid a real overlap (the Lite chip's bottom clipped under the
+          // action bar, see shots/T1/1). Fixed properly by tightening the
+          // pre-log's own margins (.prelog-header/.prelog-meta/
+          // .prelog-overview/.body-card in styles.css) instead: the exact
+          // floor is back, never loosened.
           const bar = (await page.locator('.action-bar').boundingBox())!;
           const lite = (await page.locator('#lite-toggle').boundingBox())!;
-          expect(lite.y + lite.height).toBeLessThanOrEqual(bar.y + 24);
+          expect(lite.y + lite.height).toBeLessThanOrEqual(bar.y);
           expect(await page.evaluate(() => window.scrollY)).toBe(0);
         }
         await expect(page.locator('#lite-toggle')).toContainText('✓ Lite');
@@ -8116,21 +8338,23 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v53 · <date, no year>", Settings "Build v53 · <full date>", sw.js v53', async ({
+  test('(d) the version: home "v53.1 · <date, no year>", Settings "Build v53.1 · <full date>", sw.js v53.1', async ({
     page,
   }) => {
     const src = await (await page.request.get('/app.ts')).text();
     const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
     const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
-    expect(version).toBe('v53');
+    // T1 fix r1 (Sep 27 2026, checker's should #5): the bump this round
+    // (v53 -> v53.1), same dotted-sub-version shape as v51.1/v52.1/v52.2.
+    expect(version).toBe('v53.1');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
-      `v53 · ${built.replace(/,\s*\d{4}/, '')}`
+      `${version} · ${built.replace(/,\s*\d{4}/, '')}`
     );
     await page.locator('#open-settings').click();
-    await expect(page.locator('#app')).toContainText(`Build v53 · ${built}`);
+    await expect(page.locator('#app')).toContainText(`Build ${version} · ${built}`);
     const sw = await (await page.request.get('/sw.js')).text();
-    expect(sw).toContain("'workout-tracker-v53'");
+    expect(sw).toContain(`'workout-tracker-${version}'`);
   });
 });
 

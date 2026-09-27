@@ -19,7 +19,10 @@
 // no new shell files, so only the cache name moves.
 // v53 (Sep 26 2026): Cue → Tips, 10 = good everywhere, ride numbers screen,
 // the timer circle + edit-a-past-session — and W0's offline-list fix below.
-const VERSION = 'workout-tracker-v53';
+// v53.1 (Sep 27 2026): T1 fix r1 — timing.js's own sync fixes (the phone
+// forgot her timing answers on pull; the PGRST204 retry was lossy beyond
+// v53's own group) — no new shell files, so only the cache name moves.
+const VERSION = 'workout-tracker-v53.1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const RUNTIME_CACHE = `${VERSION}-runtime`;
 
