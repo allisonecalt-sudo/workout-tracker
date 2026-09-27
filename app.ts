@@ -74,6 +74,17 @@ import {
 
 type WorkoutId = 'A' | 'B' | 'C';
 
+// v54 (Sep 27 2026) — Workout D: "30 min elliptical", her Sep 27 NotebookLM
+// reflection ("we definitely need a 4th element a week... call it Workout D").
+// Deliberately NOT folded into WorkoutId: WeekPlan.workouts is a
+// Record<WorkoutId, Workout> and every encoded week (R1W1 through R2W5) would
+// need a D entry too — D isn't part of the A/B/C weekly rotation or its
+// PROGRAM data at all, it's one fixed extra any day, so it stays a second,
+// narrower type used only where a SAVED SESSION (not a planned week) needs to
+// carry it. WorkoutId itself, and every Record<WorkoutId,...>/PROGRAM site,
+// is untouched.
+type AnyWorkoutId = WorkoutId | 'D';
+
 type Exercise = {
   name: string;
   reps?: string;
@@ -122,7 +133,7 @@ type Exercise = {
 };
 
 type Workout = {
-  id: WorkoutId;
+  id: AnyWorkoutId;
   name: string;
   description: string;
   warmup: Exercise[];
@@ -137,7 +148,7 @@ type Workout = {
 type LogEntry = {
   id?: string;
   date: string;
-  workout: WorkoutId;
+  workout: AnyWorkoutId;
   // null = never recorded. BEFORE-capacity goes nullable in v39: the sync used
   // to coerce a missing reading to 0 with `?? 0`, which rendered historical rows
   // as "cap 0 → 0" — and 0 is not a value this slider can produce (its range is
@@ -282,7 +293,7 @@ type SyncStatus = 'syncing' | 'synced' | 'offline';
 
 type AppState = {
   screen: AppScreen;
-  selectedWorkout: WorkoutId | null;
+  selectedWorkout: AnyWorkoutId | null;
   // WK2 (Sep 27 2026), PLAN-2026-09-26.md §2.3 "pin the plan for a session in
   // progress": the plan a session trains follows the week it's PICKED in, not
   // whatever week.ts says "now" is on every later render — otherwise a
@@ -428,6 +439,13 @@ type AppState = {
   // trigger is her Jul 3 ask, and until now it depended on her "telling
   // Claude" (DECISIONS §4). Optional; a step she doesn't tap stays unset.
   armFeel: ArmFeelState;
+  // v54 (Sep 27 2026) — CHIP AFTER THE LAST SET: how many sets of a multi-set
+  // arm-feel move (curl, prone row) she's marked done THIS visit, keyed by
+  // exercise name (upperBack runs once per session — see Workout's own
+  // comment — so there's only ever one visit to key against). Local/UI only,
+  // never saved to Supabase; renderArmFeel reads it to hold the Easy/Right/
+  // Hard chip back until the last set. Reset with armFeel each fresh session.
+  setsDoneFor: Record<string, number>;
   // v48 · P5: post-log "Back: Something" was tapped — the 1-10 row is open but
   // no number is chosen yet (untouched = null). Transient.
   backSomethingOpen: boolean;
@@ -2809,6 +2827,33 @@ function getWorkoutById(id: WorkoutId, date: Date = planDateNow()): Workout {
   return getWeekPlan(date).workouts[id];
 }
 
+// v54 (Sep 27 2026) — Workout D: "Cardio · 30 min elliptical". Her Sep 27
+// NotebookLM reflection: "I definitely don't do enough cardio... maybe what I
+// could add is 30 minutes on the elliptical separately... we definitely need
+// a 4th element a week... call it Workout D... ideally not the same day as
+// another workout, but it can also be if it needs to be." Fixed, not week-
+// programmed — it never bumps, never appears in PROGRAM/WeekPlan, and is
+// available any day (including a day with A/B/C already done — she was
+// explicit it's allowed on the same day, just not the ideal). ONE step: the
+// elliptical itself, straight in (no "Outdoor walk" lane picker — D IS the
+// ride, so beginExercisesForWorkoutD below forces chooseElliptical(30)
+// directly, same as if she'd tapped ▶ Elliptical). No warmup list beyond the
+// ride's own note ("First two minutes easy...", ellipticalStep's built-in
+// line — her "short warm-up line"), no strength main block, no cool-down
+// list (empty cooldown; advanceExercise's cooldown-skip below sends her
+// straight to post-log once the ride's done).
+function getWorkoutD(): Workout {
+  return {
+    id: 'D',
+    name: 'Cardio · 30 min elliptical',
+    description: 'Steady elliptical, talk-test level 3-5 — extra, on top of A/B/C.',
+    warmup: [ellipticalStep(30)],
+    main: [],
+    cooldown: [],
+    rounds: 1,
+  };
+}
+
 function getFutureWeekPlans(date: Date = planDateNow()): WeekPlan[] {
   const current = getWeekPlan(date);
   // indexOf, not findIndex-by-weekNum: week numbers repeat across rounds.
@@ -3071,6 +3116,7 @@ const state: AppState = {
   stoppedEarlyLitePrev: null,
   heldSecFor: {},
   armFeel: {},
+  setsDoneFor: {},
   backSomethingOpen: false,
   stretchTicks: {},
   completedSteps: {},
@@ -4686,6 +4732,13 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
 
 function getCurrentWorkout(): Workout | null {
   if (!state.selectedWorkout) return null;
+  // v54 (Sep 27 2026): D is fixed, not week-programmed — resolve it straight
+  // off getWorkoutD() and skip every plan/week lookup below (they're all
+  // indexed by the PROGRAM-only WorkoutId, which never has a 'D' key). This
+  // return also narrows state.selectedWorkout to WorkoutId for the rest of
+  // the function, so every `.workouts[state.selectedWorkout]` index below
+  // stays exactly as type-safe as it was before D existed.
+  if (state.selectedWorkout === 'D') return getWorkoutD();
   // WK4 (Sep 27 2026): the RESOLVED-key pin (post-launch sessions) wins first
   // — see its own comment on AppState.pinnedWeekKey and startWorkout().
   if (state.pinnedWeekKey) {
@@ -4752,7 +4805,7 @@ function effectiveRounds(w: Workout): number {
   return state.liteDay ? Math.max(1, w.rounds - 1) : w.rounds;
 }
 
-function startWorkout(id: WorkoutId): void {
+function startWorkout(id: AnyWorkoutId): void {
   state.selectedWorkout = id;
   // WK2 (Sep 27 2026), §2.3 "pin the plan for a session in progress": fixed
   // the instant she picks it, so a session that straddles the open week's own
@@ -4830,6 +4883,7 @@ function beginExercises(): void {
   state.stoppedEarlyLitePrev = null;
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
+  state.setsDoneFor = {}; // v54: sets-done belongs to one session, same as armFeel
   state.stretchTicks = {}; // v48 · P7: ticks belong to one session
   state.completedSteps = {}; // v50 · jump list: done-marks belong to one session
   state.rideNumbersOpen = false; // v51: the ride-numbers sub-screen belongs to one session
@@ -4853,11 +4907,19 @@ function beginExercises(): void {
   // it was the elliptical or the apartment — nothing starts until she taps
   // Start, and the "↩ … instead" link is right there. A walk (or no history)
   // gets the choice screen: the walk only starts on her tap as she heads out.
-  const cardio = getCurrentWorkout()?.warmup.find((e) => e.name === 'Outdoor walk');
-  if (cardio) {
-    const lane = lastCardioLane();
-    if (lane === 'elliptical') chooseElliptical(walkStepMinutes(cardio));
-    else if (lane === 'apartment') chooseApartmentCardio(walkStepMinutes(cardio));
+  // v54 (Sep 27 2026): Workout D IS the elliptical — no lane choice at all.
+  // Force it straight in, same as tapping ▶ Elliptical herself, so the step
+  // renders on the ride face immediately (renderEllipticalStep) instead of
+  // the "Outdoor walk" placeholder D's own warmup doesn't carry.
+  if (state.selectedWorkout === 'D') {
+    chooseElliptical(30);
+  } else {
+    const cardio = getCurrentWorkout()?.warmup.find((e) => e.name === 'Outdoor walk');
+    if (cardio) {
+      const lane = lastCardioLane();
+      if (lane === 'elliptical') chooseElliptical(walkStepMinutes(cardio));
+      else if (lane === 'apartment') chooseApartmentCardio(walkStepMinutes(cardio));
+    }
   }
   render();
 }
@@ -4987,9 +5049,18 @@ function advanceExercise(): void {
       // still open (often the last of a run of previously-skipped moves).
       // Go straight to cool-down instead of the plain in-order walk below,
       // which would re-tour every move she's already ✓.
-      state.currentPhase = 'cooldown';
-      state.currentExerciseIndex = 0;
+      // v54 (Sep 27 2026): Workout D has no cool-down list at all (her spec —
+      // it's the ride, nothing else) — an empty cooldown screen is nothing
+      // to land on, so finish straight into post-log instead, same as the
+      // existing empty-upperBack branch below already does for that block.
+      if (w.cooldown.length === 0) {
+        resetPostLogFields();
+      } else {
+        state.currentPhase = 'cooldown';
+        state.currentExerciseIndex = 0;
+      }
       render();
+      if (state.screen === 'post-log') beginPostLogClockTick();
       return;
     }
   }
@@ -5320,7 +5391,11 @@ function renderProgressLine(w: Workout): string {
 // split squat sat on the same face as her 40th bridge (walk-in-her-shoes: "A
 // 'New tonight' badge"). Nothing to decide — a label, gone after one session.
 // Reused by P4/P5 (pre-log overview, home hero).
-function isNewTonight(ex: Exercise, id: WorkoutId): boolean {
+function isNewTonight(ex: Exercise, id: AnyWorkoutId): boolean {
+  // v54 (Sep 27 2026): D has no PROGRAM history to compare against (it isn't
+  // week-versioned at all — see getWorkoutD's own comment) — never "new
+  // tonight"/"again tonight" for it.
+  if (id === 'D') return false;
   const current = getWeekPlan();
   const idx = PROGRAM.indexOf(current);
   const prev = idx > 0 ? PROGRAM[idx - 1] : undefined;
@@ -5350,7 +5425,7 @@ function wasInEarlierWeek(name: string): boolean {
   );
 }
 
-function tonightKind(ex: Exercise, id: WorkoutId): TonightKind | null {
+function tonightKind(ex: Exercise, id: AnyWorkoutId): TonightKind | null {
   if (!isNewTonight(ex, id)) return null;
   return wasInEarlierWeek(ex.name) ? 'back' : 'new';
 }
@@ -5612,6 +5687,18 @@ function sanitizeArmFeel(v: unknown): ArmFeelState {
   return out;
 }
 
+// v54 (Sep 27 2026): a corrupt/out-of-range value is dropped, never crashed
+// on (same convention as sanitizeStretchTicks) — a resumed count is clamped
+// to a plausible range rather than trusted as-is.
+function sanitizeSetsDoneFor(v: unknown): Record<string, number> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof val === 'number' && Number.isInteger(val) && val >= 0 && val <= 20) out[k] = val;
+  }
+  return out;
+}
+
 // "curl=easy;row=right" — the shape the arm_feel CHECK accepts; null when none.
 function armFeelString(f: ArmFeelState): string | null {
   const parts = [f.curl ? `curl=${f.curl}` : '', f.row ? `row=${f.row}` : ''].filter(
@@ -5833,7 +5920,7 @@ const RESUMABLE_SCREENS: readonly AppScreen[] = ['workout', 'post-log'];
 
 type ActiveSessionSnapshot = {
   screen: AppScreen;
-  selectedWorkout: WorkoutId;
+  selectedWorkout: AnyWorkoutId;
   capacityBefore: number;
   capacityAfter: number;
   // v50 · mood: survives an app close the same way capacity does.
@@ -5885,6 +5972,10 @@ type ActiveSessionSnapshot = {
   stoppedEarlyLitePrev: boolean | null; // v48 · fix r1: Back to the workout
   // v48 · P5: the arm-feel taps so far survive an app close.
   armFeel: ArmFeelState;
+  // v54: how many sets of a multi-set move she's marked done survive an app
+  // close too, same as armFeel — an app close mid-set shouldn't reset her
+  // spot back to "Set 1".
+  setsDoneFor: Record<string, number>;
   // v48 · P7: her cool-down ticks survive an app close (she keeps her place).
   stretchTicks: Record<string, boolean>;
   // v50 · jump list: which steps she's already done survive an app close too
@@ -5946,6 +6037,7 @@ function saveActiveSession(): void {
       stoppedEarlyAt: state.stoppedEarlyAt,
       stoppedEarlyLitePrev: state.stoppedEarlyLitePrev,
       armFeel: state.armFeel,
+      setsDoneFor: state.setsDoneFor,
       stretchTicks: state.stretchTicks,
       completedSteps: state.completedSteps,
       rideNumbersOpen: state.rideNumbersOpen,
@@ -5982,7 +6074,8 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       clearActiveSession();
       return null;
     }
-    const w = getWorkoutById(snap.selectedWorkout);
+    // v54 (Sep 27 2026): D isn't in PROGRAM — getWorkoutById can't resolve it.
+    const w = snap.selectedWorkout === 'D' ? getWorkoutD() : getWorkoutById(snap.selectedWorkout);
     if (!w) {
       clearActiveSession();
       return null;
@@ -6074,6 +6167,8 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
           : null,
       // v48 · P5: a pre-P5 snapshot has no feel → none, never a guess.
       armFeel: sanitizeArmFeel(snap.armFeel),
+      // v54: a pre-v54 snapshot has no sets-done → {} (nothing marked yet).
+      setsDoneFor: sanitizeSetsDoneFor(snap.setsDoneFor),
       // v48 · P7: a pre-P7 snapshot has no ticks → {} (nothing ticked).
       stretchTicks: sanitizeStretchTicks(snap.stretchTicks),
       // v50 · jump list: a pre-v50 snapshot has no done-marks → {} (same
@@ -6152,6 +6247,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.stoppedEarlyLitePrev = snap.stoppedEarlyLitePrev;
   state.heldSecFor = {}; // v48: display-only, not carried across a close
   state.armFeel = snap.armFeel;
+  state.setsDoneFor = snap.setsDoneFor;
   state.stretchTicks = snap.stretchTicks;
   state.completedSteps = snap.completedSteps;
   state.rideNumbersOpen = snap.rideNumbersOpen; // v51: a close on the screen reopens on it
@@ -6339,6 +6435,7 @@ function resetState(): void {
   state.stoppedEarlyLitePrev = null;
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5
+  state.setsDoneFor = {}; // v54
   state.backSomethingOpen = false;
   state.wristPain = 0;
   state.wristPainTouched = false;
@@ -6361,7 +6458,7 @@ function resetState(): void {
 type RemoteSession = {
   id: string;
   date: string;
-  workout_type: WorkoutId;
+  workout_type: AnyWorkoutId;
   capacity_before_1_10: number | null;
   capacity_after_1_10: number | null;
   wall_sit_seconds: number | null;
@@ -6567,8 +6664,12 @@ function weekAttributionSummary(
     .map(([weekMs, weekLogs]) => ({
       saturdayIso: new Date(weekMs).toISOString(),
       count: weekLogs.length,
+      // v54: D is always after the completion-model launch (COMPLETION_WEEKS_
+      // FROM), so it never legitimately lands in this OLD-model, pre-launch
+      // per-week summary — excluded rather than widening this hook's type.
       letters: weekLogs
         .slice()
+        .filter((l): l is LogEntry & { workout: WorkoutId } => l.workout !== 'D')
         .sort((a, b) => a.date.localeCompare(b.date))
         .map((l) => l.workout),
     }));
@@ -7191,7 +7292,12 @@ function getTodaysPick(): WorkoutId {
 }
 
 // Week dots (group 2J): one entry per weekday. Color is the workout letter.
-type WeekDotInfo = { letter: string; logId: string | null; date: Date; workout: WorkoutId | null };
+type WeekDotInfo = {
+  letter: string;
+  logId: string | null;
+  date: Date;
+  workout: AnyWorkoutId | null;
+};
 
 // Which week the user is currently looking at on the home screen. 0 = this
 // (current) Sat-Fri week. 1 = one week ago. Etc. Module-level — purely UI state.
@@ -7380,6 +7486,10 @@ function planKeyForLog(entry: LogEntry): WeekKey | null {
 }
 
 function planForLog(entry: LogEntry): Workout {
+  // v54 (Sep 27 2026): D never has a completion-model week key (week.ts
+  // filters it out of sessionsForWeekModel below) and isn't in any
+  // PROGRAM/plan.workouts row — it's the one fixed Workout, always.
+  if (entry.workout === 'D') return getWorkoutD();
   const key = planKeyForLog(entry);
   if (key) return planForWeekKey(key).plan.workouts[entry.workout];
   if (isNowAfterCompletionLaunch(new Date(entry.date))) {
@@ -7494,8 +7604,17 @@ function getViewedProgramWeek(offset = 0): {
  * against a malformed/legacy row, not a live gap — an id-less log is dropped
  * rather than silently miscounted (week.ts's weekOf keys by id). */
 function sessionsForWeekModel(logs: LogEntry[]): WeekSessionLite[] {
+  // v54 (Sep 27 2026), her Sep 27 words ("we definitely need a 4th element a
+  // week... call it Workout D"), and PLAN's own rule for it: D is EXTRA — it
+  // never counts toward the week's "N of 3" and never closes/opens a week.
+  // week.ts's own Letter type is 'A'|'B'|'C' on purpose (unchanged by D), so
+  // a D session is dropped here, before it ever reaches walkWeeks — the one
+  // place completion-model week-counting reads from a log list.
   return logs
-    .filter((l): l is LogEntry & { id: string } => typeof l.id === 'string' && l.id.length > 0)
+    .filter(
+      (l): l is LogEntry & { id: string; workout: 'A' | 'B' | 'C' } =>
+        typeof l.id === 'string' && l.id.length > 0 && l.workout !== 'D'
+    )
     .map((l) => ({ id: l.id, date: l.date, workout: l.workout }));
 }
 
@@ -7998,7 +8117,7 @@ type CompletionWeekDot =
   | {
       kind: 'day';
       date: Date;
-      workout: WorkoutId | null;
+      workout: AnyWorkoutId | null;
       logId: string | null;
       isToday: boolean;
       // WK2 fix r1 (Sep 27 2026, checker's should #4): how many sessions
@@ -8597,7 +8716,12 @@ type WeeklyTargetRow = {
   isCurrentWeek: boolean;
 };
 
-function buildWeeklyTargetRows(logs: LogEntry[]): WeeklyTargetRow[] {
+function buildWeeklyTargetRows(logsIn: LogEntry[]): WeeklyTargetRow[] {
+  // v54 (Sep 27 2026): this is the 3-PER-WEEK view (her "its 3 a week" rule)
+  // — D is extra, never one of the three, so it's excluded before any
+  // attribution/slot math the same way sessionsForWeekModel excludes it from
+  // the completion model.
+  const logs = logsIn.filter((l): l is LogEntry & { workout: WorkoutId } => l.workout !== 'D');
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayDow = today.getDay();
@@ -8625,7 +8749,11 @@ function buildWeeklyTargetRows(logs: LogEntry[]): WeeklyTargetRow[] {
       weekNum: pw.num,
       round: pw.round,
       skippedLabel: pw.skippedLabel,
-      workouts: weekLogs.map((l) => l.workout),
+      // v54: safe — `logs` (above) already excludes D, so nothing in
+      // weekLogs (derived from it) is ever 'D'; this is a type-only
+      // narrowing, not a second filter (a second filter here would
+      // desync `workouts` from the parallel `logs` array below).
+      workouts: weekLogs.map((l) => l.workout as 'A' | 'B' | 'C'),
       logs: weekLogs,
       isCurrentWeek: weekStart.getTime() === thisSaturday.getTime(),
     });
@@ -8974,7 +9102,7 @@ function heroCardioLine(w: Workout): string {
 // each, over the given blocks.
 function tonightNames(
   w: Workout,
-  id: WorkoutId,
+  id: AnyWorkoutId,
   want: TonightKind,
   phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown']
 ): string[] {
@@ -9018,6 +9146,28 @@ function renderWorkoutChipsFor(ids: WorkoutId[], lead = 'or do'): string {
     })
     .join('');
   return `<div class="home-chips"><span class="home-chips-lead">${escapeHtml(lead)}</span>${chips}</div>`;
+}
+
+// v54 (Sep 27 2026) — Workout D's own chip, "D · Cardio 30". Deliberately
+// separate from renderWorkoutChipsFor: that function's ids are always the
+// week's still-MISSING A/B/C letters (it goes empty once all three are
+// done) — D is never missing, never done, never counted toward the week's
+// "3 of 3", and never excluded from the row the way a just-completed A/B/C
+// letter is. It's extra, every day, including a day she's already done
+// another workout on (her words: "it can also be if it needs to be"). A
+// small standalone row under the real chips, not folded into their "or do"
+// lead, so it never reads as a 4th thing still owed this week.
+function renderWorkoutDChip(): string {
+  const w = getWorkoutD();
+  // v54 fix (Sep 27 2026): deliberately NOT .home-chips/.home-chip — those
+  // classes are what dozens of existing tests (and §2.4's own spec) use to
+  // count "the other missing A/B/C letters"; reusing them here made D read
+  // as a 4th missing letter to every one of those locators. Its own classes,
+  // same visual weight via their own CSS.
+  return `
+    <div class="home-chips-d">
+      <button class="btn-chip home-chip-d" data-workout="D" type="button" aria-label="Start Workout D · ${escapeHtml(w.name)}">D · Cardio 30</button>
+    </div>`;
 }
 
 // The "Up next" hero — the ONE sage thing on home. The whole card is the tap
@@ -9196,7 +9346,10 @@ function renderHome(): string {
     chipsHtml = doneToday
       ? attribution.get(doneToday) !== saturdayForOffset(0).getTime()
         ? renderWorkoutChips(null, `Week ${week.num}`)
-        : renderWorkoutChips(doneToday.workout)
+        : // v54: type-only guard — this pre-launch branch never actually sees
+          // a 'D' row (D didn't exist before the completion-model launch),
+          // but renderWorkoutChips' exclude param is WorkoutId-only.
+          renderWorkoutChips(doneToday.workout === 'D' ? null : doneToday.workout)
       : renderWorkoutChips(pick);
     weekNavLinkHtml = '';
   } else {
@@ -9395,6 +9548,7 @@ function renderHome(): string {
 
     ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : renderUpNextHero(pick)}
     ${chipsHtml}
+    ${renderWorkoutDChip()}
     ${
       // v48 · P5: the 2 kg question sits right under the hero + its chips (the
       // chips read as part of the hero, so the card goes after them).
@@ -10500,10 +10654,15 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
   // Start — she sets the machine up, then starts the timer (the verifier found
   // Start at y≈470 and the steps under it, from y≈620). Tapping Start closes
   // the card (it isn't drawn while the timer runs, and stays closed after).
+  // v54 (Sep 27 2026): Workout D IS the elliptical — no walk/apartment
+  // alternative exists for it, so the "instead" link would offer a lane swap
+  // into a workout that has no walk/apartment step to swap into.
   const timer = renderLaneTimerCard(
     ex,
     false,
-    `<button class="back-link cardio-back-out" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>`
+    state.selectedWorkout === 'D'
+      ? ''
+      : `<button class="back-link cardio-back-out" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>`
   );
   const guide = renderEllipticalGuide(firstRide);
   return `
@@ -10704,8 +10863,12 @@ function renderWorkout(): string {
   // v48 · P3: never on a lane — the apartment step isn't in PROGRAM, so it read
   // as "New tonight" every week (the elliptical has its own "First ride").
   // v48 · fix r1: a returning move reads "Back tonight", never "New".
+  // v54: Workout D never reaches this generic branch (its one step is the
+  // elliptical, handled above) — the 'D' exclusion here is type-safety only.
   const kind =
-    !indoorLane && state.selectedWorkout !== null ? tonightKind(ex, state.selectedWorkout) : null;
+    !indoorLane && state.selectedWorkout !== null && state.selectedWorkout !== 'D'
+      ? tonightKind(ex, state.selectedWorkout)
+      : null;
 
   // v48: a hold's timer comes straight after name + reps + safety line — it IS
   // the step. It used to sit under a 257 px picture, below the fold.
@@ -10729,7 +10892,7 @@ function renderWorkout(): string {
           ${kind ? `<span class="new-tonight-badge">${kind === 'new' ? 'New tonight' : 'Again tonight'}</span>` : ''}
         </div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
-        ${renderArmFeel(ex.name)}
+        ${renderArmFeel(ex)}
         ${safety ? `<p class="exercise-safety">${escapeHtml(safety)}</p>` : ''}
         ${renderTipsExpander(ex, safety)}
         ${renderExerciseSetup(ex)}
@@ -10770,12 +10933,44 @@ function renderWorkout(): string {
   `;
 }
 
+// v54 (Sep 27 2026) — how many sets a move's own `reps` text says ("2 sets ·
+// 12 reps", "2 sets · 12 reps each side"). A leading "N sets" / "N ×" / "N x"
+// count; anything else (no match, or N <= 1) is a single-set move and
+// unaffected — same "single-set holds don't change" convention as F1's own
+// wall-lean-sets spec (PLAN-2026-09-26.md §7 F1), applied here to the
+// Easy/Right/Hard chip instead of a timer.
+function multiSetCount(reps: string | undefined): number {
+  const m = /^(\d+)\s*(?:sets?|[×x])\b/i.exec((reps ?? '').trim());
+  const n = m ? Number(m[1]) : NaN;
+  return Number.isFinite(n) && n > 1 ? n : 1;
+}
+
 // v48 · P5 (Sep 24 2026): "How did it feel?" on the 1 kg curl and the prone
 // row — three small chips, optional; tap selects, tap again clears. Quiet
 // (outlined), so Done · Next stays the one sage on the step.
-function renderArmFeel(name: string): string {
-  const step = ARM_FEEL_STEPS[name];
+//
+// v54 (Sep 27 2026) — CHIP AFTER THE LAST SET. Her Sep 27 reflection: "for
+// the good right hard... there's two sets? Maybe I should only do on the
+// second time? Should I do both times?" Both curl and the prone row say "2
+// sets" in their own reps text, done off ONE screen with no timer between
+// them (no Start/Stop boundary the app can see) — so before this, the chip
+// simply appeared the instant the step did, with nothing marking "you've
+// actually finished both sets" first. Now a multi-set move shows a plain "Set
+// X done" tap instead, and the chip itself waits for the LAST one: it never
+// asks the question after only set 1. A single-set move (multiSetCount <= 1)
+// is unchanged — chip shows immediately, exactly as before.
+function renderArmFeel(ex: Exercise): string {
+  const step = ARM_FEEL_STEPS[ex.name];
   if (!step) return '';
+  const total = multiSetCount(ex.reps);
+  const done = Math.min(state.setsDoneFor[ex.name] ?? 0, total);
+  if (total > 1 && done < total) {
+    return `
+      <div class="arm-feel arm-feel-sets" role="group" aria-label="Sets">
+        <span class="arm-feel-label">Set ${done + 1} of ${total}</span>
+        <button class="arm-set-btn" type="button" data-mark-set="${escapeHtml(ex.name)}">Set ${done + 1} done</button>
+      </div>`;
+  }
   const current = state.armFeel[step];
   const chips = ARM_FEEL_VALUES.map((v) => {
     const on = current === v;
@@ -10784,6 +10979,7 @@ function renderArmFeel(name: string): string {
   }).join('');
   return `
     <div class="arm-feel" role="group" aria-label="How did it feel?">
+      ${total > 1 ? `<span class="arm-feel-label arm-feel-sets-done">${total} sets ✓</span>` : ''}
       <span class="arm-feel-label">How did it feel?</span>
       <div class="arm-feel-chips">${chips}</div>
     </div>`;
@@ -13196,7 +13392,10 @@ function renderProgress(): string {
   // v48 · P6 (Sep 24 2026): the "Exercise breakdown" card (94 rows repeating
   // three numbers — uxui progress 3/5) became these three chips.
   const byWorkout: Record<WorkoutId, number> = { A: 0, B: 0, C: 0 };
-  for (const l of logs) byWorkout[l.workout] += 1;
+  // v54 (Sep 27 2026): D is extra, never one of the three — it counts in
+  // cardio minutes/totals (the Rides page, via ellipticalRideRecords, which
+  // reads cardioLane not workout letter) but never in this A/B/C breakdown.
+  for (const l of logs) if (l.workout !== 'D') byWorkout[l.workout] += 1;
   const subtitle =
     count > 0
       ? `<div class="progress-subtitle">${(['A', 'B', 'C'] as WorkoutId[])
@@ -13798,7 +13997,7 @@ function attachHandlers(): void {
   // v48 · P4: the "Up next" hero AND the B/C chips carry data-workout.
   document.querySelectorAll<HTMLButtonElement>('button[data-workout]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const id = btn.dataset['workout'] as WorkoutId | undefined;
+      const id = btn.dataset['workout'] as AnyWorkoutId | undefined;
       if (id) {
         unlockAudio(); // Group 1C: gesture-anchored audio unlock
         startWorkout(id);
@@ -14361,6 +14560,19 @@ function attachHandlers(): void {
         [step]: state.armFeel[step] === feel ? undefined : feel,
       };
       if (state.armFeel[step] === undefined) delete state.armFeel[step];
+      saveActiveSession();
+      render();
+    });
+  });
+  // v54 (Sep 27 2026) — CHIP AFTER THE LAST SET: "Set N done" on a multi-set
+  // arm-feel move. One-way per session (no untap — a real set doesn't undo
+  // itself); capped at the move's own total in renderArmFeel so a stray extra
+  // tap can't push it past "N of N".
+  document.querySelectorAll<HTMLButtonElement>('[data-mark-set]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset['markSet'];
+      if (!name) return;
+      state.setsDoneFor = { ...state.setsDoneFor, [name]: (state.setsDoneFor[name] ?? 0) + 1 };
       saveActiveSession();
       render();
     });

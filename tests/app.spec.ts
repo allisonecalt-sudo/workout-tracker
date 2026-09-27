@@ -29,13 +29,16 @@ async function openCue(page: Page): Promise<void> {
 
 // v48 · P4 (Sep 24 2026): home = the "Up next" hero + B/C chips — still three
 // ways in (all data-workout), and the one week line carries the count.
+// v54 (Sep 27 2026): a 4th data-workout button joined — Workout D's own
+// "D · Cardio 30" chip, always on Home, extra to the A/B/C rotation.
 test('home screen shows three workout options and zero sessions', async ({ page }) => {
   await expect(page.locator('.home-header h1')).toBeVisible();
-  await expect(page.locator('button[data-workout]')).toHaveCount(3);
+  await expect(page.locator('button[data-workout]')).toHaveCount(4);
   await expect(page.locator('.home-hero')).toContainText('Workout A');
   await expect(page.locator('.home-hero')).toContainText('Lower Body + Core');
   await expect(page.locator('button.btn-chip[data-workout="B"]')).toHaveText('B · Glutes');
   await expect(page.locator('button.btn-chip[data-workout="C"]')).toHaveText('C · Cardio');
+  await expect(page.locator('button.btn-chip[data-workout="D"]')).toHaveText('D · Cardio 30');
   // WK2 (Sep 27 2026): "now" (no mockDate here) is permanently past the real
   // completion-model launch (Sep 26 2026 22:30) from here on, so a clean,
   // zero-session fixture reads the completion model's own "nothing done yet"
@@ -3800,6 +3803,54 @@ test('elliptical: finishing saves the minutes + level + readings, never POSTs, a
   }
 });
 
+// v54 (Sep 27 2026) — WORKOUT D: her Sep 27 NotebookLM reflection ("30
+// minutes on the elliptical separately... call it Workout D"). One step, no
+// lane picker (D IS the ride), no cool-down list, saves as workout 'D' and
+// never counts toward the week's "N of 3".
+test('Workout D: straight onto the 30-min ride, no lane picker, no cool-down, saves as D and never counts toward the week', async ({
+  page,
+}) => {
+  const posted: string[] = [];
+  page.on('request', (req) => {
+    if (req.method() === 'POST') posted.push(req.url());
+  });
+  await movableClock(page, '2026-09-27T08:00:00.000Z'); // Sunday, after the completion-model launch
+  await page.goto('/');
+  await expect(page.locator('button.btn-chip[data-workout="D"]')).toHaveText('D · Cardio 30');
+  await page.locator('button[data-workout="D"]').click();
+  await expect(page.locator('h2')).toContainText('Workout D');
+  await page.locator('#begin').click();
+  // Straight onto the ride face — no "▶ Elliptical / Walk / Apartment" choice,
+  // and no "↩ Walk or apartment instead" link (D has no lane to swap into).
+  await expect(page.locator('#ww-elliptical')).toHaveCount(0);
+  await expect(page.locator('#ww-outdoor')).toHaveCount(0);
+  await expect(page.locator('.timer-display')).toHaveText('30:00');
+  await page.locator('#start-timed').click();
+  await advanceClock(page, 30 * 60_000 + 2_000);
+  await expect(page.locator('.timer-done')).toHaveText('✓ 30 min done');
+  await page.locator('#next').click(); // opens the ride-numbers screen
+  await expect(page.locator('#ell-time')).toBeVisible();
+  await page.locator('#ell-km').fill('3.0');
+  await page.locator('#ell-pulse').fill('120');
+  // No cool-down list for D — Save · Next on the ride goes straight to post-log.
+  await page.locator('#next').click();
+  await expect(page.locator('text=Quick log')).toBeVisible();
+  await page.locator('#save-log').click();
+  await expect(page.locator('.home-header h1')).toBeVisible();
+
+  const raw = await page.evaluate(() => localStorage.getItem('workout-tracker:logs'));
+  const logs = JSON.parse(raw ?? '[]') as Array<Record<string, unknown>>;
+  expect(logs.length).toBe(1);
+  expect(logs[0]?.['workout']).toBe('D');
+  expect(logs[0]?.['cardioLane']).toBe('elliptical');
+  expect(logs[0]?.['cardioMinutes']).toBe(30);
+  expect(posted.filter((u) => u.includes('workout_sessions'))).toEqual([]);
+
+  // D is extra — the week still reads 0 of 3 (A, B and C still all to go).
+  await expect(page.locator('.week-line')).toContainText('0 of 3');
+  await expect(page.locator('.week-line')).not.toContainText('D');
+});
+
 test('elliptical: the next ride opens on the elliptical and offers the last level again', async ({
   page,
 }) => {
@@ -7506,7 +7557,14 @@ test.describe('v48 P5 logs', () => {
     await page.locator('button[data-workout="A"]').click();
     await page.locator('#begin').click();
     await goToStep(page, 'Prone row'); // v48 final: display label, key unchanged
-    await expect(page.locator('.arm-feel-label')).toHaveText('How did it feel?');
+    // v54 (Sep 27 2026): CHIP AFTER THE LAST SET — the row says "2 sets", so
+    // the Easy/Right/Hard chip waits for both "Set N done" taps first.
+    await expect(page.locator('.arm-feel-label')).toHaveText('Set 1 of 2');
+    await expect(page.locator('[data-arm-step]')).toHaveCount(0);
+    await page.locator('[data-mark-set="Prone row (bodyweight)"]').click();
+    await expect(page.locator('.arm-feel-label').first()).toHaveText('Set 2 of 2');
+    await page.locator('[data-mark-set="Prone row (bodyweight)"]').click();
+    await expect(page.locator('.arm-feel-label').last()).toHaveText('How did it feel?');
     await page.locator('[data-arm-step="row"][data-arm-feel="right"]').click();
     await expect(page.locator('[data-arm-step="row"][data-arm-feel="right"]')).toHaveAttribute(
       'aria-pressed',
@@ -7515,6 +7573,9 @@ test.describe('v48 P5 logs', () => {
     // Quiet: Done · Next is still the one sage on the step.
     await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
     await goToStep(page, '1 kg biceps curl');
+    // v54: same two-set gate on the curl.
+    await page.locator('[data-mark-set="1 kg biceps curl"]').click();
+    await page.locator('[data-mark-set="1 kg biceps curl"]').click();
     // Tap Hard, then change her mind: tap Hard again clears, then Easy.
     await page.locator('[data-arm-step="curl"][data-arm-feel="hard"]').click();
     await page.locator('[data-arm-step="curl"][data-arm-feel="hard"]').click();

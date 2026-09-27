@@ -737,7 +737,10 @@ button:disabled {
  * (spec §7 "What NOT to change"); a done day here is plain ink. */
 .dot-A .week-dot-bubble,
 .dot-B .week-dot-bubble,
-.dot-C .week-dot-bubble {
+.dot-C .week-dot-bubble,
+/* v54 (Sep 27 2026): Workout D on the week strip — same plain-ink treatment
+   as A/B/C (it's extra, not a 4th identity colour to learn). */
+.dot-D .week-dot-bubble {
   background: var(--ink-2);
   color: var(--bg);
 }
@@ -5310,6 +5313,22 @@ textarea:focus {
   white-space: nowrap;
 }
 
+/* v54 (Sep 27 2026): Workout D's own row — deliberately its own classes, not
+ * .home-chips/.home-chip (those are what the "other missing A/B/C letters"
+ * locators/tests count — D must never look like a 4th missing letter).
+ * Pulled up snug under the real chips (negative top margin eats
+ * .home-chips' own margin-bottom) so it reads as "one more small thing". */
+.home-chips-d {
+  margin-top: -10px;
+  margin-bottom: 18px;
+}
+
+.home-chip-d {
+  min-height: 44px;
+  padding: 8px 16px;
+  white-space: nowrap;
+}
+
 /* After Save, until midnight — witnessed, not sage. v53: also the door to
  * today's Session screen (Edit lives there) — same tap affordance as .week-card. */
 .home-done-card {
@@ -5852,6 +5871,27 @@ textarea:focus {
   color: var(--text);
   border-color: var(--accent-progress);
   background: color-mix(in srgb, var(--accent-progress) 18%, transparent);
+}
+
+/* v54 (Sep 27 2026) — CHIP AFTER THE LAST SET: the "Set N done" row a
+ * multi-set move shows before the Easy/Right/Hard chip is allowed to appear.
+ * Same quiet, outlined register as .arm-chip (not sage — Done · Next stays
+ * the one sage on the step). */
+.arm-feel-sets-done {
+  color: var(--sage);
+  font-weight: 600;
+}
+
+.arm-set-btn {
+  min-height: 44px;
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-meta);
+  font-weight: 500;
+  cursor: pointer;
 }
 
 /* The 2 kg question on home: a quiet card, never sage. */
