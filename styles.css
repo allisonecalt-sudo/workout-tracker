@@ -756,6 +756,31 @@ button:disabled {
     0 0 0 4.5px var(--hair-strong);
 }
 
+/* WK2 fix r2 (Sep 27 2026, checker's should #4): §2.4's exact Home-strip
+ * sizes — 32px bubble, 15px/700 letter inside, 15px weekday label, 34px
+ * columns. Scoped to #week-strip only (never the bare .week-dot-bubble /
+ * .week-dot-label classes) — those are SHARED with the legacy Sessions /
+ * Progress / Weekly-review dots (see the "Home only" comment above), which
+ * keep their existing, smaller size untouched. */
+#week-strip.week-dots {
+  gap: 4px;
+}
+
+#week-strip .week-dot {
+  flex: 0 0 34px;
+}
+
+#week-strip .week-dot-label {
+  font-size: 15px;
+}
+
+#week-strip .week-dot-bubble {
+  width: 32px;
+  height: 32px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
 /* --- Exercise display --------------------------------------------------- */
 
 .exercise-display {
@@ -5375,7 +5400,11 @@ textarea:focus {
   margin-top: 8px;
   padding: 10px 0 0;
   min-height: 44px;
-  font-size: var(--font-meta);
+  /* WK2 fix r2 (Sep 27 2026, checker's nice #5): she asked for it "plain,
+   * visible" — 14px (var(--font-meta)) read like decorative meta, not a
+   * link; 15px matches the app's other quiet buttons. --text-dim already
+   * resolves to --ink-2 (see :root), so the color itself was already right. */
+  font-size: 15px;
   color: var(--text-dim);
   text-align: center;
   background: none;

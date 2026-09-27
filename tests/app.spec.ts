@@ -807,6 +807,79 @@ test('pull merge (v33): a row deleted on the server disappears; unsynced, out-of
   expect(result.empty).toEqual(['keep-me']);
 });
 
+// WK2 fix r2 (Sep 27 2026, checker's must #1 / GATE 1): mergeRemoteSessions
+// already drops a synced row the server no longer has (v33, above) — but if
+// that row is the ONE that closed a completion-model week (the 3rd distinct
+// letter), a naive drop lets week.ts's walkWeeks recompute fresh, see only 2
+// distinct letters, and silently REOPEN that week, renumbering everything
+// after it. This already happened once, pre-model (the false Thu Sep 10 B,
+// deleted Sep 11, covered by the v33 test above) — a future delete of a
+// POST-launch closing session would cascade the same way here. The real fix
+// (counted_round/counted_week columns, or a stored closed-week record) is a
+// schema decision that needs her yes first — this proves the non-schema
+// guard that closes the practical risk in the meantime.
+test('pull merge (WK2 fix r2, GATE 1): a DELETED closing session survives instead of silently reopening + renumbering the week', async ({
+  page,
+}) => {
+  const result = await page.evaluate(() => {
+    type Row = { id: string; date: string; workout: string; staleRemoteDelete?: boolean };
+    type Merge = (local: unknown[], remote: unknown[]) => Row[];
+    const merge = (window as unknown as { __wtMergeRemoteSessions: Merge }).__wtMergeRemoteSessions;
+    const local = (id: string, date: string, workout: string) => ({
+      id,
+      date,
+      workout,
+      capacityBefore: 8,
+      capacityAfter: 8,
+      wallSitSec: 0,
+      backPain: 0,
+      word: '',
+      synced: true,
+    });
+    const remote = (id: string, date: string, workout_type: string) => ({
+      id,
+      date,
+      workout_type,
+      capacity_before_1_10: 8,
+      capacity_after_1_10: 8,
+      wall_sit_seconds: 0,
+      pain_back_0_10: null,
+      one_word: null,
+      started_at: null,
+      completed_at: null,
+      duration_seconds: null,
+      notes: null,
+    });
+    // Week 5 (post-launch, real COMPLETION_WEEKS_FROM): A Sun, B Mon, then C
+    // Tue closes it — 'wk5-c' is the CLOSING session (week.ts: the session
+    // whose own date === the span's closedAt). 'wk5-extra' is an ordinary
+    // repeat A the next day — no special status, must still behave like v33.
+    const localRows = [
+      local('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+      local('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+      local('wk5-c', '2026-09-29T15:00:00.000Z', 'C'), // closes Week 5
+      local('wk5-extra', '2026-09-30T15:00:00.000Z', 'A'), // ordinary repeat
+    ];
+    // The pull is missing BOTH the closing session AND the ordinary repeat —
+    // same "deleted on the server" shape either way.
+    const remoteRows = [
+      remote('wk5-a', '2026-09-27T15:00:00+00:00', 'A'),
+      remote('wk5-b', '2026-09-28T15:00:00+00:00', 'B'),
+    ];
+    const merged = merge(localRows, remoteRows);
+    return {
+      ids: merged.map((r) => r.id).sort(),
+      closing: merged.find((r) => r.id === 'wk5-c'),
+    };
+  });
+
+  // The ordinary repeat still disappears — v33 behavior, unchanged.
+  expect(result.ids).not.toContain('wk5-extra');
+  // The closing session survives instead, flagged rather than silently gone.
+  expect(result.ids).toContain('wk5-c');
+  expect(result.closing?.staleRemoteDelete).toBe(true);
+});
+
 // v50 · mood (Sep 25 2026): mood_before/mood_after round-trip through the pull
 // merge the same way capacity does — present → her number, missing (a
 // pre-v50 server row) → null, never invented.
@@ -6152,7 +6225,14 @@ test.describe('v48 P4 home', () => {
         swingLog('sat-b', '2026-09-26T19:14:51.000Z', 'B'), // 22:14 local — before the 22:30 launch
       ]);
       await page.goto('/');
-      await expect(page.locator('.home-done-line')).toHaveText('Week 4 done · 3 of 3 ✓');
+      // WK2 fix r2 (Sep 27 2026, checker's nice #1): this real moment closed
+      // the OLD model's Week 4 AND opened the new model's Week 5 at once — it
+      // deserves the same second line the doneTodayClosedSpan branch already
+      // gives a completion-model close ("Week N starts now" / "opens ...").
+      await expect(page.locator('.home-done-line')).toHaveText([
+        'Week 4 done · 3 of 3 ✓',
+        'Week 5 starts now',
+      ]);
     });
 
     test('Home on Week 5 day 3, one session (A) done: sub-line, count, Up next = B, one chip (C)', async ({
@@ -6248,7 +6328,13 @@ test.describe('v48 P4 home', () => {
         'opens Sat Oct 3 · a session before then counts as an extra for Week 5'
       );
       await expect(page.locator('.week-line')).toHaveText('0 of 3 · A, B and C to go');
-      await expect(page.locator('.home-chips-lead')).toHaveText('Week 6 ·');
+      // WK2 fix r2 (Sep 27 2026, checker's should #2): the chip lead used to
+      // always say "Week 6 ·" here even though a tap on any of these chips
+      // right now would actually count BACKWARD as an extra rep into Week 5
+      // (week.ts rule 3, same gap the sub-line above already names truthfully)
+      // — the exact class of bug the v52.2 swing fix existed to close, just
+      // moved to a new spot. Say the truth the tap will actually produce.
+      await expect(page.locator('.home-chips-lead')).toHaveText('Week 5 ·');
       await expect(page.locator('.home-chips .home-chip')).toHaveCount(3);
     });
 
@@ -6487,6 +6573,119 @@ test.describe('v48 P4 home', () => {
         expect([...week.letters].sort()).toEqual(['A', 'B', 'C']);
       }
       expect(summary.reduce((sum, week) => sum + week.count, 0)).toBe(42);
+    });
+
+    test("during the gap, the workout actually TRAINS the closed week's plan too, not just its label (checker's should #2)", async ({
+      page,
+    }) => {
+      // WK2 fix r2 (Sep 27 2026, checker's should #2): the test above proves
+      // pre-log/post-log's TEXT already says the truth — this proves the
+      // CONTENT does too (planDateNow, and getCurrentWorkout's unpinned
+      // fallback, both used to read the PENDING week's key during a gap). A
+      // real Round-2 Week-6 PROGRAM row doesn't exist yet, so before this fix
+      // Week 6 silently repeated Week 5's own moves either way — invisible
+      // until a real row lands. A clearly-marked fake row makes the two
+      // weeks' content provably different, so this can't pass by accident.
+      await mockDate(page, '2026-10-01T10:00:00.000Z'); // Thu Oct 1 — mid-gap
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-09-29T15:00:00.000Z', 'C'), // Tue — closed Week 5
+      ]);
+      await page.goto('/');
+      await page.evaluate(() => {
+        (
+          window as unknown as {
+            __wtInjectMarkerProgramWeek: (
+              round: number,
+              week: number,
+              startsOn: string,
+              workoutId: string,
+              marker: string
+            ) => void;
+          }
+        ).__wtInjectMarkerProgramWeek(2, 6, '2026-10-03', 'A', 'TEST-MARKER-WEEK6');
+      });
+      await page.locator('button[data-workout="A"]').click();
+      await expect(page.locator('.prelog-meta')).toContainText('Week 5 · an extra rep');
+      // The PREVIEW (before Start is even tapped) must already agree with
+      // that label — not just the workout once it begins.
+      await page.locator('.prelog-overview-summary').click();
+      await expect(page.locator('.prelog-overview')).not.toContainText('TEST-MARKER-WEEK6');
+      await page.locator('#begin').click();
+      await expect(page.locator('.exercise-name')).not.toHaveText('TEST-MARKER-WEEK6');
+    });
+
+    test('the pinned plan survives an app close — even once a background sync closes the week under it (§2.8 item 4)', async ({
+      page,
+      context,
+    }) => {
+      // WK2 fix r2 (Sep 27 2026, checker's should #3 / §2.8 item 4): no test
+      // covered "the pinned plan survives midnight and an app close" —
+      // week.test.ts #7 was repurposed for ties (week.ts's own comment), and
+      // nothing in tests/ asserted pinnedPlanDateIso across a reload. Week 5
+      // is open with A and C already done (B missing) — she starts B, pinning
+      // Week 5's plan. While her session sits open (unsaved), a background
+      // sync lands a SECOND, earlier B (a queued offline write from another
+      // day flushing, or a second phone) — completing A+B+C and closing
+      // Week 5 out from under her, with no action of her own. A fake
+      // Round-2 Week-6 row (a real one doesn't exist yet) makes the two
+      // weeks' content provably different, same as the test above.
+      await mockDate(page, '2026-09-28T10:00:00.000Z'); // Mon, day 3 — Week 5 still open
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-c', '2026-09-27T16:00:00.000Z', 'C'),
+      ]);
+      await page.goto('/');
+      await page.evaluate(() => {
+        (
+          window as unknown as {
+            __wtInjectMarkerProgramWeek: (
+              round: number,
+              week: number,
+              startsOn: string,
+              workoutId: string,
+              marker: string
+            ) => void;
+          }
+        ).__wtInjectMarkerProgramWeek(2, 6, '2026-10-03', 'B', 'TEST-MARKER-WEEK6');
+      });
+      await expect(page.locator('button.home-hero[data-workout="B"]')).toContainText('Up next');
+      await page.locator('button[data-workout="B"]').click();
+      await page.locator('#begin').click();
+      const exerciseName = page.locator('.exercise-name');
+      await expect(exerciseName).not.toHaveText('TEST-MARKER-WEEK6');
+      const beforeText = await exerciseName.textContent();
+
+      // The background sync: a DIFFERENT, already-saved B — closes Week 5
+      // without her in-progress one ever saving.
+      await page.evaluate(() => {
+        const raw = window.localStorage.getItem('workout-tracker:logs');
+        const rows: unknown[] = raw ? JSON.parse(raw) : [];
+        rows.push({
+          id: 'wk5-b-other-device',
+          date: '2026-09-28T09:00:00.000Z',
+          workout: 'B',
+          capacityBefore: 8,
+          capacityAfter: 8,
+          wallSitSec: 0,
+          backPain: 0,
+          word: '',
+          synced: true,
+        });
+        window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+      });
+
+      // The app close + reopen — same pattern as the "resume" tests above: a
+      // new page in the SAME context keeps the same localStorage, a real PWA
+      // reopen does too.
+      const reopened = await context.newPage();
+      await mockDate(reopened, '2026-09-28T10:05:00.000Z');
+      await reopened.goto('/');
+      await expect(reopened.locator('.round-indicator')).toBeVisible();
+      await expect(reopened.locator('.exercise-name')).toHaveText(beforeText ?? '__never_empty__');
+      await expect(reopened.locator('.exercise-name')).not.toHaveText('TEST-MARKER-WEEK6');
+      await reopened.close();
     });
   });
 

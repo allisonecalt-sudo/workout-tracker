@@ -201,6 +201,15 @@ type LogEntry = {
   // that was never edited after the fact.
   pendingEdit?: boolean;
   synced?: boolean;
+  // WK2 fix r2 (Sep 27 2026, checker's must #1 / GATE 1): true when a pull
+  // said the server no longer has this row, but it's the CLOSING session of
+  // an already-closed completion-model week (see mergeRemoteSessions and
+  // completionClosingSessionIds's own comments) — kept locally on purpose
+  // rather than silently dropped, so the week model never reopens +
+  // renumbers under her without anyone deciding that on purpose. Never sent
+  // to Supabase; a local-only flag for a human (her, or Claude) to notice
+  // and resolve deliberately.
+  staleRemoteDelete?: boolean;
 };
 
 type AppScreen =
@@ -4481,8 +4490,15 @@ function getCurrentWorkout(): Workout | null {
   // unchanged) — giving the pin itself a resolved KEY instead of a date is
   // WK4's job (PLAN-2026-09-26.md §2.3: "land WK4's planForLog before any
   // Week 6 PROGRAM row is written").
+  // WK2 fix r2 (Sep 27 2026, checker's should #2): during a GAP, shownWeek()
+  // .key is the PENDING week — exactly what preLogWeekLabel/weekSubLabel
+  // already stopped naming here (gapCountsBackToWeekKey). Reading the raw key
+  // instead would preview the PENDING week's content while the text right
+  // above it says the save counts toward the closed one — a session that
+  // hadn't even reached Start yet would already disagree with its own label.
   if (isNowAfterCompletionLaunch()) {
-    return planForWeekKey(shownWeek().key).plan.workouts[state.selectedWorkout];
+    const key = gapCountsBackToWeekKey() ?? shownWeek().key;
+    return planForWeekKey(key).plan.workouts[state.selectedWorkout];
   }
   return getWorkoutById(state.selectedWorkout, planDateNow());
 }
@@ -6044,12 +6060,32 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
   const windowIsEverything = remote.length < PULL_LIMIT;
   const oldestRemoteMs =
     remote.length > 0 ? Math.min(...remote.map((r) => new Date(r.date).getTime())) : NaN;
+  // WK2 fix r2 (Sep 27 2026, checker's must #1 / GATE 1) — computed ONCE, off
+  // `local` exactly as it stands before this merge touches it (the same
+  // closed weeks she's already seen on Home). See completionClosingSessionIds'
+  // own comment for why this exists instead of the schema change the plan's
+  // GATE 1 actually asks for.
+  const protectedClosingIds = completionClosingSessionIds(local);
   const byId = new Map<string, LogEntry>();
   for (const l of local) {
     if (!l.id) continue;
     if (l.synced && remote.length > 0 && !remoteIds.has(l.id)) {
       const insideWindow = windowIsEverything || new Date(l.date).getTime() >= oldestRemoteMs;
-      if (insideWindow) continue; // deleted on the server → drop it here too
+      if (insideWindow) {
+        if (protectedClosingIds.has(l.id)) {
+          // Refuse to silently drop it (CLAUDE.md fail-loud rule) — see
+          // completionClosingSessionIds' own comment. Keep it, flagged, so a
+          // real look decides what happened instead of the week model
+          // quietly reopening and renumbering everything after it.
+          console.error(
+            `[week] refusing to drop session ${l.id} (${l.date}, Workout ${l.workout}) — ` +
+              `it closed a completion-model week and the server no longer has it. ` +
+              `Keeping it locally (PLAN-2026-09-26.md WK2 GATE 1).`
+          );
+          byId.set(l.id, { ...l, staleRemoteDelete: true });
+        }
+        continue; // either kept above (protected) or genuinely deleted on the server
+      }
     }
     byId.set(l.id, l);
   }
@@ -6144,6 +6180,34 @@ function weekAttributionSummary(
     }));
 }
 
+// WK2 fix r2 (Sep 27 2026, checker's should #2/#3 test coverage): a real
+// Round-2 Week-6 PROGRAM row doesn't exist yet (§2.6), so a test proving "the
+// live-recomputed plan differs from the pinned one" needs SOME way to make
+// two weeks' content provably different without hand-writing a whole
+// WeekPlan literal per test. Clones the row directly below the target week
+// (the same row planForWeekKey's own "repeat" fallback would pick), re-labels
+// it as the given round/week/startsOn, and swaps one exercise's display name
+// for `marker` — test-only, guarded the same way as every hook below.
+function injectMarkerProgramWeek(
+  round: number,
+  weekNum: number,
+  startsOn: string,
+  workoutId: WorkoutId,
+  marker: string
+): void {
+  const base = planForWeekKey({ round, week: weekNum - 1 }).plan;
+  const clone = JSON.parse(JSON.stringify(base)) as WeekPlan;
+  clone.round = round;
+  clone.weekNum = weekNum;
+  clone.startsOn = startsOn;
+  const firstEx = clone.workouts[workoutId].warmup[0];
+  // `label` (not `name`) — displayName() always prefers it, so the marker
+  // shows up on screen regardless of any name-based special-casing (e.g. the
+  // "Outdoor walk" → "Cardio" swap).
+  if (firstEx) firstEx.label = marker;
+  PROGRAM.push(clone);
+}
+
 // Test-only hooks: these are pure functions reached through UI paths that are
 // awkward or destructive to drive (a file-picker import, a whole seeded week),
 // and the network is off under automation (syncDisabled). Never set outside
@@ -6159,6 +6223,7 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     __wtPatchMatchedARow?: typeof patchMatchedARow;
     __wtWeekAttributionSummary?: typeof weekAttributionSummary;
     __wtStartWorkout?: typeof startWorkout;
+    __wtInjectMarkerProgramWeek?: typeof injectMarkerProgramWeek;
   };
   w.__wtMergeRemoteSessions = mergeRemoteSessions;
   w.__wtIsValidLogEntry = isValidLogEntry;
@@ -6179,6 +6244,7 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   // time) needs a way in that isn't a Home click. startWorkout() itself is
   // the exact function a real tap already calls; reached here the same way.
   w.__wtStartWorkout = startWorkout;
+  w.__wtInjectMarkerProgramWeek = injectMarkerProgramWeek;
 }
 
 async function pullFromSupabase(): Promise<void> {
@@ -6806,12 +6872,21 @@ function homeWeekOffset(): number {
  * getWeekPlan(date)'s existing "highest startsOn <= date" scan (see that
  * function's own comment on why this is also the repeat/fallback rule).
  * Pre-launch (or a test mocking an earlier date) keeps the original swing
- * rule untouched — see isNowAfterCompletionLaunch's own comment. */
+ * rule untouched — see isNowAfterCompletionLaunch's own comment.
+ * WK2 fix r2 (Sep 27 2026, checker's should #2): during a GAP, shownWeek().key
+ * is the PENDING week (it hasn't opened yet) — a session started right now
+ * doesn't train that week's moves, it counts BACKWARD into the week that just
+ * closed (week.ts rule 3, gapCountsBackToWeekKey), same truth preLogWeekLabel
+ * and postLogWitnessLine already say. Before this fix, a session started
+ * during a gap trained the PENDING week's plan while every screen around it
+ * said the save would count toward the closed one — invisible only because
+ * PROGRAM had no row for the pending week yet (it silently repeated the
+ * closed week's own moves either way); it breaks the day a real row exists. */
 function planDateNow(): Date {
   if (!isNowAfterCompletionLaunch()) {
     return homeWeekOffset() === 1 ? saturdayForOffset(1) : new Date();
   }
-  return completionWeekSyntheticDate(shownWeek().key);
+  return completionWeekSyntheticDate(gapCountsBackToWeekKey() ?? shownWeek().key);
 }
 
 /** The date whose plan applied to a SAVED session: the Saturday of the week it counts toward. */
@@ -6975,6 +7050,39 @@ function weekModel(): ReturnType<typeof walkWeeks> {
   );
 }
 
+/** WK2 fix r2 (Sep 27 2026, checker's must #1 / GATE 1): which session ids are
+ * the CLOSING session (the one whose save reached 3 distinct letters) of an
+ * ALREADY-CLOSED completion-model week, over the given log list. Once even
+ * one span has closed, every week after it — open, pending, or another closed
+ * span — depends on that span's own NUMBER staying put: mergeRemoteSessions
+ * uses this to refuse silently dropping one of these ids just because a pull
+ * no longer has it (a naive recompute without it would reopen the span and
+ * renumber everything after it — the exact risk the WK1 fix r2 checker named,
+ * carried forward as WK2's GATE 1). The real fix the plan asks for
+ * (counted_round/counted_week audit columns, or a stored closed-week record
+ * next to week_moves) is a SCHEMA decision that needs her yes first
+ * (CLAUDE.md's schema-change rule) — this is the non-schema guard that closes
+ * the practical risk in the meantime. Only 'three' closes are ever session-
+ * driven ('moved_on'/'round_ended' close on a MoveOn/RoundStart event, not a
+ * deletable session, so they're out of scope here on purpose). */
+function completionClosingSessionIds(logs: LogEntry[]): Set<string> {
+  const { spans } = walkWeeks(
+    sessionsForWeekModel(logs),
+    movesForWeekModel(),
+    roundStartsForWeekModel()
+  );
+  const ids = new Set<string>();
+  for (const span of spans) {
+    if (span.how !== 'three') continue;
+    // The closing session is the one whose OWN date closeOpen used as
+    // closedAt — never just "the last one in .sessions", which can also hold
+    // a later gap session counted backward as an extra (week.ts's own rule 3).
+    const closing = span.sessions.find((s) => s.date === span.closedAt);
+    if (closing) ids.add(closing.id);
+  }
+  return ids;
+}
+
 /** The week to show RIGHT NOW: the open span if one exists, or (mid-gap,
  * waiting for the next Sat/Sun) the pending key with no span yet. Falls back
  * to the launch key itself only in the "shouldn't happen" case week.ts's own
@@ -7064,11 +7172,19 @@ let viewingLastClosedWeek = false;
  * week during a gap — true only once it actually opens; a session saved now
  * counts back into the week that just closed instead, and the screens must
  * say so rather than promise a week number the save won't use. */
-function gapCountsBackToWeekNum(): number | null {
+// WK2 fix r2 (Sep 27 2026, checker's should #2): the FULL key, not just the
+// week number — planDateNow() needs the round too, to resolve the right
+// PROGRAM row during a gap (see its own comment). gapCountsBackToWeekNum
+// keeps its old (number-only) signature for its existing callers.
+function gapCountsBackToWeekKey(): WeekKey | null {
   if (!shownWeek().pending) return null;
   const { spans } = weekModel();
   const last = spans.length ? spans[spans.length - 1] : null;
-  return last ? last.key.week : null;
+  return last ? last.key : null;
+}
+
+function gapCountsBackToWeekNum(): number | null {
+  return gapCountsBackToWeekKey()?.week ?? null;
 }
 
 /** "since Sat Sep 26 · day 3" (open) / "opens Sat Oct 3 · a session before
@@ -8385,8 +8501,19 @@ function renderHome(): string {
       const weekMs = attribution.get(doneToday) ?? calendarSaturdayMs(doneToday.date);
       const legacyWeek = getProgramWeek(new Date(weekMs));
       const legacyCount = sessionsAttributedTo(logs, new Date(weekMs), attribution).length;
+      // WK2 fix r2 (Sep 27 2026, checker's nice #1): the doneTodayClosedSpan
+      // branch below already says "Week N starts now"/"opens ..." — this is
+      // the SAME real moment (her Sat Sep 26 B closed the OLD model's Week 4
+      // AND opened the new model's Week 5 in the same instant), so it deserves
+      // the same second line, not a card that stops at "done".
+      const nextLine = shown.span
+        ? `Week ${shown.key.week} starts now`
+        : shown.pending
+          ? `Week ${shown.key.week} opens ${formatWeekdayDate(shown.pending.opensAt)}`
+          : '';
       doneCardLines = [
         `Week ${legacyWeek.num} done · ${legacyCount} of 3${legacyCount >= SESSIONS_PER_WEEK_TARGET ? ' ✓' : ''}`,
+        ...(nextLine ? [nextLine] : []),
       ];
     } else if (doneTodayClosedSpan) {
       const nextLine = shown.span
@@ -8414,9 +8541,16 @@ function renderHome(): string {
     const missingForChips: WorkoutId[] = shown.span
       ? [...shown.span.missing]
       : (['A', 'B', 'C'] as WorkoutId[]);
+    // WK2 fix r2 (Sep 27 2026, checker's should #2): the chip lead used to
+    // always name the SHOWN week's number, even mid-gap — where a tap right
+    // now would actually count backward as an extra rep into the week that
+    // just closed (week.ts rule 3), not open the shown week at all. Lead with
+    // gapCountsBackToWeekNum() during a gap, same truth pre-log/post-log
+    // already say; outside a gap it's null and this is unchanged.
+    const chipsWeekLead = `Week ${gapCountsBackToWeekNum() ?? shown.key.week} ·`;
     chipsHtml = doneToday
-      ? doneTodayClosedSpan
-        ? renderWorkoutChips(null, `Week ${shown.key.week} ·`)
+      ? doneTodayClosedSpan || doneTodayPreLaunch
+        ? renderWorkoutChips(null, chipsWeekLead)
         : renderWorkoutChipsFor(missingForChips) // no letter singled out as hero right now
       : renderWorkoutChipsFor(missingForChips.slice(1)); // pick (missing[0]) is the hero already
 
@@ -9828,7 +9962,15 @@ function postLogWitnessLine(w: Workout): string {
     // not the pending week's own (not-yet-real) count.
     const backWeek = gapCountsBackToWeekNum();
     if (backWeek !== null) {
-      parts.push(`an extra for Week ${backWeek} (already 3 of 3)`);
+      // WK2 fix r2 (Sep 27 2026, checker's nice #6): "(already 3 of 3)" was
+      // hard-coded — true today (a gap only ever exists after a 'three'
+      // close, since WK3's "moved on" isn't shipped yet), but it'll be wrong
+      // the day a moved-on week (1 or 2 done) exists. Read the real count off
+      // the actual closed span instead of assuming it.
+      const { spans } = weekModel();
+      const lastSpan = spans.length ? spans[spans.length - 1] : null;
+      const closedDone = lastSpan ? lastSpan.done.length : 3;
+      parts.push(`an extra for Week ${backWeek} (already ${closedDone} of 3)`);
     } else {
       // WK2 fix r1 (Sep 27 2026, checker's should #2): `.done.length + 1`
       // overcounts a REPEAT letter — doing A a second time in a week that

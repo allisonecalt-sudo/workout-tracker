@@ -73,6 +73,19 @@
 // an explicit GATE on WK2 in PLAN-2026-09-26.md — the counting switch-over
 // must not go live until a closed week survives a deleted session.
 //
+// WK2 fix r2 (Sep 27 2026, GATE 1 closed at the app.ts layer, not here): this
+// module still recomputes fresh every time (unchanged, on purpose — it stays
+// pure). The survival guarantee GATE 1 asks for is now enforced one layer up,
+// in app.ts's mergeRemoteSessions via completionClosingSessionIds() — a
+// synced session the server no longer has is DROPPED as always, UNLESS it's
+// the closing session of an already-closed span (per THIS module's own
+// `spans`), in which case the merge refuses to drop it and fails loud instead
+// (CLAUDE.md fail-loud rule) rather than letting walkWeeks silently reopen +
+// renumber. That's a non-schema stopgap, not the real fix — the schema
+// decision above is still hers to make, and the switch-over stays flagged
+// until she does. See app.ts's completionClosingSessionIds for the exact
+// mechanism.
+//
 // ALSO STILL OPEN, "nice", deferred by choice (checker's "nice" #3): weekday
 // math here (isWeekendAnchorDay, nextSaturdayBoundary) reads the DEVICE's
 // local time (getDay/getDate), same convention as app.ts's
