@@ -164,3 +164,165 @@ test.describe.serial('service worker: install only after a full download', () =>
     }
   });
 });
+
+// R1 · fix r1 (must #3, Sep 27 2026): the two tests above simulate "a new
+// build" by registering a DIFFERENT sw.js at the SAME scope — a fine way to
+// force a real install attempt, but not what an actual code-shape deploy
+// looks like: appVersion never bumps (CLAUDE.md's own rule), so sw.js's own
+// bytes are IDENTICAL build to build, and only index.html + the imported
+// dist/build-info.js change. The checker proved must #1 (cache name keyed on
+// appVersion alone, so two builds shared a cache) and must #2 (the fetch
+// handler overwriting live html with a fresh, not-yet-cached deploy) with a
+// REAL stopped-server harness against files it edited directly on disk
+// (scratchpad/swcheck.js, kept outside this repo) — a technique this file's
+// own comment above says works and route interception doesn't. These two
+// tests reproduce both, in-suite, the same way, but against a throwaway
+// SEPARATE SCOPE this describe block creates and deletes (its own index.html/
+// sw.js/dist/), never the real site's files — so a worker crash mid-test
+// can't corrupt what tests/golden.spec.ts and everything else are reading
+// from in parallel.
+test.describe
+  .serial('service worker: a same-appVersion deploy must not corrupt the live cache', () => {
+  const SCOPE = 'sw-fixture-scope'; // gitignored-by-convention name; deleted in `finally` either way
+  const SCOPE_DIR = path.join(ROOT, SCOPE);
+
+  function writeDeploy(
+    version: string,
+    bundleName: string,
+    marker: string,
+    bundleOk: boolean
+  ): void {
+    fs.mkdirSync(path.join(SCOPE_DIR, 'dist'), { recursive: true });
+    // sw.js copied byte-identical every time (code-shape never touches it for
+    // a content-only deploy) — importScripts('./dist/build-info.js') resolves
+    // inside SCOPE_DIR, so it precaches THIS scope's own files, never the
+    // real app's.
+    fs.writeFileSync(path.join(SCOPE_DIR, 'sw.js'), fs.readFileSync(REAL_SW_PATH, 'utf8'), 'utf8');
+    fs.writeFileSync(
+      path.join(SCOPE_DIR, 'index.html'),
+      // #app starts EMPTY on purpose — it's the bundle's JS that fills it in,
+      // same division of labour as the real app.ts/index.html. A missing
+      // bundle must leave it empty, the same honestly-blank symptom the real
+      // bug produces, not a marker this test hand-wrote into the html.
+      `<!doctype html><html><head><meta charset="utf-8"></head><body>` +
+        `<div id="app"></div>` +
+        `<script src="dist/${bundleName}"></script>` +
+        `<script>navigator.serviceWorker && navigator.serviceWorker.register('./sw.js', { scope: './' });</script>` +
+        `</body></html>\n`,
+      'utf8'
+    );
+    fs.writeFileSync(path.join(SCOPE_DIR, 'styles.css'), '/* fixture scope */\n', 'utf8');
+    fs.writeFileSync(path.join(SCOPE_DIR, 'manifest.webmanifest'), '{}', 'utf8');
+    fs.writeFileSync(
+      path.join(SCOPE_DIR, 'dist', 'build-info.js'),
+      `self.__BUILD_INFO__ = {"bundle":"${bundleName}","version":"${version}","buildDate":"test"};\n`,
+      'utf8'
+    );
+    if (bundleOk) {
+      fs.writeFileSync(
+        path.join(SCOPE_DIR, 'dist', bundleName),
+        `document.getElementById('app').innerHTML = '<span class="marker">${marker}</span>';\n`,
+        'utf8'
+      );
+    }
+    // bundleOk === false: deliberately never written — cache.add() 404s, same
+    // as writeVariant's bundleFails above, AND (since it's the bundle that
+    // fills #app) a browser that can't fetch it now renders a blank #app —
+    // the real symptom, not a stand-in for it.
+  }
+
+  function cleanupScope(): void {
+    fs.rmSync(SCOPE_DIR, { recursive: true, force: true });
+  }
+
+  test('update() only, no online navigation (must #1: cache-name isolation)', async ({
+    page,
+    context,
+  }) => {
+    cleanupScope();
+    try {
+      writeDeploy('v-fix-r1', 'app.OLD.js', 'OLD-DEPLOY', true);
+      await page.goto(`/${SCOPE}/`);
+      await page.evaluate(() => navigator.serviceWorker.ready);
+      await expect(page.locator('.marker')).toHaveText('OLD-DEPLOY');
+
+      // Sanity: this deploy boots offline right now, before any "next build".
+      await context.setOffline(true);
+      await page.reload();
+      await expect(page.locator('.marker')).toHaveText('OLD-DEPLOY');
+      await context.setOffline(false);
+
+      // The next code-shape deploy: SAME appVersion (never bumped), a
+      // different (never-written, 404) bundle name. sw.js's own bytes are
+      // unchanged — only index.html and the imported build-info.js differ,
+      // which IS what the SW update algorithm diffs against (importScripts
+      // targets are part of a registration's script resource map, not just
+      // the top-level file — proven true here: reg.update() below DOES
+      // attempt a real install even though sw.js itself never changed).
+      writeDeploy('v-fix-r1', 'app.NEW.js', 'NEW-DEPLOY', false);
+      // No page.reload() anywhere in this test — isolates the cache-name
+      // question from the fetch-handler question the next test covers.
+      await page.evaluate(async () => {
+        const reg = await navigator.serviceWorker.getRegistration('./');
+        if (reg) await reg.update().catch(() => {});
+      });
+      await page.waitForTimeout(1500);
+
+      // The money assertion: offline, the OLD deploy must still boot — not
+      // corrupted by the failed install, not blank. Pre-fix (cache keyed on
+      // appVersion alone), the failed install's Promise.all still wrote
+      // NEW-DEPLOY's html into the cache the OLD worker was serving from
+      // before the bundle 404 rejected the whole install.
+      await context.setOffline(true);
+      await page.reload();
+      await expect(page.locator('#app')).not.toBeEmpty();
+      await expect(page.locator('.marker')).toHaveText('OLD-DEPLOY');
+      await context.setOffline(false);
+    } finally {
+      cleanupScope();
+    }
+  });
+
+  test('one online reload after the deploy (must #2: the fetch handler must not write html its bundle never cached)', async ({
+    page,
+    context,
+  }) => {
+    cleanupScope();
+    try {
+      writeDeploy('v-fix-r1', 'app.OLD2.js', 'OLD-DEPLOY-2', true);
+      await page.goto(`/${SCOPE}/`);
+      await page.evaluate(() => navigator.serviceWorker.ready);
+      await expect(page.locator('.marker')).toHaveText('OLD-DEPLOY-2');
+
+      // Next deploy: same appVersion, a bundle that 404s — same as above,
+      // PLUS the one thing that test deliberately skipped: an ordinary
+      // online reload (the every-day case — she opens the app on gym Wi-Fi
+      // for a deploy whose bundle happens not to have finished uploading).
+      writeDeploy('v-fix-r1', 'app.NEW2.js', 'NEW-DEPLOY-2', false);
+      // Online reload, served by the STILL-ACTIVE old worker's fetch handler.
+      // The new bundle 404s online too (it was never written, deliberately —
+      // this IS the deploy whose upload didn't finish), so #app stays empty
+      // right now regardless of the fix; the assertion below is about what
+      // OFFLINE looks like next, not this reload.
+      await page.reload();
+      await page.waitForTimeout(500);
+      await page.evaluate(async () => {
+        const reg = await navigator.serviceWorker.getRegistration('./');
+        if (reg) await reg.update().catch(() => {});
+      });
+      await page.waitForTimeout(1500);
+
+      // The money assertion: offline, the OLD deploy must still boot. Pre-fix,
+      // handleCodeNetworkFirst's cache.put on that online reload overwrote
+      // the live cache's index.html with NEW-DEPLOY-2's html — whose bundle
+      // was never cached — so this reload would have rendered blank.
+      await context.setOffline(true);
+      await page.reload();
+      await expect(page.locator('#app')).not.toBeEmpty();
+      await expect(page.locator('.marker')).toHaveText('OLD-DEPLOY-2');
+      await context.setOffline(false);
+    } finally {
+      cleanupScope();
+    }
+  });
+});

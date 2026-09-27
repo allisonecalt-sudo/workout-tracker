@@ -3064,8 +3064,15 @@ test('deploy hygiene: version is single-sourced (package.json → build-info.js 
 
   const swSrc = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
   // sw.js must read the version at RUNTIME, never a literal 'workout-tracker-vNN'.
-  expect(swSrc).toContain('`workout-tracker-${BUILD_INFO.version}`');
+  expect(swSrc).toContain('workout-tracker-${BUILD_INFO.version}');
   expect(/workout-tracker-v\d/.test(swSrc)).toBe(false);
+  // R1 · fix r1 (must #1, Sep 27 2026): the shell cache name must fold in the
+  // bundle name too, not just appVersion — a code-shape deploy never bumps
+  // appVersion, so version-only keying let two different builds share (and
+  // corrupt) one cache. See tests/sw-upgrade.spec.ts's "same-appVersion"
+  // tests for the behavioural proof; this is the structural guard against it
+  // silently regressing back to version-only.
+  expect(swSrc).toContain('workout-tracker-${BUILD_INFO.version}-${BUILD_INFO.bundle}-shell');
 
   const bundleMatch = /"bundle":"([^"]+)"/.exec(buildInfoSrc.replace(/\s+/g, ''))?.[1];
   const bundleSrc = fs.readFileSync(path.join(__dirname, '..', 'dist', bundleMatch!), 'utf8');

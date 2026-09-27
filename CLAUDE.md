@@ -28,11 +28,27 @@ never behaviour, never in the same commit (Kent Beck's rule, the plan's own).
 
 ## Never commit as "changed" with zero real diff
 
-CRLF-only noise on Windows checkouts: `exercise-*.ts`, `index.html`, `ladders.ts`, `package.json`, `step-list.ts`, `tests/jump-list.spec.ts`, `tests/step-list.test.ts`, `tsconfig.json`. Check `git diff <path>` shows real content before adding. `index.html` DOES change for real when the bundle hash changes — that's a real diff, commit it.
+CRLF-only noise on Windows checkouts touches dozens of paths, not a fixed list — check with `git diff --ignore-cr-at-eol <path>` (empty output = noise only) before adding, don't just eyeball `git status`. `index.html` DOES change for real when the bundle hash changes — that's a real diff, commit it.
 
 ## Files an agent must read to make a typical change — BASELINE (R1d, Sep 27 2026)
 
-Measured from 3 real fix commits just before this branch (`95bcc3f`, `a702a4b`, `35f21f3`): each touched exactly **4 files** — `app.ts` + one small pure module (`ride.ts`/`chart.ts`) + 1-2 test files. `app.ts` was in all three — nothing in this repo can avoid it yet. Real reading cost is higher than files _changed_: `app.ts` has no internal boundary, so a builder reads toward the whole 15k-line file, not a slice. **Target after R3-R13 (the module + screen split): 2-4 small files (≤800 lines each), never the whole monolith.** Re-measure the same way once that split lands.
+Measured from 3 real fix commits just before this branch (`95bcc3f`, `a702a4b`, `35f21f3`): each touched exactly **4 files** — `app.ts` + 1-2 small modules (a pure module like `ride.ts`/`chart.ts`, occasionally `styles.css`) + 1-2 test files. `app.ts` was in all three — nothing in this repo can avoid it yet. Real reading cost is higher than files _changed_: `app.ts` has no internal boundary, so a builder reads toward the whole 15k-line file, not a slice. **Target after R3-R13 (the module + screen split): 2-4 small files (≤800 lines each), never the whole monolith.** Re-measure the same way once that split lands.
+
+## Import direction (R3+, so builders don't fight the split when it lands)
+
+Dependency direction first, screens second (the "second opinion" framing fix — a rule about direction, not a list of screens): `app.ts` → screens → `state`/`bus`/`program`/`sync`/`domain`. A screen may import those; they never import a screen or `app.ts` back.
+
+## Builders never touch `sw.js`
+
+Its cache-key + install/fetch semantics are the checker's own must-fix territory (`CHECK-code-shape-R1-2026-09-27.md`) — flag a needed change to the checker instead of hand-editing it.
+
+## Structure-only proof, beyond golden HTML
+
+Keep every test's title identical and identically sorted (`npx playwright test --list` before/after) — a renamed or reordered title is a behaviour signal hiding in a "no change" commit. Run `git diff --color-moved` on `app.ts` after a split step: moved lines should show dim/moved, not red/green — new red/green there is content that changed, not just relocated, same STOP-AND-REPORT as a golden diff.
+
+## One builder on `app.ts` at a time
+
+Check `git status` / `git stash list` for another window's uncommitted `app.ts` changes before a step that touches it — two builders splitting the same monolith at once is the exact collision this worktree exists to avoid.
 
 ## Never in a code-shape commit
 

@@ -16,9 +16,20 @@
 importScripts('./dist/build-info.js');
 // eslint-disable-next-line no-undef -- self.__BUILD_INFO__ is written by scripts/build.mjs's importScripts above
 const BUILD_INFO = self.__BUILD_INFO__ || { version: 'unknown', bundle: 'app.js' };
-const VERSION = `workout-tracker-${BUILD_INFO.version}`;
-const SHELL_CACHE = `${VERSION}-shell`;
-const RUNTIME_CACHE = `${VERSION}-runtime`;
+// code-shape R1 · fix r1 (must #1, Sep 27 2026): the shell cache used to be
+// keyed on appVersion ALONE. Code-shape rounds never bump appVersion (that's
+// the rule), so every R2..R13 deploy installed its new worker into the SAME
+// cache the old one was still serving from — a failed critical download (bad
+// gym Wi-Fi, or a genuinely broken build) still let `cache.add('./')` and
+// `cache.add('./index.html')` succeed and overwrite the live entries before
+// the bundle download failed and the whole install rejected, leaving the OLD
+// worker serving NEW html that pointed at an uncached bundle: blank offline
+// start. Proven with a stopped-server harness (CHECK-code-shape-R1-2026-09-
+// 27.md S5): same appVersion, blank; different appVersion, fine. Keying on
+// the bundle name too means two builds NEVER share a cache, so a failed
+// install can only ever corrupt a cache nothing live is using.
+const SHELL_CACHE = `workout-tracker-${BUILD_INFO.version}-${BUILD_INFO.bundle}-shell`;
+const RUNTIME_CACHE = `workout-tracker-${BUILD_INFO.version}-runtime`;
 const APP_BUNDLE = `./dist/${BUILD_INFO.bundle}`;
 
 // code-shape R1c (Sep 27 2026): split into CRITICAL (the app can't boot
@@ -243,7 +254,15 @@ async function handleCodeNetworkFirst(request) {
     // max-age=600, which otherwise keeps a just-deployed build stale for up to
     // 10 minutes) while still allowing cheap ETag 304 revalidation.
     const res = await fetch(request, { cache: 'no-cache' });
-    if (res && res.ok) cache.put(request, res.clone());
+    // code-shape R1 · fix r1 (must #2, Sep 27 2026): this used to
+    // `cache.put(request, res.clone())` here on every online navigation. That
+    // wrote the fresh index.html into the live shell cache even when THAT
+    // html's own bundle was never cached (gym Wi-Fi: html arrives, ~420KB
+    // bundle 404s) — the next offline start then served fresh html pointing
+    // at an uncached bundle: blank page. Proven in CHECK-code-shape-R1-2026-
+    // 09-27.md S1. Only install() writes the shell cache now, html and its
+    // bundle together or not at all; an offline navigation falls back to
+    // whatever install last cached (below), which is always a matched pair.
     return res;
   } catch (err) {
     const cached = await cache.match(request, { ignoreSearch: false });

@@ -1,11 +1,13 @@
 {
   // code-shape R1b (Sep 27 2026): tsc is now the TYPE GATE only (gate 3) —
-  // esbuild (scripts/build.mjs) does the actual bundling/emit. "include"
-  // used to hand-list every module tsc should emit separately; with noEmit,
-  // one root is enough — TypeScript still type-checks every file app.ts
-  // imports transitively, "include" or not (proven true already: this file
-  // never listed exercise-howto.ts/exercise-detail.ts/ride.ts/chart.ts/
-  // pain-feel.ts, yet they were always type-checked and emitted).
+  // esbuild (scripts/build.mjs) does the actual bundling/emit.
+  // R1 · fix r1 (should, Sep 27 2026): "include": ["app.ts"] alone gated
+  // ONLY the files app.ts imports transitively — tsc --listFiles showed 11,
+  // down from 13 at 95bcc3f, silently dropping ladders.ts and progression.ts
+  // from the type gate (neither is imported by app.ts) and making this
+  // comment's claim wrong. A glob keeps every .ts file (still respecting the
+  // excludes below) in the gate the way it used to be — verified on a scratch
+  // copy: 13 files, clean.
   "compilerOptions": {
     "target": "ES2020",
     "module": "ES2020",
@@ -23,6 +25,6 @@
     "noEmit": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"]
   },
-  "include": ["app.ts"],
+  "include": ["*.ts"],
   "exclude": ["node_modules", "dist", "tests", "playwright.config.ts"]
 }

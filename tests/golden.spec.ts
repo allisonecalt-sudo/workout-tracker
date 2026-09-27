@@ -129,6 +129,40 @@ async function seed(page: Page, rows: Row[]): Promise<void> {
   }, rows);
 }
 
+// R1 · fix r1 (should, Sep 27 2026 — CHECK-code-shape-R1's fixture-gap item):
+// shared by the sub-view fixtures added below. "Done ·"/"#start-round-2"/
+// "#ww-skip" is the same forward control tests/app.spec.ts's own walk uses
+// and the pre-existing 'workout — a strength step' fixture already relies on
+// — one selector covers every screen that has a single forward action.
+const FORWARD = 'button:has-text("Done ·"), #start-round-2, #ww-skip';
+
+// Walks Workout A forward (rest-sec left at its default of 0 — Allison's own
+// "i do not need the brakes anymore" — so this never meets a rest screen and
+// needs no hold-to-skip) until one of `stopSelectors` is visible, or gives up
+// after 40 steps. Empirically verified against the live program (probe-
+// screens.cjs, Sep 27 2026): round-break shows at step 10, the cool-down list
+// at step 23 — 40 leaves real headroom without hunting forever if a program
+// change ever moves them.
+async function walkWorkoutA(page: Page, stopSelectors: string[]): Promise<void> {
+  for (let i = 0; i < 40; i++) {
+    for (const sel of stopSelectors) {
+      if (
+        await page
+          .locator(sel)
+          .isVisible()
+          .catch(() => false)
+      )
+        return;
+    }
+    const forward = page.locator(FORWARD);
+    if (await forward.isVisible().catch(() => false)) {
+      await forward.click();
+      continue;
+    }
+    break;
+  }
+}
+
 // Whitespace BETWEEN tags is not behaviour (a Chrome/Prettier reflow shouldn't
 // fail this oracle); attribute order and text content are. Collapsing runs of
 // whitespace down to a single space (not deleting it) keeps text-node
@@ -445,5 +479,79 @@ test.describe('golden HTML — gate 1 (structure-only refactor oracle)', () => {
     await page.goto('/');
     await page.locator('#open-settings').click();
     await snapshot(page, 'settings');
+  });
+
+  // R1 · fix r1 (should, Sep 27 2026): the six sub-views CHECK-code-shape-R1
+  // flagged as missing — the ones R13 will move, so gate 1 couldn't guard
+  // them yet. Each confirmed reachable against the live program first
+  // (probe-screens.cjs, kept nowhere near this suite — throwaway).
+
+  test('home — empty log (fresh install, no prior session)', async ({ page }) => {
+    await movableClock(page, NOW_ISO);
+    // No seed() call — beforeEach's localStorage.clear() already leaves
+    // workout-tracker:logs unset, the real first-open state.
+    await page.goto('/');
+    await expect(page.locator('#app')).not.toBeEmpty();
+    await snapshot(page, 'home-empty');
+  });
+
+  test('rest screen (between two main-block moves)', async ({ page }) => {
+    await movableClock(page, NOW_ISO);
+    // Rest defaults to 0 (skipped) — this fixture is the one place that
+    // overrides it, so the screen exists to snapshot at all.
+    await page.addInitScript(() => {
+      window.localStorage.setItem('workout-tracker:setting-rest-sec', '30');
+    });
+    await seed(page, [log('golden-s1', '2026-09-20', 'A')]);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await walkWorkoutA(page, ['#skip-rest']);
+    await expect(page.locator('#skip-rest')).toBeVisible();
+    await snapshot(page, 'rest-screen');
+  });
+
+  test('round break (round 1 done, before round 2)', async ({ page }) => {
+    await movableClock(page, NOW_ISO);
+    await seed(page, [log('golden-s1', '2026-09-20', 'A')]);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await walkWorkoutA(page, ['.round-break-card']);
+    await expect(page.locator('.round-break-card')).toBeVisible();
+    await snapshot(page, 'round-break');
+  });
+
+  test('cool-down list (stretches, after the last round)', async ({ page }) => {
+    await movableClock(page, NOW_ISO);
+    await seed(page, [log('golden-s1', '2026-09-20', 'A')]);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await walkWorkoutA(page, ['.stretch-card']);
+    await expect(page.locator('.stretch-card')).toBeVisible();
+    await snapshot(page, 'cooldown-list');
+  });
+
+  test('paused overlay', async ({ page }) => {
+    await movableClock(page, NOW_ISO);
+    await seed(page, [log('golden-s1', '2026-09-20', 'A')]);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await page.locator('#pause-toggle').click();
+    await expect(page.locator('#paused-overlay')).toBeVisible();
+    await snapshot(page, 'paused');
+  });
+
+  test('step list open (the ☰ jump list)', async ({ page }) => {
+    await movableClock(page, NOW_ISO);
+    await seed(page, [log('golden-s1', '2026-09-20', 'A')]);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await page.locator('#step-list-open').click();
+    await expect(page.locator('#step-list-panel')).toBeVisible();
+    await snapshot(page, 'step-list-open');
   });
 });
