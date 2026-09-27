@@ -1459,6 +1459,24 @@ textarea:focus {
   margin: -6px 0 12px;
 }
 
+/* T2 (Sep 27 2026) §3.4 — Sessions list, said once at the top: why an old
+ * row shows no "N min" (the app only started asking her start/finish times
+ * from the timing launch date). Same dim caption weight as .detail-sub. */
+.history-length-note {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  margin: 0 4px 12px;
+}
+
+/* T2 §3.4 — Session detail's own honesty line: the app's tap-to-tap open/
+ * close time is kept for checking only, never shown as if it were workout
+ * time (that was the "76 min" bug). Dim, under the detail card. */
+.detail-app-time {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  margin: 8px 4px 0;
+}
+
 /* History detail — scoped to .card so the 8px 4px padding stops leaking into
  * the exercise detail card, which shares the class name (Sep 24 2026 audit). */
 .card.detail-card {

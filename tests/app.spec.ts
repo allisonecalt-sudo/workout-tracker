@@ -7705,7 +7705,10 @@ test.describe('v48 P6 mirror', () => {
       await expect(page.locator('.screen-header h2')).toHaveText('Sessions');
       await expect(page.locator('.screen-header #back-home')).toHaveText('× Back');
       await expect(page.locator('.btn-large')).toHaveCount(0);
-      await expect(page.locator('.history-date').first()).toHaveText(/^Sat Sep 19 · 40 min/);
+      // T2 (Sep 27 2026): these seeded rows carry the app's own durationSec
+      // but no her_start/her_end confirm — "old rows show no length" (§3.4),
+      // so the row is the date alone, no "· N min" tacked on.
+      await expect(page.locator('.history-date').first()).toHaveText(/^Sat Sep 19$/);
       // Scroll down, open a row, come back: the list is where she left it.
       const target = page.locator('[data-detail="r20"]');
       await target.scrollIntoViewIfNeeded();
@@ -7719,6 +7722,46 @@ test.describe('v48 P6 mirror', () => {
       const after = await page.evaluate(() => window.scrollY);
       expect(Math.abs(after - before)).toBeLessThan(4);
     });
+  });
+
+  test('(e2) T2: one time formatter — the once-only Sessions note, "about N min" only on a confirmed row, never the app tap-time', async ({
+    page,
+  }) => {
+    await mockDate(page, THU_WEEK4);
+    await seedLogs(page, [
+      // Confirmed her own start/finish (T1): a real 45-minute span.
+      log('confirmed', '2026-09-22T15:00:00.000Z', 'B', {
+        startedAt: '2026-09-22T15:31:00.000Z',
+        completedAt: '2026-09-22T20:04:00.000Z', // the app's own tap span — a red herring
+        herStartAt: '2026-09-22T15:00:00.000Z',
+        herStartConfirmed: true,
+        herEndAt: '2026-09-22T15:45:00.000Z',
+        herEndConfirmed: true,
+        breakMinutes: 0,
+      }),
+      // Old-style row: durationSec but no her_start/her_end confirm.
+      log('unconfirmed', '2026-09-20T15:00:00.000Z', 'A'),
+    ]);
+    await page.goto('/');
+    await page.locator('#view-history').click();
+    // Said once, at the top — not per row.
+    await expect(page.locator('.history-length-note')).toHaveText(
+      "Workout length shows from Sep 27 2026 — before that the app didn't ask."
+    );
+    const confirmedRow = page.locator('[data-detail="confirmed"]');
+    const unconfirmedRow = page.locator('[data-detail="unconfirmed"]');
+    await expect(confirmedRow.locator('.history-date')).toHaveText(/^Tue Sep 22 · about 45 min$/);
+    await expect(unconfirmedRow.locator('.history-date')).toHaveText(/^Sun Sep 20$/);
+
+    // Session detail: the Time row is HER confirmed minutes, never the app's
+    // 15:31–20:04 tap span (4h33m) that's sitting right there in the data.
+    await confirmedRow.click();
+    const card = page.locator('.detail-card');
+    const time = card.locator('.detail-row').filter({ hasText: 'Time' });
+    await expect(time).toHaveText('Timeabout 45 min');
+    await expect(page.locator('#detail-app-time')).toHaveText(
+      /^App open \d\d:\d\d–\d\d:\d\d — not workout time$/
+    );
   });
 
   test('(e) Session: B has no Wall sit row; a ride shows one Cardio row from columns or the old marker; Note = her words only', async ({
@@ -7763,9 +7806,14 @@ test.describe('v48 P6 mirror', () => {
     await expect(card).toContainText('Arms');
     await expect(card).toContainText('curl easy · row right');
     await expect(page.locator('#detail-session-note')).toHaveText('Knee fine');
-    // One Time row: "HH:MM–HH:MM · 33 min".
+    // T2 (Sep 27 2026): this row has no her_start/her_end confirm, so the
+    // Time row is the honest dash — the app's own open/close tap-time moved
+    // to its own dim "not workout time" line below the card (§3.4).
     const time = card.locator('.detail-row').filter({ hasText: 'Time' });
-    await expect(time).toContainText(/\d\d:\d\d–\d\d:\d\d · 33 min/);
+    await expect(time).toHaveText('Time—');
+    await expect(page.locator('#detail-app-time')).toHaveText(
+      /^App open \d\d:\d\d–\d\d:\d\d — not workout time$/
+    );
     await expect(card.locator('.detail-row').filter({ hasText: 'Capacity' })).toContainText(
       '6 → 7'
     );

@@ -8,7 +8,7 @@ import { EXERCISE_VISUALS } from './exercise-visuals.js';
 import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
 import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
 import { painFromFeel, feelFromPain } from './pain-feel.js';
-import { trainingMinutes } from './timing.js';
+import { trainingMinutes, formatWorkoutTime } from './timing.js';
 import {
   excludedUntouchedCount,
   todayCycleStatus,
@@ -4304,6 +4304,11 @@ const V50_MOOD_SESSION_COLUMNS = ['mood_before', 'mood_after'] as const;
 // #6) so a build that's somehow still ahead of an older mirror/branch of
 // the schema keeps landing safely: the PGRST204 retry below strips it and
 // the session still saves, nothing lost.
+// T2 (Sep 27 2026) §3.4: "Old rows show no length. Sessions says it once, at
+// the top." Same applied date as the migration just below (her 10:49 yes) —
+// one label, not two dates that could quietly drift apart.
+const TIMING_LAUNCH_LABEL = 'Sep 27 2026';
+
 const V53_TIMING_SESSION_COLUMNS = [
   'her_start_at',
   'her_start_confirmed',
@@ -11058,11 +11063,6 @@ function combineDateAndClock(baseIso: string, hhmm: string): string {
   return combined.toISOString();
 }
 
-// "40 min" on a row; a sub-minute session keeps its seconds.
-function formatRowDuration(sec: number): string {
-  return sec < 60 ? `${sec} s` : `${Math.round(sec / 60)} min`;
-}
-
 // v47 rows carry the cardio lane, the machine readings and her words as prose
 // in `notes` ("cardio: elliptical 10 min · level 7 · 1.4 km · pulse 128 · knee
 // fine · duration not recorded — …"). Same head as ELLIPTICAL_MARKER_RE, with
@@ -11237,11 +11237,18 @@ function renderSessionRow(l: LogEntry, logs: LogEntry[]): string {
     // v46: B and C have no wall sit — "wall 0s" there read as a zero.
     l.wallSitSec > 0 || l.workout === 'A' ? ` · wall ${l.wallSitSec}s` : '';
   const words = sessionWords(l).split('\n')[0] ?? '';
+  // T2 (Sep 27 2026), PLAN-2026-09-26.md §3.4/§10: "about N min" through the
+  // one shared formatter, never the app's own tap-to-tap durationSec — that
+  // was "76 min"/"1s" shown as fact (her 22:33 "it really doesn't know
+  // timing"). formatWorkoutTime already returns '' on an unconfirmed/old row
+  // (no her_start_at/her_end_at pair), which is the honest "old rows show no
+  // length" behavior §3.4 asks for — no fallback needed here.
+  const workoutTime = formatWorkoutTime(l);
   return `
     <button class="history-row history-row-btn session-row" ${idAttr} type="button">
       <span class="history-workout-badge">${l.workout}</span>
       <div class="session-row-body">
-        <div class="history-date">${formatRowDate(l.date)}${l.durationSec ? ` · ${formatRowDuration(l.durationSec)}` : ''}${spark ? ` <span class="history-sparkline-wrap">${spark}</span>` : ''}</div>
+        <div class="history-date">${formatRowDate(l.date)}${workoutTime ? ` · ${workoutTime}` : ''}${spark ? ` <span class="history-sparkline-wrap">${spark}</span>` : ''}</div>
         <div class="history-meta">cap ${l.capacityBefore ?? '—'}→${l.capacityAfter ?? '—'}${wall} · ${back}</div>
         ${words ? `<div class="history-word" dir="auto">${escapeHtml(words)}</div>` : ''}
       </div>
@@ -11263,7 +11270,11 @@ function renderHistory(): string {
   if (logs.length === 0) {
     return `${header}<p class="empty">No sessions yet.</p>`;
   }
-  return `${header}<div class="card session-list">${logs.map((l) => renderSessionRow(l, logs)).join('')}</div>`;
+  // T2 §3.4: said once, here, not per-row — a row before the launch just
+  // shows no "· N min" (formatWorkoutTime returns '' for it), which would
+  // otherwise read as a silent gap instead of an honest "the app didn't ask".
+  const lengthNote = `<p class="history-length-note">Workout length shows from ${TIMING_LAUNCH_LABEL} — before that the app didn't ask.</p>`;
+  return `${header}${lengthNote}<div class="card session-list">${logs.map((l) => renderSessionRow(l, logs)).join('')}</div>`;
 }
 
 // One label + value row on the Session screen; `stack` puts a long value under
@@ -11292,14 +11303,19 @@ function renderHistoryDetail(): string {
   }
   // 10 rows → the ones that carry something (DECISIONS §5 Session detail).
   const rows: string[] = [];
+  // T2 (Sep 27 2026) §3.4: the app's own open/close tap-time (`span`, from
+  // startedAt/completedAt) is kept for CHECKING only from here down — it
+  // used to be glued onto this same "Time" row as if it were how long she
+  // trained ("TIME 21:48–22:14 · 26 min", her 22:33 "it really doesn't know
+  // timing"). The row now shows only her confirmed workout time (or the
+  // honest dash); `span` moves to its own dim line below the card.
   const span =
     log.startedAt && log.completedAt
       ? `${formatClock(log.startedAt)}–${formatClock(log.completedAt)}`
       : log.startedAt
         ? `from ${formatClock(log.startedAt)}`
         : '';
-  const mins = log.durationSec ? formatRowDuration(log.durationSec) : '';
-  rows.push(detailRow('Time', [span, mins].filter((s) => s !== '').join(' · ') || '—'));
+  rows.push(detailRow('Time', formatWorkoutTime(log) || '—'));
   if (log.capacityBefore !== null || log.capacityAfter !== null) {
     rows.push(
       detailRow(
@@ -11344,10 +11360,18 @@ function renderHistoryDetail(): string {
   const unsyncedLine = log.pendingEdit
     ? `<p class="detail-edit-unsynced" id="detail-edit-unsynced">Not saved online yet — will retry</p>`
     : '';
+  // T2 §3.4: "one dim line for checking" — the app's own open/close tap-time,
+  // labeled plainly so it never reads as a workout-length claim. Only when
+  // there's a span to show at all (an old row with just `startedAt`, or none,
+  // has nothing here to check against).
+  const appTimeLine = span
+    ? `<p class="detail-app-time" id="detail-app-time">App open ${span} — not workout time</p>`
+    : '';
   return `
     ${header}
     <p class="detail-sub">Workout ${log.workout} · ${formatDateLong(log.date)}</p>
     <div class="card detail-card">${rows.join('')}</div>
+    ${appTimeLine}
     ${unsyncedLine}
     <button class="btn-chip detail-edit-btn" id="edit-history-session" type="button">Edit</button>
   `;
