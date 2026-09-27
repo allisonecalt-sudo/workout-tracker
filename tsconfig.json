@@ -1,4 +1,11 @@
 {
+  // code-shape R1b (Sep 27 2026): tsc is now the TYPE GATE only (gate 3) —
+  // esbuild (scripts/build.mjs) does the actual bundling/emit. "include"
+  // used to hand-list every module tsc should emit separately; with noEmit,
+  // one root is enough — TypeScript still type-checks every file app.ts
+  // imports transitively, "include" or not (proven true already: this file
+  // never listed exercise-howto.ts/exercise-detail.ts/ride.ts/chart.ts/
+  // pain-feel.ts, yet they were always type-checked and emitted).
   "compilerOptions": {
     "target": "ES2020",
     "module": "ES2020",
@@ -13,19 +20,9 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "outDir": "./dist",
-    "rootDir": ".",
+    "noEmit": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"]
   },
-  "include": [
-    "app.ts",
-    "exercise-visuals.ts",
-    "ladders.ts",
-    "progression.ts",
-    "cycle.ts",
-    "step-list.ts",
-    "week.ts",
-    "timing.ts"
-  ],
+  "include": ["app.ts"],
   "exclude": ["node_modules", "dist", "tests", "playwright.config.ts"]
 }

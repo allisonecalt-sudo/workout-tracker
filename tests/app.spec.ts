@@ -1792,14 +1792,15 @@ test('R2 W3 (v41): the plank in B is the SAME prescription as the one in A', asy
 test('setup blocks (v40): every phase that renders an Exercise also renders its setup', async ({
   page,
 }) => {
-  const callSites = await page.evaluate(() => {
-    // renderExerciseSetup is not exported; count its call sites in the shipped
-    // bundle instead. Both the stepped-exercise renderer and the cooldown list
-    // must call it.
-    return fetch('dist/app.js')
-      .then((r) => r.text())
-      .then((src) => (src.match(/renderExerciseSetup\(/g) ?? []).length);
-  });
+  // code-shape R1b (Sep 27 2026): this used to fetch the SHIPPED bundle
+  // (dist/app.js) and grep it — esbuild's minifier can rename/inline a
+  // non-exported function, and the bundle is now content-hashed, so a
+  // structural source check reads the TypeScript source directly instead.
+  // Same assertion (1 definition + 2 call sites), source of truth moved.
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
+  const callSites = (src.match(/renderExerciseSetup\(/g) ?? []).length;
   // 1 definition + 2 call sites.
   expect(callSites).toBeGreaterThanOrEqual(3);
 
@@ -3010,70 +3011,66 @@ test('Tips audit: no exercise notes string leaks PROGRAM bookkeeping instead of 
   expect(offenders).toEqual([]);
 });
 
-test('deploy hygiene: every dist/*.js module app.js imports (transitively) is precached', () => {
-  // v53 fix (CHECK M1, Sep 26 2026): dist/pain-feel.js was imported by
-  // app.js but missing from BOTH sw.js precache lists — the ONE gap in nine
-  // modules was enough for an offline start to fail the whole module graph
-  // on a blank page (Playwright's setOffline doesn't exercise the service
-  // worker, so a naive offline test passed falsely; only a stopped-server
-  // drive with the HTTP cache cleared caught it). This walks the REAL import
-  // graph from the BUILT dist/*.js output — not a hand-kept list of module
-  // names — so a future import can never repeat the gap silently.
+// code-shape R1b (Sep 27 2026): both deploy-hygiene tests below moved from
+// "every dist/*.js module is hand-listed in sw.js twice" (the M1 bug class —
+// see the old comment this replaced, kept in git history) to the new
+// invariant: ONE esbuild bundle, its name known only through dist/build-
+// info.js, read by sw.js at runtime via importScripts. There is no longer a
+// per-module list to drift out of sync — this instead guards that the build
+// actually produced what sw.js expects, and that no hand-listed dist/*.js
+// entry ever creeps back in.
+test('deploy hygiene: sw.js precaches exactly the bundle dist/build-info.js names', () => {
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
   const distDir = path.join(__dirname, '..', 'dist');
-  const importRe = /from\s+'\.\/([\w-]+\.js)'/g;
-
-  function localImports(file: string): string[] {
-    const src = fs.readFileSync(path.join(distDir, file), 'utf8');
-    const found: string[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = importRe.exec(src))) found.push(m[1]!);
-    return found;
-  }
-
-  const graph = new Set<string>();
-  const queue: string[] = ['app.js'];
-  while (queue.length > 0) {
-    const file = queue.shift()!;
-    for (const dep of localImports(file)) {
-      if (!graph.has(dep)) {
-        graph.add(dep);
-        queue.push(dep);
-      }
-    }
-  }
-  // Sanity: the graph actually found something, so an empty/broken build
-  // doesn't pass this test by vacuous truth.
-  expect(graph.size).toBeGreaterThan(0);
-
   const swSrc = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
-  const missingFromShell: string[] = [];
-  const missingFromCodeRequest: string[] = [];
-  for (const mod of graph) {
-    if (!swSrc.includes(`'./dist/${mod}'`)) missingFromShell.push(mod);
-    if (!swSrc.includes(`endsWith('/dist/${mod}')`)) missingFromCodeRequest.push(mod);
-  }
-  expect({ missingFromShell, missingFromCodeRequest }).toEqual({
-    missingFromShell: [],
-    missingFromCodeRequest: [],
-  });
+
+  expect(swSrc).toContain("importScripts('./dist/build-info.js')");
+
+  const buildInfoPath = path.join(distDir, 'build-info.js');
+  expect(fs.existsSync(buildInfoPath), 'dist/build-info.js — run "npm run build" first').toBe(true);
+  const buildInfoSrc = fs.readFileSync(buildInfoPath, 'utf8');
+  const bundle = /"bundle":"([^"]+)"/.exec(buildInfoSrc.replace(/\s+/g, ''))?.[1];
+  expect(bundle).toBeTruthy();
+  expect(
+    fs.existsSync(path.join(distDir, bundle!)),
+    `dist/${bundle} — the built bundle itself`
+  ).toBe(true);
+
+  // Guard against the OLD pattern quietly coming back: a hand-listed
+  // 'dist/<name>.js' string literal other than build-info.js itself.
+  const handListed = [...swSrc.matchAll(/'\.\/dist\/([\w.-]+\.js)'/g)]
+    .map((m) => m[1]!)
+    .filter((name) => name !== 'build-info.js');
+  expect(handListed).toEqual([]);
 });
 
-test('deploy hygiene: sw.js cache VERSION stays in sync with APP_VERSION', () => {
+test('deploy hygiene: version is single-sourced (package.json → build-info.js → sw.js, never hand-typed)', () => {
   // v25 shipped with sw.js still saying v24 — an installed PWA then kept the
-  // old cache name and the new build didn't visibly land on her phone. The
-  // sync rule was only a comment; this makes it a failing test instead.
+  // old cache name and the new build didn't visibly land on her phone. R1b
+  // fixes the ROOT cause (3 places to edit) instead of re-checking the
+  // symptom: package.json's "appVersion" is the one place a bump happens.
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
-  const appSrc = fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as {
+    appVersion?: string;
+  };
+  expect(pkg.appVersion).toBeTruthy();
+
+  const buildInfoPath = path.join(__dirname, '..', 'dist', 'build-info.js');
+  expect(fs.existsSync(buildInfoPath), 'dist/build-info.js — run "npm run build" first').toBe(true);
+  const buildInfoSrc = fs.readFileSync(buildInfoPath, 'utf8');
+  expect(buildInfoSrc).toContain(`"version":"${pkg.appVersion}"`.replace(/\s+/g, ''));
+
   const swSrc = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
-  // v52.2 (Sep 26 2026): versions can carry a dot now (v52.1, v52.2, …) — the
-  // pattern must accept that or a dotted bump falsely reads as "out of sync".
-  const appVersion = /APP_VERSION = '(v\d+(?:\.\d+)?)'/.exec(appSrc)?.[1];
-  const swVersion = /VERSION = 'workout-tracker-(v\d+(?:\.\d+)?)'/.exec(swSrc)?.[1];
-  expect(appVersion).toBeTruthy();
-  expect(swVersion).toBe(appVersion);
+  // sw.js must read the version at RUNTIME, never a literal 'workout-tracker-vNN'.
+  expect(swSrc).toContain('`workout-tracker-${BUILD_INFO.version}`');
+  expect(/workout-tracker-v\d/.test(swSrc)).toBe(false);
+
+  const bundleMatch = /"bundle":"([^"]+)"/.exec(buildInfoSrc.replace(/\s+/g, ''))?.[1];
+  const bundleSrc = fs.readFileSync(path.join(__dirname, '..', 'dist', bundleMatch!), 'utf8');
+  // Proves esbuild's --define actually ran against THIS build, not a stale one.
+  expect(bundleSrc.includes(pkg.appVersion!)).toBe(true);
 });
 
 test('round 2: banner reads Round 2 · Week 1 from Aug 29 2026 and restart numbers are live', async ({
@@ -8681,12 +8678,27 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v54 · <date, no year>", Settings "Build v54 · <full date>", sw.js v54', async ({
+  test('(d) the version: home "v54 · <date, no year>", Settings "Build v54 · <full date>"', async ({
     page,
   }) => {
-    const src = await (await page.request.get('/app.ts')).text();
-    const version = /const APP_VERSION = '([^']+)'/.exec(src)?.[1];
-    const built = /const BUILD_DATE = '([^']+)'/.exec(src)?.[1] ?? '';
+    // code-shape R1b (Sep 27 2026): APP_VERSION/BUILD_DATE are no longer
+    // string literals in app.ts's source (they're `--define`-injected from
+    // package.json's "appVersion" + a build-time timestamp — see app.ts's
+    // own comment there), so this reads the single source of truth instead
+    // of regexing source text. sw.js's version string is covered by its own
+    // "deploy hygiene: version is single-sourced" test now — not duplicated
+    // here, since this test's own job is the RENDERED text, not the source.
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as {
+      appVersion?: string;
+    };
+    const version = pkg.appVersion;
+    const buildInfoSrc = fs.readFileSync(
+      path.join(__dirname, '..', 'dist', 'build-info.js'),
+      'utf8'
+    );
+    const built = /"buildDate":"([^"]+)"/.exec(buildInfoSrc)?.[1] ?? '';
     // THE RIDES PAGE (Sep 27 2026): the bump this round (v53.1 -> v54) — a
     // whole-number bump, not another dotted sub-version, since this ships a
     // new screen (v51/v52/v53's own shape: sub-versions are same-day fixes,
@@ -8698,8 +8710,6 @@ test.describe('v48 P8 sweep', () => {
     );
     await page.locator('#open-settings').click();
     await expect(page.locator('#app')).toContainText(`Build ${version} · ${built}`);
-    const sw = await (await page.request.get('/sw.js')).text();
-    expect(sw).toContain(`'workout-tracker-${version}'`);
   });
 });
 
