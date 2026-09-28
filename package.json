@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Allison's hands-free home workout tracker (A/B/C rotation, tempo timer, log)",
   "private": true,
-  "appVersion": "v58",
+  "appVersion": "v59",
   "scripts": {
     "build": "tsc --noEmit && node scripts/build.mjs",
     "lint": "eslint . --ext .ts",

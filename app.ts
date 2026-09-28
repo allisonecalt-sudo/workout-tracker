@@ -77,6 +77,8 @@ import {
 } from './week.js';
 import {
   steppedMovesForWorkout,
+  steppedLineText,
+  steppedLineFor,
   moveFeelString,
   isMoveFeelValue,
   canonicalMoveName,
@@ -3669,6 +3671,16 @@ const WALK_ACTIVE_KEY = 'workout-tracker:walk-active';
 // The v47 counters' keys — only cleared now (a phone may still hold them).
 const LEGACY_WALK_COUNTER_KEYS = ['workout-tracker:walk-meters', 'workout-tracker:walk-steps'];
 
+// v59 (Sep 28 2026), CHECK-v58 round 2 nice #R2-N2: the walk-outside lane's
+// Easy/Right/Hard chip (renderMoveFeel via the Outdoor-walk branch below)
+// used to show the instant she tapped ▶ Walk outside — "Walking · 0 min ·
+// how did it feel?" — before she'd walked at all. Gated on real elapsed time
+// instead: no opinion to ask about yet under 3 min.
+const WALK_FEEL_GATE_MS = 3 * 60_000;
+function walkFeelReady(start: number | null): boolean {
+  return start !== null && Date.now() - start >= WALK_FEEL_GATE_MS;
+}
+
 let walkWakeLock: { release: () => Promise<void> } | null = null;
 let walkTickId: number | null = null;
 
@@ -3713,10 +3725,17 @@ async function acquireWalkWakeLock(): Promise<void> {
 
 // v48 · P3 (Sep 24 2026): minutes only — "Walking · 12 min", refreshed by the
 // 30 s tick. The step/km parts are gone with the sensors (archived).
+// v59 (Sep 28 2026, R2-N2): also the walk-lane feel chip's own reveal — the
+// chip's HTML never changes once it exists (only WHETHER it's shown does,
+// see walkFeelReady above), so a class toggle on its wrapper is enough; no
+// need for a full render() mid-walk (app.ts keeps that discipline everywhere
+// else a tick runs, see updatePreLogClockLine's own comment).
 function updateWalkLiveLine(): void {
+  const start = activeWalkStart() ?? workoutWalkStart();
   const el = document.getElementById('walk-live');
-  if (!el) return;
-  el.textContent = walkLiveText(activeWalkStart() ?? workoutWalkStart());
+  if (el) el.textContent = walkLiveText(start);
+  const feelSlot = document.getElementById('walk-move-feel-slot');
+  if (feelSlot) feelSlot.classList.toggle('wt-hidden', !walkFeelReady(workoutWalkStart()));
 }
 
 // v48 · P3: the wake lock + the minute tick. No GPS watch, no devicemotion
@@ -10240,11 +10259,16 @@ function renderPreLog(): string {
   // in-workout chip reads (currentSteppedMoves) — the two can never disagree
   // about which moves ask tonight. Empty when nothing stepped (a repeat
   // week) — no empty line, nothing shown.
+  // v59 fix pass (Sep 28 2026, CHECK-v58 round 2 must #R2-S1): the line used
+  // to join every stepped move's summary with no cap — on a several-move
+  // week (R2·Week4's split squat + hip hinge + wall sit) it wrapped to a
+  // second line and pushed the Lite chip's bottom past the action bar (862 vs
+  // 826 at 412×915, still 0 scroll). steppedLineText (move-feel.ts) caps what
+  // SHOWS to one line's worth of text, "+N more" for the rest — the chip
+  // itself (renderMoveFeel, mid-workout) still reads currentSteppedMoves()
+  // directly, so every move still gets asked, only the PREVIEW truncates.
   const steppedThisWeek = currentSteppedMoves();
-  const steppedLine =
-    steppedThisWeek.length > 0
-      ? `Stepped this week: ${steppedThisWeek.map((s) => s.summary).join(' · ')}`
-      : '';
+  const steppedLine = steppedLineText(steppedThisWeek);
   // Lite = one round less, never below 1 — the chip says how many rounds today.
   const liteRounds = Math.max(1, w.rounds - 1);
   const liteWord = liteRounds === 1 ? 'one round' : `${liteRounds} rounds`;
@@ -10298,7 +10322,7 @@ function renderPreLog(): string {
       editingOpen: state.herStartEditingOpen,
     })}
     <p class="prelog-meta">${escapeHtml(meta)}</p>
-    ${steppedLine ? `<p class="prelog-stepped">${escapeHtml(steppedLine)}</p>` : ''}
+    ${steppedLine ? `<p class="prelog-stepped" id="prelog-stepped">${escapeHtml(steppedLine)}</p>` : ''}
 
     ${renderWorkoutOverview(w)}
 
@@ -10314,6 +10338,33 @@ function renderPreLog(): string {
 
     ${renderActionBar(`<button class="btn-large btn-primary" id="begin" type="button">Start</button>`)}
   `;
+}
+
+// v59 (Sep 28 2026), CHECK-v58 round 2 must #R2-S1: renderPreLog's own
+// #prelog-stepped starts out UNTRIMMED (steppedLineText shows every stepped
+// move) — this is the live fit, run once right after the pre-log screen
+// mounts (render()'s own post-innerHTML hook). Forces one line (nowrap),
+// compares the text's real rendered width (scrollWidth) against the real box
+// width (clientWidth — a block <p>'s own width, set by its container,
+// unaffected by nowrap), and drops trailing moves — "+N more" for the rest —
+// until it actually fits. A character-count budget was tried and dropped
+// here on purpose (move-feel.ts's own comment on steppedLineFor): real
+// letters vary too much in width to predict this without measuring the real
+// font. Always leaves at least one move shown, even if that one alone still
+// doesn't fit (the fallback below restores normal wrapping rather than
+// clipping it off).
+function fitSteppedLine(stepped: readonly SteppedMove[]): void {
+  if (stepped.length === 0) return;
+  const el = document.getElementById('prelog-stepped');
+  if (!el) return;
+  const prevWhiteSpace = el.style.whiteSpace;
+  el.style.whiteSpace = 'nowrap';
+  let shown = stepped.length;
+  while (shown > 1 && el.scrollWidth > el.clientWidth) {
+    shown -= 1;
+    el.textContent = steppedLineFor(stepped, shown);
+  }
+  el.style.whiteSpace = prevWhiteSpace;
 }
 
 // Workout overview — the structure before starting (2026-05-15 18:07: "see the
@@ -11237,7 +11288,17 @@ function renderWorkout(): string {
   // Start/Stop timer the indoor lanes have), so `ready: true` — same as the
   // elliptical's own post-ride branch below — lets her tap it any time on
   // this screen, same as every other reps-based move.
+  // v59 fix pass (Sep 28 2026, CHECK-v58 round 2 nice #R2-N2): `ready: true`
+  // meant the chip appeared the instant she tapped ▶ Walk outside —
+  // "Walking · 0 min · how did it feel?", nothing to have an opinion about
+  // yet. renderMoveFeel's own `ready` gate stays true (curl/row-style — she
+  // can tap it any time once it's showing); the WHETHER-it-shows question
+  // moves to the wrapper below instead, gated on real elapsed time
+  // (walkFeelReady) and kept live by the 30 s tick (updateWalkLiveLine, a
+  // class toggle only — never a full render() mid-walk).
   if (ex.name === 'Outdoor walk') {
+    const feelHtml = renderMoveFeel(ex, { hold: false, ready: true, isLastRoundOrNA: true });
+    const feelReady = walkFeelReady(workoutWalkStart());
     return `
       ${header}
       <div class="card">
@@ -11246,7 +11307,7 @@ function renderWorkout(): string {
           <div class="exercise-reps">${walkStepMinutes(ex)} min</div>
           <p class="walk-live-line">🚶 <span id="walk-live">${walkLiveText(workoutWalkStart())}</span></p>
           <p class="gear-note">It saves with this workout. Tap Done · Next when you're back.</p>
-          ${renderMoveFeel(ex, { hold: false, ready: true, isLastRoundOrNA: true })}
+          ${feelHtml ? `<div id="walk-move-feel-slot" class="${feelReady ? '' : 'wt-hidden'}">${feelHtml}</div>` : ''}
         </div>
       </div>
       ${renderStepNav('Done · Next')}
@@ -14887,6 +14948,10 @@ function render(): void {
     root.classList.remove('screen-enter');
   }
   attachHandlers();
+  // v59 (Sep 28 2026, R2-S1): the pre-log "Stepped this week" line's live
+  // one-line fit — see fitSteppedLine's own comment. Must run after
+  // attachHandlers/innerHTML (it measures the just-mounted #prelog-stepped).
+  if (state.screen === 'pre-log') fitSteppedLine(currentSteppedMoves());
   // v46: a new screen or step lands at the top (see navigationKey).
   // v48 · P6 (Sep 24 2026): except coming BACK from a Session to the list that
   // opened it — she lands where she was, not at the top of 39 rows (DECISIONS

@@ -13,6 +13,8 @@ import {
   canonicalMoveName,
   steppedMovesForPhase,
   steppedMovesForWorkout,
+  steppedLineText,
+  steppedLineFor,
   moveFeelString,
   parseMoveFeelString,
   isValidMoveFeelString,
@@ -20,6 +22,7 @@ import {
   RIDE_NAMES,
   type MoveFeelExercise,
   type MoveFeelWorkout,
+  type SteppedMove,
 } from '../move-feel';
 
 test.describe('slugFor', () => {
@@ -73,7 +76,12 @@ test.describe('steppedMovesForPhase / steppedMovesForWorkout — which moves ask
     expect(stepped).toHaveLength(1);
     expect(stepped[0]).toMatchObject({ name: 'Split squat', slug: 'splitsquat', kind: 'reps' });
     expect(stepped[0]!.qty).toBeUndefined();
-    expect(stepped[0]!.summary).toBe('split squat 8-10 each side');
+    // v59 fix pass (Sep 28 2026, CHECK-v58 round 2 must #R2-S1): the summary
+    // keeps only the stepped NUMBER now ("8-10"), not the whole prose
+    // segment ("8-10 each side") — the pre-log line's own one-line budget
+    // (steppedLineText below) needs every move's text short, not just
+    // capped to its first segment.
+    expect(stepped[0]!.summary).toBe('split squat 8-10');
   });
 
   test('a brand-new variant (not in prev at all, by name) steps', () => {
@@ -87,7 +95,27 @@ test.describe('steppedMovesForPhase / steppedMovesForWorkout — which moves ask
     // v58 fix pass (Sep 28 2026): only the first ' · '-segment survives —
     // the "· one set per round" extra used the same separator the pre-log
     // line joins several moves with, which made a multi-move week unreadable.
-    expect(stepped[0]!.summary).toBe('supported split squat 6-8 each side');
+    // v59: and now just the number out of that segment (see the reps-bump
+    // test above).
+    expect(stepped[0]!.summary).toBe('supported split squat 6-8');
+  });
+
+  test('v59 (CHECK-v58 round 2 nice #R2-N1): a reps move whose only real change is a LATER, appended segment shows THAT segment — not the unchanged first one', () => {
+    // Her real data: hip hinge went from Week 3's "2 sets · 12 reps" to Week
+    // 4's "12 reps · 2 sets each round · holding 1–2 kg (your pick)" — same
+    // "12 reps" (just reworded), the actual step is the added load, three
+    // segments later. The old first-segment cut said "hip hinge 12 reps",
+    // which reads as though the rep count changed when it didn't.
+    const prev: MoveFeelExercise[] = [{ name: 'Bodyweight hip hinge', reps: '2 sets · 12 reps' }];
+    const next: MoveFeelExercise[] = [
+      {
+        name: 'Bodyweight hip hinge',
+        reps: '12 reps · 2 sets each round · holding 1–2 kg (your pick)',
+      },
+    ];
+    const stepped = steppedMovesForPhase(prev, next, new Set());
+    expect(stepped).toHaveLength(1);
+    expect(stepped[0]!.summary).toBe('bodyweight hip hinge 1–2 kg');
   });
 
   test('a hold whose seconds went up steps with a seconds qty', () => {
@@ -217,6 +245,50 @@ test.describe('moveFeelString / parseMoveFeelString — tap saves the right slug
     expect(parseMoveFeelString(null)).toEqual([]);
     expect(parseMoveFeelString(undefined)).toEqual([]);
     expect(parseMoveFeelString('')).toEqual([]);
+  });
+});
+
+// v59 (Sep 28 2026), CHECK-v58 round 2 must #R2-S1: the pre-log "Stepped
+// this week" line's own one-line budget — tested here (pure) since
+// tests/app.spec.ts's own phone-size test proves the actual RESULT of the
+// real fit (the Lite chip clears the action bar) — the live DOM measurement
+// itself (app.ts's fitSteppedLine) has no browser-free unit test on purpose,
+// same as this module's own "stays DOM-free" discipline. What's pure and
+// tested here is the STRING each shown-count builds.
+test.describe('steppedLineFor / steppedLineText — the pre-log preview text', () => {
+  const move = (summary: string): SteppedMove => ({
+    name: summary,
+    slug: summary,
+    kind: 'reps',
+    summary,
+  });
+
+  test('nothing stepped -> empty string, no line at all', () => {
+    expect(steppedLineText([])).toBe('');
+    expect(steppedLineFor([], 1)).toBe('');
+  });
+
+  test('steppedLineText is untrimmed — every stepped move, no "more" — the live fit (app.ts) does the trimming', () => {
+    const stepped = [move('split squat 8-10'), move('hip hinge 1–2 kg'), move('wall sit 45s')];
+    expect(steppedLineText(stepped)).toBe(
+      'Stepped this week: split squat 8-10 · hip hinge 1–2 kg · wall sit 45s'
+    );
+  });
+
+  test('steppedLineFor(stepped, shown) shows exactly `shown` moves, "+N more" for the rest', () => {
+    const stepped = [move('split squat 8-10'), move('hip hinge 1–2 kg'), move('wall sit 45s')];
+    expect(steppedLineFor(stepped, 3)).toBe(
+      'Stepped this week: split squat 8-10 · hip hinge 1–2 kg · wall sit 45s'
+    );
+    expect(steppedLineFor(stepped, 2)).toBe(
+      'Stepped this week: split squat 8-10 · hip hinge 1–2 kg · +1 more'
+    );
+    expect(steppedLineFor(stepped, 1)).toBe('Stepped this week: split squat 8-10 · +2 more');
+  });
+
+  test('never drops to zero shown moves, even asked for 0', () => {
+    const stepped = [move('ride 12 min')];
+    expect(steppedLineFor(stepped, 0)).toBe('Stepped this week: ride 12 min');
   });
 });
 

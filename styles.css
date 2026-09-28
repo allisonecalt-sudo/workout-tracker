@@ -5629,8 +5629,10 @@ textarea:focus {
   /* T1 fix r1 (Sep 27 2026, checker's should #3): this is still a .card, so
    * it inherits the base 18px margin-bottom — cut to 8px here (only this
    * details element, in the pre-log screen alone) to help win back the
-   * timing row's height. See .prelog-header's own comment. */
-  margin-bottom: 8px;
+   * timing row's height. See .prelog-header's own comment.
+   * v59 fix pass (Sep 28 2026, R2-S1): 8px -> 4px — see .body-card's own
+   * comment. */
+  margin-bottom: 4px;
 }
 
 .prelog-overview-summary {
@@ -5677,8 +5679,13 @@ textarea:focus {
   padding: 16px 18px;
   /* T1 fix r1 (Sep 27 2026, checker's should #3): this is the pre-log's own
    * .card (only used here — see .prelog-overview's own comment), cut from
-   * the base 18px the same way to help win back the timing row's height. */
-  margin-bottom: 10px;
+   * the base 18px the same way to help win back the timing row's height.
+   * v59 fix pass (Sep 28 2026, CHECK-v58 round 2 must #R2-S1): 10px -> 6px —
+   * one of several small cuts (see .prelog-overview/.body-card > .field +
+   * .field/.prelog-stepped below) that together win back the height the
+   * "Stepped this week" line costs, even trimmed to one line — the exact
+   * floor this card's own comment already promises, now unconditional. */
+  margin-bottom: 6px;
 }
 
 .body-field {
@@ -5692,9 +5699,11 @@ textarea:focus {
  * ("1 empty · 5 ordinary · 10 strong"). Her screenshot (pre-log). Gives every
  * field after the first the same breathing room the first one already gets
  * from the card's own padding, so "Mood" (and Back & wrist below it) reads
- * as its own field, not a runt of the one above. */
+ * as its own field, not a runt of the one above.
+ * v59 fix pass (Sep 28 2026, R2-S1): 20px -> 16px — see .body-card's own
+ * comment just above; still clearly its own field, just 4px tighter × 2 gaps. */
 .body-card > .field + .field {
-  margin-top: 20px;
+  margin-top: 16px;
 }
 
 .body-label {
@@ -5955,7 +5964,11 @@ textarea:focus {
   color: var(--text-dim);
   font-size: var(--font-meta);
   line-height: 1.45;
-  margin: 0 0 6px;
+  /* v59 fix pass (Sep 28 2026, R2-S1): 6px -> 4px, one of the .body-card/
+   * .prelog-overview cuts right below that together win the height this
+   * line costs back — even trimmed to one line (fitSteppedLine, app.ts),
+   * it's real content the pre-v58 floor never budgeted for. */
+  margin: 0 0 4px;
 }
 
 .move-feel {
@@ -5965,6 +5978,13 @@ textarea:focus {
   align-items: center;
   gap: 8px 10px;
   margin: 6px 0 8px;
+}
+
+/* v59 (Sep 28 2026, R2-N2): the walk-lane feel chip's wrapper — its content
+ * never changes mid-walk, only whether it's shown (walkFeelReady, app.ts),
+ * toggled by the same 30 s tick that updates #walk-live. */
+.wt-hidden {
+  display: none;
 }
 
 .move-feel-label {

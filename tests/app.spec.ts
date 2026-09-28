@@ -7395,6 +7395,134 @@ test.describe('v48 P4 home', () => {
       expect(stepped).toEqual([]);
     });
 
+    // v59 (Sep 28 2026), CHECK-v58 round 2 must #R2-S2: the repeat-week test
+    // above proves the ONE branch that returns [] — nothing proved the
+    // ordinary, every-week branch (pinnedWeekKey → the real row → diff vs
+    // PROGRAM[idx-1]) still returns the real stepped moves. A future change
+    // that returned [] too eagerly would have passed the whole suite.
+    type SteppedName = { name: string; summary: string };
+    test('v59 (a) post-launch, a real (non-repeat) week: A/B logged, C not yet — stepped is still [ride 12 min]', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-09-29T10:00:00.000Z'); // Tue Sep 29 — inside Week 5, a real PROGRAM row
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+      ]);
+      await page.goto('/');
+      // A/B already done this week — Home's own "Up next" hero only offers
+      // the missing C (see the swing-Saturday tests above), so A isn't a
+      // clickable button here. Same __wtStartWorkout hook v58 (a) above uses
+      // to pick an arbitrary workout id regardless of what Home is offering.
+      const stepped = await page.evaluate(() => {
+        const w = window as unknown as {
+          __wtStartWorkout: (id: 'A' | 'B' | 'C' | 'D') => void;
+          __wtCurrentSteppedMoves: () => SteppedName[];
+        };
+        w.__wtStartWorkout('A');
+        return w.__wtCurrentSteppedMoves();
+      });
+      expect(stepped.map((s) => s.name)).toEqual(['Outdoor walk']);
+      expect(stepped[0]!.summary).toBe('ride 12 min');
+    });
+
+    test("v59 (b) pinned crossing: a session started at the END of Week 5 (Fri) still asks about Week 5's own stepped move after resuming past the Week-6 boundary (Sun, C logged Sat)", async ({
+      page,
+      context,
+    }) => {
+      // Same shape as "the pinned plan survives an app close" below, minus
+      // the marker-row background-sync half — this is R2-S2's own repro:
+      // start on the LAST day Week 5 is live, let a Saturday C close it and
+      // open (repeat) Week 6 out from under the pin, resume Sunday. The fix
+      // (steppedMovesForWorkoutId resolving state.pinnedWeekKey first) means
+      // this session keeps training/asking about Week 5, never Week 6's
+      // (empty, repeat) list.
+      await mockDate(page, '2026-10-02T10:00:00.000Z'); // Fri Oct 2 — Week 5's own last day
+      await page.goto('/');
+      await page.locator('button[data-workout="A"]').click(); // pins state.pinnedWeekKey to Week 5
+      await expect(page.locator('.prelog-stepped')).toContainText('ride 12 min');
+      await page.locator('#begin').click();
+
+      // Sat Oct 3: a C session lands (another day/device flushing), closing
+      // Week 5 and opening (repeating) Week 6 — same trick the tests above
+      // use, done here mid-session instead of before it starts.
+      await page.evaluate(() => {
+        const raw = window.localStorage.getItem('workout-tracker:logs');
+        const rows: unknown[] = raw ? JSON.parse(raw) : [];
+        rows.push({
+          id: 'wk5-c-sat',
+          date: '2026-10-03T15:00:00.000Z',
+          workout: 'C',
+          capacityBefore: 8,
+          capacityAfter: 8,
+          wallSitSec: 0,
+          backPain: 0,
+          word: '',
+          synced: true,
+        });
+        window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+      });
+
+      // Resume Sunday Oct 4 — a new page in the same context, same "app
+      // close/reopen" pattern as the test right below — except two full days
+      // pass here (Fri -> Sun), past STALE_SESSION_MS (3h), so this resume
+      // lands on the "Workout A was left open ... Did you do it?" stale card
+      // instead of silently reopening it — "Keep going where I left off"
+      // (#stale-continue → continueStaleSession → applyActiveSnapshot) is
+      // the same pin-preserving resume, one tap further.
+      const resumed = await context.newPage();
+      await mockDate(resumed, '2026-10-04T10:00:00.000Z');
+      await resumed.goto('/');
+      await resumed.locator('#stale-continue').click();
+      await expect(resumed.locator('.round-indicator')).toBeVisible();
+      const stepped = await resumed.evaluate(
+        () =>
+          (
+            window as unknown as { __wtCurrentSteppedMoves: () => SteppedName[] }
+          ).__wtCurrentSteppedMoves() as SteppedName[]
+      );
+      expect(stepped.map((s) => s.name)).toEqual(['Outdoor walk']);
+      expect(stepped[0]!.summary).toBe('ride 12 min');
+      await resumed.close();
+    });
+
+    // v59 (Sep 28 2026), CHECK-v58 round 2 nice #R2-N2: the walk-outside
+    // lane's own feel chip used to show the instant she tapped ▶ Walk
+    // outside ("Walking · 0 min · how did it feel?"). Gated on real elapsed
+    // time now (walkFeelReady, app.ts) — nothing to have an opinion about at
+    // 0 min.
+    test('v59 (R2-N2): the walk-outside feel chip waits for real elapsed time, not "Walking · 0 min"', async ({
+      page,
+      context,
+    }) => {
+      await mockDate(page, '2026-09-27T10:00:00.000Z'); // Sun inside Week 5 — ride steps 10 -> 12 for A
+      await page.goto('/');
+      await page.locator('button[data-workout="A"]').click();
+      await page.locator('#begin').click();
+      await page.locator('#ww-start').click(); // the walk lane, right now — 0 min elapsed
+      await expect(page.locator('#walk-live')).toHaveText('Walking · 0 min');
+      await expect(page.locator('#walk-move-feel-slot')).toHaveClass(/wt-hidden/);
+      await expect(page.locator('.move-feel .arm-chip').first()).not.toBeVisible();
+
+      // Back-date the stamped start 4 minutes — a real elapsed walk. A fresh
+      // load re-renders the step off the (now backdated) stamp, standing in
+      // for the 30 s tick without a real 4-minute wait (same "app close/
+      // reopen" pattern the resume tests above use).
+      await page.evaluate(() => {
+        window.localStorage.setItem('workout-tracker:ww-start', String(Date.now() - 4 * 60_000));
+      });
+      const resumed = await context.newPage();
+      await mockDate(resumed, '2026-09-27T10:00:00.000Z');
+      await resumed.goto('/');
+      // displayName(ex) shows "Cardio" for the Outdoor-walk slot throughout
+      // (app.ts: `ex.name === 'Outdoor walk' ? 'Cardio' : ex.name`) — same on
+      // this screen before AND during the walk, not just on the choice card.
+      await expect(resumed.locator('.exercise-name')).toHaveText('Cardio');
+      await expect(resumed.locator('#walk-move-feel-slot')).not.toHaveClass(/wt-hidden/);
+      await expect(resumed.locator('.move-feel .arm-chip').first()).toBeVisible();
+      await resumed.close();
+    });
+
     test('the pinned plan survives an app close — even once a background sync closes the week under it (§2.8 item 4)', async ({
       page,
       context,
@@ -7641,23 +7769,20 @@ test.describe('v48 P5 logs', () => {
           // floor is back, never loosened.
           // v58 (Sep 28 2026): the new "Stepped this week: …" line (her spec
           // item 2) is real, intended content — on a week with several
-          // stepped moves (R2·Week4's split squat + wall sit, this fixture's
-          // own week) it can legitimately push the Lite chip past the exact
-          // floor above. #begin stays reachable regardless (the pinned
-          // action bar, asserted just above, never scrolls), so the hard
-          // zero-scroll floor only still applies on a week with nothing (or
-          // little) stepped — most weeks, and every week this test's OWN
-          // Workout C case covers unchanged (C's ride stays 25 min, nothing
-          // else stepped, at TUE_WEEK4).
-          const stepped = await page.locator('.prelog-stepped').count();
+          // stepped moves it used to run past one line and legitimately push
+          // the Lite chip past this exact floor, so round 1 loosened the
+          // assertion below to a plain visibility check whenever the line
+          // existed (checker's should #1 / R2-S1).
+          // v59 fix pass (Sep 28 2026, CHECK-v58 round 2 must #R2-S1): fixed
+          // at the source instead — steppedLineText (move-feel.ts) caps the
+          // line to one line's worth of text ("+N more" for the rest), so the
+          // line never wins back the height the exception used to excuse.
+          // R2·Week4 A (3 stepped moves) now fits: floor restored
+          // unconditionally, no exception left to take.
           const bar = (await page.locator('.action-bar').boundingBox())!;
           const lite = (await page.locator('#lite-toggle').boundingBox())!;
-          if (stepped === 0) {
-            expect(lite.y + lite.height).toBeLessThanOrEqual(bar.y);
-            expect(await page.evaluate(() => window.scrollY)).toBe(0);
-          } else {
-            await expect(page.locator('#lite-toggle')).toBeVisible();
-          }
+          expect(lite.y + lite.height).toBeLessThanOrEqual(bar.y);
+          expect(await page.evaluate(() => window.scrollY)).toBe(0);
         }
         await expect(page.locator('#lite-toggle')).toContainText('✓ Lite');
         await page.locator('#back-home').click();
@@ -8328,7 +8453,22 @@ test.describe('v48 P5 logs', () => {
     const stepped = page.locator('.prelog-stepped');
     await expect(stepped).toContainText('Stepped this week:');
     await expect(stepped).toContainText('supported split squat');
-    await expect(stepped).toContainText('wall sit 45s');
+    // v59 fix pass (Sep 28 2026, CHECK-v58 round 2 must #R2-S1): three moves
+    // step this week (split squat, hip hinge, wall sit) — the live one-line
+    // fit (fitSteppedLine) truncates the PREVIEW to what actually fits at
+    // 412px, "+N more" for the rest; wall sit no longer prints here. The
+    // computed list underneath (what the mid-workout chip actually reads)
+    // still carries every one of them — proved directly, not from the
+    // truncated text.
+    await expect(stepped).toContainText('+2 more');
+    const namesA = await page.evaluate(() =>
+      (window as unknown as { __wtCurrentSteppedMoves: () => { name: string }[] })
+        .__wtCurrentSteppedMoves()
+        .map((m) => m.name)
+    );
+    expect(namesA).toEqual(
+      expect.arrayContaining(['Supported split squat', 'Bodyweight hip hinge', 'Wall sit'])
+    );
     // Workout C: nothing stepped -> no line at all.
     await page.locator('#back-home').click();
     await page.locator('button[data-workout="C"]').click();
@@ -9353,7 +9493,7 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v58 · <date, no year>", Settings "Build v58 · <full date>"', async ({
+  test('(d) the version: home "v59 · <date, no year>", Settings "Build v59 · <full date>"', async ({
     page,
   }) => {
     // code-shape R1b (Sep 27 2026): APP_VERSION/BUILD_DATE are no longer
@@ -9374,11 +9514,12 @@ test.describe('v48 P8 sweep', () => {
       'utf8'
     );
     const built = /"buildDate":"([^"]+)"/.exec(buildInfoSrc)?.[1] ?? '';
-    // v58 (Sep 28 2026): Easy/Right/Hard on every stepped move (move_feel) +
-    // the "Stepped this week" pre-log line + the rides-page nice items — a
-    // whole-number bump (v51/v52/v53's own shape: sub-versions are same-day
-    // fixes, a new number is a new build).
-    expect(version).toBe('v58');
+    // v59 (Sep 28 2026): pre-log zero-scroll floor restored (short numeric
+    // move-feel summaries + a one-line truncated "Stepped this week" text),
+    // positive stepped-moves tests, the hip-hinge segment fix, walk-chip
+    // timing — a whole-number bump (v51/v52/v53's own shape: sub-versions
+    // are same-day fixes, a new number is a new build).
+    expect(version).toBe('v59');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
       `${version} · ${built.replace(/,\s*\d{4}/, '')}`

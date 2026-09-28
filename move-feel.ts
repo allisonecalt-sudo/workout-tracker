@@ -115,20 +115,63 @@ function displayLabel(name: string): string {
   return RIDE_NAMES.has(name) ? RIDE_SLUG : name.toLowerCase();
 }
 
-// v58 fix pass (Sep 28 2026, checker's should #2): a plain reps summary used
-// to carry the WHOLE `reps` text — but that text often has its own
-// ' · '-joined extras ("12 reps · 2 sets each round", "6-8 each side · one
-// set per round"), the SAME separator the pre-log "Stepped this week" line
-// joins several moves' summaries with, so a week with more than one stepped
-// move became unreadable (all the ' · '-parts ran together). Only the first
-// ' · '-segment survives — short: the name + the stepped number, nothing
-// else.
-function summaryFor(ex: MoveFeelExercise, kind: SteppedMoveKind, qty: number | undefined): string {
+// v59 fix pass (Sep 28 2026, CHECK-v58 round 2 must #R2-S1 / nice #R2-N1):
+// round 1 fixed the RUN-ON line (dropping every segment past the first) but
+// two bugs remained. (1) the first segment isn't always the one that
+// changed — hip hinge's Week-4 reps text is "12 reps · 2 sets each round ·
+// holding 1–2 kg (your pick)"; "12 reps" is the SAME number Week 3 already
+// had, the real step is the added load, three segments later. `changedSegment`
+// picks the segment that's actually new: when the count of ' · '-segments
+// grew (a segment was APPENDED — her hip-hinge case), the newest one is the
+// real change; same segment count, position 0 already differed for every
+// case in the data (a plain rep bump), so that stays the pick. (2) even the
+// right segment is still prose ("8-10 each side") — too long once several
+// moves step the same week (the R2·Week4 3-move repro clipped the Lite chip
+// under the action bar, checker's own must). `extractStepNumber` keeps only
+// the number the segment is actually reporting: a leading count/range
+// ("8-10"), or — hip hinge's own case — a "N–M kg" load anywhere in the
+// text. No number found (rare) → just the name, never the raw prose again.
+function changedSegment(nextReps: string, prevReps: string | undefined): string {
+  const nextSegs = nextReps.split(' · ').filter((s) => s !== '');
+  if (nextSegs.length === 0) return '';
+  if (prevReps === undefined) return nextSegs[0] as string;
+  const prevSegs = prevReps.split(' · ').filter((s) => s !== '');
+  if (nextSegs.length > prevSegs.length) {
+    // A segment was appended (her hip-hinge case) — the appended tail is the
+    // real change, not whichever segment happens to sit first.
+    return nextSegs[nextSegs.length - 1] as string;
+  }
+  for (let i = 0; i < nextSegs.length; i++) {
+    if (nextSegs[i] !== prevSegs[i]) return nextSegs[i] as string;
+  }
+  return nextSegs[0] as string; // same shape front-to-back — shouldn't happen (changed=true got us here), first segment is the safe fallback
+}
+
+// A number/range (hyphen or en dash), optionally "… kg" for a load segment
+// ("holding 1–2 kg (your pick)" → "1–2 kg"; "8-10 each side" → "8-10"). Tried
+// as a KG phrase first — a load reads better with its unit than a bare
+// range would — then as a bare leading number/range.
+const KG_RE = /(\d+(?:[–-]\d+)?\s*kg)/;
+const LEADING_NUM_RE = /^(\d+(?:[–-]\d+)?)/;
+function extractStepNumber(segment: string): string {
+  const kg = KG_RE.exec(segment);
+  if (kg) return kg[1] as string;
+  const lead = LEADING_NUM_RE.exec(segment.trim());
+  return lead ? (lead[1] as string) : '';
+}
+
+function summaryFor(
+  ex: MoveFeelExercise,
+  kind: SteppedMoveKind,
+  qty: number | undefined,
+  prevReps: string | undefined
+): string {
   const label = displayLabel(ex.name);
   if (kind === 'seconds' && qty !== undefined) return `${label} ${qty}s`;
   if (kind === 'minutes' && qty !== undefined) return `${label} ${qty} min`;
-  const firstSegment = (ex.reps ?? '').split(' · ')[0] ?? '';
-  return firstSegment ? `${label} ${firstSegment}` : label;
+  const seg = changedSegment(ex.reps ?? '', prevReps);
+  const num = extractStepNumber(seg);
+  return num ? `${label} ${num}` : label;
 }
 
 // One phase's worth of stepped moves — new-in-`next` (not in `prev` at all,
@@ -156,7 +199,7 @@ export function steppedMovesForPhase(
       slug: slugFor(nx.name),
       kind,
       qty,
-      summary: summaryFor(nx, kind, qty),
+      summary: summaryFor(nx, kind, qty, pv?.reps),
     });
   }
   return out;
@@ -177,6 +220,44 @@ export function steppedMovesForWorkout(
     ...steppedMovesForPhase(prev?.main, next.main, excludeNames),
     ...steppedMovesForPhase(prev?.upperBack, next.upperBack ?? [], excludeNames),
   ];
+}
+
+// v59 (Sep 28 2026), CHECK-v58 round 2 must #R2-S1: even with the short
+// numeric summaries above, a week with several stepped moves still didn't
+// fit the pre-log's one line (R2·Week4's 3 moves ran past the exact
+// zero-scroll floor). This caps what's SHOWN, not what's computed —
+// `currentSteppedMoves` still returns every stepped move (the chip still
+// asks about all of them mid-workout); only the pre-log preview line
+// truncates.
+//
+// A character-count budget was tried first and DROPPED: real letters vary
+// enough in width that it isn't reliable — measured against the real font
+// (app.ts's fitSteppedLine, driven live), "Stepped this week: supported
+// split squat 8-10" (45 chars) already wraps to 2 lines while "Stepped this
+// week: ride 12 min · wall sit 45s" (also 45 chars) doesn't. `steppedLineFor`
+// only builds the STRING for a given shown-count; the real fit — shrinking
+// `shown` until the text's actual rendered width clears the actual box
+// width — is a DOM measurement, so it lives in app.ts's fitSteppedLine, not
+// here (this module stays DOM-free on purpose, its own header comment).
+const STEPPED_LINE_PREFIX = 'Stepped this week: ';
+
+export function steppedLineFor(stepped: readonly SteppedMove[], shown: number): string {
+  if (stepped.length === 0) return '';
+  const capped = Math.max(1, Math.min(shown, stepped.length));
+  const hidden = stepped.length - capped;
+  const more = hidden > 0 ? ` · +${hidden} more` : '';
+  const text = stepped
+    .slice(0, capped)
+    .map((s) => s.summary)
+    .join(' · ');
+  return `${STEPPED_LINE_PREFIX}${text}${more}`;
+}
+
+// The untrimmed line — app.ts renders this first (every stepped move
+// shown), then fitSteppedLine trims it live to whatever the real box
+// actually fits.
+export function steppedLineText(stepped: readonly SteppedMove[]): string {
+  return steppedLineFor(stepped, stepped.length);
 }
 
 const UNIT_FOR_KIND: Record<SteppedMoveKind, string> = { reps: '', seconds: 's', minutes: 'min' };
