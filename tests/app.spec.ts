@@ -9099,7 +9099,7 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v56 · <date, no year>", Settings "Build v56 · <full date>"', async ({
+  test('(d) the version: home "v57 · <date, no year>", Settings "Build v57 · <full date>"', async ({
     page,
   }) => {
     // code-shape R1b (Sep 27 2026): APP_VERSION/BUILD_DATE are no longer
@@ -9120,10 +9120,11 @@ test.describe('v48 P8 sweep', () => {
       'utf8'
     );
     const built = /"buildDate":"([^"]+)"/.exec(buildInfoSrc)?.[1] ?? '';
-    // v56 (Sep 28 2026): merges code-shape R1 (bundle/SW-upgrade-guard/golden
-    // oracle/CLAUDE.md) onto v55 — a whole-number bump (v51/v52/v53's own
-    // shape: sub-versions are same-day fixes, a new number is a new build).
-    expect(version).toBe('v56');
+    // v57 (Sep 28 2026): "Week by week" — the rides page's week-on-week
+    // comparison (task spec, her Sun Sep 27 22:45 words) — a whole-number
+    // bump (v51/v52/v53's own shape: sub-versions are same-day fixes, a new
+    // number is a new build).
+    expect(version).toBe('v57');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
       `${version} · ${built.replace(/,\s*\d{4}/, '')}`

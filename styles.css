@@ -6335,3 +6335,95 @@ textarea:focus {
   color: var(--text-dim-2);
   font-style: italic;
 }
+
+/* v57 (Sep 28 2026) — "Week by week": "This week vs last week" + the
+ * compact table. Plain numbers only, no arrow/verdict color (her rule). */
+.rides-vs-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rides-vs-header,
+.rides-vs-row {
+  display: grid;
+  grid-template-columns: 1fr 52px 52px 40px;
+  gap: 6px;
+  align-items: baseline;
+  padding: 6px 0;
+}
+
+.rides-vs-header {
+  border-bottom: 1px solid var(--border-divider);
+  margin-bottom: 2px;
+}
+
+.rides-vs-row + .rides-vs-row {
+  border-top: 1px solid var(--border-divider);
+}
+
+.rides-vs-lbl {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.rides-vs-val {
+  font-size: var(--font-small);
+  color: var(--text);
+  text-align: right;
+  font-weight: 600;
+}
+
+.rides-vs-delta {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  text-align: right;
+}
+
+.rides-week-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.rides-week-row {
+  padding: 8px 0;
+}
+
+.rides-week-row + .rides-week-row {
+  border-top: 1px solid var(--border-divider);
+}
+
+.rides-week-lbl {
+  display: block;
+  font-size: var(--font-small);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.rides-week-totals {
+  display: block;
+  font-size: var(--font-small);
+  color: var(--text-dim);
+}
+
+.rides-week-avgs {
+  display: block;
+  font-size: var(--font-small);
+  color: var(--text-dim-2);
+}
+
+.rides-week-empty {
+  display: block;
+  font-size: var(--font-small);
+  color: var(--text-dim-2);
+  font-style: italic;
+}
+
+.rides-chart-caption {
+  font-size: var(--font-small);
+  color: var(--text-dim-2);
+  margin-top: 6px;
+}

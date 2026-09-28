@@ -21,8 +21,11 @@ import {
   usualKcalPerMin,
   bestRide,
   rideTotals,
+  weekRideAggregate,
+  weeklyRideRows,
   type RideRecord,
 } from '../ride';
+import { walkWeeks, type WeekSpan, type WeekKey } from '../week';
 
 const RIDE_A: RideRecord = {
   id: 'a1',
@@ -308,3 +311,173 @@ function round1(n: number): number {
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+// v57 (Sep 28 2026) — "Week by week" (her words, Sun Sep 27 22:45): "I want
+// week on week comparison with elliptical" · "Also how much time total" ·
+// "Also kph".
+
+test.describe('weekRideAggregate: the week-level rate (sum first, divide once)', () => {
+  test('her real Week 4 (Sep 24 A / Sep 25 C / Sep 26 B) — verified by hand', () => {
+    // 602+1501+600 = 2703s -> 45.05min -> 45; 0.72+1.87+0.69 = 3.28km;
+    // 63.4+140.5+62.4 = 266.3kcal.
+    // avg kcal/min = 266.3 / (2703/60) = 266.3/45.05 = 5.912... -> 5.9
+    // (NOT the mean of the 3 rides' own rates, 6.3/5.6/6.2 -> 6.058 -> 6.1 —
+    // that's the wrong average; the task spec's own worked answer is 5.9).
+    // avg km/h = 3.28 / (2703/3600) = 3.28/0.75083 = 4.3688 -> 4.4
+    // avg level = (5+3+5)/3 = 4.333 -> 4.3
+    const agg = weekRideAggregate([RIDE_A, RIDE_C, RIDE_B]);
+    expect(agg.rides).toBe(3);
+    expect(agg.minutes).toBe(45);
+    expect(agg.km).toBe(3.28);
+    expect(agg.kcal).toBe(266.3);
+    expect(agg.avgKcalPerMin).toBe(5.9);
+    expect(agg.avgKmh).toBe(4.4);
+    expect(agg.avgLevel).toBe(4.3);
+  });
+
+  test('empty week -> zero totals, null averages, never a crash', () => {
+    const agg = weekRideAggregate([]);
+    expect(agg).toEqual({
+      rides: 0,
+      minutes: 0,
+      km: 0,
+      kcal: 0,
+      avgKcalPerMin: null,
+      avgKmh: null,
+      avgLevel: null,
+    });
+  });
+
+  test('a "no numbers" ride counts toward rides but not the rate averages', () => {
+    const noNumbers: RideRecord = { ...RIDE_A, id: 'x', kcal: null, timeSec: null, km: null };
+    const agg = weekRideAggregate([RIDE_A, noNumbers]);
+    expect(agg.rides).toBe(2);
+    // Same rate as RIDE_A alone — the no-numbers ride contributes nothing.
+    expect(agg.avgKcalPerMin).toBe(weekRideAggregate([RIDE_A]).avgKcalPerMin);
+  });
+
+  test('level averages independently of kcal/time (km/h-only or kcal-only rides)', () => {
+    const kcalOnly: RideRecord = { ...RIDE_A, id: 'k', km: null, level: null };
+    const agg = weekRideAggregate([kcalOnly, RIDE_C]);
+    // Levels: null (skipped), 3 -> average of just the one real level.
+    expect(agg.avgLevel).toBe(3);
+  });
+});
+
+test.describe('weeklyRideRows: the table — last N weeks, newest first, "so far"', () => {
+  test('her real Week 4 as a closed span + an empty open Week 5, D-ride-free', () => {
+    // The exact production shape: Week 4 closes ON a Saturday (Sep 26), so
+    // week.ts opens Week 5 at that SAME instant (weekendAnchorDay branch) —
+    // this is the scenario renderRidesTotalsCard's v54 fix r3 comment
+    // (app.ts) already had to guard against double-counting. Membership
+    // (`weekOf`) must keep the closing ride in Week 4 only.
+    const sessions = [
+      { id: 'a1', date: '2026-09-24', workout: 'A' as const },
+      { id: 'c1', date: '2026-09-25', workout: 'C' as const },
+      { id: 'b1', date: '2026-09-26', workout: 'B' as const },
+    ];
+    const { spans, open, weekOf } = walkWeeks(sessions, [], [], {
+      round: 2,
+      week: 4,
+      at: '2026-09-24T00:00:00+03:00',
+    });
+    expect(spans).toHaveLength(1);
+    expect(open?.key).toEqual({ round: 2, week: 5 });
+
+    const rows = weeklyRideRows([RIDE_A, RIDE_C, RIDE_B], weekOf, spans, open);
+    expect(rows).toHaveLength(2);
+    // Newest first: Week 5 (open, "so far") then Week 4 (closed).
+    expect(rows[0]?.key).toEqual({ round: 2, week: 5 });
+    expect(rows[0]?.isOpen).toBe(true);
+    expect(rows[0]?.rides).toBe(0); // no double-count of the Sat closing ride
+    expect(rows[0]?.avgKcalPerMin).toBeNull();
+
+    expect(rows[1]?.key).toEqual({ round: 2, week: 4 });
+    expect(rows[1]?.isOpen).toBe(false);
+    expect(rows[1]?.rides).toBe(3);
+    expect(rows[1]?.minutes).toBe(45);
+    expect(rows[1]?.km).toBe(3.28);
+    expect(rows[1]?.kcal).toBe(266.3);
+    expect(rows[1]?.avgKcalPerMin).toBe(5.9);
+    expect(rows[1]?.avgKmh).toBe(4.4);
+    expect(rows[1]?.avgLevel).toBe(4.3);
+  });
+
+  test('a D ride (never in weekOf) is bucketed by date into the open week', () => {
+    const sessions = [
+      { id: 'a1', date: '2026-09-24', workout: 'A' as const },
+      { id: 'c1', date: '2026-09-25', workout: 'C' as const },
+      { id: 'b1', date: '2026-09-26', workout: 'B' as const },
+    ];
+    const { spans, open, weekOf } = walkWeeks(sessions, [], [], {
+      round: 2,
+      week: 4,
+      at: '2026-09-24T00:00:00+03:00',
+    });
+    const dRide: RideRecord = { ...RIDE_A, id: 'd1', date: '2026-09-27', workout: 'D' };
+    const rows = weeklyRideRows([RIDE_A, RIDE_C, RIDE_B, dRide], weekOf, spans, open);
+    const week5 = rows.find((r) => r.key.week === 5);
+    expect(week5?.rides).toBe(1);
+    expect(week5?.isOpen).toBe(true);
+    // Week 4 is untouched by the D ride.
+    const week4 = rows.find((r) => r.key.week === 4);
+    expect(week4?.rides).toBe(3);
+  });
+
+  test('a D ride landing in a weekday gap (no open week) counts back to the closed week', () => {
+    // Week 4 closes on Thursday Sep 17 2026 (a weekday, not Sat/Sun) -> the
+    // next week can't open until the following Saturday (Sep 19). A D ride
+    // on Friday Sep 18 lands in that gap — week.ts's own rule for A/B/C
+    // ("a gap session counts backward to the week that just closed"),
+    // generalized here to D via date-range bucketing since D never has
+    // weekOf membership to fall back on first.
+    const sessions = [
+      { id: 'a1', date: '2026-09-15', workout: 'A' as const },
+      { id: 'c1', date: '2026-09-16', workout: 'C' as const },
+      { id: 'b1', date: '2026-09-17', workout: 'B' as const },
+    ];
+    const { spans, open, weekOf } = walkWeeks(sessions, [], [], {
+      round: 2,
+      week: 4,
+      at: '2026-09-15T00:00:00+03:00',
+    });
+    expect(open).toBeNull(); // still a gap — no session since the close
+    const dRide: RideRecord = { ...RIDE_A, id: 'd1', date: '2026-09-18', workout: 'D' };
+    const rows = weeklyRideRows([RIDE_A, RIDE_C, RIDE_B, dRide], weekOf, spans, open);
+    expect(rows).toHaveLength(1); // no open span to add a row for
+    expect(rows[0]?.key).toEqual({ round: 2, week: 4 });
+    expect(rows[0]?.rides).toBe(4); // the 3 real sessions + the gap D ride
+  });
+
+  test('only the last N weeks are returned, newest first', () => {
+    const span = (round: number, week: number, openedAt: string, closedAt: string): WeekSpan => ({
+      key: { round, week },
+      openedAt,
+      closedAt,
+      how: 'three',
+      sessions: [],
+      done: ['A', 'B', 'C'],
+      missing: [],
+    });
+    const spans: WeekSpan[] = [
+      span(2, 1, '2026-08-01', '2026-08-08'),
+      span(2, 2, '2026-08-08', '2026-08-15'),
+      span(2, 3, '2026-08-15', '2026-08-22'),
+      span(2, 4, '2026-08-22', '2026-08-29'),
+      span(2, 5, '2026-08-29', '2026-09-05'),
+      span(2, 6, '2026-09-05', '2026-09-12'),
+      span(2, 7, '2026-09-12', '2026-09-19'),
+    ];
+    const weekOf = new Map<string, WeekKey>();
+    const rows = weeklyRideRows([], weekOf, spans, null, 6);
+    expect(rows).toHaveLength(6);
+    expect(rows.map((r) => r.key.week)).toEqual([7, 6, 5, 4, 3, 2]); // week 1 dropped
+    // Every row here has 0 rides — the "—" the app shows is app.ts's own
+    // display choice; this module reports the plain 0/null.
+    expect(rows.every((r) => r.rides === 0 && r.avgKcalPerMin === null)).toBe(true);
+  });
+
+  test('no spans and no open week -> an empty table, never a crash', () => {
+    expect(weeklyRideRows([], new Map(), [], null)).toEqual([]);
+  });
+});

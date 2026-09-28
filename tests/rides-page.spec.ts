@@ -287,10 +287,153 @@ test.describe('the list: date · workout letter · min · km · kcal · level, n
   });
 });
 
+// v57 (Sep 28 2026) — "Week by week" (her words, Sun Sep 27 22:45): "I want
+// week on week comparison with elliptical" · "Also how much time total" ·
+// "Also kph". `week` here is the SAME completion model (week.ts) every other
+// card on this page already reads — Week 5 opens the instant the completion
+// launch (COMPLETION_WEEKS_FROM, Sat Sep 26 2026 22:30) takes over, no
+// mocked clock needed (walkWeeks is pure over the session dates given).
+test.describe('week by week (v57)', () => {
+  // Week 5: A (Sun Sep 27), C (Wed Sep 30), B (Sat Oct 3 — the 3rd distinct
+  // letter, closing the week ON a Saturday, same shape as her real Week 4
+  // close). Week 6 opens immediately at that same instant (week.ts's
+  // weekendAnchorDay branch) — the exact double-count risk the membership-
+  // first rule (ride.ts) exists to avoid.
+  const WEEK5 = [
+    rideLog('w5a', '2026-09-27', { ...RIDE_A, workout: 'A' }),
+    rideLog('w5c', '2026-09-30', { ...RIDE_C, workout: 'C' }),
+    rideLog('w5b', '2026-10-03', { ...RIDE_B, workout: 'B' }),
+  ];
+  // A Workout D ride inside the now-open Week 6 (Sun Oct 4) — never part of
+  // week.ts's own A/B/C membership, bucketed here by date instead.
+  const WEEK6_D = rideLog('w6d', '2026-10-04', {
+    level: 4,
+    km: 1,
+    kcal: 70,
+    timeSec: 900, // 15 min -> 70/15 = 4.6666.. -> 4.7 kcal/min, 1/(900/3600)=4 km/h
+    workout: 'A', // workout letter is irrelevant for D-shape rides in this seed helper
+  });
+
+  test('the table: last weeks newest first, real numbers, the open week marked "so far"', async ({
+    page,
+  }) => {
+    await seedLogs(page, [...WEEK5, WEEK6_D]);
+    await page.goto('/');
+    await openRides(page);
+
+    const rows = page.locator('.rides-week-row');
+    await expect(rows).toHaveCount(2);
+    // Newest first: Week 6 (open, "so far"), then Week 5 (closed).
+    await expect(rows.nth(0)).toContainText('Week 6');
+    await expect(rows.nth(0)).toContainText('so far');
+    await expect(rows.nth(0)).toContainText('1 ride');
+    await expect(rows.nth(0)).toContainText('15 min');
+    await expect(rows.nth(0)).toContainText('1 km');
+    await expect(rows.nth(0)).toContainText('70 kcal');
+    await expect(rows.nth(0)).toContainText('4.7 kcal/min');
+    await expect(rows.nth(0)).toContainText('4 km/h');
+    await expect(rows.nth(0)).toContainText('avg L4');
+
+    await expect(rows.nth(1)).toContainText('Week 5');
+    await expect(rows.nth(1)).not.toContainText('so far');
+    await expect(rows.nth(1)).toContainText('3 rides');
+    await expect(rows.nth(1)).toContainText('45 min');
+    await expect(rows.nth(1)).toContainText('3.28 km');
+    await expect(rows.nth(1)).toContainText('266.3 kcal');
+    await expect(rows.nth(1)).toContainText('5.9 kcal/min');
+    await expect(rows.nth(1)).toContainText('4.4 km/h');
+    await expect(rows.nth(1)).toContainText('avg L4.3');
+  });
+
+  test('a week with 0 rides shows a plain "—", nothing hidden', async ({ page }) => {
+    // Same Week 5, but no Week 6 ride at all yet — Week 6 is open with 0.
+    await seedLogs(page, WEEK5);
+    await page.goto('/');
+    await openRides(page);
+
+    const rows = page.locator('.rides-week-row');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('Week 6');
+    await expect(rows.nth(0)).toContainText('so far');
+    await expect(rows.nth(0).locator('.rides-week-empty')).toHaveText('—');
+    await expect(rows.nth(1)).toContainText('3 rides');
+  });
+
+  test('"This week vs last week": the same 7 numbers side by side, plain Δ, never a verdict word', async ({
+    page,
+  }) => {
+    await seedLogs(page, [...WEEK5, WEEK6_D]);
+    await page.goto('/');
+    await openRides(page);
+
+    const card = page.locator('.rides-vs-card');
+    await expect(card).toContainText('This week vs last week');
+    await expect(card).toContainText('Week 6');
+    await expect(card).toContainText('(so far)');
+    await expect(card).toContainText('Week 5');
+
+    const rows = card.locator('.rides-vs-row');
+    await expect(rows).toHaveCount(7); // rides, minutes, km, kcal, kcal/min, km/h, level
+
+    const ridesRow = rows.filter({ hasText: 'Rides' });
+    await expect(ridesRow.locator('.rides-vs-val').nth(0)).toHaveText('1');
+    await expect(ridesRow.locator('.rides-vs-val').nth(1)).toHaveText('3');
+    await expect(ridesRow.locator('.rides-vs-delta')).toHaveText('-2');
+
+    const kcalRow = rows.filter({ hasText: 'Kcal/min' });
+    await expect(kcalRow.locator('.rides-vs-val').nth(0)).toHaveText('4.7');
+    await expect(kcalRow.locator('.rides-vs-val').nth(1)).toHaveText('5.9');
+    await expect(kcalRow.locator('.rides-vs-delta')).toHaveText('-1.2');
+
+    // Her rule, carried through this whole page: plain numbers, no verdicts.
+    await expect(card).not.toContainText('better');
+    await expect(card).not.toContainText('worse');
+    await expect(card).not.toContainText('harder');
+    await expect(card).not.toContainText('easier');
+  });
+
+  test('the chart\'s "per ride · per week" toggle', async ({ page }) => {
+    await seedLogs(page, [...WEEK5, WEEK6_D]);
+    await page.goto('/');
+    await openRides(page);
+
+    // Default is "Per ride" — the existing per-ride chart, unchanged.
+    await expect(page.locator('button[data-rides-chart-mode="perRide"]')).toHaveClass(/is-on/);
+    await expect(page.locator('#rides-chart-readout')).toHaveCount(1);
+
+    await page.locator('button[data-rides-chart-mode="perWeek"]').click();
+    await expect(page.locator('button[data-rides-chart-mode="perWeek"]')).toHaveClass(/is-on/);
+    await expect(page.locator('button[data-rides-chart-mode="perRide"]')).not.toHaveClass(/is-on/);
+
+    // One bar per week (Week 5, Week 6) — total minutes, not kcal/min.
+    const bars = page.locator('#rides-chart [data-ride-id]');
+    await expect(bars).toHaveCount(2);
+    await expect(page.locator('.rides-chart-caption')).toContainText('Total minutes');
+    // Per-week mode has no single-ride readout.
+    await expect(page.locator('#rides-chart-readout')).toHaveCount(0);
+
+    // Switching back to "Per ride" restores the original chart + readout.
+    await page.locator('button[data-rides-chart-mode="perRide"]').click();
+    await expect(page.locator('#rides-chart-readout')).toHaveCount(1);
+  });
+
+  test('re-opening the page resets the chart toggle to "Per ride"', async ({ page }) => {
+    await seedLogs(page, [...WEEK5, WEEK6_D]);
+    await page.goto('/');
+    await openRides(page);
+    await page.locator('button[data-rides-chart-mode="perWeek"]').click();
+    await expect(page.locator('button[data-rides-chart-mode="perWeek"]')).toHaveClass(/is-on/);
+
+    await page.locator('#back-from-rides').click();
+    await page.locator('#open-rides').click();
+    await expect(page.locator('button[data-rides-chart-mode="perRide"]')).toHaveClass(/is-on/);
+  });
+});
+
 test.describe('phone width', () => {
   test.use({ viewport: { width: 412, height: 915 } });
 
-  test('no horizontal scroll with a full page (hero, usual/best, totals, chart, list)', async ({
+  test('no horizontal scroll with a full page (hero, usual/best, totals, week-by-week, chart, list)', async ({
     page,
   }) => {
     await seedLogs(page, [
@@ -301,6 +444,12 @@ test.describe('phone width', () => {
       rideLog('r5', '2026-09-20', RIDE_C),
       rideLog('r6', '2026-09-24', { level: 5, km: null, kcal: 0, timeSec: null }),
       rideLog('r7', '2026-09-26', RIDE_B),
+      // v57: real post-launch weeks too, so the vs-card + week table render
+      // with actual numbers (not just empty states) under the width check.
+      rideLog('r8', '2026-09-27', { ...RIDE_A, workout: 'A' }),
+      rideLog('r9', '2026-09-30', { ...RIDE_C, workout: 'C' }),
+      rideLog('r10', '2026-10-03', { ...RIDE_B, workout: 'B' }),
+      rideLog('r11', '2026-10-04', { level: 4, km: 1, kcal: 70, timeSec: 900 }),
     ]);
     await page.goto('/');
     await openRides(page);
@@ -308,5 +457,10 @@ test.describe('phone width', () => {
     const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+
+    // Same check with the "per week" chart mode showing too.
+    await page.locator('button[data-rides-chart-mode="perWeek"]').click();
+    const scrollWidth2 = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(scrollWidth2).toBeLessThanOrEqual(clientWidth);
   });
 });

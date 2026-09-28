@@ -29,6 +29,14 @@
 // own 1-decimal calorie precision), two decimals for a distance sum (km),
 // whole seconds->minutes for a time sum. Every rounding goes through round1/
 // round2 below so two call sites can never quietly disagree by a decimal.
+//
+// v57 (Sep 28 2026) — "Week by week" (her words, Sun Sep 27 22:45): "I want
+// week on week comparison with elliptical" · "Also how much time total" ·
+// "Also kph". `WeekSpan`/`WeekKey` come straight from week.ts — THE RULE
+// (task text): "the week = the app's week rule" — never a second, new
+// meaning of week invented here, same discipline renderRidesTotalsCard
+// (app.ts) already follows for "This week"/"This month".
+import type { WeekSpan, WeekKey } from './week.js';
 
 export type RideRecord = {
   id: string;
@@ -213,4 +221,146 @@ export function rideTotals(rides: RideRecord[]): RideTotals {
     km: round2(km),
     kcal: round1(kcal),
   };
+}
+
+// ---------- v57 · "Week by week" (Sep 28 2026) ----------
+//
+// Her real 3 rides, verified against her own worked numbers (task spec —
+// "verify the arithmetic yourself", and tests/ride.test.ts does exactly
+// that): Sep 24 A 602s/0.72km/63.4kcal/L5, Sep 25 C 1501s/1.87km/140.5kcal/L3,
+// Sep 26 B 600s/0.69km/62.4kcal/L5 -> 3 rides, 45 min, 3.28 km, 266.3 kcal,
+// avg 5.9 kcal/min, avg 4.4 km/h, avg level 4.3.
+//
+// The averages are NOT the mean of each ride's own rate (that gives 6.1
+// kcal/min for her 3 rides, not her 5.9) — they're the WEEK's aggregate rate:
+// total kcal / total minutes, total km / total hours, same "sum first,
+// divide once" reasoning rideTotals already uses for the plain sums. Level
+// is the one plain mean (5, 3, 5 -> 4.3) since there's no time/distance axis
+// to weight it by.
+export type WeekRideAggregate = RideTotals & {
+  avgKcalPerMin: number | null;
+  avgKmh: number | null;
+  avgLevel: number | null;
+};
+
+export function weekRideAggregate(rides: RideRecord[]): WeekRideAggregate {
+  const totals = rideTotals(rides);
+  let kcalForRate = 0;
+  let secForKcalRate = 0;
+  let kmForKmh = 0;
+  let secForKmh = 0;
+  let levelSum = 0;
+  let levelCount = 0;
+  for (const r of rides) {
+    const hasKcalTime =
+      typeof r.kcal === 'number' && r.kcal > 0 && typeof r.timeSec === 'number' && r.timeSec > 0;
+    if (hasKcalTime) {
+      kcalForRate += r.kcal as number;
+      secForKcalRate += r.timeSec as number;
+    }
+    const hasKmTime =
+      typeof r.km === 'number' && r.km > 0 && typeof r.timeSec === 'number' && r.timeSec > 0;
+    if (hasKmTime) {
+      kmForKmh += r.km as number;
+      secForKmh += r.timeSec as number;
+    }
+    if (typeof r.level === 'number') {
+      levelSum += r.level;
+      levelCount += 1;
+    }
+  }
+  return {
+    ...totals,
+    avgKcalPerMin: secForKcalRate > 0 ? round1(kcalForRate / (secForKcalRate / 60)) : null,
+    avgKmh: secForKmh > 0 ? round1(kmForKmh / (secForKmh / 3600)) : null,
+    avgLevel: levelCount > 0 ? round1(levelSum / levelCount) : null,
+  };
+}
+
+export type WeeklyRideRow = WeekRideAggregate & {
+  key: WeekKey;
+  isOpen: boolean; // "so far" — the currently open week, her rule (§ task
+  // text): "the open week included and marked 'so far'"
+};
+
+// A ride's week — membership FIRST (`weekOf`, week.ts's own attribution for
+// A/B/C, including a gap session counted backward to the week it closed),
+// falling back to date-range bucketing only for a ride `weekOf` never placed
+// (a D ride — week.ts's sessionsForWeekModel drops D on purpose, app.ts's own
+// comment on renderRidesTotalsCard — or a ride from before the first span
+// here). Membership must come first: a week that closes ON a Saturday/Sunday
+// opens its NEXT span at that SAME instant (week.ts's weekendAnchorDay
+// branch), so a plain date>=openedAt bucketing would put the CLOSING A/B/C
+// ride into the week it just closed OUT of — the exact double-count bug
+// renderRidesTotalsCard's v54 fix r3 comment (app.ts) already fixed once for
+// "This week"; membership-first here means this table can never reopen it.
+function weekKeyStr(k: WeekKey): string {
+  return `${k.round}-${k.week}`;
+}
+
+function assignRidesToWeeks(
+  rides: RideRecord[],
+  weekOf: ReadonlyMap<string, WeekKey>,
+  ordered: readonly WeekSpan[]
+): Map<string, RideRecord[]> {
+  const buckets = new Map<string, RideRecord[]>();
+  for (const span of ordered) buckets.set(weekKeyStr(span.key), []);
+  for (const r of rides) {
+    const membership = weekOf.get(r.id);
+    if (membership) {
+      buckets.get(weekKeyStr(membership))?.push(r);
+      continue;
+    }
+    // Date-range fallback (D, or anything weekOf never saw): the span whose
+    // [openedAt, next span's openedAt) window contains this ride's date — a
+    // date landing in a weekday gap (no week open yet) counts backward to
+    // the span just before it, same as week.ts's own gap rule for A/B/C.
+    const t = new Date(r.date).getTime();
+    for (let i = 0; i < ordered.length; i++) {
+      const span = ordered[i] as WeekSpan;
+      const opened = new Date(span.openedAt).getTime();
+      const nextOpened =
+        i + 1 < ordered.length
+          ? new Date((ordered[i + 1] as WeekSpan).openedAt).getTime()
+          : Infinity;
+      if (t >= opened && t < nextOpened) {
+        buckets.get(weekKeyStr(span.key))?.push(r);
+        break;
+      }
+      // A ride dated before the very first span's own opening (i === 0, t <
+      // opened) predates what this table can show — left unattributed on
+      // purpose, same as week.ts's own launch-instant filter.
+    }
+  }
+  return buckets;
+}
+
+// The last `count` weeks (spans + the still-open one, when there is one),
+// NEWEST FIRST — her rule: "a compact table of the last 6 weeks ... newest
+// first, the open week included and marked 'so far'". A week with 0 rides
+// still gets its own row (rides: 0, minutes/km/kcal: 0, avgs: null) — the
+// caller (app.ts) is the one that turns a 0/null into the "—" her spec asks
+// for; this module only ever returns real numbers or null, never a display
+// string (same discipline as the rest of ride.ts).
+export function weeklyRideRows(
+  rides: RideRecord[],
+  weekOf: ReadonlyMap<string, WeekKey>,
+  spans: readonly WeekSpan[],
+  open: WeekSpan | null,
+  count = 6
+): WeeklyRideRow[] {
+  const ordered: WeekSpan[] = open ? [...spans, open] : [...spans];
+  const last = ordered.slice(-count);
+  const buckets = assignRidesToWeeks(rides, weekOf, ordered);
+  return last
+    .map((span): WeeklyRideRow => {
+      const bucketRides = buckets.get(weekKeyStr(span.key)) ?? [];
+      return {
+        key: span.key,
+        isOpen:
+          open !== null && span.key.round === open.key.round && span.key.week === open.key.week,
+        ...weekRideAggregate(bucketRides),
+      };
+    })
+    .reverse();
 }
