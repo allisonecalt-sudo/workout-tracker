@@ -7,8 +7,8 @@
 //   - Supabase REST GET: network-first, fall back to cache, fall back to empty array.
 //   - Everything else: passthrough (default browser behavior).
 
-// Keep this version number in sync with APP_VERSION in app.ts (shown in the
-// home header) so a deploy visibly busts the cache AND the on-screen tag moves.
+// Version history (informational — the version itself is no longer
+// hand-kept here; see the R1b note below):
 // v48 (Sep 24 2026): the redesign — no new shell files in P1-P8 (the archive
 // and migration files are not shell), so only the cache name moves.
 // v49 (Sep 25 2026): the visual pass + the two more machine readings.
@@ -30,50 +30,54 @@
 // gating copy retired (rule 8e) + chip labels + the v54 CHECK's nice items —
 // no new shell files (ride.js/app.js are already cached), so only the cache
 // name moves.
-const VERSION = 'workout-tracker-v55';
-const SHELL_CACHE = `${VERSION}-shell`;
-const RUNTIME_CACHE = `${VERSION}-runtime`;
+// code-shape R1b (Sep 27 2026): the "version lives in 3 places" bug + the
+// hand-kept-twice-over per-module precache list (decision doc, "Hand-kept
+// lists and versions" / the M1 bug class) are both fixed the same way — one
+// bundle, one build-info.js written by scripts/build.mjs on every `npm run
+// build`, imported here so VERSION and the precached filename always follow
+// the actual build. Never hand-edit VERSION or a dist/*.js entry below again.
+importScripts('./dist/build-info.js');
+// eslint-disable-next-line no-undef -- self.__BUILD_INFO__ is written by scripts/build.mjs's importScripts above
+const BUILD_INFO = self.__BUILD_INFO__ || { version: 'unknown', bundle: 'app.js' };
+// code-shape R1 · fix r1 (must #1, Sep 27 2026): the shell cache used to be
+// keyed on appVersion ALONE. Code-shape rounds never bump appVersion (that's
+// the rule), so every R2..R13 deploy installed its new worker into the SAME
+// cache the old one was still serving from — a failed critical download (bad
+// gym Wi-Fi, or a genuinely broken build) still let `cache.add('./')` and
+// `cache.add('./index.html')` succeed and overwrite the live entries before
+// the bundle download failed and the whole install rejected, leaving the OLD
+// worker serving NEW html that pointed at an uncached bundle: blank offline
+// start. Proven with a stopped-server harness (CHECK-code-shape-R1-2026-09-
+// 27.md S5): same appVersion, blank; different appVersion, fine. Keying on
+// the bundle name too means two builds NEVER share a cache, so a failed
+// install can only ever corrupt a cache nothing live is using.
+const SHELL_CACHE = `workout-tracker-${BUILD_INFO.version}-${BUILD_INFO.bundle}-shell`;
+const RUNTIME_CACHE = `workout-tracker-${BUILD_INFO.version}-runtime`;
+const APP_BUNDLE = `./dist/${BUILD_INFO.bundle}`;
 
-const SHELL_ASSETS = [
+// code-shape R1c (Sep 27 2026): split into CRITICAL (the app can't boot
+// without these — install must succeed on ALL of them or not at all) vs
+// OPTIONAL (nice-to-have offline: exercise photos, voice notes — one missing
+// image must never block the app itself from updating). Before this, EVERY
+// asset used a tolerant `cache.add().catch()` — including the app bundle —
+// so a failed download of `app.js` on bad gym Wi-Fi still let the install
+// finish, activate, and delete the OLD cache: the next offline start was a
+// blank page (Gemini Pro's pushback, Sep 27 dialogue, stack-decision-2026-
+// 09-27.md). Now a critical-asset failure aborts the WHOLE install — the
+// still-registered OLD service worker (and its cache) keeps serving.
+const CRITICAL_ASSETS = [
   './',
   './index.html',
   './styles.css',
-  './dist/app.js',
-  // app.js imports these as separate ES modules — they MUST be cached too or
-  // the app fails to boot offline, and stay network-first or visual/how-to
-  // data updates never reach an installed PWA.
-  './dist/exercise-howto.js',
-  './dist/exercise-visuals.js',
-  './dist/exercise-detail.js',
-  // v49 · the progression engine (Sep 25 2026, shadow mode) — app.js imports
-  // these too, so they need the same offline treatment as the other modules.
-  './dist/ladders.js',
-  './dist/progression.js',
-  // v50 · cycle (Sep 25 2026) — capacity & cycle phase math, its own module
-  // the same way progression.js is (app.js imports it).
-  './dist/cycle.js',
-  // v50 · jump list (Sep 25 2026) — the flat step list + completion tracking
-  // behind the List sheet, its own module the same way cycle.js is.
-  './dist/step-list.js',
-  // v53 fix (CHECK M1, Sep 26 2026): app.js imports this statically (feel<->
-  // pain conversion) and it was the ONE module missing from precache — an
-  // offline start failed the whole module graph on a blank page. See the W0
-  // test below (tests/app.spec.ts) that fails whenever this list drifts from
-  // app.ts's own import graph again.
-  './dist/pain-feel.js',
-  // v53 · WK2 (Sep 27 2026): the completion-based week model, its own module
-  // the same way cycle.js/step-list.js are (app.js imports it — see the W0
-  // test's own comment above pain-feel.js).
-  './dist/week.js',
-  // v53 · T1 (Sep 27 2026): her start/finish "Right?" + breaks — timing.ts,
-  // its own module the same way week.js is (app.js imports it statically).
-  './dist/timing.js',
-  // v54 · THE RIDES PAGE (Sep 27 2026) — ride.js (kcal/min, km/h, usual,
-  // best, totals) and chart.js (the one bar-chart module), the same way
-  // timing.js is (app.js imports both statically).
-  './dist/ride.js',
-  './dist/chart.js',
+  // R1b: ONE bundle now (esbuild), content-hashed by scripts/build.mjs — the
+  // 12 hand-listed per-module dist/*.js entries this used to carry (and the
+  // M1 bug they caused: a module missing from this list = blank app offline)
+  // are gone because there's nothing left to hand-list.
+  APP_BUNDLE,
   './manifest.webmanifest',
+];
+
+const OPTIONAL_ASSETS = [
   // v49 · look (Sep 25 2026): self-hosted DM Sans (spec §3 "Font loading") —
   // precached so it renders offline on the floor, never a runtime Google
   // Fonts fetch.
@@ -171,21 +175,31 @@ const SUPABASE_REST_HINT = '/rest/v1/';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) =>
-      // Individual adds so one missing asset (e.g. a not-yet-shipped image)
-      // doesn't abort the whole install.
-      Promise.all(
-        SHELL_ASSETS.map((url) =>
-          // cache: 'reload' skips the browser's HTTP cache, so a new install
-          // precaches THIS build, not a copy up to 10 minutes old (v45).
+    (async () => {
+      const cache = await caches.open(SHELL_CACHE);
+      // CRITICAL: every one must succeed, or this whole install is REJECTED.
+      // No `.catch()` here on purpose — cache.add() rejects on a non-2xx
+      // response or a network failure, Promise.all propagates that
+      // rejection to the extend-lifetime promise below, and per the service
+      // worker spec a rejected install event's worker is discarded before it
+      // ever reaches "waiting"/"active" — the OLD worker (and its cache,
+      // still holding the last GOOD build) is never replaced. skipWaiting()
+      // below only runs once every critical asset is confirmed cached.
+      await Promise.all(
+        CRITICAL_ASSETS.map((url) => cache.add(new Request(url, { cache: 'reload' })))
+      );
+      self.skipWaiting();
+      // OPTIONAL: best-effort, one missing image/voice note must never block
+      // (or undo) a critical install that already succeeded.
+      await Promise.all(
+        OPTIONAL_ASSETS.map((url) =>
           cache.add(new Request(url, { cache: 'reload' })).catch((err) => {
-            console.warn('[SW] Failed to cache shell asset', url, err);
+            console.warn('[SW] Failed to cache optional asset', url, err);
           })
         )
-      )
-    )
+      );
+    })()
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -225,30 +239,10 @@ function isSupabaseRest(url) {
 
 // Code = the HTML document + the app bundle. These must stay fresh when online
 // so a stale cached build can't strand the app. Images/CSS/icons stay cache-first.
+// R1b: one bundle name, read from BUILD_INFO — nothing left to hand-list.
 function isCodeRequest(url, request) {
   if (request.mode === 'navigate') return true;
-  return (
-    url.pathname.endsWith('/dist/app.js') ||
-    url.pathname.endsWith('/dist/exercise-howto.js') ||
-    url.pathname.endsWith('/dist/exercise-visuals.js') ||
-    url.pathname.endsWith('/dist/exercise-detail.js') ||
-    url.pathname.endsWith('/dist/ladders.js') ||
-    url.pathname.endsWith('/dist/progression.js') ||
-    url.pathname.endsWith('/dist/cycle.js') ||
-    url.pathname.endsWith('/dist/step-list.js') ||
-    url.pathname.endsWith('/dist/pain-feel.js') ||
-    // v53 · WK2 (Sep 27 2026): the completion-based week model — app.js
-    // imports it (see the W0 test in tests/app.spec.ts, which parses app.ts's
-    // own import graph and fails this list drifts from it again).
-    url.pathname.endsWith('/dist/week.js') ||
-    // v53 · T1 (Sep 27 2026): her start/finish "Right?" + breaks — same
-    // reasoning as week.js just above.
-    url.pathname.endsWith('/dist/timing.js') ||
-    // v54 · THE RIDES PAGE (Sep 27 2026) — same reasoning as timing.js above.
-    url.pathname.endsWith('/dist/ride.js') ||
-    url.pathname.endsWith('/dist/chart.js') ||
-    url.pathname.endsWith('/index.html')
-  );
+  return url.pathname.endsWith(`/${BUILD_INFO.bundle}`) || url.pathname.endsWith('/index.html');
 }
 
 self.addEventListener('fetch', (event) => {
@@ -283,7 +277,15 @@ async function handleCodeNetworkFirst(request) {
     // max-age=600, which otherwise keeps a just-deployed build stale for up to
     // 10 minutes) while still allowing cheap ETag 304 revalidation.
     const res = await fetch(request, { cache: 'no-cache' });
-    if (res && res.ok) cache.put(request, res.clone());
+    // code-shape R1 · fix r1 (must #2, Sep 27 2026): this used to
+    // `cache.put(request, res.clone())` here on every online navigation. That
+    // wrote the fresh index.html into the live shell cache even when THAT
+    // html's own bundle was never cached (gym Wi-Fi: html arrives, ~420KB
+    // bundle 404s) — the next offline start then served fresh html pointing
+    // at an uncached bundle: blank page. Proven in CHECK-code-shape-R1-2026-
+    // 09-27.md S1. Only install() writes the shell cache now, html and its
+    // bundle together or not at all; an offline navigation falls back to
+    // whatever install last cached (below), which is always a matched pair.
     return res;
   } catch (err) {
     const cached = await cache.match(request, { ignoreSearch: false });

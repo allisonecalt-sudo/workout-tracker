@@ -24,13 +24,13 @@
   </head>
   <body>
     <div id="app"></div>
-    <script type="module" src="dist/app.js"></script>
+    <script type="module" src="dist/app.97f865fc2e.js"></script>
     <script>
       // PWA service worker registration — registers on load, no-op if unsupported.
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker
-            .register('sw.js', { scope: './' })
+            .register('sw.js', { scope: './', updateViaCache: 'none' })
             .then((reg) => {
               if (reg.waiting && navigator.serviceWorker.controller) {
                 reg.waiting.postMessage({ type: 'SKIP_WAITING' });

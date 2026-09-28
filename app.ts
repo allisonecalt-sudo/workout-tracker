@@ -603,8 +603,12 @@ const SUPABASE_ANON_KEY =
 // Visible build version + date+TIME (shown in the home header as "vN · Mon D, YYYY · HH:MM")
 // so she can tell at a glance whether a new build actually loaded, and when.
 // Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
-// BUMP APP_VERSION TOGETHER WITH sw.js VERSION on every deploy
-// (sw.js workout-tracker-vN ↔ APP_VERSION 'vN'); refresh BUILD_DATE to the ship date+time.
+// code-shape R1b (Sep 27 2026): the "version lives in 3 places" bug (decision
+// doc, "Hand-kept lists and versions") is fixed by making package.json's
+// "appVersion" the ONE source. scripts/build.mjs reads it and injects both
+// consts below via esbuild `--define`; sw.js reads the same value at runtime
+// from the generated dist/build-info.js. Bump appVersion in package.json —
+// never here, and never in sw.js.
 // v48 (Sep 24 2026): the home + workout redesign, P1-P8 on branch redesign-v48
 // (DECISIONS-v48-2026-09-24.md). Her words: "look at home ux ui and make it
 // better i feel like its a bit all over the place".
@@ -629,8 +633,10 @@ const SUPABASE_ANON_KEY =
 // branch's ride numbers (Next -> "from the machine" entry screen) + Cue ->
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
-const APP_VERSION = 'v55';
-const BUILD_DATE = 'Sep 28, 2026 · 00:39'; // v55 · fix r3 ship time
+declare const __APP_VERSION__: string;
+declare const __BUILD_DATE__: string;
+const APP_VERSION = __APP_VERSION__;
+const BUILD_DATE = __BUILD_DATE__;
 
 function supabaseHeaders(): HeadersInit {
   return {
