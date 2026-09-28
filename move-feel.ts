@@ -47,6 +47,13 @@ export type MoveFeelExercise = {
   reps?: string;
   durationSec?: number;
   isTimed?: boolean;
+  // Fix pass (Sep 28 2026, checker's nice #R2-N... v59 CHECK, "hinge summary
+  // contradiction"): app.ts's Exercise.label (e.g. hip hinge's 'Hip hinge')
+  // exists for exactly this — displayLabel used to fall back to `name`
+  // ("Bodyweight hip hinge"), so a stepped-move summary line could read
+  // "bodyweight hip hinge 1–2 kg", the same "bodyweight vs holding a kg"
+  // contradiction the label field was added (v48 fix r2) to stop.
+  label?: string;
 };
 
 export type MoveFeelWorkout = {
@@ -111,8 +118,9 @@ function moveKindAndQty(ex: MoveFeelExercise): { kind: SteppedMoveKind; qty?: nu
   return { kind: 'reps' };
 }
 
-function displayLabel(name: string): string {
-  return RIDE_NAMES.has(name) ? RIDE_SLUG : name.toLowerCase();
+function displayLabel(ex: MoveFeelExercise): string {
+  if (RIDE_NAMES.has(ex.name)) return RIDE_SLUG;
+  return (ex.label ?? ex.name).toLowerCase();
 }
 
 // v59 fix pass (Sep 28 2026, CHECK-v58 round 2 must #R2-S1 / nice #R2-N1):
@@ -166,7 +174,7 @@ function summaryFor(
   qty: number | undefined,
   prevReps: string | undefined
 ): string {
-  const label = displayLabel(ex.name);
+  const label = displayLabel(ex);
   if (kind === 'seconds' && qty !== undefined) return `${label} ${qty}s`;
   if (kind === 'minutes' && qty !== undefined) return `${label} ${qty} min`;
   const seg = changedSegment(ex.reps ?? '', prevReps);

@@ -110,12 +110,20 @@ test.describe('steppedMovesForPhase / steppedMovesForWorkout — which moves ask
     const next: MoveFeelExercise[] = [
       {
         name: 'Bodyweight hip hinge',
+        // Real app data (app.ts's HIP_HINGE_R2W4) carries this same label —
+        // 'Hip hinge' over the PROGRAM name 'Bodyweight hip hinge', on
+        // purpose, because the name contradicts the "holding 1-2 kg" line
+        // right under it (v48 fix r2).
+        label: 'Hip hinge',
         reps: '12 reps · 2 sets each round · holding 1–2 kg (your pick)',
       },
     ];
     const stepped = steppedMovesForPhase(prev, next, new Set());
     expect(stepped).toHaveLength(1);
-    expect(stepped[0]!.summary).toBe('bodyweight hip hinge 1–2 kg');
+    // Fix pass (Sep 28 2026, v59 CHECK nice): was 'bodyweight hip hinge 1–2
+    // kg' — displayLabel ignored ex.label and fell right back into the same
+    // "bodyweight vs holding a kg" contradiction the label exists to avoid.
+    expect(stepped[0]!.summary).toBe('hip hinge 1–2 kg');
   });
 
   test('a hold whose seconds went up steps with a seconds qty', () => {

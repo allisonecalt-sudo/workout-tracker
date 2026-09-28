@@ -7437,15 +7437,36 @@ test.describe('v48 P4 home', () => {
       // (steppedMovesForWorkoutId resolving state.pinnedWeekKey first) means
       // this session keeps training/asking about Week 5, never Week 6's
       // (empty, repeat) list.
+      //
+      // Fix pass (Sep 28 2026, checker's must #1): this test never actually
+      // crossed the boundary it claims to — with no A/B seeded, the Saturday
+      // C push below was Week 5's ONLY logged session (1 of 3), so Week 5
+      // stayed open into Sunday even under the OLD, un-pinned behaviour.
+      // Seed A/B first (same wk5-a/wk5-b dates v59 (a) above uses) so the
+      // Friday pin + Saturday C really do finish 3 of 3 and close Week 5.
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+      ]);
       await mockDate(page, '2026-10-02T10:00:00.000Z'); // Fri Oct 2 — Week 5's own last day
       await page.goto('/');
-      await page.locator('button[data-workout="A"]').click(); // pins state.pinnedWeekKey to Week 5
+      // A/B already logged for Week 5 — Home's hero only offers the missing
+      // C (same v59 (a) reasoning above), so button[data-workout="A"] isn't
+      // on the page. Force-start A via the same __wtStartWorkout hook v59
+      // (a) uses, which still pins state.pinnedWeekKey to Week 5 exactly
+      // like the button click did.
+      await page.evaluate(() => {
+        (
+          window as unknown as { __wtStartWorkout: (id: 'A' | 'B' | 'C' | 'D') => void }
+        ).__wtStartWorkout('A');
+      });
       await expect(page.locator('.prelog-stepped')).toContainText('ride 12 min');
       await page.locator('#begin').click();
 
-      // Sat Oct 3: a C session lands (another day/device flushing), closing
-      // Week 5 and opening (repeating) Week 6 — same trick the tests above
-      // use, done here mid-session instead of before it starts.
+      // Sat Oct 3: a C session lands (another day/device flushing) — with
+      // A/B already logged above, this is the THIRD of Week 5's three, so it
+      // really does close Week 5 and open (repeat) Week 6 — same trick the
+      // tests above use, done here mid-session instead of before it starts.
       await page.evaluate(() => {
         const raw = window.localStorage.getItem('workout-tracker:logs');
         const rows: unknown[] = raw ? JSON.parse(raw) : [];
@@ -8455,12 +8476,20 @@ test.describe('v48 P5 logs', () => {
     await expect(stepped).toContainText('supported split squat');
     // v59 fix pass (Sep 28 2026, CHECK-v58 round 2 must #R2-S1): three moves
     // step this week (split squat, hip hinge, wall sit) — the live one-line
-    // fit (fitSteppedLine) truncates the PREVIEW to what actually fits at
-    // 412px, "+N more" for the rest; wall sit no longer prints here. The
+    // fit (fitSteppedLine) truncated the PREVIEW to what fit, "+N more" for
+    // the rest.
+    // v59 fix pass round 2 (Sep 28 2026, checker's nice — displayLabel now
+    // reads ex.label): hip hinge's own summary shortened from "bodyweight
+    // hip hinge 1–2 kg" to "hip hinge 1–2 kg" — 11 fewer characters, which
+    // is enough for all three stepped moves to fit on the one line now, so
+    // the truncation this comment used to describe no longer fires here. The
     // computed list underneath (what the mid-workout chip actually reads)
-    // still carries every one of them — proved directly, not from the
-    // truncated text.
-    await expect(stepped).toContainText('+2 more');
+    // always carried every one of them regardless — this proves the PREVIEW
+    // text now does too, untruncated.
+    await expect(stepped).toContainText('hip hinge');
+    await expect(stepped).toContainText('wall sit');
+    await expect(stepped).not.toContainText('bodyweight hip hinge'); // the fixed contradiction (nice #R2-N... hinge label)
+    await expect(stepped).not.toContainText('+2 more');
     const namesA = await page.evaluate(() =>
       (window as unknown as { __wtCurrentSteppedMoves: () => { name: string }[] })
         .__wtCurrentSteppedMoves()

@@ -10357,14 +10357,28 @@ function fitSteppedLine(stepped: readonly SteppedMove[]): void {
   if (stepped.length === 0) return;
   const el = document.getElementById('prelog-stepped');
   if (!el) return;
-  const prevWhiteSpace = el.style.whiteSpace;
-  el.style.whiteSpace = 'nowrap';
+  // Fix pass (Sep 28 2026, v59 CHECK nice): the CSSOM `.style` property
+  // setter has a real Chromium quirk (verified directly, isolated repro) —
+  // after a SECOND touch of `.style` with no attribute read in between
+  // (exactly this function's shape: set nowrap, mutate textContent in the
+  // loop, unset), neither `.style.whiteSpace = ''` nor
+  // `.style.removeProperty(...)` nor even a later `.removeAttribute('style')`
+  // actually drops the attribute — Chromium silently leaves a stale
+  // `style=""` behind (the golden HTML gate is what caught it). Going
+  // through the plain attribute API for BOTH the set and the restore (never
+  // touching `.style` itself) sidesteps it and was verified to work.
+  const prevStyleAttr = el.getAttribute('style'); // null on a fresh pre-log mount — no inline style yet
+  el.setAttribute('style', 'white-space: nowrap');
   let shown = stepped.length;
   while (shown > 1 && el.scrollWidth > el.clientWidth) {
     shown -= 1;
     el.textContent = steppedLineFor(stepped, shown);
   }
-  el.style.whiteSpace = prevWhiteSpace;
+  if (prevStyleAttr === null) {
+    el.removeAttribute('style');
+  } else {
+    el.setAttribute('style', prevStyleAttr);
+  }
 }
 
 // Workout overview — the structure before starting (2026-05-15 18:07: "see the
