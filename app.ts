@@ -3001,12 +3001,45 @@ function diffWorkout(prev: Workout, next: Workout): string[] {
 // same as diffWorkout's own `!prev` branch. Curl/row (ARM_FEEL_STEPS' two
 // names) are always excluded — they keep arm_feel, never migrated (her spec
 // item 1).
+//
+// v58 fix pass (Sep 28 2026, checker's must): this used to call
+// `getWeekPlan()` — the synthetic-date round trip — and diff it against
+// `PROGRAM[idx-1]` unconditionally. On a REPEAT week (planForWeekKey's own
+// `repeatsWeek` fallback — "same moves as Week N", no new PROGRAM row yet)
+// that lands on the SAME row as the week it repeats, so the diff compared
+// that row against the week BEFORE the one it repeats and found stepped
+// moves that already stepped last week, not this one (repro: Week 5 steps
+// the ride 10->12; Week 6 repeats Week 5 with no new row; opening Workout A
+// in Week 6 still said "Stepped this week: ride 12 min"). It also ignored
+// state.pinnedWeekKey, so a session pinned to one week (startWorkout) could
+// ask about a DIFFERENT week's moves if "now" crossed the Sat/Sun boundary
+// before she finished. Fixed by resolving the SAME key getCurrentWorkout
+// uses (pinnedWeekKey -> pinnedPlanDateIso -> the live completion-model key
+// -> the pre-launch calendar scan) and returning [] outright on a repeat
+// week — there is nothing to diff, and diffing against the wrong
+// predecessor is worse than showing nothing.
 function steppedMovesForWorkoutId(id: AnyWorkoutId | null): SteppedMove[] {
   if (!id || id === 'D') return [];
-  const current = getWeekPlan();
+  const excludeNames = new Set(Object.keys(ARM_FEEL_STEPS));
+  let current: WeekPlan;
+  if (state.pinnedWeekKey) {
+    const { plan, repeatsWeek } = planForWeekKey(state.pinnedWeekKey);
+    if (repeatsWeek !== null) return [];
+    current = plan;
+  } else if (state.pinnedPlanDateIso) {
+    // Pre-launch pin — same synthetic-date lookup getCurrentWorkout's own
+    // pinnedPlanDateIso branch uses; PROGRAM has no "repeat" concept there.
+    current = getWeekPlan(new Date(state.pinnedPlanDateIso));
+  } else if (isNowAfterCompletionLaunch()) {
+    const key = gapCountsBackToWeekKey() ?? shownWeek().key;
+    const { plan, repeatsWeek } = planForWeekKey(key);
+    if (repeatsWeek !== null) return [];
+    current = plan;
+  } else {
+    current = getWeekPlan();
+  }
   const idx = PROGRAM.indexOf(current);
   const prev = idx > 0 ? PROGRAM[idx - 1] : undefined;
-  const excludeNames = new Set(Object.keys(ARM_FEEL_STEPS));
   return steppedMovesForWorkout(prev?.workouts[id], current.workouts[id], excludeNames);
 }
 
@@ -11194,6 +11227,16 @@ function renderWorkout(): string {
   // v48 · P3: the walk, once she tapped it — minutes only ("Walking · 12 min";
   // the GPS + step counters are archived). The phone is in her pocket: no
   // picture, no form card — the live line and Done are the whole interface.
+  // v58 fix pass (Sep 28 2026, checker's should #4): this branch never called
+  // renderMoveFeel, so the walk-outside lane — unlike the elliptical and
+  // apartment lanes, which both reuse the same call — never showed the
+  // Easy/Right/Hard chip on a week the ride slot stepped (0 chips after
+  // ▶ Walk outside, vs. the elliptical lane, which worked). No
+  // laneRan/timerIdle boundary exists here (the walk stays live the whole
+  // time she's on this screen, tracked in the background, not gated behind a
+  // Start/Stop timer the indoor lanes have), so `ready: true` — same as the
+  // elliptical's own post-ride branch below — lets her tap it any time on
+  // this screen, same as every other reps-based move.
   if (ex.name === 'Outdoor walk') {
     return `
       ${header}
@@ -11203,6 +11246,7 @@ function renderWorkout(): string {
           <div class="exercise-reps">${walkStepMinutes(ex)} min</div>
           <p class="walk-live-line">🚶 <span id="walk-live">${walkLiveText(workoutWalkStart())}</span></p>
           <p class="gear-note">It saves with this workout. Tap Done · Next when you're back.</p>
+          ${renderMoveFeel(ex, { hold: false, ready: true, isLastRoundOrNA: true })}
         </div>
       </div>
       ${renderStepNav('Done · Next')}
@@ -11302,13 +11346,22 @@ function renderWorkout(): string {
 }
 
 // v54 (Sep 27 2026) — how many sets a move's own `reps` text says ("2 sets ·
-// 12 reps", "2 sets · 12 reps each side"). A leading "N sets" / "N ×" / "N x"
-// count; anything else (no match, or N <= 1) is a single-set move and
-// unaffected — same "single-set holds don't change" convention as F1's own
-// wall-lean-sets spec (PLAN-2026-09-26.md §7 F1), applied here to the
-// Easy/Right/Hard chip instead of a timer.
+// 12 reps", "2 sets · 12 reps each side"). An "N sets" / "N ×" / "N x" count
+// anywhere in the string; anything else (no match, or N <= 1) is a
+// single-set move and unaffected — same "single-set holds don't change"
+// convention as F1's own wall-lean-sets spec (PLAN-2026-09-26.md §7 F1),
+// applied here to the Easy/Right/Hard chip instead of a timer.
+// v58 fix pass (Sep 28 2026, checker's should #3): used to anchor the count
+// to the very START of the string (`^`), so "12 reps · 2 sets each round"
+// (hip hinge's own reps text — the count sits AFTER the reps number, not
+// before it) never matched at all and read as single-set. The chip then
+// showed the instant round 2's step appeared, before either set was done,
+// instead of waiting for "Set 2 done" the way curl/row's own 2-set moves
+// already do. Searching anywhere (dropping the `^`) finds "2 sets" wherever
+// it sits; "sets?"/×/x still can't false-match a hold's "2-sec hold" or a
+// tempo's "3-1-3" (no digit-then-whitespace-then-s/x there).
 function multiSetCount(reps: string | undefined): number {
-  const m = /^(\d+)\s*(?:sets?|[×x])\b/i.exec((reps ?? '').trim());
+  const m = /(\d+)\s*(?:sets?|[×x])\b/i.exec((reps ?? '').trim());
   const n = m ? Number(m[1]) : NaN;
   return Number.isFinite(n) && n > 1 ? n : 1;
 }
@@ -14208,7 +14261,18 @@ function renderRidesListCard(rides: RideRecord[]): string {
 // comment already gives). Null when nothing landed there (a break/sick week
 // per SKIPPED_WEEKS, or she just didn't ride that week) — no point showing a
 // permanent empty legacy row once real week.ts history exists on its own.
-function legacyWeek4RideRow(logs: LogEntry[], rides: RideRecord[]): WeeklyRideRow | null {
+// v58 fix pass (Sep 28 2026, checker's should #5): spec item 3 (v57 N5) asked
+// to exclude any ride that already has a week.ts `weekOf` membership — a
+// ride the completion model already counts in a real span/pending week
+// should never ALSO double-count into the legacy row, which exists only to
+// backfill the rides from BEFORE week.ts history starts. That filter was
+// skipped in the v57 commit with no note; added here (`weekOf` is the same
+// map every other card on the Rides screen already reads for "This week").
+function legacyWeek4RideRow(
+  logs: LogEntry[],
+  rides: RideRecord[],
+  weekOf: ReadonlyMap<string, WeekKey>
+): WeeklyRideRow | null {
   const legacyWeek = getProgramWeek(LEGACY_LAST_CLOSED_WEEK_INSTANT);
   if (legacyWeek.skippedLabel) return null;
   const attribution = attributeSessionsToWeeks(logs);
@@ -14217,7 +14281,7 @@ function legacyWeek4RideRow(logs: LogEntry[], rides: RideRecord[]): WeeklyRideRo
       .map((l) => l.id)
       .filter((id): id is string => !!id)
   );
-  const legacyRides = rides.filter((r) => legacyLogIds.has(r.id));
+  const legacyRides = rides.filter((r) => legacyLogIds.has(r.id) && !weekOf.has(r.id));
   if (legacyRides.length === 0) return null;
   return {
     key: { round: legacyWeek.round, week: legacyWeek.num },
@@ -14257,7 +14321,7 @@ function renderRides(): string {
   // never overlaps a weekModel span), so it goes at the END of the
   // newest-first list — capped at the same 6-week window weeklyRideRows
   // already enforces for its own rows.
-  const legacyRow = legacyWeek4RideRow(logs, rides);
+  const legacyRow = legacyWeek4RideRow(logs, rides, weekOf);
   const combinedWeekRows = legacyRow ? [...weekRows, legacyRow].slice(0, 6) : weekRows;
 
   return `

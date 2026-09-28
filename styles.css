@@ -5942,6 +5942,36 @@ textarea:focus {
   cursor: pointer;
 }
 
+/* v58 fix pass (Sep 28 2026, checker's should #1): .prelog-stepped, .move-feel
+ * and .move-feel-label shipped with no CSS at all, so the "Stepped this
+ * week" line (and the in-workout chip's own label) rendered at the browser
+ * default (~17px, full-bright text) — bigger than the 14px .prelog-meta line
+ * right above it, and each move's summary used the same ' · ' the list joins
+ * with, so a several-move week read as one run-on line. Same quiet/dim
+ * recipe as .prelog-meta and .arm-feel/.arm-feel-label above (never a
+ * second, competing style) — .move-feel reuses .arm-feel-chips/.arm-chip for
+ * its own chip row, unchanged. */
+.prelog-stepped {
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  line-height: 1.45;
+  margin: 0 0 6px;
+}
+
+.move-feel {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 6px 0 8px;
+}
+
+.move-feel-label {
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+}
+
 /* ---- v48 · P8 (Sep 24 2026) — the consistency sweep, appended only -------- */
 
 /* ONE quiet-button recipe. Before P8 the app had five near-copies of "quiet

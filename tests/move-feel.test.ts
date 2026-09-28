@@ -84,7 +84,10 @@ test.describe('steppedMovesForPhase / steppedMovesForWorkout — which moves ask
     const stepped = steppedMovesForPhase(prev, next, new Set());
     expect(stepped).toHaveLength(1);
     expect(stepped[0]!.name).toBe('Supported split squat');
-    expect(stepped[0]!.summary).toBe('supported split squat 6-8 each side · one set per round');
+    // v58 fix pass (Sep 28 2026): only the first ' · '-segment survives —
+    // the "· one set per round" extra used the same separator the pre-log
+    // line joins several moves with, which made a multi-move week unreadable.
+    expect(stepped[0]!.summary).toBe('supported split squat 6-8 each side');
   });
 
   test('a hold whose seconds went up steps with a seconds qty', () => {

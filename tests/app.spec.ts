@@ -7366,6 +7366,35 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.exercise-name')).not.toHaveText('TEST-MARKER-WEEK6');
     });
 
+    test("v58 fix pass (Sep 28 2026, checker's must): a REPEAT week (no new PROGRAM row yet) never says a move stepped", async ({
+      page,
+    }) => {
+      // Repro exactly: Week 5 (starts Sat Sep 26, "a 12-minute ride in A and
+      // B" — the ride stepped 10 -> 12) logs A/B/C, the C landing ON an
+      // anchor day (Sat Oct 3) so Week 6 opens THAT SAME DAY ("starts now",
+      // not a gap). Round 2 has no Week 6 PROGRAM row yet, so Week 6 repeats
+      // Week 5's own moves (planForWeekKey's repeatsWeek fallback). Before
+      // this fix, steppedMovesForWorkoutId ignored the repeat and diffed
+      // Week 5 against Week 4 anyway — the ride still read as "stepped" on a
+      // week that changed NOTHING.
+      await mockDate(page, '2026-10-04T10:00:00.000Z'); // Sun Oct 4 — inside the open Week 6
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-10-03T15:00:00.000Z', 'C'), // Sat — closes Week 5, opens Week 6 same day
+      ]);
+      await page.goto('/');
+      await page.locator('button[data-workout="A"]').click(); // pins state.pinnedWeekKey (startWorkout)
+      await expect(page.locator('.prelog-meta')).toContainText('Week 6 · same moves as Week 5');
+      await expect(page.locator('.prelog-stepped')).toHaveCount(0);
+      const stepped = await page.evaluate(() =>
+        (
+          window as unknown as { __wtCurrentSteppedMoves: () => unknown[] }
+        ).__wtCurrentSteppedMoves()
+      );
+      expect(stepped).toEqual([]);
+    });
+
     test('the pinned plan survives an app close — even once a background sync closes the week under it (§2.8 item 4)', async ({
       page,
       context,

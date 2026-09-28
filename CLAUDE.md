@@ -43,7 +43,7 @@ ride=right@12min"`. `slug=feel@qty`, `;`-joined; slug is `move-feel.ts`'s
 
 - `app.ts` — still the monolith (~15k lines): every screen's render + handlers + state + sync. **The split (program.ts/state.ts/sync.ts/screens/\*) is R3+, not done yet.**
 - `exercise-visuals.ts` / `exercise-howto.ts` / `exercise-detail.ts` — exercise content data.
-- `cycle.ts` / `step-list.ts` / `pain-feel.ts` / `week.ts` / `timing.ts` / `ride.ts` / `chart.ts` — already-extracted pure modules, imported by `app.ts`. `ladders.ts` / `progression.ts` are tested pure modules, not yet wired into `app.ts` (not in the bundle) — `progression.ts` imports `ladders.ts`; only tests import `progression.ts`.
+- `cycle.ts` / `step-list.ts` / `pain-feel.ts` / `week.ts` / `timing.ts` / `ride.ts` / `chart.ts` / `move-feel.ts` — already-extracted pure modules, imported by `app.ts`. `ladders.ts` / `progression.ts` are tested pure modules, not yet wired into `app.ts` (not in the bundle) — `progression.ts` imports `ladders.ts`; only tests import `progression.ts`.
 - `sw.js` — service worker. Reads `dist/build-info.js` (generated) at runtime for the version + bundle filename — never hand-edit a version or file name in here. `CRITICAL_ASSETS` (shell + the app bundle) install with strict `Promise.all` — any one failing aborts the WHOLE install and the OLD worker/cache keeps serving; `OPTIONAL_ASSETS` (photos, voice notes) stay tolerant (`.catch()`), never blocking.
 - `scripts/build.mjs` — the ONE esbuild bundle (content-hashed `app.<hash>.js`) + manifest + build-info + index.html rewrite. Deterministic: re-running it with no source change reproduces the same hash (the buildDate literal is excluded from what gets hashed — see its own comment; that bit it once). `scripts/update-golden.mjs` — the ONLY way to regenerate `tests/golden/*.html`.
 - `tests/golden.spec.ts` + `tests/golden/*.html` — gate 1 (below). `tests/sw-upgrade.spec.ts` — proves the install-only-after-full-download mechanism with a real (not mocked-in-page) sibling service-worker script; part of gate 2.
@@ -51,10 +51,10 @@ ride=right@12min"`. `slug=feel@qty`, `;`-joined; slug is `move-feel.ts`'s
 
 ## The three gates (all green before hand-off, every step)
 
-1. **Golden HTML** — `PW_PORT=3103 npx playwright test tests/golden.spec.ts`. Byte-for-byte oracle for structure-only moves. A diff = STOP AND REPORT, never fix by regenerating. Regenerate only via `npm run golden:update`, checker-only, with a written reason. Weaker than it sounds alone — pairs with gate 2's full behavioural suite (focus/timers/ARIA aren't provable by markup) and gate 3's type/lint check; none of the three stands alone.
-2. **The full suite** (behavioural, incl. `sw-upgrade.spec.ts`) — `PW_PORT=3103 npm run test`.
+1. **Golden HTML** — `PW_PORT=<your port> npx playwright test tests/golden.spec.ts`. Byte-for-byte oracle for structure-only moves. A diff = STOP AND REPORT, never fix by regenerating. Regenerate only via `npm run golden:update`, checker-only, with a written reason. Weaker than it sounds alone — pairs with gate 2's full behavioural suite (focus/timers/ARIA aren't provable by markup) and gate 3's type/lint check; none of the three stands alone.
+2. **The full suite** (behavioural, incl. `sw-upgrade.spec.ts`) — `PW_PORT=<your port> npm run test`.
 3. **Static** — `npm run build` (`tsc --noEmit` then esbuild) + `npm run lint`.
-   Always set `PW_PORT` (default 3100) so a parallel worktree's server never collides with yours. Run `npm run build` before gates 1-2 — `dist/` is gitignored and generated, so a stale or missing `dist/` fails both with confusing errors, not a real bug.
+   Always set `PW_PORT` (default 3100) so a parallel worktree's server never collides with yours — **pick a port that's actually free in YOUR checkout; don't copy a fixed number from this file or another session's notes.** Fix pass (Sep 28 2026, checker's should #6): gates 1-2 above used to hard-code `PW_PORT=3103`; the main checkout was already serving `:3103` during one check, producing 3 false failures that all went green on a free port. Check first (`netstat -ano | grep :<port>` on Windows), kill a stray listener only from YOUR OWN prior run, never another window's. Run `npm run build` before gates 1-2 — `dist/` is gitignored and generated, so a stale or missing `dist/` fails both with confusing errors, not a real bug.
 
 ## Version — ONE source
 

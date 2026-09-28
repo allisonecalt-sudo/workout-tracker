@@ -115,11 +115,20 @@ function displayLabel(name: string): string {
   return RIDE_NAMES.has(name) ? RIDE_SLUG : name.toLowerCase();
 }
 
+// v58 fix pass (Sep 28 2026, checker's should #2): a plain reps summary used
+// to carry the WHOLE `reps` text — but that text often has its own
+// ' · '-joined extras ("12 reps · 2 sets each round", "6-8 each side · one
+// set per round"), the SAME separator the pre-log "Stepped this week" line
+// joins several moves' summaries with, so a week with more than one stepped
+// move became unreadable (all the ' · '-parts ran together). Only the first
+// ' · '-segment survives — short: the name + the stepped number, nothing
+// else.
 function summaryFor(ex: MoveFeelExercise, kind: SteppedMoveKind, qty: number | undefined): string {
   const label = displayLabel(ex.name);
   if (kind === 'seconds' && qty !== undefined) return `${label} ${qty}s`;
   if (kind === 'minutes' && qty !== undefined) return `${label} ${qty} min`;
-  return ex.reps ? `${label} ${ex.reps}` : label;
+  const firstSegment = (ex.reps ?? '').split(' · ')[0] ?? '';
+  return firstSegment ? `${label} ${firstSegment}` : label;
 }
 
 // One phase's worth of stepped moves — new-in-`next` (not in `prev` at all,
