@@ -75,6 +75,15 @@ import {
   type WeekKey,
   type PendingWeek,
 } from './week.js';
+import {
+  steppedMovesForWorkout,
+  moveFeelString,
+  isMoveFeelValue,
+  canonicalMoveName,
+  MOVE_FEEL_VALUES,
+  type MoveFeelValue,
+  type SteppedMove,
+} from './move-feel.js';
 
 type WorkoutId = 'A' | 'B' | 'C';
 
@@ -219,6 +228,13 @@ type LogEntry = {
   liteDay?: boolean | null;
   // "curl=easy;row=right" — the one-tap Easy/Right/Hard on the 1 kg moves (P5).
   armFeel?: string | null;
+  // v58 (Sep 28 2026) — "splitsquat=right;wallsit=easy@45s;ride=right@12min":
+  // the SAME one-tap Easy/Right/Hard, generalized to every move that STEPPED
+  // this week (reps/seconds/minutes up, or a new variant), never the curl/
+  // row pair — those keep arm_feel above, unmigrated (her spec item 1). See
+  // move-feel.ts for the slug/qty shape and migrations/2026-09-28-v58-move-
+  // feel.sql for the CHECK it round-trips through.
+  moveFeel?: string | null;
   // How many voice notes she started this session. Her words: "I can hear
   // details in audio better"; Gemini said she never plays them — count, don't guess.
   voicePlays?: number | null;
@@ -443,6 +459,11 @@ type AppState = {
   // trigger is her Jul 3 ask, and until now it depended on her "telling
   // Claude" (DECISIONS §4). Optional; a step she doesn't tap stays unset.
   armFeel: ArmFeelState;
+  // v58 (Sep 28 2026) — the generalized version of armFeel above, for every
+  // OTHER move that stepped this week (never curl/row — those stay on
+  // armFeel). Keyed by move-feel.ts's slugFor(name), so it survives whichever
+  // lane a cardio step is in (walk/apartment/elliptical all slug to "ride").
+  moveFeel: MoveFeelState;
   // v55 (Sep 27 2026) — LOAD CHIP: which weight she picked for THIS session's
   // curl / row, her own call by pain, never Lisa's ("no Lisa approval, I
   // decide based on pain", Sep 26 23:15). Defaults to whatever she used last
@@ -504,6 +525,8 @@ type AppState = {
 
 type ArmFeel = 'easy' | 'right' | 'hard';
 type ArmFeelState = { curl?: ArmFeel; row?: ArmFeel };
+// v58 — one slug per stepped move (move-feel.ts's slugFor), never curl/row.
+type MoveFeelState = Record<string, MoveFeelValue>;
 // v55 (Sep 27 2026) — the two dumbbells she owns now; her pick, per set.
 type ArmLoad = '1kg' | '2kg';
 type ArmLoadState = { curl?: ArmLoad; row?: ArmLoad };
@@ -2968,6 +2991,32 @@ function diffWorkout(prev: Workout, next: Workout): string[] {
   return out;
 }
 
+// v58 (Sep 28 2026) — the moves that STEPPED this week for `id`, computed the
+// exact same way diffWorkout above already diffs a week against its own
+// predecessor in PROGRAM (renderComingNextWeek/renderPastWeeks' own pattern:
+// `PROGRAM.indexOf` + `PROGRAM[idx - 1]`) — never a second, competing notion
+// of "last week's plan". `id === 'D'` never steps (D isn't in PROGRAM's A/B/C
+// rotation at all — see AnyWorkoutId's own comment); the very first encoded
+// week (idx 0) has no predecessor, so every one of its moves reads as new —
+// same as diffWorkout's own `!prev` branch. Curl/row (ARM_FEEL_STEPS' two
+// names) are always excluded — they keep arm_feel, never migrated (her spec
+// item 1).
+function steppedMovesForWorkoutId(id: AnyWorkoutId | null): SteppedMove[] {
+  if (!id || id === 'D') return [];
+  const current = getWeekPlan();
+  const idx = PROGRAM.indexOf(current);
+  const prev = idx > 0 ? PROGRAM[idx - 1] : undefined;
+  const excludeNames = new Set(Object.keys(ARM_FEEL_STEPS));
+  return steppedMovesForWorkout(prev?.workouts[id], current.workouts[id], excludeNames);
+}
+
+// The live session's own stepped-moves list — the one call site every render
+// (the chip, the pre-log line) reads, so they can never quietly disagree
+// about which moves stepped tonight.
+function currentSteppedMoves(): SteppedMove[] {
+  return steppedMovesForWorkoutId(state.selectedWorkout);
+}
+
 // HAND_ROUTINES retired 2026-05-15 — see archive/hand-routine-2026-05-15/.
 
 // EXERCISE_GUIDE is keyed only by exercise names referenced in WORKOUTS.
@@ -3184,6 +3233,7 @@ const state: AppState = {
   stoppedEarlyLitePrev: null,
   heldSecFor: {},
   armFeel: {},
+  moveFeel: {},
   armLoad: {},
   armLoadMax: {},
   setsDoneFor: {},
@@ -4436,6 +4486,13 @@ const V50_SESSION_COLUMNS = ['steps_skipped'] as const;
 // The two columns added in v50 for mood (migrations/2026-09-25-v50-mood.sql).
 const V50_MOOD_SESSION_COLUMNS = ['mood_before', 'mood_after'] as const;
 
+// The one column added in v58 for Easy/Right/Hard on every stepped move
+// (migrations/2026-09-28-v58-move-feel.sql). Applied live (her go 09:52,
+// Sep 28 2026) — kept as its own strip group anyway, same reasoning as every
+// other V-group here: a mirror/branch that hasn't run the migration yet
+// still saves cleanly, just without this one column.
+const V58_MOVE_FEEL_SESSION_COLUMNS = ['move_feel'] as const;
+
 // The five columns added in T1 for her start/finish "Right?" + breaks
 // (migrations/2026-09-27-v53-timing.sql). APPLIED Sep 27 2026 (her 10:49
 // yes) — kept as its own strip group anyway (T1 fix r1, checker's should
@@ -4506,6 +4563,9 @@ function sessionPayload(entry: LogEntry): Record<string, unknown> {
     // feel-load.sql, applied live) — the suffix is additive to the CHECK, so
     // a pre-v55 row with none still passes.
     arm_feel: entry.armFeel ?? null,
+    // v58 (Sep 28 2026): plain passthrough, same as arm_feel above — the
+    // slug/qty shape is already the wire shape (move-feel.ts's moveFeelString).
+    move_feel: entry.moveFeel ?? null,
     voice_plays: entry.voicePlays ?? null,
     steps_skipped: entry.stepsSkipped ?? null,
     // T1 (Sep 27 2026), §3: her own start/finish answers — see LogEntry's
@@ -4531,6 +4591,7 @@ function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
   for (const col of V50_MOOD_SESSION_COLUMNS) delete payload[col];
   for (const col of V51_BACK_WRIST_BEFORE_SESSION_COLUMNS) delete payload[col];
   for (const col of V53_TIMING_SESSION_COLUMNS) delete payload[col];
+  for (const col of V58_MOVE_FEEL_SESSION_COLUMNS) delete payload[col];
   const noteParts = [legacyCardioMarker(entry), entry.sessionNote, entry.notes].filter(
     (p): p is string => typeof p === 'string' && p.trim() !== ''
   );
@@ -4961,6 +5022,7 @@ function beginExercises(): void {
   state.stoppedEarlyLitePrev = null;
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
+  state.moveFeel = {}; // v58: same — a feel belongs to one session
   state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
   state.armLoadMax = { ...state.armLoad }; // v55 · fix r1: starts equal, then only climbs
   state.setsDoneFor = {}; // v54: sets-done belongs to one session, same as armFeel
@@ -5780,6 +5842,18 @@ function sanitizeArmFeel(v: unknown): ArmFeelState {
   return out;
 }
 
+// v58 (Sep 28 2026) — a corrupt/unknown-shaped key or value is dropped, never
+// crashed on (same convention as sanitizeArmFeel/sanitizeStretchTicks): a
+// resumed snapshot is trusted only as far as its shape actually checks out.
+function sanitizeMoveFeel(v: unknown): MoveFeelState {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out: MoveFeelState = {};
+  for (const [slug, val] of Object.entries(v as Record<string, unknown>)) {
+    if (/^[a-z]+$/.test(slug) && isMoveFeelValue(val)) out[slug] = val;
+  }
+  return out;
+}
+
 function isArmLoad(v: unknown): v is ArmLoad {
   return v === '1kg' || v === '2kg';
 }
@@ -6048,6 +6122,11 @@ async function saveCompletedSession(): Promise<void> {
     // really on that step this session, so a load survives even without a
     // feel tap (see armFeelString's own comment).
     armFeel: armFeelString(state.armFeel, state.armLoadMax, state.setsDoneFor),
+    // v58 (Sep 28 2026): only the moves she actually tapped a feel on, paired
+    // with THIS week's own stepped-move list so the qty/unit is always the
+    // real prescription, never a stale one from a plan that changed mid-
+    // session (moveFeelString's own comment).
+    moveFeel: moveFeelString(state.moveFeel, currentSteppedMoves()),
     voicePlays: state.voicePlays,
     stepsSkipped: w ? skippedStepsCount(w) : null,
   });
@@ -6119,6 +6198,8 @@ type ActiveSessionSnapshot = {
   stoppedEarlyLitePrev: boolean | null; // v48 · fix r1: Back to the workout
   // v48 · P5: the arm-feel taps so far survive an app close.
   armFeel: ArmFeelState;
+  // v58: same, generalized — the stepped-move feel taps survive an app close.
+  moveFeel: MoveFeelState;
   // v55: her load pick so far survives an app close too, same as armFeel.
   armLoad: ArmLoadState;
   // v55 · fix r1: the heaviest-so-far tracker survives an app close too, same
@@ -6189,6 +6270,7 @@ function saveActiveSession(): void {
       stoppedEarlyAt: state.stoppedEarlyAt,
       stoppedEarlyLitePrev: state.stoppedEarlyLitePrev,
       armFeel: state.armFeel,
+      moveFeel: state.moveFeel,
       armLoad: state.armLoad,
       armLoadMax: state.armLoadMax,
       setsDoneFor: state.setsDoneFor,
@@ -6321,6 +6403,8 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
           : null,
       // v48 · P5: a pre-P5 snapshot has no feel → none, never a guess.
       armFeel: sanitizeArmFeel(snap.armFeel),
+      // v58: a pre-v58 snapshot has no moveFeel key at all → {}, same rule.
+      moveFeel: sanitizeMoveFeel(snap.moveFeel),
       // v55: a pre-v55 snapshot has no load → {}; renderArmLoadChips already
       // falls back to '1kg' per key, so a mid-session resume never crashes.
       armLoad: sanitizeArmLoad(snap.armLoad),
@@ -6416,6 +6500,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.stoppedEarlyLitePrev = snap.stoppedEarlyLitePrev;
   state.heldSecFor = {}; // v48: display-only, not carried across a close
   state.armFeel = snap.armFeel;
+  state.moveFeel = snap.moveFeel;
   state.armLoad = snap.armLoad;
   state.armLoadMax = snap.armLoadMax;
   state.setsDoneFor = snap.setsDoneFor;
@@ -6606,6 +6691,7 @@ function resetState(): void {
   state.stoppedEarlyLitePrev = null;
   state.heldSecFor = {};
   state.armFeel = {}; // v48 · P5
+  state.moveFeel = {}; // v58
   state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
   state.armLoadMax = { ...state.armLoad }; // v55 · fix r1
   state.setsDoneFor = {}; // v54
@@ -6671,6 +6757,9 @@ type RemoteSession = {
   session_note?: string | null;
   lite_day?: boolean | null;
   arm_feel?: string | null;
+  // v58 (Sep 28 2026): optional — a server that hasn't run the migration, or
+  // a pre-v58 row, simply doesn't carry it.
+  move_feel?: string | null;
   voice_plays?: number | null;
   // v50 · jump list (Sep 25 2026): optional — a server that hasn't run the
   // migration, or a pre-v50 row, simply doesn't carry it.
@@ -6799,6 +6888,9 @@ function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEnt
       // no code change needed here, just the note for the next person who
       // wonders why this looked fine already.
       armFeel: r.arm_feel ?? null,
+      // v58: round-trips the same way — null stays null, a pre-v58 row (no
+      // key at all) merges as null, never invented.
+      moveFeel: r.move_feel ?? null,
       voicePlays: r.voice_plays ?? null,
       stepsSkipped: r.steps_skipped ?? null,
       // T1 fix r1 (Sep 27 2026, checker's must #1): round-trips the same way
@@ -6905,6 +6997,12 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     __wtInjectMarkerProgramWeek?: typeof injectMarkerProgramWeek;
     __wtPlanKeyForLog?: typeof planKeyForLog;
     __wtCurrentHowToWeekKey?: typeof currentHowToWeekKey;
+    // v58 (Sep 28 2026): the rides-page Δ formatting is pure too — tested
+    // directly rather than reverse-engineering it off rendered week data.
+    __wtRidesVsDelta?: typeof ridesVsDelta;
+    // v58: the live session's own stepped-moves list, asserted directly
+    // (which moves ask tonight) instead of only through the rendered chip.
+    __wtCurrentSteppedMoves?: typeof currentSteppedMoves;
   };
   w.__wtMergeRemoteSessions = mergeRemoteSessions;
   w.__wtIsValidLogEntry = isValidLogEntry;
@@ -6940,6 +7038,8 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   // WK4 (Sep 27 2026): the "seen this week" how-to key, asserted directly
   // rather than through a full pre-log → workout → how-to-card UI journey.
   w.__wtCurrentHowToWeekKey = currentHowToWeekKey;
+  w.__wtRidesVsDelta = ridesVsDelta;
+  w.__wtCurrentSteppedMoves = currentSteppedMoves;
 }
 
 async function pullFromSupabase(): Promise<void> {
@@ -7185,6 +7285,12 @@ let progressScrollForRides = 0;
 // item 3). Same reset-on-open rule as ridesWindow above — always 'perRide'
 // the moment the page opens.
 let ridesChartMode: 'perRide' | 'perWeek' = 'perRide';
+// v58 fix pass (Sep 28 2026), nice-items list item 3: "per-week bar tap
+// shows that week's readout" — the per-week chart's own tapped bar, keyed
+// the same way chart.ts's `id` already keys a per-week bar
+// (`${round}-${week}`, weeklyRideRows' own weekKeyStr shape). Same
+// reset-on-open/reset-on-mode-switch rule as ridesSelectedChartId.
+let ridesSelectedWeekChartKey: string | null = null;
 
 // v53 (Sep 26 2026) — the history-edit screen's draft (renderHistoryEdit,
 // openHistoryEdit, saveHistoryEdit). Transient, module-level, like the cycle
@@ -10096,6 +10202,16 @@ function renderPreLog(): string {
   ]
     .filter((s) => s !== '')
     .join(' · ');
+  // v58 (Sep 28 2026), her spec item 2: "a tiny 'what stepped this week'
+  // line ... so she knows which moves will ask." Same stepped-moves list the
+  // in-workout chip reads (currentSteppedMoves) — the two can never disagree
+  // about which moves ask tonight. Empty when nothing stepped (a repeat
+  // week) — no empty line, nothing shown.
+  const steppedThisWeek = currentSteppedMoves();
+  const steppedLine =
+    steppedThisWeek.length > 0
+      ? `Stepped this week: ${steppedThisWeek.map((s) => s.summary).join(' · ')}`
+      : '';
   // Lite = one round less, never below 1 — the chip says how many rounds today.
   const liteRounds = Math.max(1, w.rounds - 1);
   const liteWord = liteRounds === 1 ? 'one round' : `${liteRounds} rounds`;
@@ -10149,6 +10265,7 @@ function renderPreLog(): string {
       editingOpen: state.herStartEditingOpen,
     })}
     <p class="prelog-meta">${escapeHtml(meta)}</p>
+    ${steppedLine ? `<p class="prelog-stepped">${escapeHtml(steppedLine)}</p>` : ''}
 
     ${renderWorkoutOverview(w)}
 
@@ -10887,6 +11004,7 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
         <span class="exercise-name">${ELLIPTICAL_NAME}</span>
         <span class="timer-done timer-held">✓ ${doneMins} min done</span>
       </div>
+      ${renderMoveFeel(ex, { hold: false, ready: true, isLastRoundOrNA: true })}
       ${renderEllipticalGuide(false)}
       ${renderStepNav('Done · Next')}
     `;
@@ -11137,6 +11255,12 @@ function renderWorkout(): string {
         </div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${renderArmFeel(ex)}
+        ${renderMoveFeel(ex, {
+          hold,
+          ready: hold ? holdRan : indoorLane ? laneRan && timerIdle : true,
+          isLastRoundOrNA:
+            state.currentPhase !== 'main' || state.currentRound === effectiveRounds(w),
+        })}
         ${safety ? `<p class="exercise-safety">${escapeHtml(safety)}</p>` : ''}
         ${renderTipsExpander(ex, safety)}
         ${renderExerciseSetup(ex)}
@@ -11271,6 +11395,48 @@ function renderArmFeel(ex: Exercise): string {
       ${loadRow}
       ${step === 'curl' ? renderPaceRuleOnce() : ''}
       <span class="arm-feel-label">How did it feel?</span>
+      <div class="arm-feel-chips">${chips}</div>
+    </div>`;
+}
+
+// v58 (Sep 28 2026) — the SAME chip, generalized to every move that stepped
+// this week (never curl/row — renderArmFeel above still owns those). Gating
+// is the same "after the last set (or after the timer/ride ends)" rule
+// renderArmFeel already proved (CHIP AFTER THE LAST SET, v54): a hold waits
+// for holdRan, a cardio lane waits for laneRan && timerIdle, a multi-set
+// reps move reuses the exact same setsDoneFor + "Set N done" mechanism
+// (data-mark-set is already keyed by exercise NAME, not curl/row-specific —
+// no new tap handler needed for that half). A main-phase move that repeats
+// across rounds only asks on its LAST round (`isLastRoundOrNA`) — asking the
+// same question every round would be noise, and there's no per-round
+// boundary here the way curl/row's "2 sets, one screen" already has one.
+function renderMoveFeel(
+  ex: Exercise,
+  gate: { hold: boolean; ready: boolean; isLastRoundOrNA: boolean }
+): string {
+  if (ARM_FEEL_STEPS[ex.name]) return ''; // curl/row keep arm_feel, unmigrated
+  if (!gate.isLastRoundOrNA) return '';
+  const stepped = currentSteppedMoves().find((s) => s.name === canonicalMoveName(ex.name));
+  if (!stepped) return '';
+  if (!gate.ready) return '';
+  const total = multiSetCount(ex.reps);
+  const done = Math.min(state.setsDoneFor[ex.name] ?? 0, total);
+  if (!gate.hold && total > 1 && done < total) {
+    return `
+      <div class="move-feel move-feel-sets" role="group" aria-label="Sets">
+        <span class="move-feel-label">Set ${done + 1} of ${total}</span>
+        <button class="arm-set-btn" type="button" data-mark-set="${escapeHtml(ex.name)}">Set ${done + 1} done</button>
+      </div>`;
+  }
+  const current = state.moveFeel[stepped.slug];
+  const chips = MOVE_FEEL_VALUES.map((v) => {
+    const on = current === v;
+    const label = v === 'easy' ? 'Easy' : v === 'right' ? 'Right' : 'Hard';
+    return `<button class="arm-chip${on ? ' arm-chip-on' : ''}" type="button" data-move-feel-slug="${stepped.slug}" data-move-feel="${v}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
+  }).join('');
+  return `
+    <div class="move-feel" role="group" aria-label="How did it feel?">
+      <span class="move-feel-label">Stepped this week — how did it feel?</span>
       <div class="arm-feel-chips">${chips}</div>
     </div>`;
 }
@@ -13732,6 +13898,19 @@ function formatWeekMinutes(minutes: number): string {
 // numbers, never an arrow or a verdict word (her rule, carried from §4.2 and
 // restated in the task spec: "no arrows of judgment"). A tiny Δ is allowed
 // only as a plain signed difference — never colored, never "better/worse".
+// v58 fix pass (Sep 28 2026), her nice-items list item 3: "0" not "+0" (a
+// real tie read as a false "gain" before), and the Δ matches whatever decimal
+// precision the metric ITSELF already carries (ride.ts's own round1/round2)
+// instead of every row being force-rounded to 1 decimal — Km at 2 decimals
+// used to lose its own last digit in the Δ column. Module-level (not a
+// closure inside renderRidesWeekVsCard) so it's directly testable under
+// automation, same convention as sessionPayload/patchSessionRequest below.
+function ridesVsDelta(a: number, b: number, decimals: number): string {
+  const rounded = Number((a - b).toFixed(decimals));
+  if (rounded === 0) return '0';
+  return rounded > 0 ? `+${rounded.toFixed(decimals)}` : rounded.toFixed(decimals);
+}
+
 function renderRidesWeekVsCard(rows: WeeklyRideRow[]): string {
   if (rows.length === 0) {
     return `
@@ -13742,20 +13921,35 @@ function renderRidesWeekVsCard(rows: WeeklyRideRow[]): string {
   }
   const thisWeek = rows[0] as WeeklyRideRow;
   const lastWeek = rows[1] ?? null;
-  const deltaNum = (a: number, b: number | null): string =>
-    b === null ? '—' : a - b >= 0 ? `+${round1Str(a - b)}` : round1Str(a - b);
+  // v58 fix pass, same list item: "one empty-week style for both cards" — a
+  // week with 0 rides reads as a single "—" here too, the exact rule
+  // renderWeekTableRow already applies to the table right below this card,
+  // rather than a real 0 sitting next to a dash on the very next metric row
+  // (minutes/km/kcal are genuinely 0 for a no-ride week; the avgs are
+  // already null there — the two used to disagree inside one card).
+  const thisEmpty = thisWeek.rides === 0;
+  const lastEmpty = lastWeek === null || lastWeek.rides === 0;
   const numRow = (
     label: string,
     a: number | null,
     b: number | null | undefined,
-    suffix: string
-  ): string => `
+    decimals: number,
+    suffix = ''
+  ): string => {
+    const aStr = !thisEmpty && a !== null ? `${a}${suffix}` : '—';
+    const bStr = !lastEmpty && b !== null && b !== undefined ? `${b}${suffix}` : '—';
+    const delta =
+      !thisEmpty && !lastEmpty && a !== null && b !== null && b !== undefined
+        ? ridesVsDelta(a, b, decimals)
+        : '—';
+    return `
     <div class="rides-vs-row">
       <span class="rides-vs-lbl">${escapeHtml(label)}</span>
-      <span class="rides-vs-val">${a !== null ? `${a}${suffix}` : '—'}</span>
-      <span class="rides-vs-val">${b !== null && b !== undefined ? `${b}${suffix}` : '—'}</span>
-      <span class="rides-vs-delta">${a !== null ? deltaNum(a, b ?? null) : '—'}</span>
+      <span class="rides-vs-val">${aStr}</span>
+      <span class="rides-vs-val">${bStr}</span>
+      <span class="rides-vs-delta">${delta}</span>
     </div>`;
+  };
   // v57 fix pass (Sep 28 2026), CHECK-v57 S3: the full week names ("R2 ·
   // Week 6 (so far)") don't fit a 52px grid column — they used to sit
   // straight in the header row and either overlapped the metric-name column
@@ -13774,18 +13968,14 @@ function renderRidesWeekVsCard(rows: WeeklyRideRow[]): string {
         <span class="rides-vs-val">Last</span>
         <span class="rides-vs-delta">Δ</span>
       </div>
-      ${numRow('Rides', thisWeek.rides, lastWeek?.rides, '')}
-      ${numRow('Minutes', thisWeek.minutes, lastWeek?.minutes, '')}
-      ${numRow('Km', thisWeek.km, lastWeek?.km, '')}
-      ${numRow('Kcal', thisWeek.kcal, lastWeek?.kcal, '')}
-      ${numRow('Kcal/min', thisWeek.avgKcalPerMin, lastWeek?.avgKcalPerMin, '')}
-      ${numRow('Km/h', thisWeek.avgKmh, lastWeek?.avgKmh, '')}
-      ${numRow('Level', thisWeek.avgLevel, lastWeek?.avgLevel, '')}
+      ${numRow('Rides', thisWeek.rides, lastWeek?.rides, 0)}
+      ${numRow('Minutes', thisWeek.minutes, lastWeek?.minutes, 0)}
+      ${numRow('Km', thisWeek.km, lastWeek?.km, 2)}
+      ${numRow('Kcal', thisWeek.kcal, lastWeek?.kcal, 1)}
+      ${numRow('Kcal/min', thisWeek.avgKcalPerMin, lastWeek?.avgKcalPerMin, 1)}
+      ${numRow('Km/h', thisWeek.avgKmh, lastWeek?.avgKmh, 1)}
+      ${numRow('Level', thisWeek.avgLevel, lastWeek?.avgLevel, 1)}
     </div>`;
-}
-
-function round1Str(n: number): string {
-  return `${Math.round(n * 10) / 10}`;
 }
 
 // The compact table — last 6 weeks, newest first, the open week marked
@@ -13847,6 +14037,26 @@ function renderRideReadoutLine(r: RideRecord): string {
   return escapeHtml(parts.join(' · '));
 }
 
+// v58 fix pass (Sep 28 2026), nice-items list item 3: the per-week chart's
+// own one-line readout, same "never shown until tapped" rule as
+// renderRideReadoutLine above — an empty week (0 rides) still reads
+// honestly, "—" for every number she didn't get, nothing invented.
+function renderWeekReadoutLine(row: WeeklyRideRow): string {
+  const label = `${weekRowLabel(row.key)}${row.isOpen ? ' (so far)' : ''}`;
+  if (row.rides === 0) return escapeHtml(`${label} · —`);
+  const parts = [
+    label,
+    `${row.rides} ${row.rides === 1 ? 'ride' : 'rides'}`,
+    formatWeekMinutes(row.minutes),
+    `${row.km} km`,
+    `${row.kcal} kcal`,
+    row.avgKcalPerMin !== null ? `${row.avgKcalPerMin} kcal/min` : '',
+    row.avgKmh !== null ? `${row.avgKmh} km/h` : '',
+    row.avgLevel !== null ? `L${row.avgLevel}` : '',
+  ].filter((s) => s !== '');
+  return escapeHtml(parts.join(' · '));
+}
+
 // v57 (Sep 28 2026) — the "per ride · per week" toggle (task spec item 3).
 // Shared chip markup so both chart modes render the same on/off look as
 // every other toggle on this page (.rides-toggle-chip).
@@ -13861,8 +14071,11 @@ function renderRidesChartModeToggle(): string {
 // bar, a tap opens the one-line readout above. Rides with no numbers aren't
 // charted (§4.2/§4.5: nothing to plot). "Per week" (v57, task spec item 3) —
 // one bar per week from the SAME `weekRows` the table above uses, plotting
-// TOTAL MINUTES (her own cardio-gap number, not kcal/min — see the caption):
-// no tap readout (a week isn't a single session to read a rate off of).
+// TOTAL MINUTES (her own cardio-gap number, not kcal/min — see the caption).
+// v58 fix pass (Sep 28 2026): a tap now opens that week's own one-line
+// readout too, same mechanism as "per ride" — she asked for the numbers
+// "so that I can like really see the data", and per-week bars were the one
+// place on this page a tap read out nothing at all.
 function renderRidesChartCard(rides: RideRecord[], weekRows: WeeklyRideRow[]): string {
   const toggle = renderRidesChartModeToggle();
   if (ridesChartMode === 'perWeek') {
@@ -13895,11 +14108,15 @@ function renderRidesChartCard(rides: RideRecord[], weekRows: WeeklyRideRow[]): s
       ariaLabel: 'Total minutes ridden, by week',
       labelAllBars: true,
     });
+    const selectedWeek = ridesSelectedWeekChartKey
+      ? weekRows.find((row) => `${row.key.round}-${row.key.week}` === ridesSelectedWeekChartKey)
+      : null;
     return `
       <div class="card progress-card rides-chart-card">
         <div class="progress-card-label">Rides</div>
         ${toggle}
         <div class="rides-chart-wrap" id="rides-chart">${svg}</div>
+        <div class="rides-chart-readout" id="rides-chart-readout">${selectedWeek ? renderWeekReadoutLine(selectedWeek) : ''}</div>
         <p class="rides-chart-caption">Total minutes ridden that week — the cardio-time gap, not the rate.</p>
       </div>`;
   }
@@ -14354,6 +14571,7 @@ function isValidLogEntry(x: unknown): x is LogEntry {
     isOptionalOf(o['sessionNote'], 'string') &&
     isOptionalOf(o['liteDay'], 'boolean') &&
     isOptionalOf(o['armFeel'], 'string') &&
+    isOptionalOf(o['moveFeel'], 'string') &&
     isOptionalOf(o['voicePlays'], 'number') &&
     // v49 · engine: optional AND nullable, same as the v48 fields above — an
     // export from before the engine has neither key and must still restore.
@@ -15240,6 +15458,22 @@ function attachHandlers(): void {
       render();
     });
   });
+  // v58 (Sep 28 2026) — the generalized Easy/Right/Hard on any stepped move:
+  // same tap-selects/tap-clears rule as arm feel, keyed by slug instead of a
+  // fixed curl/row pair.
+  document.querySelectorAll<HTMLButtonElement>('[data-move-feel-slug]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const slug = btn.dataset['moveFeelSlug'];
+      const feel = btn.dataset['moveFeel'];
+      if (!slug || !isMoveFeelValue(feel)) return;
+      const next = { ...state.moveFeel };
+      if (next[slug] === feel) delete next[slug];
+      else next[slug] = feel;
+      state.moveFeel = next;
+      saveActiveSession();
+      render();
+    });
+  });
   // v55 (Sep 27 2026) — LOAD CHIP: which weight for the NEXT set. Always one
   // selected (no clear — a set needs a weight), her pick by pain, never a
   // question the app asks.
@@ -15689,6 +15923,7 @@ function attachRidesHandlers(): void {
     progressScrollForRides = window.scrollY;
     ridesWindow = 'tenMin';
     ridesSelectedChartId = null;
+    ridesSelectedWeekChartKey = null;
     ridesChartMode = 'perRide';
     state.screen = 'rides';
     render();
@@ -15714,15 +15949,19 @@ function attachRidesHandlers(): void {
       if (mode) {
         ridesChartMode = mode;
         ridesSelectedChartId = null;
+        ridesSelectedWeekChartKey = null;
         render();
       }
     });
   });
   // The chart's bars (chart.ts's <g data-ride-id>, one per ride) — a tap or
   // Enter/Space opens the one-line readout under the chart (spec: "tap a bar
-  // -> a one-line readout of that ride under the chart"). Per-week mode's
-  // bars aren't a single session to read a rate off of, so they carry no tap
-  // handler at all.
+  // -> a one-line readout of that ride under the chart"). v58 fix pass (Sep
+  // 28 2026), nice-items list item 3: per-week mode's bars now carry the SAME
+  // tap -> readout mechanism, keyed by the bar's own id (chart.ts's already-
+  // generic `data-ride-id`, which weeklyRideRows' own `${round}-${week}`
+  // shape already fills for a per-week bar) — she doesn't have to
+  // cross-reference the table below just to read one week's own numbers.
   if (ridesChartMode === 'perRide') {
     document
       .querySelectorAll<SVGGElement>('#rides-chart [data-ride-id]')
@@ -15731,6 +15970,24 @@ function attachRidesHandlers(): void {
           const id = el.dataset['rideId'];
           if (!id) return;
           ridesSelectedChartId = id;
+          render();
+        };
+        el.addEventListener('click', open);
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open();
+          }
+        });
+      });
+  } else {
+    document
+      .querySelectorAll<SVGGElement>('#rides-chart [data-ride-id]')
+      .forEach((el: SVGGElement) => {
+        const open = (): void => {
+          const key = el.dataset['rideId'];
+          if (!key) return;
+          ridesSelectedWeekChartKey = key;
           render();
         };
         el.addEventListener('click', open);

@@ -409,12 +409,46 @@ test.describe('week by week (v57)', () => {
     const bars = page.locator('#rides-chart [data-ride-id]');
     await expect(bars).toHaveCount(2);
     await expect(page.locator('.rides-chart-caption')).toContainText('Total minutes');
-    // Per-week mode has no single-ride readout.
-    await expect(page.locator('#rides-chart-readout')).toHaveCount(0);
+    // v58 fix pass (Sep 28 2026), nice-items list item 3: per-week mode now
+    // gets the same tap -> readout mechanism as per-ride — the readout div
+    // exists (empty) before a tap, same as the per-ride chart's own.
+    await expect(page.locator('#rides-chart-readout')).toHaveCount(1);
+    await expect(page.locator('#rides-chart-readout')).toBeEmpty();
 
     // Switching back to "Per ride" restores the original chart + readout.
     await page.locator('button[data-rides-chart-mode="perRide"]').click();
     await expect(page.locator('#rides-chart-readout')).toHaveCount(1);
+  });
+
+  test("v58: tapping a per-week bar shows that week's own one-line readout", async ({ page }) => {
+    await seedLogs(page, [...WEEK5, WEEK6_D]);
+    await page.goto('/');
+    await openRides(page);
+    await page.locator('button[data-rides-chart-mode="perWeek"]').click();
+
+    await expect(page.locator('#rides-chart-readout')).toBeEmpty();
+    await page.locator('#rides-chart [data-ride-id="2-5"]').click();
+    const readout = page.locator('#rides-chart-readout');
+    await expect(readout).toContainText('Week 5');
+    await expect(readout).toContainText('3 rides');
+    await expect(readout).toContainText('45 min');
+    await expect(readout).toContainText('3.28 km');
+    await expect(readout).toContainText('266.3 kcal');
+    await expect(readout).toContainText('5.9 kcal/min');
+    await expect(readout).toContainText('4.4 km/h');
+    await expect(readout).toContainText('L4.3');
+
+    // Tapping the open week's own bar reads "(so far)", same convention the
+    // table and vs-card already use for the still-open week.
+    await page.locator('#rides-chart [data-ride-id="2-6"]').click();
+    await expect(readout).toContainText('Week 6');
+    await expect(readout).toContainText('(so far)');
+    await expect(readout).toContainText('1 ride');
+
+    // Switching mode clears the selection, same reset rule as per-ride.
+    await page.locator('button[data-rides-chart-mode="perRide"]').click();
+    await page.locator('button[data-rides-chart-mode="perWeek"]').click();
+    await expect(page.locator('#rides-chart-readout')).toBeEmpty();
   });
 
   test('re-opening the page resets the chart toggle to "Per ride"', async ({ page }) => {
@@ -475,6 +509,46 @@ test.describe('week by week (v57)', () => {
     await expect(header.locator('.rides-vs-val').nth(1)).toHaveText('Last');
     await expect(header.locator('.rides-vs-delta')).toHaveText('Δ');
   });
+
+  // v58 fix pass (Sep 28 2026), nice-items list item 3: "Δ rounded to the
+  // compared value's precision and '0' not '+0'".
+  test('v58: the Km Δ keeps its own 2-decimal precision (Week 6 1 km vs Week 5 3.28 km)', async ({
+    page,
+  }) => {
+    await seedLogs(page, [...WEEK5, WEEK6_D]);
+    await page.goto('/');
+    await openRides(page);
+
+    const card = page.locator('.rides-vs-card');
+    const kmRow = card.locator('.rides-vs-row').filter({ hasText: 'Km' }).first();
+    await expect(kmRow.locator('.rides-vs-delta')).toHaveText('-2.28');
+  });
+
+  test('v58: ridesVsDelta — "0" not "+0" on a real tie, at each metric\'s own precision', async ({
+    page,
+  }) => {
+    const result = await page.evaluate(() => {
+      const w = window as unknown as {
+        __wtRidesVsDelta: (a: number, b: number, decimals: number) => string;
+      };
+      return {
+        tieInt: w.__wtRidesVsDelta(3, 3, 0),
+        tieOneDecimal: w.__wtRidesVsDelta(4.3, 4.3, 1),
+        tieTwoDecimal: w.__wtRidesVsDelta(3.28, 3.28, 2),
+        // A real tie after rounding (4.301 vs 4.299 both round to 4.3 at 1
+        // decimal) must ALSO read "0", not a false "+0.0"/"-0.0".
+        tieAfterRounding: w.__wtRidesVsDelta(4.301, 4.299, 1),
+        positive: w.__wtRidesVsDelta(5, 3, 0),
+        negative: w.__wtRidesVsDelta(1, 3.28, 2),
+      };
+    });
+    expect(result.tieInt).toBe('0');
+    expect(result.tieOneDecimal).toBe('0');
+    expect(result.tieTwoDecimal).toBe('0');
+    expect(result.tieAfterRounding).toBe('0');
+    expect(result.positive).toBe('+2');
+    expect(result.negative).toBe('-2.28');
+  });
 });
 
 // v57 fix pass (Sep 28 2026) — CHECK-v57-2026-09-28.md M1 (must).
@@ -516,8 +590,14 @@ test.describe('v57 fix pass: legacy Week 4 (Sep 28 2026)', () => {
     const card = page.locator('.rides-vs-card');
     await expect(card).toContainText('Week 4');
     const ridesRow = card.locator('.rides-vs-row').filter({ hasText: 'Rides' });
-    await expect(ridesRow.locator('.rides-vs-val').nth(0)).toHaveText('0'); // Week 5, so far
+    // v58 fix pass (Sep 28 2026), nice-items list item 3: "one empty-week
+    // style for both cards" — a 0-ride week now reads as a single "—" here
+    // too, the exact rule the week table (rides-week-row) already applied
+    // (a 0-ride week gets ONE dash, not "0 rides · 0 min · 0 km · 0 kcal"
+    // sitting next to a "—" on the very next averaged row).
+    await expect(ridesRow.locator('.rides-vs-val').nth(0)).toHaveText('—'); // Week 5, so far
     await expect(ridesRow.locator('.rides-vs-val').nth(1)).toHaveText('3'); // Week 4
+    await expect(ridesRow.locator('.rides-vs-delta')).toHaveText('—');
   });
 });
 

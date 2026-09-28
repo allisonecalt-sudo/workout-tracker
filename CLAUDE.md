@@ -1,9 +1,43 @@
-# workout-tracker — repo map (code-shape, Sep 27 2026)
+# workout-tracker — repo map
 
-Full plan: `second-brain/self/health/workout-app-audit-2026-09-24/next-level-2026-09-26/stack-decision-2026-09-27.md`
-("The builder sequence"). This branch (`code-shape`) is R1: build + oracle.
-**No user-visible change in a code-shape commit — ever.** Structure moves,
-never behaviour, never in the same commit (Kent Beck's rule, the plan's own).
+**This is the repo's own map — read it from whichever branch you're on**
+(v58, Sep 28 2026: it used to call itself "the code-shape branch's map" and
+open on `git branch --show-current` disagreeing with its own first line;
+fixed branch-agnostic here). The file map, the three gates, versioning and
+the data-model conventions below are true on every branch. The
+code-shape-specific sections (structure-only refactor rules, the R-numbered
+roadmap) describe a SEPARATE, ongoing restructuring effort — read them when
+you're doing that work, on whichever branch is doing it; they don't describe
+this checkout's state by default.
+
+Code-shape's full plan: `second-brain/self/health/workout-app-audit-2026-09-24/next-level-2026-09-26/stack-decision-2026-09-27.md`
+("The builder sequence") — R1 was build + oracle. **No user-visible change in
+a code-shape commit — ever.** Structure moves, never behaviour, never in the
+same commit (Kent Beck's rule, the plan's own).
+
+## Data model — text-encoded columns (`workout_sessions`)
+
+Two `workout_sessions` columns pack several per-move readings into one short
+text string instead of a column each — same convention, deliberately kept
+distinct by what they own:
+
+- **`arm_feel`** (v48 · P5, widened v55) — Easy/Right/Hard + her LOAD CHIP
+  pick, ONLY for the two 1–2 kg moves (curl, prone row): `"curl=easy@2kg;
+row=right@1kg"`. `key=feel@load`, `;`-joined, either half optional (a load
+  with no feel tap is `"curl=@2kg"`). Built by `armFeelString` (app.ts), CHECK
+  in `migrations/2026-09-24-v48-session-columns.sql` (widened by
+  `migrations/2026-09-28-v55-arm-feel-load.sql`). Never migrated to
+  `move_feel` below — it keeps its own shape on purpose (v58 spec item 1).
+- **`move_feel`** (v58, Sep 28 2026) — the SAME Easy/Right/Hard, generalized
+  to every OTHER move that stepped this week (reps/seconds/minutes up, or a
+  new variant), never curl/row: `"splitsquat=right;wallsit=easy@45s;
+ride=right@12min"`. `slug=feel@qty`, `;`-joined; slug is `move-feel.ts`'s
+  `slugFor(name)` (lowercased, letters only — the cardio slot, whichever lane
+  it's in, always slugs to `ride`); `feel` is optional; `@qty` appears ONLY
+  for a hold (`s`) or the ride/walk slot (`min`) — a plain reps bump carries
+  no qty (the number already lives in the PROGRAM diff). Built by
+  `moveFeelString` (move-feel.ts), CHECK in
+  `migrations/2026-09-28-v58-move-feel.sql`.
 
 ## File map (as of R1d — before the R3+ module split)
 

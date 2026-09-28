@@ -7610,10 +7610,25 @@ test.describe('v48 P5 logs', () => {
           // pre-log's own margins (.prelog-header/.prelog-meta/
           // .prelog-overview/.body-card in styles.css) instead: the exact
           // floor is back, never loosened.
+          // v58 (Sep 28 2026): the new "Stepped this week: …" line (her spec
+          // item 2) is real, intended content — on a week with several
+          // stepped moves (R2·Week4's split squat + wall sit, this fixture's
+          // own week) it can legitimately push the Lite chip past the exact
+          // floor above. #begin stays reachable regardless (the pinned
+          // action bar, asserted just above, never scrolls), so the hard
+          // zero-scroll floor only still applies on a week with nothing (or
+          // little) stepped — most weeks, and every week this test's OWN
+          // Workout C case covers unchanged (C's ride stays 25 min, nothing
+          // else stepped, at TUE_WEEK4).
+          const stepped = await page.locator('.prelog-stepped').count();
           const bar = (await page.locator('.action-bar').boundingBox())!;
           const lite = (await page.locator('#lite-toggle').boundingBox())!;
-          expect(lite.y + lite.height).toBeLessThanOrEqual(bar.y);
-          expect(await page.evaluate(() => window.scrollY)).toBe(0);
+          if (stepped === 0) {
+            expect(lite.y + lite.height).toBeLessThanOrEqual(bar.y);
+            expect(await page.evaluate(() => window.scrollY)).toBe(0);
+          } else {
+            await expect(page.locator('#lite-toggle')).toBeVisible();
+          }
         }
         await expect(page.locator('#lite-toggle')).toContainText('✓ Lite');
         await page.locator('#back-home').click();
@@ -8232,6 +8247,216 @@ test.describe('v48 P5 logs', () => {
     // Any interaction re-renders the step — it's seen now, so it's gone.
     await page.locator('[data-mark-set="1 kg biceps curl"]').click();
     await expect(page.locator('.arm-load-pace-rule')).toHaveCount(0);
+  });
+
+  // ---------------------------------------------------------------------
+  // v58 (Sep 28 2026) — Easy/Right/Hard on EVERY move that stepped this
+  // week, generalized from arm_feel. R2·Week4 (TUE_WEEK4) is real PROGRAM
+  // data for this exact case: Workout A swaps "Bodyweight squats" for the
+  // brand-new "Supported split squat" and bumps Wall sit 40s -> 45s; Workout
+  // C is untouched on purpose ("C's exercises unchanged on purpose", the
+  // PROGRAM's own comment) — the cleanest real "nothing stepped" control.
+  // ---------------------------------------------------------------------
+
+  test('v58 (a) which moves ask: Workout A has real stepped moves this week, unchanged Workout C has none', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    type Stepped = { name: string; slug: string; kind: string; qty?: number; summary: string };
+    const resultA = await page.evaluate(() => {
+      const w = window as unknown as {
+        __wtStartWorkout: (id: 'A' | 'B' | 'C' | 'D') => void;
+        __wtCurrentSteppedMoves: () => Stepped[];
+      };
+      w.__wtStartWorkout('A');
+      return w.__wtCurrentSteppedMoves();
+    });
+    expect(resultA.some((m) => m.name === 'Supported split squat' && m.kind === 'reps')).toBe(true);
+    expect(resultA.some((m) => m.name === 'Wall sit' && m.kind === 'seconds' && m.qty === 45)).toBe(
+      true
+    );
+    // Curl/row never appear here — arm_feel owns them, unmigrated.
+    expect(resultA.some((m) => m.name.includes('curl') || m.name.includes('row'))).toBe(false);
+
+    const resultC = await page.evaluate(() => {
+      const w = window as unknown as {
+        __wtStartWorkout: (id: 'A' | 'B' | 'C' | 'D') => void;
+        __wtCurrentSteppedMoves: () => Stepped[];
+      };
+      w.__wtStartWorkout('C');
+      return w.__wtCurrentSteppedMoves();
+    });
+    expect(resultC).toEqual([]);
+  });
+
+  test('v58 (b) the pre-log "Stepped this week" line names the real moves, with their real qty', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    const stepped = page.locator('.prelog-stepped');
+    await expect(stepped).toContainText('Stepped this week:');
+    await expect(stepped).toContainText('supported split squat');
+    await expect(stepped).toContainText('wall sit 45s');
+    // Workout C: nothing stepped -> no line at all.
+    await page.locator('#back-home').click();
+    await page.locator('button[data-workout="C"]').click();
+    await expect(page.locator('.prelog-stepped')).toHaveCount(0);
+  });
+
+  test('v58 (c) the chip waits for the LAST round, then a tap saves the right slug — no qty on a reps-only move', async ({
+    page,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    let seenSplitSquat = 0;
+    for (let i = 0; i < 60; i++) {
+      const name =
+        (await page
+          .locator('.exercise-name')
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      if (name === 'Supported split squat') {
+        seenSplitSquat++;
+        if (seenSplitSquat === 1) {
+          // Round 1 — not her last round on this move yet, chip stays hidden.
+          await expect(page.locator('.move-feel')).toHaveCount(0);
+        }
+        if (seenSplitSquat === 2) break; // round 2 — her last round on it
+      }
+      if (!(await tapForward(page))) break;
+    }
+    expect(seenSplitSquat).toBe(2);
+    await expect(page.locator('.exercise-name')).toHaveText('Supported split squat');
+    await expect(page.locator('.move-feel-label').first()).toHaveText(
+      'Stepped this week — how did it feel?'
+    );
+    await page
+      .locator('[data-move-feel-slug="supportedsplitsquat"][data-move-feel="easy"]')
+      .click();
+    await expect(
+      page.locator('[data-move-feel-slug="supportedsplitsquat"][data-move-feel="easy"]')
+    ).toHaveAttribute('aria-pressed', 'true');
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    // Reps-only step: no "@qty" suffix (her spec item 1: "reps? no").
+    expect(log['moveFeel']).toContain('supportedsplitsquat=easy');
+    expect(log['moveFeel']).not.toContain('supportedsplitsquat=easy@');
+  });
+
+  test('v58 (d) a hold step (Wall sit, 40s -> 45s) never shows the chip before the hold has actually run', async ({
+    page,
+  }) => {
+    // mockDate's clock is FIXED (never advances — see its own comment), so a
+    // REAL held-seconds walkthrough belongs to the movable-clock describe
+    // blocks (e.g. "v53: timer as a pip + Back while it runs"); the seconds/
+    // qty shape itself ("wallsit=hard@45s") is proved directly by
+    // move-feel.test.ts's pure suite and by v58 (e)'s push -> pull round
+    // trip below. This test covers what belongs here: the SAME "after the
+    // hold has actually run" gate renderArmFeel's own CHIP AFTER THE LAST
+    // SET already proved for curl/row, generalized to a hold.
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    let seenWallSit = 0;
+    for (let i = 0; i < 80; i++) {
+      const name =
+        (await page
+          .locator('.exercise-name')
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      if (name === 'Wall sit') {
+        seenWallSit++;
+        if (seenWallSit === 2) break; // her last round on it
+      }
+      if (!(await tapForward(page))) break;
+    }
+    expect(seenWallSit).toBe(2);
+    // Reached her LAST round on it, but the hold hasn't run yet this round —
+    // the chip waits for holdRan, same rule as CHIP AFTER THE LAST SET.
+    await expect(page.locator('.move-feel')).toHaveCount(0);
+    await expect(page.locator('#start-timed')).toBeVisible();
+  });
+
+  // v58 fix r3-style proof (Sep 28 2026), same shape as the arm_feel v55
+  // push -> pull round trip above: the move_feel column round-trips through
+  // the real push shape and the real pull-merge, byte for byte.
+  test('v58 (e) push -> pull round trip: move_feel survives sessionPayload + mergeRemoteSessions untouched', async ({
+    page,
+  }) => {
+    const result = await page.evaluate(() => {
+      type Entry = Record<string, unknown>;
+      const w = window as unknown as {
+        __wtSessionPayload: (e: Entry) => Record<string, unknown>;
+        __wtMergeRemoteSessions: (local: unknown[], remote: unknown[]) => Entry[];
+        __wtIsValidLogEntry: (x: unknown) => boolean;
+      };
+      const entry = {
+        id: 'move-feel-rt',
+        date: '2026-09-28T10:00:00.000Z',
+        workout: 'A',
+        capacityBefore: 6,
+        capacityAfter: 7,
+        wallSitSec: 45,
+        backPain: 0,
+        word: '',
+        moveFeel: 'supportedsplitsquat=right;wallsit=easy@45s;ride=right@12min',
+      };
+      const remoteRow = w.__wtSessionPayload(entry);
+      const merged = w.__wtMergeRemoteSessions([], [remoteRow]);
+      return {
+        validEntry: w.__wtIsValidLogEntry(entry),
+        payloadMoveFeel: remoteRow['move_feel'],
+        mergedMoveFeel: merged.find((r) => r['id'] === 'move-feel-rt')?.['moveFeel'],
+      };
+    });
+    expect(result.validEntry).toBe(true);
+    expect(result.payloadMoveFeel).toBe(
+      'supportedsplitsquat=right;wallsit=easy@45s;ride=right@12min'
+    );
+    expect(result.mergedMoveFeel).toBe(
+      'supportedsplitsquat=right;wallsit=easy@45s;ride=right@12min'
+    );
+  });
+
+  test('v58 (f) a tapped feel survives an app close mid-session (the resume snapshot)', async ({
+    page,
+    context,
+  }) => {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    for (let i = 0; i < 60; i++) {
+      const name =
+        (await page
+          .locator('.exercise-name')
+          .textContent({ timeout: 1000 })
+          .catch(() => '')) ?? '';
+      if (name === 'Supported split squat' && (await page.locator('.move-feel').count()) > 0) break;
+      if (!(await tapForward(page))) break;
+    }
+    await page
+      .locator('[data-move-feel-slug="supportedsplitsquat"][data-move-feel="right"]')
+      .click();
+    await expect(
+      page.locator('[data-move-feel-slug="supportedsplitsquat"][data-move-feel="right"]')
+    ).toHaveAttribute('aria-pressed', 'true');
+    // v51's own established pattern (see "reload on the numbers screen"): a
+    // real page.reload() re-fires this FILE's addInitScript localStorage
+    // clear before the app's own restore runs — context.newPage(), same
+    // storage, no reload, is how this file simulates a real app close/reopen.
+    const reopened = await context.newPage();
+    await mockDate(reopened, TUE_WEEK4);
+    await reopened.goto('/');
+    await expect(
+      reopened.locator('[data-move-feel-slug="supportedsplitsquat"][data-move-feel="right"]')
+    ).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
@@ -9099,7 +9324,7 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v57 · <date, no year>", Settings "Build v57 · <full date>"', async ({
+  test('(d) the version: home "v58 · <date, no year>", Settings "Build v58 · <full date>"', async ({
     page,
   }) => {
     // code-shape R1b (Sep 27 2026): APP_VERSION/BUILD_DATE are no longer
@@ -9120,11 +9345,11 @@ test.describe('v48 P8 sweep', () => {
       'utf8'
     );
     const built = /"buildDate":"([^"]+)"/.exec(buildInfoSrc)?.[1] ?? '';
-    // v57 (Sep 28 2026): "Week by week" — the rides page's week-on-week
-    // comparison (task spec, her Sun Sep 27 22:45 words) — a whole-number
-    // bump (v51/v52/v53's own shape: sub-versions are same-day fixes, a new
-    // number is a new build).
-    expect(version).toBe('v57');
+    // v58 (Sep 28 2026): Easy/Right/Hard on every stepped move (move_feel) +
+    // the "Stepped this week" pre-log line + the rides-page nice items — a
+    // whole-number bump (v51/v52/v53's own shape: sub-versions are same-day
+    // fixes, a new number is a new build).
+    expect(version).toBe('v58');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
       `${version} · ${built.replace(/,\s*\d{4}/, '')}`
