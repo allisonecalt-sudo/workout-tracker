@@ -841,7 +841,7 @@ const plank: Ladder = {
             durationSec: 20,
             isTimed: true,
             notes:
-              'Hold WITH a posterior pelvic tilt — tuck the tailbone under, squeeze the glutes, ribs down. Forearms only, NOT hands. Stop if any wrist sensation.',
+              'Hold WITH a posterior pelvic tilt — tuck the tailbone under, squeeze the glutes, ribs down. Forearms only, NOT hands. A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
           },
         ],
         B: [
@@ -1036,7 +1036,7 @@ const rowcurl: Ladder = {
             // "— your call" — "(your pick)" right before it already says
             // the same thing once.
             notes:
-              'Bodyweight or 1–2 kg (your pick). Arm hanging, wrist neutral, light grip. Head down. Drive the elbow up, squeeze the shoulder blade, lower slow. Pain tells — stop on any wrist signal.',
+              'Bodyweight or 1–2 kg (your pick). Arm hanging, wrist neutral, light grip. Head down. Drive the elbow up, squeeze the shoulder blade, lower slow. Pain tells — back off if it is sharp, climbing, or still there tomorrow.',
           },
           {
             name: '1 kg biceps curl',
@@ -1048,7 +1048,7 @@ const rowcurl: Ladder = {
             // line is where this rung says the real range out loud.
             reps: '2 sets · 12 reps · 1–2 kg (your pick)',
             notes:
-              'Hold 1–2 kg (your pick) lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging. Lower slow. Pain tells — stop on any wrist signal.',
+              'Hold 1–2 kg (your pick) lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging. Lower slow. Pain tells — back off if it is sharp, climbing, or still there tomorrow.',
           },
         ],
         B: [

@@ -4897,6 +4897,36 @@ textarea:focus {
   color: var(--text);
 }
 
+/* v60 (Sep 28 2026) — F1 "Redo everywhere": a real outline button (not grey
+ * .back-link text) on every hold, single- or multi-set. Same outline recipe
+ * as .arm-set-btn ("Set N done"), centered like .back-link. */
+.hold-redo-btn {
+  display: block;
+  margin: 8px auto 0;
+  min-height: 44px;
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-small);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.hold-redo-btn:hover {
+  background: var(--bg-elev-2);
+}
+
+/* "Shake your hands out first." — the cue between a multi-set hold's sets,
+ * dim like .timer-last. */
+.hold-set-cue {
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  text-align: center;
+  margin: 8px 0 0;
+}
+
 /* Done · Next before a hold has run: the Back look, but it keeps its width. */
 .step-nav .btn-done-quiet {
   flex: 1 1 auto;

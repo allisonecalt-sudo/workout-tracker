@@ -1422,7 +1422,7 @@ export const EXERCISE_HOWTO: Record<string, ExerciseHowTo> = {
       },
       {
         do: 'Hold 15-20 sec, shake the hands out, once more.',
-        avoid: 'STOP at any wrist or thumb sensation.',
+        avoid: 'A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
       },
     ],
   },

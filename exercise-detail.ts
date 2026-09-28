@@ -209,8 +209,13 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
   '1 kg biceps curl': {
     exercise: '1 kg biceps curl',
     voiceSrc: './assets/voice/1-kg-biceps-curl.mp3',
+    // v60 · fix (Sep 28 2026, health check): "one kilogram" was still fixed
+    // in the spoken line — the LOAD CHIP is where she actually picks 1 or 2
+    // kg (rule 8e, same fix the row's own mp3 already got in v55 fix r3).
+    // Regenerated with the same edge-tts voice (en-US-AvaMultilingualNeural),
+    // same pipeline as the row/hinge mp3s.
     voiceScript:
-      "This is the one kilogram biceps curl. Hold the weight lightly with your elbow tucked at your side and your forearm hanging straight down. Keep your wrist and fingers neutral and straight the whole time. Curl the forearm up toward your shoulder, keeping the elbow pinned in place, so only the forearm moves. Then lower slowly under control. Do the reps on your screen. The main cue: hold light and stay controlled. The main don't: don't let the wrist bend back, and don't swing your body for momentum. Light hold, wrist neutral, and pain tells. If the wrist hurts, stop there.",
+      "This is the biceps curl — one or two kilos, whichever you picked. Hold the weight lightly with your elbow tucked at your side and your forearm hanging straight down. Keep your wrist and fingers neutral and straight the whole time. Curl the forearm up toward your shoulder, keeping the elbow pinned in place, so only the forearm moves. Then lower slowly under control. Do the reps on your screen. The main cue: hold light and stay controlled. The main don't: don't let the wrist bend back, and don't swing your body for momentum. Light hold, wrist neutral, and pain tells. If the wrist hurts, stop there.",
     muscles: ['forearms'],
     muscleLabel: 'Biceps (arm)',
     steps: [
@@ -220,13 +225,13 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       'Hold the weight lightly, elbow tucked at your side, forearm hanging down, wrist and fingers neutral and straight.',
       'Curl the forearm up toward your shoulder, keeping the elbow pinned in place so only the forearm moves.',
       'Lower slowly under control.',
-      'Do the reps on your screen. Pain tells — stop on any wrist signal.',
+      'Do the reps on your screen. Pain tells — back off if it is sharp, climbing, or still there tomorrow.',
     ],
     dos: [
       'Hold the weight lightly, wrist and fingers neutral',
       'Keep the elbow tucked and pinned at your side',
       'Lower slow and controlled',
-      'Stop on any wrist signal',
+      'Back off if it is sharp, climbing, or still there tomorrow',
     ],
     donts: [
       "Don't let the wrist bend back or hyperextend",
@@ -350,7 +355,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     donts: [
       "Don't force the wrist back — this isn't a wrist stretch.",
       "Don't rotate the palm down.",
-      "Don't push through wrist pain — stop if it hurts.",
+      "Don't push through wrist pain — a little is fine, back off if it is sharp, climbing, or still there tomorrow.",
     ],
     mistakes: [
       {
@@ -390,7 +395,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     donts: [
       "Don't force the wrist back — this isn't a wrist stretch.",
       "Don't rotate the palm down.",
-      "Don't push through wrist pain — stop if it hurts.",
+      "Don't push through wrist pain — a little is fine, back off if it is sharp, climbing, or still there tomorrow.",
       "Don't stay locked out if the wrist complains — bend the elbow slightly.",
     ],
     mistakes: [
@@ -1431,7 +1436,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     mistakes: [
       {
         mistake: 'Bending the wrist or loading the palm',
-        fix: 'Keep the wrist straight and neutral throughout; the arm just hangs, no palm weight-bearing. Stop on any wrist signal.',
+        fix: 'Keep the wrist straight and neutral throughout; the arm just hangs, no palm weight-bearing. Back off if it is sharp, climbing, or still there tomorrow.',
       },
       {
         mistake: 'Yanking with the arm instead of leading with the elbow and blade',

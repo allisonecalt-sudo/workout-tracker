@@ -145,7 +145,7 @@ test('Done marks the step done and goes to the next undone one', async ({ page }
   const rows = await readMovableRows(page);
   await page.locator(`[data-jump-key="${rows[3]!.key}"]`).click(); // jump to row 3
 
-  await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+  await page.locator('#next, #ww-skip').first().click();
   // Nothing between row 3 and row 4 was skipped, so this is the plain next
   // step in list order.
   await expect(page.locator('.exercise-name')).toHaveText(rows[4]!.name);
@@ -166,7 +166,7 @@ test('jumping back to a skipped step, completing it, and the count reading "reac
 
   // Skip ahead to row 3, mark it done, land on row 4 — leaves rows 0-2 open.
   await page.locator(`[data-jump-key="${rows[3]!.key}"]`).click();
-  await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+  await page.locator('#next, #ww-skip').first().click();
 
   // Jump BACK to the very first, still-open row.
   await page.locator('#step-list-open').click();
@@ -174,7 +174,7 @@ test('jumping back to a skipped step, completing it, and the count reading "reac
   await expect(page.locator('.exercise-name')).toHaveText(rows[0]!.name);
 
   // Complete it.
-  await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+  await page.locator('#next, #ww-skip').first().click();
   await expect(page.locator('.exercise-name')).toHaveText(rows[1]!.name);
 
   await page.locator('#step-list-open').click();
@@ -195,7 +195,7 @@ test('the resume snapshot survives a reload', async ({ page, context }) => {
   await page.locator('#step-list-open').click();
   const rows = await readMovableRows(page);
   await page.locator(`[data-jump-key="${rows[3]!.key}"]`).click();
-  await page.locator('button:has-text("Done ·"), #ww-skip').first().click(); // marks row 3 done
+  await page.locator('#next, #ww-skip').first().click(); // marks row 3 done
 
   // A fresh page in the same context, the way tests/app.spec.ts's resume test
   // does it — `page.reload()` would re-fire this file's beforeEach init
@@ -219,14 +219,15 @@ test('skipped-count shows on the log and saves to the row', async ({ page }) => 
   // Complete exactly two of the movable steps (rows 0 and 3), then jump
   // straight to the cool-down and finish — everything else stays skipped.
   await page.locator(`[data-jump-key="${rows[0]!.key}"]`).click();
-  await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+  await page.locator('#next, #ww-skip').first().click();
   await page.locator('#step-list-open').click();
   await page.locator(`[data-jump-key="${rows[3]!.key}"]`).click();
-  await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+  await page.locator('#next, #ww-skip').first().click();
   await page.locator('#step-list-open').click();
   await page.locator('[data-jump-key="cooldown:1:0"]').click();
   await expect(page.locator('.stretch-list')).toBeVisible();
-  await page.locator('button:has-text("Done ·")').click(); // Done · Finish
+  // v60 (Sep 28 2026) F2: "Done · Finish" -> "Done stretching ✓".
+  await page.locator('#next').click();
 
   const expectedSkipped = rows.length - 2;
   await expect(page.locator('.postlog-skipped')).toHaveText(
@@ -266,7 +267,7 @@ test('finishing the last of 2 skipped moves goes straight to cool-down, not back
       await page.locator('#start-round-2').click();
       continue;
     }
-    const btn = page.locator('button:has-text("Done ·"), #ww-skip').first();
+    const btn = page.locator('#next, #ww-skip').first();
     if (await btn.isVisible()) {
       await btn.click();
       continue;
@@ -318,7 +319,7 @@ test('round 2 + upper back done first: finishing round 1 skips the floor and ret
     ) {
       break; // auto-wrapped back to the still-open warm-up row 0 — round 2 + upper back are done
     }
-    await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+    await page.locator('#next, #ww-skip').first().click();
   }
   expect(sawRoundBreak).toBe(false);
   await expect(page.locator('.exercise-name')).toHaveText(rows[0]!.name);
@@ -345,14 +346,14 @@ test('round 2 + upper back done first: finishing round 1 skips the floor and ret
     ) {
       break; // landed back on the skipped move — round 1's last move handed off correctly
     }
-    await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+    await page.locator('#next, #ww-skip').first().click();
   }
   expect(sawRoundBreak).toBe(false);
   await expect(page.locator('.exercise-name')).toHaveText(rows[0]!.name);
 
   // Finish the last open move — everything's done now, so Done should go
   // straight to cool-down, not back through anything already finished.
-  await page.locator('button:has-text("Done ·"), #ww-skip').first().click();
+  await page.locator('#next, #ww-skip').first().click();
   await expect(page.locator('.stretch-list')).toBeVisible();
 });
 
@@ -365,7 +366,7 @@ test('the round-1 floor still shows even with an earlier step skipped', async ({
 
   for (let i = 0; i < 40; i++) {
     if (await page.locator('#start-round-2').isVisible()) break;
-    const btn = page.locator('button:has-text("Done ·"), #ww-skip');
+    const btn = page.locator('#next, #ww-skip');
     if (await btn.isVisible()) {
       await btn.first().click();
     }

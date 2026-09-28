@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 // open it first.
 // v48 · P3 (Sep 24 2026): the cardio CHOICE step has no Done · Next — its way
 // on is the quiet "Skip cardio today" (#ww-skip). One tap forward on any step.
-const NEXT = 'button:has-text("Done ·"), #ww-skip';
+const NEXT = '#next, #ww-skip';
 
 // WK2 (Sep 27 2026): the completion-based week model's real launch instant —
 // week.ts's own COMPLETION_WEEKS_FROM.at, duplicated here (not imported —
@@ -126,7 +126,7 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
     if (isPostLog) break;
     // Matches both the stepped "Done · Next" and the cool-down list's
     // single "Done · Finish" button.
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -183,7 +183,7 @@ test('cool-down renders as a single stretch list with no per-stretch video', asy
       reachedStretch = true;
       break;
     }
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -206,7 +206,8 @@ test('cool-down renders as a single stretch list with no per-stretch video', asy
   expect(await page.locator('.stretch-row').count()).toBeGreaterThan(1);
   await expect(page.locator('.exercise-visual')).toHaveCount(0);
   // The single finish button ends the session straight to post-log.
-  await page.locator('button:has-text("Done · Finish")').click();
+  // v60 (Sep 28 2026) F2: "Done · Finish" -> "Done stretching ✓".
+  await page.locator('button:has-text("Done stretching")').click();
   await expect(page.locator('text=Quick log')).toBeVisible();
 });
 
@@ -423,7 +424,7 @@ async function walkToPostLog(page: import('@playwright/test').Page): Promise<voi
       .isVisible()
       .catch(() => false);
     if (isPostLog) return;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else return;
   }
@@ -1168,7 +1169,7 @@ test('R2 W3: workout B carries the yellow band on the clamshells, reps back to 1
           .catch(() => '')) ?? '';
       break;
     }
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -1195,7 +1196,7 @@ test('R2 W3: the clamshell step carries a tying explanation AND its own video, o
         .textContent({ timeout: 1000 })
         .catch(() => '')) ?? '';
     if (name.includes('Side-lying clamshells')) break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -1258,7 +1259,7 @@ test('R2 W3: the tying setup does NOT leak onto Week 2, whose clamshell is bodyw
       await expect(page.locator('.tips-section')).toHaveCount(0);
       return;
     }
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -1271,7 +1272,7 @@ test('R2 W3: workout C carries no setup block anywhere', async ({ page }) => {
   await page.locator('button:has-text("Start")').click();
   for (let i = 0; i < 40; i++) {
     await expect(page.locator('.setup-block')).toHaveCount(0);
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -1608,7 +1609,7 @@ test('R2 W4: the wall sit step itself reads 45 sec (the earned nudge from 40)', 
     if (/hip hinge/i.test(name)) {
       await expect(page.locator('.exercise-reps')).toContainText('holding 1–2 kg (your pick)');
     }
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -1813,7 +1814,7 @@ test('R2 W3 (v41): the plank in B is the SAME prescription as the one in A', asy
             .catch(() => '')) ?? '';
         return `${reps.trim()} :: ${notes.trim()}`;
       }
-      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+      const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
       if (await nextBtn.isVisible()) await nextBtn.click();
       else {
         const skipRest = page.locator('#skip-rest');
@@ -1867,7 +1868,7 @@ test('setup blocks (v40): every phase that renders an Exercise also renders its 
         .catch(() => false)
     )
       break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else {
       const skipRest = page.locator('#skip-rest');
@@ -2101,7 +2102,7 @@ test('Done safety net: a session that comes out longer than 3h logs no duration,
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = reopened.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = reopened.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
     } else {
@@ -3347,7 +3348,7 @@ test('R2 W2: workout A carries the full dead bug, bird dog legs-only, the tilted
       seen[name] = `${reps} :: ${notes}`;
     }
     if (seen['Forearm plank']) break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -3556,7 +3557,7 @@ test('cardio either/or: finishing after the apartment option saves the lane + it
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -4296,7 +4297,7 @@ test('post-log: the free-text note saves verbatim on a session with no cardio la
       .isVisible()
       .catch(() => false);
     if (isPostLog) break;
-    const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+    const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
     if (await nextBtn.isVisible()) await nextBtn.click();
     else break;
   }
@@ -4577,7 +4578,7 @@ test.describe('v48 P1 data', () => {
         .isVisible()
         .catch(() => false);
       if (isPostLog) break;
-      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+      const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
       if (await nextBtn.isVisible()) await nextBtn.click();
       else break;
     }
@@ -4964,7 +4965,7 @@ test.describe('v48 P1 data', () => {
         expect(name).not.toContain('Bodyweight');
         return;
       }
-      await page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip').click();
+      await page.locator('#next, #start-round-2, #ww-skip').click();
     }
     throw new Error('never reached the hip hinge');
   });
@@ -4994,7 +4995,7 @@ test.describe('v48 P1 data', () => {
         expect(reps).toContain('1–2 kg (your pick)');
         return;
       }
-      await page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip').click();
+      await page.locator('#next, #start-round-2, #ww-skip').click();
     }
     throw new Error('never reached the hip hinge');
   });
@@ -5707,7 +5708,7 @@ test.describe('v48 P2 shell', () => {
     await page.locator('button:has-text("Start")').click();
     for (let i = 0; i < 60; i++) {
       if (await page.locator('text=Quick log').isVisible()) break;
-      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+      const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
       if (await nextBtn.isVisible()) await nextBtn.click();
       else break;
     }
@@ -5869,7 +5870,7 @@ test.describe('v48 P3 cardio', () => {
 
   // v51 (Sep 25 2026): ID-based, not text-based — Done · Next on the elliptical
   // step now opens the ride-numbers screen (id="next", text "Save · Next")
-  // before it advances; a text match on "Done ·" would stall there for good.
+  // before it advances; a text match on "Done" would stall there for good.
   const tapForward = async (page: Page): Promise<boolean> => {
     const next = page.locator('#next, #start-round-2, #ww-skip');
     if (await next.isVisible()) {
@@ -9171,43 +9172,20 @@ test.describe('v48 P7 cool-down', () => {
     expect(list).not.toContain('45 sec');
     expect(list).not.toContain('No timer');
     await expect(page.locator('.stretch-reps').first()).toHaveText('~45 s each side');
-    await expect(page.locator('.stretch-progress')).toHaveText('~13 min · 0 of 11');
+    // v60 (Sep 28 2026) F2: no tick count any more — just the time estimate.
+    await expect(page.locator('.stretch-progress')).toHaveText('~13 min');
   });
 
-  test('(c) a tick updates the live line and survives an app close mid-cool-down', async ({
+  // v60 (Sep 28 2026) — F2: her words (Sep 25 14:54) "when I do the
+  // stretches I just say I'm done. I don't mark them in the app and do it
+  // on my own." Replaces the old per-row tick test: no [data-stretch-tick]
+  // exists any more, and the list is read-only.
+  test('(c) no per-stretch tick: the rows are read-only, no [data-stretch-tick] anywhere', async ({
     page,
-    context,
   }) => {
     await toCooldown(page);
-    const check = (p: Page) => p.locator('[data-stretch-tick="Wrist extension"]');
-    await expect(check(page)).toHaveAttribute('aria-pressed', 'false');
-    await check(page).click();
-    await expect(page.locator('.stretch-progress')).toHaveText('~13 min · 1 of 11');
-    await expect(check(page)).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.stretch-row').first()).toHaveClass(/stretch-row-done/);
-    // The check fills in ink-2 (v49 · look: --accent-progress is ink, not
-    // green), never the sage of the one action.
-    const fill = await check(page).evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(fill).toBe('rgb(184, 181, 171)');
-    // Tap again = untick; then tick it back for the close.
-    await check(page).click();
-    await expect(page.locator('.stretch-progress')).toHaveText('~13 min · 0 of 11');
-    await check(page).click();
-    await expect(page.locator('.stretch-progress')).toHaveText('~13 min · 1 of 11');
-    const snap = await page.evaluate(() => localStorage.getItem('workout-tracker:active-session'));
-    expect(snap).not.toBeNull();
-    // A fresh page in the same context (`page` re-seeds on every load).
-    const reopened = await context.newPage();
-    await mockDate(reopened, TUE_WEEK4);
-    await reopened.addInitScript(([key, s]) => window.localStorage.setItem(key, s), [
-      'workout-tracker:active-session',
-      snap ?? '',
-    ] as const);
-    await reopened.goto('/');
-    await expect(reopened.locator('.stretch-list')).toBeVisible();
-    await expect(reopened.locator('.stretch-progress')).toHaveText('~13 min · 1 of 11');
-    await expect(check(reopened)).toHaveAttribute('aria-pressed', 'true');
-    await reopened.close();
+    await expect(page.locator('[data-stretch-tick]')).toHaveCount(0);
+    await expect(page.locator('.stretch-check')).toHaveCount(0);
   });
 
   test('(d) a placeholder cue has no ▸; a real cue opens behind ▸, closed by default', async ({
@@ -9228,38 +9206,40 @@ test.describe('v48 P7 cool-down', () => {
   test.describe('at phone size', () => {
     test.use({ viewport: { width: 412, height: 915 } });
 
-    test('(e) the whole list fits: Done · Finish pinned in view, page ≤ 1400 px, one sage', async ({
+    test('(e) the whole list fits: Done stretching ✓ pinned in view, page ≤ 1400 px, one sage, a quiet Skip', async ({
       page,
     }) => {
       await toCooldown(page);
       const done = page.locator('.action-bar #next');
-      await expect(done).toHaveText('Done · Finish');
+      await expect(done).toHaveText('Done stretching ✓');
       await expect(done).toBeInViewport();
       const box = (await done.boundingBox())!;
       expect(box.y + box.height).toBeLessThanOrEqual(915);
       const h = await page.evaluate(() => document.documentElement.scrollHeight);
       expect(h).toBeLessThanOrEqual(1400);
       await expect(page.locator('.btn-primary:visible')).toHaveCount(1);
-      // Every check is a real 44×44 target.
-      for (const c of await page.locator('.stretch-check').all()) {
-        const b = (await c.boundingBox())!;
-        expect(b.width).toBeGreaterThanOrEqual(44);
-        expect(b.height).toBeGreaterThanOrEqual(44);
-      }
+      // v60 F2: no per-stretch ticks any more — the quiet Skip is the only
+      // other control, a real 44×44 target.
+      const skip = page.locator('#cooldown-skip');
+      await expect(skip).toHaveText('Skip');
+      const b = (await skip.boundingBox())!;
+      expect(b.width).toBeGreaterThanOrEqual(44);
+      expect(b.height).toBeGreaterThanOrEqual(44);
     });
   });
 
   test('(f) a lite day keeps its own subtitle', async ({ page }) => {
     await toCooldown(page, true);
     await expect(page.locator('.subtitle')).toHaveText(
-      'Lite day — do the stretches you need, skip the rest. Done · Finish whenever.'
+      'Lite day — do the stretches you need, skip the rest. Done stretching whenever.'
     );
     await expect(page.locator('.round-indicator')).toHaveText('Stretch · 11 · lite');
   });
 
-  test('(g) Done · Finish lands on the post-log; the ticks go nowhere', async ({ page }) => {
+  test('(g) Done stretching ✓ lands on the post-log; nothing about the stretches is saved', async ({
+    page,
+  }) => {
     await toCooldown(page);
-    await page.locator('[data-stretch-tick="Neck stretch"]').click();
     await page.locator('#next').click();
     await expect(page.locator('text=Quick log')).toBeVisible();
     await page.locator('#save-log').click();
@@ -9267,6 +9247,14 @@ test.describe('v48 P7 cool-down', () => {
     const raw = (await page.evaluate(() => localStorage.getItem('workout-tracker:logs'))) ?? '';
     expect(raw).toContain('"workout":"A"');
     expect(raw).not.toMatch(/stretch/i);
+  });
+
+  test('(h) Skip lands on the post-log too — same handler as Done stretching ✓', async ({
+    page,
+  }) => {
+    await toCooldown(page);
+    await page.locator('#cooldown-skip').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
   });
 });
 
@@ -9522,7 +9510,7 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v59 · <date, no year>", Settings "Build v59 · <full date>"', async ({
+  test('(d) the version: home "v60 · <date, no year>", Settings "Build v60 · <full date>"', async ({
     page,
   }) => {
     // code-shape R1b (Sep 27 2026): APP_VERSION/BUILD_DATE are no longer
@@ -9543,12 +9531,11 @@ test.describe('v48 P8 sweep', () => {
       'utf8'
     );
     const built = /"buildDate":"([^"]+)"/.exec(buildInfoSrc)?.[1] ?? '';
-    // v59 (Sep 28 2026): pre-log zero-scroll floor restored (short numeric
-    // move-feel summaries + a one-line truncated "Stepped this week" text),
-    // positive stepped-moves tests, the hip-hinge segment fix, walk-chip
-    // timing — a whole-number bump (v51/v52/v53's own shape: sub-versions
-    // are same-day fixes, a new number is a new build).
-    expect(version).toBe('v59');
+    // v60 (Sep 28 2026): wall-lean set counter + real Redo, stretches one
+    // tap, the pain rule on every card, curl voice line — a whole-number
+    // bump (v51/v52/v53's own shape: sub-versions are same-day fixes, a new
+    // number is a new build).
+    expect(version).toBe('v60');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
       `${version} · ${built.replace(/,\s*\d{4}/, '')}`
@@ -10649,7 +10636,7 @@ test.describe('T1 · Timing: her start/finish "Right?" + breaks', () => {
         .isVisible()
         .catch(() => false);
       if (isPostLog) break;
-      const nextBtn = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+      const nextBtn = page.locator('#next, #start-round-2, #ww-skip');
       if (await nextBtn.isVisible()) await nextBtn.click();
       else break;
     }

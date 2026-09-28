@@ -8,6 +8,7 @@ import { EXERCISE_VISUALS } from './exercise-visuals.js';
 import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
 import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
 import { painFromFeel, feelFromPain } from './pain-feel.js';
+import { setsPrescribed, holdSetsFace, formatHeldSeconds } from './hold-sets.js';
 import { trainingMinutes, formatWorkoutTime, formatWorkoutMinutesTotal } from './timing.js';
 import {
   hasRideNumbers,
@@ -456,6 +457,14 @@ type AppState = {
   // "phase|round|index" — for the "✓ held 45 s" done-face only (the saved wall
   // sit number stays wallSitSec). Transient; not in the resume snapshot.
   heldSecFor: Record<string, number>;
+  // v60 (Sep 28 2026) — the SAME keying, for a hold prescribed "N ×" (today:
+  // Wall lean, "2 × 15-20 sec"; hold-sets.ts's setsPrescribed generalizes to
+  // any future one). One array entry per completed SET, in order; a redo
+  // replaces the LAST entry (max, never erase a real one — recordHeldSet's own
+  // rule, same as recordHeld's). Untouched by a single-set hold (heldSecFor
+  // above keeps owning those, unchanged). Transient; not in the resume
+  // snapshot, same as heldSecFor.
+  heldSetsFor: Record<string, number[]>;
   // v48 · P5 (Sep 24 2026): the one-tap Easy / Right / Hard on the 1 kg curl
   // and the prone row — saved as arm_feel "curl=easy;row=right". The 2 kg
   // trigger is her Jul 3 ask, and until now it depended on her "telling
@@ -905,7 +914,7 @@ const STRETCH_COOLDOWN: Exercise[] = [
     name: 'Biceps stretch — right',
     reps: '45 sec',
     notes:
-      'Stand sideways to a wall, RIGHT arm nearest. Raise arm to shoulder height, rotate palm up, place it flat on the wall (fingers spread). Slowly turn your body AWAY from the wall — feel it in the biceps + front of the shoulder. This is NOT a wrist stretch: keep the wrist comfortable; if it complains, bend the elbow slightly. Stop on any wrist pain.',
+      'Stand sideways to a wall, RIGHT arm nearest. Raise arm to shoulder height, rotate palm up, place it flat on the wall (fingers spread). Slowly turn your body AWAY from the wall — feel it in the biceps + front of the shoulder. This is NOT a wrist stretch: keep the wrist comfortable; if it complains, bend the elbow slightly. Back off if it is sharp, climbing, or still there tomorrow.',
     durationSec: 45,
     isTimed: true,
   },
@@ -913,7 +922,7 @@ const STRETCH_COOLDOWN: Exercise[] = [
     name: 'Biceps stretch — left',
     reps: '45 sec',
     notes:
-      'Stand sideways to a wall, LEFT arm nearest. Raise arm to shoulder height, rotate palm up, place it flat on the wall (fingers spread). Slowly turn your body AWAY from the wall — feel it in the biceps + front of the shoulder. NOT a wrist stretch: keep the wrist comfortable; bend the elbow slightly if needed. Stop on any wrist pain.',
+      'Stand sideways to a wall, LEFT arm nearest. Raise arm to shoulder height, rotate palm up, place it flat on the wall (fingers spread). Slowly turn your body AWAY from the wall — feel it in the biceps + front of the shoulder. NOT a wrist stretch: keep the wrist comfortable; bend the elbow slightly if needed. Back off if it is sharp, climbing, or still there tomorrow.',
     durationSec: 45,
     isTimed: true,
   },
@@ -991,7 +1000,7 @@ const UPPER_BACK_W7: Exercise[] = [
     // v55: "NO weight yet" / "add the 1 kg only when you say you are ready"
     // retired — the LOAD CHIP is that same "when you say" call, made live.
     notes:
-      'Arm hanging, wrist NEUTRAL/straight. Keep your HEAD DOWN — do NOT lift it. Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; stop on any wrist signal.',
+      'Arm hanging, wrist NEUTRAL/straight. Keep your HEAD DOWN — do NOT lift it. Drive the elbow UP, squeeze the shoulder blade toward your spine. Lower slow. Keep the wrist straight throughout; back off if it is sharp, climbing, or still there tomorrow.',
   },
   {
     name: '1 kg biceps curl',
@@ -1006,7 +1015,7 @@ const UPPER_BACK_W7: Exercise[] = [
     // PROGRAM: the "(Lisa, Jun 18: ... caused that)" attribution dropped —
     // the instruction ("hold lightly") stays.
     notes:
-      'Hold the weight LIGHTLY — keep wrist AND fingers neutral, never bending back / hyperextending. Elbow tucked at your side, forearm hanging. Curl the forearm up — only the forearm moves, elbow stays pinned. Lower slow. Stop on any wrist signal.',
+      'Hold the weight LIGHTLY — keep wrist AND fingers neutral, never bending back / hyperextending. Elbow tucked at your side, forearm hanging. Curl the forearm up — only the forearm moves, elbow stays pinned. Lower slow. Back off if it is sharp, climbing, or still there tomorrow.',
   },
 ];
 
@@ -1050,7 +1059,7 @@ const WRIST_ONRAMP: Exercise[] = [
     // banner and this all say "pressure fine, pain = stop" (her Sep 14: "it
     // shouldn't hurt"). The Jul-3 provenance lives in the comment above.
     notes:
-      'Stand a small step from a wall, palms flat on it at shoulder height, fingers up, elbows soft. Lean in gently so the palms take light weight — breathe. 15-20 sec, shake the hands out, once more. Pressure is fine; pain = stop. When this feels like nothing, say so and the next rung (counter-height lean) unlocks.',
+      'Stand a small step from a wall, palms flat on it at shoulder height, fingers up, elbows soft. Lean in gently so the palms take light weight — breathe. 15-20 sec, shake the hands out, once more. A little pain is fine — back off if it is sharp, climbing, or still there tomorrow. When this feels like nothing, say so and the next rung (counter-height lean) unlocks.',
     // Timed hold → gets a timer (TIMER RULE, 2026-07-08). 20 sec = top of the
     // 15-20 range; do 2 rounds (restart the timer for round 2, shake out between).
     durationSec: 20,
@@ -1424,7 +1433,8 @@ const PROGRAM: WeekPlan[] = [
             // PROGRAM: held (not doubled) for Week 4 to consolidate the new
             // movement; the climb-then-add-a-set rule needs no extra Lisa
             // sign-off — none of that is hers to read, just form + safety.
-            notes: 'On forearms only (NOT hands — wrists still off). Stop if any wrist sensation.',
+            notes:
+              'On forearms only (NOT hands — wrists still off). A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
             durationSec: 15,
             isTimed: true,
           },
@@ -1526,7 +1536,8 @@ const PROGRAM: WeekPlan[] = [
             reps: '1 set · 15 sec hold',
             // PROGRAM: held again for Week 5 to stay on the slow cadence;
             // climb-then-add-a-set needs no extra Lisa sign-off — bookkeeping.
-            notes: 'On forearms only (NOT hands — wrists still off). Stop if any wrist sensation.',
+            notes:
+              'On forearms only (NOT hands — wrists still off). A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
             durationSec: 15,
             isTimed: true,
           },
@@ -1636,7 +1647,7 @@ const PROGRAM: WeekPlan[] = [
             notes:
               // PROGRAM: "HELD at 1×15s" just restates the unchanged reps
               // field — dropped as noise, not a movement instruction.
-              'On forearms only (NOT hands — wrists still off). Stop if any wrist sensation.',
+              'On forearms only (NOT hands — wrists still off). A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
             durationSec: 15,
             isTimed: true,
           },
@@ -1744,7 +1755,7 @@ const PROGRAM: WeekPlan[] = [
             notes:
               // PROGRAM: "HELD at 1×15s" just restates the unchanged reps
               // field — dropped as noise, not a movement instruction.
-              'On forearms only (NOT hands — wrists still off). Stop if any wrist sensation.',
+              'On forearms only (NOT hands — wrists still off). A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
             durationSec: 15,
             isTimed: true,
           },
@@ -1851,7 +1862,7 @@ const PROGRAM: WeekPlan[] = [
             notes:
               // PROGRAM: climbing 15 -> 20s (Jun 18, progression-rules said
               // to climb it, back 0/10) — the history behind the target.
-              'On forearms only (NOT hands — wrists still off). Building toward 30s, then a 2nd set. Stop if any wrist sensation.',
+              'On forearms only (NOT hands — wrists still off). Building toward 30s, then a 2nd set. A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
             durationSec: 20,
             isTimed: true,
           },
@@ -1959,7 +1970,7 @@ const PROGRAM: WeekPlan[] = [
             reps: '1 set · 30 sec hold',
             notes:
               // PROGRAM: climbing 25 -> 30s.
-              'On forearms only (NOT hands — wrists still off). At a clean 30s → add a 2nd set. Stop if any wrist sensation.',
+              'On forearms only (NOT hands — wrists still off). At a clean 30s → add a 2nd set. A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
             durationSec: 30,
             isTimed: true,
           },
@@ -2103,7 +2114,7 @@ const PROGRAM: WeekPlan[] = [
             reps: '1 set · 30 sec hold',
             // PROGRAM: carried 30s from Week 9.
             notes:
-              'On forearms only (NOT hands — wrists still off). At a clean 30s add a 2nd set. Stop if any wrist sensation.',
+              'On forearms only (NOT hands — wrists still off). At a clean 30s add a 2nd set. A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
             durationSec: 30,
             isTimed: true,
           },
@@ -2250,7 +2261,8 @@ PROGRAM.push({
           name: 'Forearm plank',
           reps: '1 set · 20 sec hold',
           // PROGRAM: round-2 restart at 20s (was 30).
-          notes: 'On forearms only (NOT hands — wrists still off). Stop if any wrist sensation.',
+          notes:
+            'On forearms only (NOT hands — wrists still off). A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
           durationSec: 20,
           isTimed: true,
         },
@@ -2396,7 +2408,7 @@ PROGRAM.push({
           name: 'Forearm plank',
           reps: '1 set · 20 sec hold',
           notes:
-            'SAME 20 sec, roughly DOUBLE the work: hold it WITH a posterior pelvic tilt — tuck the tailbone under, squeeze the glutes, ribs down. Forearms only, NOT hands. Stop if any wrist sensation.',
+            'SAME 20 sec, roughly DOUBLE the work: hold it WITH a posterior pelvic tilt — tuck the tailbone under, squeeze the glutes, ribs down. Forearms only, NOT hands. A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
           durationSec: 20,
           isTimed: true,
         },
@@ -2717,7 +2729,7 @@ const R2W4_LOADED_ARMS: Exercise[] = (() => {
       // predates the LOAD CHIP and the 2 kg — dropped in favor of `row`'s own
       // reps/notes (already "1–2 kg (your pick)"), one wording, not two.
       notes:
-        'Arm hanging, wrist neutral, light grip. Head down — do not lift it. Drive the elbow up, squeeze the shoulder blade toward your spine, lower slow. Pain tells — stop on any wrist signal.',
+        'Arm hanging, wrist neutral, light grip. Head down — do not lift it. Drive the elbow up, squeeze the shoulder blade toward your spine, lower slow. Pain tells — back off if it is sharp, climbing, or still there tomorrow.',
     },
     {
       ...curl,
@@ -2727,7 +2739,7 @@ const R2W4_LOADED_ARMS: Exercise[] = (() => {
       // stale next to the LOAD CHIP, same class of bug as the row override
       // above already fixed. Weight-neutral now; the chip is where she picks.
       notes:
-        'Hold the weight lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging; only the forearm moves. Lower slow. Pain tells — stop on any wrist signal.',
+        'Hold the weight lightly — wrist and fingers neutral, never bending back. Elbow tucked, forearm hanging; only the forearm moves. Lower slow. Pain tells — back off if it is sharp, climbing, or still there tomorrow.',
     },
   ];
 })();
@@ -3195,13 +3207,16 @@ const SAFETY_LINE: Record<string, string> = {
   'Bodyweight hip hinge': 'Do NOT round the low back.',
   'Wall sit': 'Knees toward 90°. Hands on thighs or hanging — no pushing on the wall.',
   'Full dead bug': 'Low back pressed to the mat the whole time.',
-  'Forearm plank': 'Forearms only, not hands. Stop if any wrist sensation.',
+  'Forearm plank':
+    'Forearms only, not hands. A little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
   'Wall angels': 'If the wrists lift off, stop there — no forcing.',
   'IWYT raises': 'Thumbs up, wrist neutral. Stop if the neck complains.',
-  'Prone row (bodyweight)': 'Head down. Pain tells — stop on any wrist signal.',
+  'Prone row (bodyweight)':
+    'Head down. Pain tells — back off if it is sharp, climbing, or still there tomorrow.',
   '1 kg biceps curl': 'Wrist neutral, never bending back. Pain tells.',
   'Bird dog (legs only)': 'Pressure is fine; pain = done for today.',
-  'Wall lean (wrist on-ramp)': 'Pressure is fine; pain = stop.',
+  'Wall lean (wrist on-ramp)':
+    'A little pain is fine — back off if it is sharp, climbing, or still there tomorrow.',
   'Side-lying clamshells': 'Hips rolling back? Band lower, or off.',
   'Standing calf raises': 'Fingertips on the wall for balance only.',
   'Bodyweight squats': 'Wall behind the shoulders if wobbly.',
@@ -3267,6 +3282,7 @@ const state: AppState = {
   stoppedEarlyAt: null,
   stoppedEarlyLitePrev: null,
   heldSecFor: {},
+  heldSetsFor: {},
   armFeel: {},
   moveFeel: {},
   armLoad: {},
@@ -3292,6 +3308,14 @@ let stepListOpen = false;
 // path that ends a running timer — Stop, Back, advancing, quitting) resets it,
 // so it can never outlive the timer it belongs to.
 let timerPipOpen = false;
+
+// v60 (Sep 28 2026): whether the timed hold about to run/running is a REDO of
+// the last completed SET, not a fresh next one — same transient-UI reasoning
+// as stepListOpen/timerPipOpen above (not session progress, not persisted).
+// Only read by recordHeldSet, and only matters for a multi-set hold
+// (hold-sets.ts setsPrescribed > 1); a single-set hold's Redo still goes
+// through the untouched recordHeld/heldSecFor path.
+let holdRedoInProgress = false;
 
 // ---------- audio ----------
 
@@ -5073,6 +5097,7 @@ function beginExercises(): void {
   state.stoppedEarlyAt = null;
   state.stoppedEarlyLitePrev = null;
   state.heldSecFor = {};
+  state.heldSetsFor = {}; // v60: same as heldSecFor — a hold's sets belong to one session
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
   state.moveFeel = {}; // v58: same — a feel belongs to one session
   state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
@@ -5665,6 +5690,19 @@ function recordHeld(key: string, sec: number): void {
   if (sec > 0) state.heldSecFor[key] = Math.max(state.heldSecFor[key] ?? 0, sec);
 }
 
+// v60 (Sep 28 2026) — the multi-set hold's own recordHeld: appends a fresh
+// set, or (holdRedoInProgress) replaces the LAST one, both via the same
+// "never erase a real one" max rule recordHeld above already uses. Untouched
+// by any single-set hold — those keep calling recordHeld/heldSecFor.
+function recordHeldSet(key: string, sec: number): void {
+  if (sec <= 0) return;
+  const next = [...(state.heldSetsFor[key] ?? [])];
+  const idx = holdRedoInProgress ? next.length - 1 : next.length;
+  if (idx < 0) return; // a redo with no prior set — shouldn't happen; fail quiet
+  next[idx] = Math.max(next[idx] ?? 0, sec);
+  state.heldSetsFor[key] = next;
+}
+
 // v48 (Sep 24 2026): the quiet Stop on a running hold. Saves the REAL seconds
 // — walk §4: "No way to say I held less". There used to be only a disabled
 // "Running…" slab. Stopped during the 3-2-1 = nothing held, back to Ready.
@@ -5674,11 +5712,33 @@ function stopTimedHold(): void {
   const t = activeTimer;
   if (t && t.kind === 'timed-exercise' && ex.durationSec) {
     const remainSec = Math.max(0, (t.endsAt - Date.now()) / 1000);
-    recordHeld(holdStepKey(), Math.max(0, Math.round(ex.durationSec - remainSec)));
+    const heldSec = Math.max(0, Math.round(ex.durationSec - remainSec));
+    if (setsPrescribed(ex.reps) > 1) recordHeldSet(holdStepKey(), heldSec);
+    else recordHeld(holdStepKey(), heldSec);
   }
   if (ex.name === 'Wall sit') captureWallSitIfPending(); // the saved number
+  holdRedoInProgress = false;
   stopTimer();
   render();
+}
+
+// v60 (Sep 28 2026): "Start set N" (#hold-set-next) — a fresh next set, same
+// countdown+timer machinery as the very first "Start timer" tap. Kept as its
+// own function (rather than reusing #start-timed's id) so a multi-set hold's
+// "Set N of M" ready face never collides with the untouched single-set Ready
+// face above it in renderHoldTimerCard.
+function startNextHoldSet(): void {
+  holdRedoInProgress = false;
+  startTimedExercise();
+}
+
+// v60 (Sep 28 2026): "Redo set N" (#hold-redo) on a multi-set hold — redoes
+// the LAST completed set (recordHeldSet replaces it via max, never erases a
+// real hold). #redo-timed (single-set) stays exactly as it was, calling
+// startTimedExercise() straight — unaffected by this flag.
+function redoLastHoldSet(): void {
+  holdRedoInProgress = true;
+  startTimedExercise();
 }
 
 // "Start round 2" on the round-break screen (v48). Rest (if she set one) runs
@@ -5764,7 +5824,14 @@ function startTimedExercise(): void {
     }
     const stepKey = holdStepKey(); // v48: the done-face belongs to this step
     startTimerCore('timed-exercise', duration, () => {
-      if (!isIndoorLane(exerciseName)) recordHeld(stepKey, duration); // v48 "✓ held 45 s"
+      if (!isIndoorLane(exerciseName)) {
+        // v60: a hold prescribed "N ×" (setsPrescribed > 1) records into
+        // heldSetsFor instead — one array entry per set, a redo replacing the
+        // last one. Every other hold (setsPrescribed <= 1) is untouched.
+        if (setsPrescribed(ex.reps) > 1) recordHeldSet(stepKey, duration);
+        else recordHeld(stepKey, duration); // v48 "✓ held 45 s"
+      }
+      holdRedoInProgress = false;
       if (exerciseName === 'Wall sit') {
         // v48 (Sep 24 2026): a hold that ran to the end held exactly its
         // duration. Measuring the wall clock here logged 46+ when the frame
@@ -6551,6 +6618,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.stoppedEarlyAt = snap.stoppedEarlyAt;
   state.stoppedEarlyLitePrev = snap.stoppedEarlyLitePrev;
   state.heldSecFor = {}; // v48: display-only, not carried across a close
+  state.heldSetsFor = {}; // v60: same, not carried across a close
   state.armFeel = snap.armFeel;
   state.moveFeel = snap.moveFeel;
   state.armLoad = snap.armLoad;
@@ -6742,6 +6810,7 @@ function resetState(): void {
   state.stoppedEarlyAt = null;
   state.stoppedEarlyLitePrev = null;
   state.heldSecFor = {};
+  state.heldSetsFor = {}; // v60
   state.armFeel = {}; // v48 · P5
   state.moveFeel = {}; // v58
   state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
@@ -10607,8 +10676,14 @@ function stretchListMinutes(groups: StretchGroup[]): number {
   return Math.max(1, Math.floor(sec / 60));
 }
 
+// v60 (Sep 28 2026) — F2: no per-stretch tick. Her words (Sep 25 14:54):
+// "when I do the stretches I just say I'm done. I don't mark them in the
+// app and do it on my own." The row is read-only now (name + time + the
+// ▸ how-to toggle) — state.stretchTicks stays in AppState/the resume
+// snapshot untouched (nothing writes it any more; harmless dead state,
+// simpler than threading its removal through sync/resume too) but nothing
+// here reads or renders it either.
 function renderStretchRow(g: StretchGroup): string {
-  const ticked = state.stretchTicks[g.key] === true;
   const cueKey = `stretch::${g.key}`;
   const cueOpen = g.cue !== null && state.openSections[cueKey] === true;
   const cueToggle =
@@ -10617,9 +10692,8 @@ function renderStretchRow(g: StretchGroup): string {
       : `<button class="stretch-cue-toggle ${cueOpen ? 'is-open' : ''}" data-toggle-section="${escapeHtml(cueKey)}" type="button" aria-expanded="${cueOpen}" aria-label="How to do ${escapeHtml(g.name)}"><span aria-hidden="true">▸</span></button>`;
   const setups = g.items.map((s) => renderExerciseSetup(s)).join('');
   return `
-      <li class="stretch-row ${ticked ? 'stretch-row-done' : ''}">
+      <li class="stretch-row">
         <div class="stretch-row-head">
-          <button class="stretch-check" data-stretch-tick="${escapeHtml(g.key)}" type="button" aria-pressed="${ticked}" aria-label="${escapeHtml(g.name)} done"><span aria-hidden="true">✓</span></button>
           <span class="stretch-name">${escapeHtml(g.name)}</span>
           <span class="stretch-reps">${escapeHtml(stretchRowTime(g))}</span>
           ${cueToggle}
@@ -10635,9 +10709,14 @@ function renderStretchRow(g: StretchGroup): string {
       </li>`;
 }
 
+// v60 (Sep 28 2026) — F2: one tap, not eleven. The list stays (names + cues,
+// readable), but the only controls are a sage "Done stretching ✓" and a
+// quiet "Skip" — both just advance (advanceExercise() already treats the
+// whole cool-down as ONE step regardless of what's in it); the app never
+// recorded whether she stretched, so there's nothing for either button to
+// disagree about. Back stays (renderStepNav's own canGoBack()).
 function renderCooldownList(w: Workout): string {
   const groups = groupStretchPairs(w.cooldown ?? []);
-  const ticked = groups.filter((g) => state.stretchTicks[g.key] === true).length;
   const rows = groups.map((g) => renderStretchRow(g)).join('');
 
   return `
@@ -10652,18 +10731,19 @@ function renderCooldownList(w: Workout): string {
     ${/* v48: the same one progress line as every step (the list = one step). */ renderProgressLine(w)}
     <p class="subtitle">${
       state.liteDay
-        ? 'Lite day — do the stretches you need, skip the rest. Done · Finish whenever.'
+        ? 'Lite day — do the stretches you need, skip the rest. Done stretching whenever.'
         : /* v48 · P7: one honest line — the old "No timer" sat over "45 sec"
              on every row (DECISIONS §4). Her Jun 6 call: one list, no timer. */
           'About 45 s each — no timer, go by feel.'
     }</p>
-    <p class="stretch-progress" aria-live="polite">~${stretchListMinutes(groups)} min · ${ticked} of ${groups.length}</p>
+    <p class="stretch-progress" aria-live="polite">~${stretchListMinutes(groups)} min</p>
 
     <div class="card stretch-card">
       <ul class="stretch-list">${rows}</ul>
     </div>
+    <button class="back-link cooldown-skip" id="cooldown-skip" type="button">Skip</button>
 
-    ${renderStepNav('Done · Finish')}
+    ${renderStepNav('Done stretching ✓')}
   `;
 }
 
@@ -11136,10 +11216,17 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
 // v48 (Sep 24 2026): the face of a hold (wall sit, plank, wall lean). Four
 // states, one sage at a time: Ready (sage Start) → Get ready / Hold (a quiet
 // Stop that saves the real seconds; no dead "Running…" slab) → Done ("✓ held
-// 45 s · last time 43", a quiet Redo; Done · Next turns sage). uxui timed 4/5
-// (the hold reset silently) and 3/5 (two sage buttons, a dead slab); walk §4:
-// "No way to say I held less".
+// 45 s · last time 43", a real outline Redo; Done · Next turns sage). uxui
+// timed 4/5 (the hold reset silently) and 3/5 (two sage buttons, a dead
+// slab); walk §4: "No way to say I held less".
+// v60 (Sep 28 2026): a hold prescribed "N ×" (hold-sets.ts setsPrescribed,
+// today only Wall lean, "2 × 15-20 sec") branches to its own done-face below
+// — her words Sat Sep 26 22:13, "Wall lean I need to be able to do the timer
+// again" (PLAN-2026-09-26.md §7 F1). Every single-set hold is the untouched
+// path above, unchanged in shape; only the Redo button's class changes
+// (real outline, not grey text — F1's own "Redo everywhere" line).
 function renderHoldTimerCard(ex: Exercise, showTempo: boolean): string {
+  const totalSets = setsPrescribed(ex.reps);
   const held = heldOnThisStep();
   const idle = state.timerSeconds === 0 && state.preCountdown === 0;
   let inner: string;
@@ -11156,6 +11243,26 @@ function renderHoldTimerCard(ex: Exercise, showTempo: boolean): string {
     // /handler) — this card steps aside so the name/Tips/Steps/picture stay
     // visible and scrollable, not a big "Hold" slab covering them.
     return showTempo ? `<div class="card">${renderTempoBar()}</div>` : '';
+  } else if (totalSets > 1) {
+    const face = holdSetsFace(totalSets, state.heldSetsFor[holdStepKey()] ?? []);
+    if (face.kind === 'ready') {
+      inner = `
+        <div class="timer-label">Ready</div>
+        <div class="timer-display timer-idle">${formatTimerDisplay(ex.durationSec ?? 0)}</div>
+        <button class="btn-large btn-primary" id="start-timed" type="button">Start timer</button>`;
+    } else if (face.kind === 'more-sets') {
+      inner = `
+        <div class="timer-label">Set ${face.setDone} ✓</div>
+        <div class="timer-done timer-held">${face.heldSec} s</div>
+        <p class="hold-set-cue">Shake your hands out first.</p>
+        <button class="btn-large btn-primary" id="hold-set-next" type="button">Start set ${face.setDone + 1}</button>
+        <button class="hold-redo-btn" id="hold-redo" type="button">↻ Redo set ${face.setDone}</button>`;
+    } else {
+      inner = `
+        <div class="timer-label">Done</div>
+        <div class="timer-done timer-held">${face.setsTotal} sets ✓ · ${formatHeldSeconds(face.sets)}</div>
+        <button class="hold-redo-btn" id="hold-redo" type="button">↻ Redo set ${face.setsTotal}</button>`;
+    }
   } else if (held > 0) {
     // "last time" = the most recent saved session with a real wall sit (logs
     // are newest-first; this session isn't saved yet). Omitted when none.
@@ -11167,7 +11274,7 @@ function renderHoldTimerCard(ex: Exercise, showTempo: boolean): string {
     inner = `
       <div class="timer-label">Done</div>
       <div class="timer-done timer-held">✓ held ${held} s${last ? `<span class="timer-last"> · last time ${last}</span>` : ''}</div>
-      <button class="back-link" id="redo-timed" type="button">Redo</button>`;
+      <button class="hold-redo-btn" id="redo-timed" type="button">↻ Redo</button>`;
   } else {
     inner = `
       <div class="timer-label">Ready</div>
@@ -11339,7 +11446,15 @@ function renderWorkout(): string {
   const laneRan = indoorLane && localStorage.getItem(WW_LANE_STARTED_KEY) !== null;
   const timerIdle = state.timerSeconds === 0 && state.preCountdown === 0;
   const hold = isHoldStep(ex);
-  const holdRan = hold && heldOnThisStep() > 0;
+  // v60: a multi-set hold is "ran" (sage Done · Next, the move-feel chip
+  // ready) only once EVERY prescribed set is done — one set in isn't the
+  // green light the single-set path's `heldOnThisStep() > 0` already is.
+  const holdSets = hold ? setsPrescribed(ex.reps) : 1;
+  const holdRan =
+    hold &&
+    (holdSets > 1
+      ? (state.heldSetsFor[holdStepKey()] ?? []).length >= holdSets
+      : heldOnThisStep() > 0);
   const safety = ex.safety ?? SAFETY_LINE[ex.name];
   // v48 · P3: never on a lane — the apartment step isn't in PROGRAM, so it read
   // as "New tonight" every week (the elliptical has its own "First ride").
@@ -15653,23 +15768,15 @@ function attachHandlers(): void {
       render();
     });
   });
-  // v48 · P7 (Sep 24 2026): tick a cool-down row off — tap again to untick.
-  // Place-keeping only (her list, her pace); saved to the resume snapshot,
-  // never to Supabase.
-  document.querySelectorAll<HTMLButtonElement>('[data-stretch-tick]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const key = btn.dataset['stretchTick'];
-      if (!key) return;
-      if (state.stretchTicks[key] === true) {
-        const next = { ...state.stretchTicks };
-        delete next[key];
-        state.stretchTicks = next;
-      } else {
-        state.stretchTicks = { ...state.stretchTicks, [key]: true };
-      }
-      saveActiveSession();
-      render();
-    });
+  // v60 (Sep 28 2026) — F2: "Skip" on the cool-down list does exactly what
+  // Done stretching ✓ does (advanceExercise() already treats the whole
+  // cool-down as one step, and the app never recorded per-stretch state) —
+  // same handler, a quieter button for whenever she'd rather not tap the
+  // sage one. Her words (Sep 25 14:54): "I don't mark them in the app and
+  // do it on my own." (The old per-row tick handler this replaced is gone —
+  // see git history / the F2 commit for its shape.)
+  bindClick('cooldown-skip', () => {
+    advanceExercise();
   });
   // Explicit Start for the in-workout walk — nothing tracks until she taps it
   // (Allison Jul 9 2026: being on the page ≠ walking started).
@@ -15808,6 +15915,15 @@ function attachHandlers(): void {
   });
   bindClick('redo-timed', () => {
     startTimedExercise();
+  });
+  // v60 (Sep 28 2026): a multi-set hold's own two buttons — "Start set N"
+  // (a fresh next set) and "Redo set N" (redoes the last one). See
+  // startNextHoldSet/redoLastHoldSet's own comments.
+  bindClick('hold-set-next', () => {
+    startNextHoldSet();
+  });
+  bindClick('hold-redo', () => {
+    redoLastHoldSet();
   });
   // v48: the round-1 floor — go on, or finish here (it still counts).
   bindClick('start-round-2', () => {

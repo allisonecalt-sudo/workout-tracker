@@ -35,7 +35,7 @@ const UPDATE = process.env.UPDATE_GOLDEN === '1';
 // forward one step (tests/app.spec.ts's own NEXT, duplicated here on purpose —
 // R2 moves shared test helpers into tests/helpers.ts; golden.spec.ts adopts
 // that import once R2 lands, not before).
-const NEXT = 'button:has-text("Done ·"), #ww-skip';
+const NEXT = '#next, #ww-skip';
 
 type Row = Record<string, unknown>;
 
@@ -130,11 +130,11 @@ async function seed(page: Page, rows: Row[]): Promise<void> {
 }
 
 // R1 · fix r1 (should, Sep 27 2026 — CHECK-code-shape-R1's fixture-gap item):
-// shared by the sub-view fixtures added below. "Done ·"/"#start-round-2"/
+// shared by the sub-view fixtures added below. "Done"/"#start-round-2"/
 // "#ww-skip" is the same forward control tests/app.spec.ts's own walk uses
 // and the pre-existing 'workout — a strength step' fixture already relies on
 // — one selector covers every screen that has a single forward action.
-const FORWARD = 'button:has-text("Done ·"), #start-round-2, #ww-skip';
+const FORWARD = '#next, #start-round-2, #ww-skip';
 
 // Walks Workout A forward (rest-sec left at its default of 0 — Allison's own
 // "i do not need the brakes anymore" — so this never meets a rest screen and
@@ -292,7 +292,7 @@ test.describe('golden HTML — gate 1 (structure-only refactor oracle)', () => {
           .catch(() => null)
       )?.trim();
       if (name && !CARDIO_NAMES.includes(name)) break;
-      const forward = page.locator('button:has-text("Done ·"), #start-round-2, #ww-skip');
+      const forward = page.locator('#next, #start-round-2, #ww-skip');
       if (await forward.isVisible().catch(() => false)) {
         await forward.click();
         continue;
