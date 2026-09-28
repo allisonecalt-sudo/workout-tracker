@@ -78,19 +78,20 @@ test('selecting workout A goes to pre-log screen', async ({ page }) => {
   await expect(page.locator('button:has-text("Start")')).toBeVisible();
 });
 
-test('pre-log wrist line: one grey line on A (pressure fine, pain = stop), no amber banner', async ({
+test('pre-log wrist line: one grey line on A (pressure fine, the pain rule), no amber banner', async ({
   page,
 }) => {
   // Group 2K, refreshed twice (May 10 → the Jul 3 wall-lean on-ramp → Sep 7:
   // "i can go on my arms i just have to stop with pain"). v48 · P5 (Sep 24
   // 2026): the 58-word amber box, the same every session, became ONE grey line
-  // on workouts with a palm or grip move (DECISIONS §5). It still states
-  // today's permission — pressure fine, pain = stop — and never the old
-  // "cleared May 10" wording.
+  // on workouts with a palm or grip move (DECISIONS §5). v60 (Sep 28 2026):
+  // reworded off the alarm-toned "pain = stop" to the actual pain rule (hers
+  // + Lisa via her) — pressure fine, back off if it's sharp/climbing/still
+  // there tomorrow — and it still never says the old "cleared May 10" wording.
   await page.locator('button[data-workout="A"]').click();
   await expect(page.locator('.warning-banner')).toHaveCount(0);
   await expect(page.locator('.safety-line')).toHaveText(
-    'Wrist + back: pressure fine, pain = stop.'
+    'Wrist + back: pressure fine — back off if it is sharp, climbing, or still there tomorrow.'
   );
   await expect(page.locator('#app')).not.toContainText('May 10');
 });
@@ -7819,7 +7820,7 @@ test.describe('v48 P5 logs', () => {
     await page.goto('/');
     await page.locator('button[data-workout="A"]').click();
     await expect(page.locator('.safety-line')).toHaveText(
-      'Wrist + back: pressure fine, pain = stop.'
+      'Wrist + back: pressure fine — back off if it is sharp, climbing, or still there tomorrow.'
     );
     await expect(page.locator('.prelog-meta')).toContainText('new tonight: supported split squat');
     const fold = page.locator('details.prelog-overview');
@@ -9543,6 +9544,92 @@ test.describe('v48 P8 sweep', () => {
     await page.locator('#open-settings').click();
     await expect(page.locator('#app')).toContainText(`Build ${version} · ${built}`);
   });
+});
+
+// v60 fix (Sep 28 2026, checker's should #4): the multi-set hold UI (wall
+// lean's own "2 × 15-20 sec") had no DOM/e2e coverage — hold-sets.test.ts
+// only proved the pure logic (holdSetsFace/formatHeldSeconds), so the wiring
+// (recordHeldSet, holdRan gating Done · Next, the Start set 2 / Redo
+// handlers, the redo-keeps-the-max rule) was unguarded. Wall lean is
+// currently the ONLY move whose reps text parses to setsPrescribed() > 1
+// (checked app.ts: every other isTimed move is a plain "N sec" / "1 set ·
+// N sec hold"), so #next/#ww-skip alone (no timer needed) reach it — #next
+// is "still tappable either way" (its own comment) even in its quiet state.
+async function advanceToExercise(
+  page: import('@playwright/test').Page,
+  name: string,
+  maxSteps = 60
+): Promise<void> {
+  for (let i = 0; i < maxSteps; i++) {
+    // A short bounded timeout: some steps (the round-break screen) have NO
+    // .exercise-name at all, and a locator action's own default wait is for
+    // the element to APPEAR — with zero on the page it hangs for the whole
+    // default actionability timeout (30s+) before .catch() ever fires, which
+    // starved the click below and looked like a stuck click, not a stuck
+    // read. 300ms is plenty once the element exists at all.
+    const current = await page
+      .locator('.exercise-name')
+      .first()
+      .textContent({ timeout: 300 })
+      .catch(() => null);
+    if (current === name) return;
+    try {
+      await page.locator('#next, #start-round-2, #ww-skip').first().click({ timeout: 5000 });
+    } catch {
+      throw new Error(`advanceToExercise: stuck before "${name}" (last seen "${current}")`);
+    }
+  }
+  throw new Error(`advanceToExercise: did not reach "${name}" within ${maxSteps} steps`);
+}
+
+test('v60: wall lean multi-set hold — Set 1 ✓, Start set 2, both sets done turns Next sage, Redo keeps the max', async ({
+  page,
+}) => {
+  await movableClock(page, '2026-09-22T14:00:00.000Z', { skipPreCountdown: true }); // TUE, R2 Week 4
+  await page.goto('/');
+  await page.locator('button[data-workout="A"]').click();
+  await page.locator('button:has-text("Start")').click();
+  await advanceToExercise(page, 'Wall lean (wrist on-ramp)');
+
+  // Ready face — nothing held yet this step.
+  await expect(page.locator('#start-timed')).toBeVisible();
+  await expect(page.locator('#hold-set-next')).toHaveCount(0);
+  await expect(page.locator('#next')).toHaveClass(/btn-done-quiet/); // not ready — quiet
+
+  // Set 1: run the full 20 s.
+  await page.locator('#start-timed').click();
+  await advanceClock(page, 20_000);
+  await expect(page.locator('.timer-label')).toHaveText('Set 1 ✓');
+  await expect(page.locator('.timer-done')).toHaveText('20 s');
+  const startSet2 = page.locator('#hold-set-next');
+  await expect(startSet2).toHaveText('Start set 2');
+  await expect(startSet2).toHaveClass(/btn-primary/); // the ONE sage action on this screen
+  await expect(page.locator('#hold-redo')).toHaveText('↻ Redo set 1');
+  await expect(page.locator('#next')).toHaveClass(/btn-done-quiet/); // still not ready — one set isn't both
+
+  // Set 2: a shorter hold (12 s, cut short on purpose) — the face reports
+  // EACH set's own seconds. A shorter-than-prescribed hold only exists via
+  // the real Stop path (the running pip → its sheet → #stop-timed) — letting
+  // the clock run to the full 20 s would just auto-finish at 20, same as set
+  // 1, and never exercise "her own real seconds" (stopTimedHold's own why).
+  await startSet2.click();
+  await advanceClock(page, 12_000);
+  await page.locator('#timer-pip').click();
+  await page.locator('#stop-timed').click();
+  await expect(page.locator('.timer-label')).toHaveText('Done');
+  await expect(page.locator('.timer-done')).toHaveText('2 sets ✓ · 20 s · 12 s');
+  await expect(page.locator('#hold-set-next')).toHaveCount(0); // nothing left to start
+  await expect(page.locator('#hold-redo')).toHaveText('↻ Redo set 2');
+  await expect(page.locator('#next')).toHaveClass(/btn-primary/); // BOTH sets done — Next turns sage
+  await expect(page.locator('#next')).not.toHaveClass(/btn-done-quiet/);
+
+  // Redo set 2 with a SHORTER hold (5 s, stopped the same way) — recordHeldSet's
+  // max rule keeps 12 s, never erasing the real one she already banked.
+  await page.locator('#hold-redo').click();
+  await advanceClock(page, 5_000);
+  await page.locator('#timer-pip').click();
+  await page.locator('#stop-timed').click();
+  await expect(page.locator('.timer-done')).toHaveText('2 sets ✓ · 20 s · 12 s');
 });
 
 // v49 · look fix (Sep 25 2026): the self-hosted DM Sans ships no tabular

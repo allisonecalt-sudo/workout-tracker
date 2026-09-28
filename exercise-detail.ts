@@ -215,7 +215,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     // Regenerated with the same edge-tts voice (en-US-AvaMultilingualNeural),
     // same pipeline as the row/hinge mp3s.
     voiceScript:
-      "This is the biceps curl — one or two kilos, whichever you picked. Hold the weight lightly with your elbow tucked at your side and your forearm hanging straight down. Keep your wrist and fingers neutral and straight the whole time. Curl the forearm up toward your shoulder, keeping the elbow pinned in place, so only the forearm moves. Then lower slowly under control. Do the reps on your screen. The main cue: hold light and stay controlled. The main don't: don't let the wrist bend back, and don't swing your body for momentum. Light hold, wrist neutral, and pain tells. If the wrist hurts, stop there.",
+      "This is the biceps curl — one or two kilos, whichever you picked. Hold the weight lightly with your elbow tucked at your side and your forearm hanging straight down. Keep your wrist and fingers neutral and straight the whole time. Curl the forearm up toward your shoulder, keeping the elbow pinned in place, so only the forearm moves. Then lower slowly under control. Do the reps on your screen. The main cue: hold light and stay controlled. The main don't: don't let the wrist bend back, and don't swing your body for momentum. Light hold, wrist neutral, and pain tells — a little pain is fine, back off if it's sharp, climbing, or still there tomorrow.",
     muscles: ['forearms'],
     muscleLabel: 'Biceps (arm)',
     steps: [
@@ -376,7 +376,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Biceps stretch — right',
     voiceSrc: './assets/voice/biceps-stretch-right.mp3',
     voiceScript:
-      "Biceps stretch, right side. Stand sideways to the wall with your right arm closest. Raise that arm to shoulder height, rotate your palm up, and place it flat on the wall with your fingers spread. Now slowly turn your body away from the wall until you feel the stretch in your biceps and the front of your shoulder. Hold there for about forty-five seconds and keep breathing. Remember, this is not a wrist stretch, so don't force the wrist back and don't rotate the palm down. Keep the wrist comfortable. If it complains, bend the elbow slightly, or stop on any wrist pain.",
+      "Biceps stretch, right side. Stand sideways to the wall with your right arm closest. Raise that arm to shoulder height, rotate your palm up, and place it flat on the wall with your fingers spread. Now slowly turn your body away from the wall until you feel the stretch in your biceps and the front of your shoulder. Hold there for about forty-five seconds and keep breathing. Remember, this is not a wrist stretch, so don't force the wrist back and don't rotate the palm down. Keep the wrist comfortable. If it complains, bend the elbow slightly — a little pain is fine, back off if it's sharp, climbing, or still there tomorrow.",
     muscles: ['shoulders', 'chest'],
     muscleLabel: 'Biceps + front of shoulder',
     steps: [
@@ -461,7 +461,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Bird dog (legs only)',
     voiceSrc: './assets/voice/bird-dog-legs-only.mp3',
     voiceScript:
-      "Bird dog, legs only. This is your first move back on your hands, so we start at the gentlest rung. Get on your hands and knees. Hands flat under your shoulders with your fingers turned slightly out, knees under your hips, back long and flat. If flat palms bother you, make fists and rest on your knuckles instead. If that still bothers you, put your hands up on the couch or a low step — the higher your hands, the less weight goes through them. Both hands stay down the whole time. Now slide one leg straight back until it's level with your body. Hold two seconds, then lower it with control. Alternate sides, six each side, two sets. Keep your hips square, like you're balancing a cup on your lower back, and keep your neck long with your eyes on the floor. Here's the rule that matters most: stop at pain. Pressure and stretch are fine. Pain means shake your hands out and you're done for today — and the next morning must not feel worse.",
+      "Bird dog, legs only. This is your first move back on your hands, so we start at the gentlest rung. Get on your hands and knees. Hands flat under your shoulders with your fingers turned slightly out, knees under your hips, back long and flat. If flat palms bother you, make fists and rest on your knuckles instead. If that still bothers you, put your hands up on the couch or a low step — the higher your hands, the less weight goes through them. Both hands stay down the whole time. Now slide one leg straight back until it's level with your body. Hold two seconds, then lower it with control. Alternate sides, six each side, two sets. Keep your hips square, like you're balancing a cup on your lower back, and keep your neck long with your eyes on the floor. Here's the rule that matters most: pressure and stretch are fine, and a little pain is fine too — back off if it's sharp, climbing, or still there the next morning, and shake your hands out and call it for today.",
     muscles: ['core', 'glutes', 'back', 'forearms'],
     muscleLabel: 'Deep core + glutes (with light, even hand load)',
     steps: [
@@ -479,7 +479,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     ],
     donts: [
       "Don't lift a hand or an arm — the full bird dog is the next rung.",
-      "Don't push through pain. Pressure is fine; pain means stop for today.",
+      "A little pain is fine — back off if it's sharp, climbing, or still there tomorrow morning.",
       "Don't let the low back sag or the leg swing up past level.",
       "Don't crane your neck up to look forward.",
     ],
@@ -1407,7 +1407,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     // assets/voice/prone-row-bodyweight.mp3 with the same edge-tts voice
     // (en-US-AvaMultilingualNeural), same pipeline as the hinge mp3.
     voiceScript:
-      "Prone row. Lie face down on a bed or bench edge, or stand and hinge over, with your arm hanging straight down toward the floor and your wrist neutral and straight. Bodyweight, or holding one or two kilos, whichever you pick. Keep your head down, don't lift it, because lifting strains the neck. Drive your elbow up toward the ceiling, leading with the elbow and squeezing your shoulder blade toward your spine, then lower slowly. Do the reps on your screen, each side. Keep the wrist straight and the grip light. Pain tells — stop on any wrist signal.",
+      "Prone row. Lie face down on a bed or bench edge, or stand and hinge over, with your arm hanging straight down toward the floor and your wrist neutral and straight. Bodyweight, or holding one or two kilos, whichever you pick. Keep your head down, don't lift it, because lifting strains the neck. Drive your elbow up toward the ceiling, leading with the elbow and squeezing your shoulder blade toward your spine, then lower slowly. Do the reps on your screen, each side. Keep the wrist straight and the grip light. Pain tells — a little pain is fine, back off if it's sharp, climbing, or still there tomorrow.",
     muscles: ['back'],
     muscleLabel: 'Lower trap + mid-back (shoulder blade)',
     steps: [
@@ -1813,7 +1813,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Wall lean (wrist on-ramp)',
     voiceSrc: './assets/voice/wall-lean-wrist-on-ramp.mp3',
     voiceScript:
-      "Wall lean, your wrist on-ramp. Stand a small step back from a wall, and place your palms flat on it at shoulder height, fingers pointing up. Keep your elbows soft — don't lock them. Now lean in gently, just enough that your palms take light weight, and keep breathing. This is a gentle rehab on-ramp, not a push-up, so nothing intense. Hold for fifteen to twenty seconds, shake your hands out, then do one more round. And the important one: pressure is fine; pain means stop. When this feels like nothing, tell me and the next step unlocks.",
+      "Wall lean, your wrist on-ramp. Stand a small step back from a wall, and place your palms flat on it at shoulder height, fingers pointing up. Keep your elbows soft — don't lock them. Now lean in gently, just enough that your palms take light weight, and keep breathing. This is a gentle rehab on-ramp, not a push-up, so nothing intense. Hold for fifteen to twenty seconds, shake your hands out, then do one more round. And the important one: pressure is fine, and a little pain is fine too — back off if it's sharp, climbing, or still there tomorrow. When this feels like nothing, tell me and the next step unlocks.",
     muscles: ['forearms'],
     muscleLabel: 'Wrist / forearm (weight-bearing on-ramp)',
     steps: [
@@ -1832,7 +1832,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     donts: [
       "Don't lock your elbows.",
       "Don't push hard — this is a rehab on-ramp, not a push-up.",
-      "Don't push through pain — pressure is fine; pain means stop.",
+      "A little pain is fine — pressure is fine too; back off if it's sharp, climbing, or still there tomorrow.",
     ],
     mistakes: [
       { mistake: 'Locking your elbows straight.', fix: 'Keep them soft and slightly bent.' },
@@ -1841,8 +1841,8 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
         fix: 'Lean gently so your palms take only LIGHT weight.',
       },
       {
-        mistake: 'Pushing through wrist or thumb pain.',
-        fix: 'Pressure is fine; pain means stop.',
+        mistake: 'Worrying that any wrist or thumb pain means stop.',
+        fix: 'Pressure is fine, and a little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
       },
     ],
   },

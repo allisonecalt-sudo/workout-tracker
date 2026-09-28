@@ -5,12 +5,20 @@
 // keep moving; back off if it's sharp, climbing, or still there next
 // morning." She decides load by pain herself (never "ask Lisa").
 //
-// Scans every SHOWN string (steps/dos/donts/mistakes.fix in
-// exercise-detail.ts, do/avoid in exercise-howto.ts, notes/SAFETY_LINE in
-// app.ts + ladders.ts) for the two banned shapes. Never scans voiceScript —
-// spoken, not shown, a separate pass (only the curl mp3 changed this round,
-// F item 4) — so a stale spoken line surviving here is expected, not a bug
-// this test should catch.
+// Widened (v60 fix pass, same day): the checker found the first two banned
+// shapes didn't catch the "pain = stop" / "pain means stop" / "stop at
+// pain" shape — the wall lean's own Do & Don't, the pre-log safety line, and
+// bird dog in three places (donts, EXERCISE_GUIDE howTo, SAFETY_LINE) all
+// still said the opposite of the rule. Two more banned shapes added, and the
+// scan widened to cover EXERCISE_GUIDE's howTo strings, every voiceScript
+// (spoken, but the checker's should #2 flagged 5 stale spoken lines — the
+// spec's own grep list named voice scripts, so scanning them here is the
+// closing of that gap, not new scope), and the pre-log safety-line template.
+//
+// Scans every SHOWN string (steps/dos/donts/mistakes.fix + voiceScript in
+// exercise-detail.ts, do/avoid in exercise-howto.ts, notes/SAFETY_LINE/
+// EXERCISE_GUIDE.howTo/the pre-log safety-line <p> in app.ts + ladders.ts)
+// for the four banned shapes.
 //
 // Code comments are never scanned: exercise-detail.ts/exercise-howto.ts are
 // real imports (a `//` comment is never a string value), and app.ts/
@@ -27,6 +35,8 @@ import { EXERCISE_HOWTO } from '../exercise-howto';
 const BANNED: [RegExp, string][] = [
   [/stop (at|if|on) any/i, 'alarm-toned "stop ... any"'],
   [/any (wrist )?sensation/i, '"any (wrist) sensation"'],
+  [/pain\s*(=|means)\s*(stop|done)/i, '"pain = stop/done" / "pain means stop/done"'],
+  [/stop at pain/i, '"stop at pain"'],
 ];
 
 function violations(label: string, text: string | undefined | null): string[] {
@@ -38,7 +48,7 @@ function violations(label: string, text: string | undefined | null): string[] {
   return out;
 }
 
-test('pain rule: no shown exercise string uses the old alarm-toned "stop at/if/on any" or "any (wrist) sensation" wording', () => {
+test('pain rule: no shown or spoken exercise string uses the old alarm-toned "stop ..." wording', () => {
   const offenders: string[] = [];
 
   // exercise-detail.ts — real import, no DOM needed.
@@ -48,6 +58,7 @@ test('pain rule: no shown exercise string uses the old alarm-toned "stop at/if/o
     for (const s of d.donts) offenders.push(...violations(`exercise-detail.ts "${name}" donts`, s));
     for (const m of d.mistakes)
       offenders.push(...violations(`exercise-detail.ts "${name}" mistakes.fix`, m.fix));
+    offenders.push(...violations(`exercise-detail.ts "${name}" voiceScript`, d.voiceScript));
   }
 
   // exercise-howto.ts — real import.
@@ -84,6 +95,35 @@ test('pain rule: no shown exercise string uses the old alarm-toned "stop at/if/o
     }
   } else {
     offenders.push("app.ts — SAFETY_LINE block not found by this test's own regex — fix the test");
+  }
+
+  // app.ts's EXERCISE_GUIDE map — 'Exercise name': { howTo: '...' }, same
+  // shape as SAFETY_LINE's own extraction (checker's must, exercise item
+  // "Bird dog (legs only)" howTo).
+  const guideBlock =
+    /const EXERCISE_GUIDE: Record<string, \{ howTo: string \}> = \{([\s\S]*?)\n\};/.exec(appSrc);
+  if (guideBlock) {
+    const howToRe = /howTo:\s*\n?\s*(['"])((?:\\.|(?!\1).)*)\1/g;
+    let hm: RegExpExecArray | null;
+    while ((hm = howToRe.exec(guideBlock[1]!))) {
+      const line = appSrc.slice(0, appSrc.indexOf(guideBlock[1]!) + hm.index).split(/\r?\n/).length;
+      offenders.push(...violations(`app.ts:${line} EXERCISE_GUIDE.howTo`, hm[2]));
+    }
+  } else {
+    offenders.push(
+      "app.ts — EXERCISE_GUIDE block not found by this test's own regex — fix the test"
+    );
+  }
+
+  // app.ts's pre-log safety-line template (checker's must, item "app.ts:10406") —
+  // the one-line grey wrist+back permission shown on the pre-log screen.
+  const safetyLineTag = /<p class="safety-line">([^<]*)<\/p>/.exec(appSrc);
+  if (safetyLineTag) {
+    offenders.push(...violations('app.ts pre-log safety-line <p>', safetyLineTag[1]!));
+  } else {
+    offenders.push(
+      "app.ts — pre-log safety-line <p> not found by this test's own regex — fix the test"
+    );
   }
 
   expect(offenders).toEqual([]);

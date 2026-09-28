@@ -866,6 +866,13 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* v60 fix (Sep 28 2026, checker's should #6): F2 dropped the 44px tick
+     button that used to set the row's height, so a row with no ▸ cue toggle
+     (Neck stretch, Shoulder stretch — g.cue === null) collapsed to ~28px
+     against ~55px for the others, reading as run-together. Floor it back to
+     the tick's own 44px so every row is the same height whether or not it
+     carries a cue toggle. */
+  min-height: 44px;
 }
 
 .stretch-check {

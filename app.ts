@@ -462,8 +462,11 @@ type AppState = {
   // any future one). One array entry per completed SET, in order; a redo
   // replaces the LAST entry (max, never erase a real one — recordHeldSet's own
   // rule, same as recordHeld's). Untouched by a single-set hold (heldSecFor
-  // above keeps owning those, unchanged). Transient; not in the resume
-  // snapshot, same as heldSecFor.
+  // above keeps owning those, unchanged). v60 fix (Sep 28 2026, checker's
+  // should #5): unlike heldSecFor (a live timer's display-only seconds, safe
+  // to lose), this is REAL completed-set progress — a PWA killed between set
+  // 1 and set 2 was losing set 1. Now carried in the resume snapshot, same as
+  // setsDoneFor.
   heldSetsFor: Record<string, number[]>;
   // v48 · P5 (Sep 24 2026): the one-tap Easy / Right / Hard on the 1 kg curl
   // and the prone row — saved as arm_feel "curl=easy;row=right". The 2 kg
@@ -1055,9 +1058,11 @@ const WRIST_ONRAMP: Exercise[] = [
   {
     name: 'Wall lean (wrist on-ramp)',
     reps: '2 × 15-20 sec',
-    // v46: halved, and ONE stop threshold across the session — bird dog, the
-    // banner and this all say "pressure fine, pain = stop" (her Sep 14: "it
-    // shouldn't hurt"). The Jul-3 provenance lives in the comment above.
+    // v46: halved, and ONE rule across the session — bird dog, the banner and
+    // this all say the pain rule (hers + Lisa via her, v60 Sep 28 2026: "a
+    // little pain is OK, keep moving; back off if it's sharp, climbing, or
+    // still there next morning" — supersedes her Sep 14 "it shouldn't hurt"
+    // wording, which read as an alarm). The Jul-3 provenance lives above.
     notes:
       'Stand a small step from a wall, palms flat on it at shoulder height, fingers up, elbows soft. Lean in gently so the palms take light weight — breathe. 15-20 sec, shake the hands out, once more. A little pain is fine — back off if it is sharp, climbing, or still there tomorrow. When this feels like nothing, say so and the next rung (counter-height lean) unlocks.',
     // Timed hold → gets a timer (TIMER RULE, 2026-07-08). 20 sec = top of the
@@ -1076,15 +1081,16 @@ const UPPER_BACK_SAFE_W10: Exercise[] = [...UPPER_BACK_SAFE, ...WRIST_ONRAMP];
 // proxy) puts static quadruped at 2-11% and legs-only bird dog just above it,
 // with SYMMETRIC hand load — the full bird dog (one hand lifted, 20-40%) is the
 // NEXT rung, not this one. Runs at the END of the upper-back block in A + B.
-// Her stop rule governs: pressure is fine, PAIN means done for the day, and the
-// next morning must not be worse.
+// Her pain rule governs (v60, Sep 28 2026): a little pain is OK, keep moving;
+// back off if it's sharp, climbing, or still there the next morning.
 const BIRD_DOG_LEGS: Exercise = {
   name: 'Bird dog (legs only)',
   reps: '2 sets · 6 each side · 2-sec hold',
-  // v46: halved — the Sep-7 provenance is in the comment above; every safety
-  // line stays (pressure fine / pain = done / tomorrow not worse).
+  // v46: halved — the Sep-7 provenance is in the comment above; the pain rule
+  // stays on every safety line (pressure fine; back off if sharp/climbing/
+  // still there tomorrow).
   notes:
-    'Hands and knees, hands flat under the shoulders (fists, or hands up on the couch, if flat palms complain). Both hands stay down. One leg straight back to level, hold 2 sec, lower with control. Pressure is fine; pain = shake the hands out, done for today — and tomorrow must not be worse.',
+    'Hands and knees, hands flat under the shoulders (fists, or hands up on the couch, if flat palms complain). Both hands stay down. One leg straight back to level, hold 2 sec, lower with control. Pressure is fine — a little pain is fine too; back off if it is sharp, climbing, or still there tomorrow.',
 };
 
 // A + B upper-back block for R2 Week 2 — the same wrist-safe wall angels + IWYT,
@@ -3183,7 +3189,7 @@ const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   },
   'Bird dog (legs only)': {
     howTo:
-      "Your first hands-on-the-floor move since April, at the beginner rung — LEGS ONLY, both hands stay down the whole time. Set up on hands and knees: hands flat under the shoulders with the fingers turned slightly out, knees under the hips, back long and flat. If flat palms bother you, make fists and rest on the knuckles; if that still bothers you, put the hands up on the couch or a low step — the higher your hands, the less weight goes through them. Slide one leg straight back until it is level with your body, hold 2 seconds, and lower it with control. Alternate sides — 6 each side, 2 sets. Keep the hips square (a hip bone shouldn't roll open) and the neck long, eyes on the floor. THE RULE: stop at PAIN. Pressure and stretch are fine; pain means shake the hands out and you're done for today — and the next morning must not feel worse. The full bird dog, where one hand also lifts, is the next rung. Not this week.",
+      "Your first hands-on-the-floor move since April, at the beginner rung — LEGS ONLY, both hands stay down the whole time. Set up on hands and knees: hands flat under the shoulders with the fingers turned slightly out, knees under the hips, back long and flat. If flat palms bother you, make fists and rest on the knuckles; if that still bothers you, put the hands up on the couch or a low step — the higher your hands, the less weight goes through them. Slide one leg straight back until it is level with your body, hold 2 seconds, and lower it with control. Alternate sides — 6 each side, 2 sets. Keep the hips square (a hip bone shouldn't roll open) and the neck long, eyes on the floor. THE RULE: pressure and stretch are fine, and a little pain is fine too — back off if it's sharp, climbing, or still there the next morning; shake the hands out and call it for today. The full bird dog, where one hand also lifts, is the next rung. Not this week.",
   },
   'Apartment cardio': {
     howTo:
@@ -3214,7 +3220,8 @@ const SAFETY_LINE: Record<string, string> = {
   'Prone row (bodyweight)':
     'Head down. Pain tells — back off if it is sharp, climbing, or still there tomorrow.',
   '1 kg biceps curl': 'Wrist neutral, never bending back. Pain tells.',
-  'Bird dog (legs only)': 'Pressure is fine; pain = done for today.',
+  'Bird dog (legs only)':
+    'Pressure is fine — back off if it is sharp, climbing, or still there tomorrow.',
   'Wall lean (wrist on-ramp)':
     'A little pain is fine — back off if it is sharp, climbing, or still there tomorrow.',
   'Side-lying clamshells': 'Hips rolling back? Band lower, or off.',
@@ -6000,6 +6007,25 @@ function sanitizeSetsDoneFor(v: unknown): Record<string, number> {
   return out;
 }
 
+// v60 fix (Sep 28 2026, checker's should #5): same shape of guard as
+// sanitizeSetsDoneFor above, for heldSetsFor's array-of-seconds-per-set —
+// each key's value must be an array of small non-negative integers (a
+// held-seconds count never exceeds a couple of minutes; 600 s is a generous
+// ceiling), so a corrupt or pre-v60 snapshot (no key at all) degrades to {}
+// rather than crashing resume.
+function sanitizeHeldSetsFor(v: unknown): Record<string, number[]> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out: Record<string, number[]> = {};
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (!Array.isArray(val)) continue;
+    const sets = val.filter(
+      (n): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n <= 600
+    );
+    if (sets.length > 0) out[k] = sets;
+  }
+  return out;
+}
+
 // v55 fix r3 (Sep 28 2026): reverse of ARM_FEEL_STEPS (name -> step) — so
 // armFeelString can read state.setsDoneFor (keyed by exercise name) off a
 // step key without a third hand-copy of the same two literal strings.
@@ -6328,6 +6354,11 @@ type ActiveSessionSnapshot = {
   // close too, same as armFeel — an app close mid-set shouldn't reset her
   // spot back to "Set 1".
   setsDoneFor: Record<string, number>;
+  // v60 fix (Sep 28 2026, checker's should #5): a multi-set HOLD's completed
+  // sets (durations, not just a count) survive an app close too — see
+  // AppState.heldSetsFor's own comment for why this one, unlike heldSecFor,
+  // is real progress and not just a live display.
+  heldSetsFor: Record<string, number[]>;
   // v48 · P7: her cool-down ticks survive an app close (she keeps her place).
   stretchTicks: Record<string, boolean>;
   // v50 · jump list: which steps she's already done survive an app close too
@@ -6393,6 +6424,7 @@ function saveActiveSession(): void {
       armLoad: state.armLoad,
       armLoadMax: state.armLoadMax,
       setsDoneFor: state.setsDoneFor,
+      heldSetsFor: state.heldSetsFor,
       stretchTicks: state.stretchTicks,
       completedSteps: state.completedSteps,
       rideNumbersOpen: state.rideNumbersOpen,
@@ -6541,6 +6573,9 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       })(),
       // v54: a pre-v54 snapshot has no sets-done → {} (nothing marked yet).
       setsDoneFor: sanitizeSetsDoneFor(snap.setsDoneFor),
+      // v60 fix: a pre-fix snapshot has no held-sets key → {} (nothing lost —
+      // there was nothing to carry before this fix shipped).
+      heldSetsFor: sanitizeHeldSetsFor(snap.heldSetsFor),
       // v48 · P7: a pre-P7 snapshot has no ticks → {} (nothing ticked).
       stretchTicks: sanitizeStretchTicks(snap.stretchTicks),
       // v50 · jump list: a pre-v50 snapshot has no done-marks → {} (same
@@ -6618,7 +6653,9 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.stoppedEarlyAt = snap.stoppedEarlyAt;
   state.stoppedEarlyLitePrev = snap.stoppedEarlyLitePrev;
   state.heldSecFor = {}; // v48: display-only, not carried across a close
-  state.heldSetsFor = {}; // v60: same, not carried across a close
+  // v60 fix (Sep 28 2026, checker's should #5): heldSetsFor IS carried now —
+  // real completed-set progress, unlike heldSecFor's live display seconds.
+  state.heldSetsFor = snap.heldSetsFor;
   state.armFeel = snap.armFeel;
   state.moveFeel = snap.moveFeel;
   state.armLoad = snap.armLoad;
@@ -10403,7 +10440,7 @@ function renderPreLog(): string {
 
     ${liteChip}
 
-    ${workoutNeedsWristLine(w) ? `<p class="safety-line">Wrist + back: pressure fine, pain = stop.</p>` : ''}
+    ${workoutNeedsWristLine(w) ? `<p class="safety-line">Wrist + back: pressure fine — back off if it is sharp, climbing, or still there tomorrow.</p>` : ''}
 
     ${renderActionBar(`<button class="btn-large btn-primary" id="begin" type="button">Start</button>`)}
   `;

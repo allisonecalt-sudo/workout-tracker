@@ -7,8 +7,18 @@
 // was already fixed at v55 fix r3. This test is what keeps both fixed —
 // pure-logic, no `page` fixture, same reasoning as pain-rule.test.ts's own
 // header (a real import, no DOM needed).
+//
+// Widened (v60 fix pass, same day, checker's should #3): the hardcoded
+// 2-move list only caught curl/row. Now loops EVERY EXERCISE_DETAIL entry
+// with a voiceScript against its own PROGRAM reps text pulled from app.ts —
+// same "can't import app.ts in Node" workaround pain-rule.test.ts already
+// uses (regex extraction, not the DOM). Flags any move whose spoken script
+// names a specific kg/kilo number ("one kilogram", "1 kg") that its current
+// reps text doesn't also carry — the exact bug class the curl mp3 had.
 
 import { test, expect } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
 import { EXERCISE_DETAIL } from '../exercise-detail';
 
 // The two 1–2 kg LOAD CHIP moves (app.ts's ARM_FEEL_STEPS — curl/row, rule
@@ -33,4 +43,62 @@ test.describe('voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram
       expect(lower).toMatch(/one or two kilos/);
     });
   }
+});
+
+// --- general sweep: every voiceScript vs. its own program reps text -------
+
+const WORD_NUM: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 };
+
+/** Every kg/kilo(gram) number mentioned in `text`, digit or word form. */
+function kgMentions(text: string): Set<number> {
+  const out = new Set<number>();
+  const lower = text.toLowerCase();
+  for (const m of lower.matchAll(/\b(\d+(?:\.\d+)?)\s*kg\b/g)) out.add(parseFloat(m[1]!));
+  for (const m of lower.matchAll(/\b(\d+(?:\.\d+)?)\s*kilo(?:gram)?s?\b/g))
+    out.add(parseFloat(m[1]!));
+  for (const m of lower.matchAll(/\b(one|two|three|four|five)\s*kilo(?:gram)?s?\b/g))
+    out.add(WORD_NUM[m[1]!]!);
+  return out;
+}
+
+test('voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks', () => {
+  // Every `name: '...'` followed by that SAME object's `reps: '...'` in
+  // app.ts's Exercise object literals — the PROGRAM's own prescribed
+  // reps/load text for that move, name -> all reps strings seen for it (a
+  // move can appear in more than one workout/week, sometimes with a `label:`
+  // field or several comment lines between `name:` and `reps:` — e.g.
+  // HIP_HINGE_R2W4 — so this stops at the next `name:` rather than a fixed
+  // char window, which a first pass got wrong: a too-tight window missed
+  // that object's own "1–2 kg" reps text and flagged its voiceScript as a
+  // false positive).
+  const appSrc = fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
+  const nameRepsRe =
+    /name:\s*'((?:\\.|[^'])*)',(?:(?!name:\s*')[\s\S])*?reps:\s*'((?:\\.|[^'])*)'/g;
+  const repsByName = new Map<string, string[]>();
+  let nm: RegExpExecArray | null;
+  while ((nm = nameRepsRe.exec(appSrc))) {
+    const name = nm[1]!;
+    const reps = nm[2]!;
+    const arr = repsByName.get(name) ?? [];
+    arr.push(reps);
+    repsByName.set(name, arr);
+  }
+
+  const offenders: string[] = [];
+  for (const [name, d] of Object.entries(EXERCISE_DETAIL)) {
+    if (!d.voiceScript) continue;
+    const scriptKg = kgMentions(d.voiceScript);
+    if (scriptKg.size === 0) continue; // nothing kg-shaped spoken — not this test's concern
+    const repsTexts = repsByName.get(name);
+    if (!repsTexts || repsTexts.length === 0) continue; // no program reps text found — can't check, skip
+    const repsKg = new Set<number>();
+    for (const r of repsTexts) for (const n of kgMentions(r)) repsKg.add(n);
+    const missing = [...scriptKg].filter((n) => !repsKg.has(n));
+    if (missing.length > 0) {
+      offenders.push(
+        `"${name}" voiceScript names ${missing.join('/')} kg but its reps text (${repsTexts.join(' | ')}) doesn't`
+      );
+    }
+  }
+  expect(offenders).toEqual([]);
 });
