@@ -428,6 +428,97 @@ test.describe('week by week (v57)', () => {
     await page.locator('#open-rides').click();
     await expect(page.locator('button[data-rides-chart-mode="perRide"]')).toHaveClass(/is-on/);
   });
+
+  // v57 fix pass (Sep 28 2026) — CHECK-v57-2026-09-28.md, shoulds S1-S3.
+  test('S1: the per-week chart runs oldest to newest, left to right, same as the per-ride chart', async ({
+    page,
+  }) => {
+    await seedLogs(page, [...WEEK5, WEEK6_D]);
+    await page.goto('/');
+    await openRides(page);
+    await page.locator('button[data-rides-chart-mode="perWeek"]').click();
+
+    const barIds = await page
+      .locator('#rides-chart [data-ride-id]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-ride-id')));
+    // Week 5 (round 2, week 5) first, Week 6 second — oldest to newest.
+    expect(barIds).toEqual(['2-5', '2-6']);
+  });
+
+  test('S2: every bar in per-week mode shows its own minutes, not just the open one', async ({
+    page,
+  }) => {
+    await seedLogs(page, [...WEEK5, WEEK6_D]);
+    await page.goto('/');
+    await openRides(page);
+    await page.locator('button[data-rides-chart-mode="perWeek"]').click();
+
+    // Week 5 (closed, not highlighted) still shows its own "45" — before
+    // this fix only the open bar (Week 6) had a value label.
+    await expect(page.locator('#rides-chart [data-ride-id="2-5"]')).toContainText('45');
+    await expect(page.locator('#rides-chart [data-ride-id="2-6"]')).toContainText('15');
+  });
+
+  test('S3: the vs-card header carries short column labels; full week names sit on their own line', async ({
+    page,
+  }) => {
+    await seedLogs(page, [...WEEK5, WEEK6_D]);
+    await page.goto('/');
+    await openRides(page);
+
+    await expect(page.locator('.rides-vs-names')).toContainText('Week 6');
+    await expect(page.locator('.rides-vs-names')).toContainText('(so far)');
+    await expect(page.locator('.rides-vs-names')).toContainText('Week 5');
+
+    const header = page.locator('.rides-vs-header');
+    await expect(header.locator('.rides-vs-val').nth(0)).toHaveText('This');
+    await expect(header.locator('.rides-vs-val').nth(1)).toHaveText('Last');
+    await expect(header.locator('.rides-vs-delta')).toHaveText('Δ');
+  });
+});
+
+// v57 fix pass (Sep 28 2026) — CHECK-v57-2026-09-28.md M1 (must).
+test.describe('v57 fix pass: legacy Week 4 (Sep 28 2026)', () => {
+  test('rides logged before the completion launch (her real Week 4) show as a legacy row, not dropped', async ({
+    page,
+  }) => {
+    // Her real 3 rides, real dates, the REAL launch instant (no test-only
+    // override) — CHECK-v57 M1's own repro: on her phone today the table
+    // showed one row ("Week 5 · so far") and every vs-card cell read "—",
+    // even though the Totals card above it counted all of her rides.
+    await seedLogs(page, [
+      rideLog('a1', '2026-09-24', { ...RIDE_A, workout: 'A' }),
+      rideLog('c1', '2026-09-25', { ...RIDE_C, workout: 'C' }),
+      rideLog('b1', '2026-09-26', { ...RIDE_B, workout: 'B' }),
+    ]);
+    await page.goto('/');
+    await openRides(page);
+
+    const rows = page.locator('.rides-week-row');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('Week 5');
+    await expect(rows.nth(0)).toContainText('so far');
+    await expect(rows.nth(0).locator('.rides-week-empty')).toHaveText('—');
+
+    await expect(rows.nth(1)).toContainText('Week 4');
+    await expect(rows.nth(1)).not.toContainText('so far');
+    await expect(rows.nth(1)).toContainText('3 rides');
+    await expect(rows.nth(1)).toContainText('45 min');
+    await expect(rows.nth(1)).toContainText('3.28 km');
+    await expect(rows.nth(1)).toContainText('266.3 kcal');
+    await expect(rows.nth(1)).toContainText('5.9 kcal/min');
+    await expect(rows.nth(1)).toContainText('4.4 km/h');
+    await expect(rows.nth(1)).toContainText('avg L4.3');
+
+    // The Sat Sep 26 B is Week 4's own closing ride (the swing rule) — it
+    // must not ALSO land in Week 5's count (the exact double-count risk
+    // membership-first bucketing exists to avoid).
+    const card = page.locator('.rides-vs-card');
+    await expect(card).toContainText('Week 4');
+    const ridesRow = card.locator('.rides-vs-row').filter({ hasText: 'Rides' });
+    await expect(ridesRow.locator('.rides-vs-val').nth(0)).toHaveText('0'); // Week 5, so far
+    await expect(ridesRow.locator('.rides-vs-val').nth(1)).toHaveText('3'); // Week 4
+  });
 });
 
 test.describe('phone width', () => {

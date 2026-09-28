@@ -6347,7 +6347,9 @@ textarea:focus {
 .rides-vs-header,
 .rides-vs-row {
   display: grid;
-  grid-template-columns: 1fr 52px 52px 40px;
+  /* v57 fix pass (Sep 28 2026), CHECK-v57 S3: Δ widened 40px -> 48px — her
+   * real "-196.3" was tight against 40px. */
+  grid-template-columns: 1fr 52px 52px 48px;
   gap: 6px;
   align-items: baseline;
   padding: 6px 0;
@@ -6356,6 +6358,16 @@ textarea:focus {
 .rides-vs-header {
   border-bottom: 1px solid var(--border-divider);
   margin-bottom: 2px;
+}
+
+/* v57 fix pass (Sep 28 2026), CHECK-v57 S3: the full week names ("R2 · Week
+ * 6 (so far) vs R2 · Week 4") get their own full-width line above the grid
+ * — they never fit a 52px column. */
+.rides-vs-names {
+  font-size: var(--font-small);
+  color: var(--text-dim);
+  font-weight: 600;
+  margin-bottom: 4px;
 }
 
 .rides-vs-row + .rides-vs-row {

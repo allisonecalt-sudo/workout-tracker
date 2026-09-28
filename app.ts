@@ -18,6 +18,7 @@ import {
   usualKcalPerMin,
   bestRide,
   rideTotals,
+  weekRideAggregate,
   weeklyRideRows,
   PROJECTION_LABEL,
   type RideRecord,
@@ -13755,13 +13756,22 @@ function renderRidesWeekVsCard(rows: WeeklyRideRow[]): string {
       <span class="rides-vs-val">${b !== null && b !== undefined ? `${b}${suffix}` : '—'}</span>
       <span class="rides-vs-delta">${a !== null ? deltaNum(a, b ?? null) : '—'}</span>
     </div>`;
+  // v57 fix pass (Sep 28 2026), CHECK-v57 S3: the full week names ("R2 ·
+  // Week 6 (so far)") don't fit a 52px grid column — they used to sit
+  // straight in the header row and either overlapped the metric-name column
+  // or wrapped to 3 lines. Now they get their own full-width line, and the
+  // header row underneath carries only short column labels aligned to the
+  // same 4 columns every data row uses (styles.css .rides-vs-header).
+  const thisLabel = `${weekRowLabel(thisWeek.key)}${thisWeek.isOpen ? ' (so far)' : ''}`;
+  const lastLabel = lastWeek ? weekRowLabel(lastWeek.key) : null;
   return `
     <div class="card progress-card rides-vs-card">
       <div class="progress-card-label">This week vs last week</div>
+      <div class="rides-vs-names">${escapeHtml(thisLabel)}${lastLabel ? ` vs ${escapeHtml(lastLabel)}` : ''}</div>
       <div class="rides-vs-header">
-        <span class="rides-vs-lbl">${escapeHtml(weekRowLabel(thisWeek.key))}${thisWeek.isOpen ? ' (so far)' : ''}</span>
-        <span class="rides-vs-val"></span>
-        <span class="rides-vs-val">${lastWeek ? escapeHtml(weekRowLabel(lastWeek.key)) : ''}</span>
+        <span class="rides-vs-lbl"></span>
+        <span class="rides-vs-val">This</span>
+        <span class="rides-vs-val">Last</span>
         <span class="rides-vs-delta">Δ</span>
       </div>
       ${numRow('Rides', thisWeek.rides, lastWeek?.rides, '')}
@@ -13864,14 +13874,27 @@ function renderRidesChartCard(rides: RideRecord[], weekRows: WeeklyRideRow[]): s
           <p class="progress-card-empty">Shows once a week's worth of rides has run.</p>
         </div>`;
     }
-    const bars: ChartBar[] = weekRows.map((row) => ({
+    // v57 fix pass (CHECK-v57 S1): the table/vs-card read `weekRows`
+    // newest-first (row 0 = the latest week — that's what "this week vs
+    // last week" needs), but a chart reads oldest -> newest, left to right,
+    // same as the per-ride chart just below — pass the newest-first rows
+    // through unchanged and this bar chart draws right-to-left in time.
+    // Reverse ONLY for the chart's own bar order.
+    const chartWeekRows = [...weekRows].reverse();
+    const bars: ChartBar[] = chartWeekRows.map((row) => ({
       id: `${row.key.round}-${row.key.week}`,
       value: row.minutes,
       label: `W${row.key.week}`,
       highlighted: row.isOpen,
       sublabel: row.rides > 0 ? `${row.rides}x` : undefined,
     }));
-    const svg = barChartSvg(bars, { ariaLabel: 'Total minutes ridden, by week' });
+    // v57 fix pass (CHECK-v57 S2): every bar gets its own minutes label, not
+    // just the highlighted/open one — she shouldn't have to cross-reference
+    // the table below to read W5's total off the chart.
+    const svg = barChartSvg(bars, {
+      ariaLabel: 'Total minutes ridden, by week',
+      labelAllBars: true,
+    });
     return `
       <div class="card progress-card rides-chart-card">
         <div class="progress-card-label">Rides</div>
@@ -13950,6 +13973,42 @@ function renderRidesListCard(rides: RideRecord[]): string {
     </div>`;
 }
 
+// v57 fix pass (Sep 28 2026) — CHECK-v57 M1: rides dated before
+// COMPLETION_WEEKS_FROM never get a weekOf membership (week.ts's HISTORY
+// rule: "every session dated before it is filtered out before the walk
+// runs"), and weeklyRideRows' date-range fallback only ever checks the spans
+// weekModel() itself produced (post-launch only) — so her real Week 4 rides
+// (Sep 24 A / Sep 25 C / Sep 26 B) were silently dropped: "this week vs last
+// week" read empty on her phone the whole time Week 5 was still open, even
+// though the Totals card right above it counted all 4 of her rides that
+// month (CHECK-v57-2026-09-28.md M1). Fix: reuse the SAME legacy attribution
+// the app already shows for "‹ Week 4" (attributeSessionsToWeeks +
+// LEGACY_LAST_CLOSED_WEEK_INSTANT — legacyLastClosedWeekPeek's own pairing,
+// see its comment) instead of inventing a second meaning of "week" here.
+// One pinned legacy row, always the calendar week that closed the night
+// before the real launch — never "whatever today happens to be minus a
+// week" (same fixed-instant reasoning LEGACY_LAST_CLOSED_WEEK_INSTANT's own
+// comment already gives). Null when nothing landed there (a break/sick week
+// per SKIPPED_WEEKS, or she just didn't ride that week) — no point showing a
+// permanent empty legacy row once real week.ts history exists on its own.
+function legacyWeek4RideRow(logs: LogEntry[], rides: RideRecord[]): WeeklyRideRow | null {
+  const legacyWeek = getProgramWeek(LEGACY_LAST_CLOSED_WEEK_INSTANT);
+  if (legacyWeek.skippedLabel) return null;
+  const attribution = attributeSessionsToWeeks(logs);
+  const legacyLogIds = new Set(
+    sessionsAttributedTo(logs, legacyWeek.start, attribution)
+      .map((l) => l.id)
+      .filter((id): id is string => !!id)
+  );
+  const legacyRides = rides.filter((r) => legacyLogIds.has(r.id));
+  if (legacyRides.length === 0) return null;
+  return {
+    key: { round: legacyWeek.round, week: legacyWeek.num },
+    isOpen: false,
+    ...weekRideAggregate(legacyRides),
+  };
+}
+
 function renderRides(): string {
   const logs = getChronologicalLogs(); // oldest → newest, by date
   const rides = ellipticalRideRecords(logs);
@@ -13976,6 +14035,13 @@ function renderRides(): string {
   // the chart's "per week" mode — one computation, three views of it.
   const { spans, open, weekOf } = weekModel();
   const weekRows = weeklyRideRows(rides, weekOf, spans, open, 6);
+  // v57 fix pass (CHECK-v57 M1): the legacy row is always the OLDEST of the
+  // two kinds of week (week.ts weeks come after it, her own real Week 4
+  // never overlaps a weekModel span), so it goes at the END of the
+  // newest-first list — capped at the same 6-week window weeklyRideRows
+  // already enforces for its own rows.
+  const legacyRow = legacyWeek4RideRow(logs, rides);
+  const combinedWeekRows = legacyRow ? [...weekRows, legacyRow].slice(0, 6) : weekRows;
 
   return `
     ${header}
@@ -13983,9 +14049,9 @@ function renderRides(): string {
       ${renderRidesHeroCard(latest, latestRate)}
       ${renderRidesUsualBestCard(usualKcalPerMin(rides), bestRide(rides), eligibleCount)}
       ${renderRidesTotalsCard(rides)}
-      ${renderRidesWeekVsCard(weekRows)}
-      ${renderRidesWeekTableCard(weekRows)}
-      ${renderRidesChartCard(rides, weekRows)}
+      ${renderRidesWeekVsCard(combinedWeekRows)}
+      ${renderRidesWeekTableCard(combinedWeekRows)}
+      ${renderRidesChartCard(rides, combinedWeekRows)}
       ${renderRidesListCard(rides)}
     </div>`;
 }

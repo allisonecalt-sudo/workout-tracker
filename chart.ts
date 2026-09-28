@@ -34,6 +34,13 @@ export type BarChartOptions = {
   ariaLabel: string;
   width?: number; // default 340 (PLAN §4.5: a 380px card, 20px padding -> 340px content)
   plotHeight?: number; // default 120 — the bars' own area, no axis under it
+  // v57 fix pass (Sep 28 2026), CHECK-v57 S2: the rides page's per-week
+  // chart only labelled the highlighted (open) bar — every other week's
+  // total minutes had no number, so she had to cross-reference the table
+  // below to read one off. A small (<=6 bars) chart can label every bar
+  // without crowding it; the per-ride chart (up to 10 bars) keeps the old
+  // highlighted-only behavior by leaving this unset.
+  labelAllBars?: boolean;
 };
 
 const DEFAULT_WIDTH = 340;
@@ -75,8 +82,13 @@ export function barChartSvg(bars: ChartBar[], opts: BarChartOptions): string {
       const barH = Math.max(2, (b.value / scaleMax) * plotHeight);
       const barY = plotHeight - barH;
       const fill = b.highlighted ? 'var(--text)' : 'var(--text-dim-2)';
-      const valueLabel = b.highlighted
-        ? `<text x="${(barX + barWidth / 2).toFixed(1)}" y="${Math.max(13, barY - 6).toFixed(1)}" font-size="17" font-weight="700" fill="var(--text)" text-anchor="middle">${escapeXml(String(b.value))}</text>`
+      // v57 fix pass (Sep 28 2026), CHECK-v57 S2: the highlighted bar keeps
+      // its original bold 17px label; a non-highlighted bar only gets one
+      // when the caller opts in (labelAllBars) — 15px dim, her own §4.5
+      // floor, never smaller than the sublabel row right under it.
+      const showValue = b.highlighted || !!opts.labelAllBars;
+      const valueLabel = showValue
+        ? `<text x="${(barX + barWidth / 2).toFixed(1)}" y="${Math.max(13, barY - 6).toFixed(1)}" font-size="${b.highlighted ? 17 : 15}" font-weight="${b.highlighted ? 700 : 400}" fill="${b.highlighted ? 'var(--text)' : 'var(--text-dim)'}" text-anchor="middle">${escapeXml(String(b.value))}</text>`
         : '';
       // v54 fix r2 (Sep 27 2026), checker's should #4: 13px broke her own
       // §4.5 rule ("nothing on that card under 15px" — "too small I can't
