@@ -301,18 +301,23 @@ export function moveFeelString(
 // that function's whole contract is "only slugs `stepped` can vouch for" —
 // this is the one deliberate, always-on exception the ride (and Workout D,
 // same slug) needs, not a second door into the same rule.
+// v61 fix pass (Sep 28 2026, CHECK-v61 should #5): `qty` is nullable — a
+// ride she never typed a time for has a real feel but nothing honest to
+// scale it by (her planned minutes aren't what she DID). null skips the
+// `@qty<unit>` suffix entirely, same optional-qty shape moveFeelString's own
+// slugs already allow for a plain reps bump.
 export function withOverrideFeel(
   base: string | null,
   slug: string,
   feel: MoveFeelValue,
-  qty: number,
+  qty: number | null,
   unit: 'kg' | 's' | 'min'
 ): string {
   const kept = parseMoveFeelString(base).filter((p) => p.slug !== slug);
   const rebuilt = kept.map(
     (p) => `${p.slug}=${p.feel ?? ''}${p.qtyRaw !== null ? `@${p.qtyRaw}` : ''}`
   );
-  rebuilt.push(`${slug}=${feel}@${qty}${unit}`);
+  rebuilt.push(`${slug}=${feel}${qty !== null ? `@${qty}${unit}` : ''}`);
   return rebuilt.join(';');
 }
 

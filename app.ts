@@ -6160,9 +6160,22 @@ async function saveCompletedSession(): Promise<void> {
         : workoutWalk
           ? 'walk'
           : null;
+  // v61 fix pass (Sep 28 2026, CHECK-v61 must #2): the elliptical lane used
+  // to fall back to the PRESCRIBED length (laneDone ?? prescribedElliptical)
+  // — but laneDone is always null now (no app timer left to run,
+  // captureLaneMinutesIfLeaving's own WW_LANE_STARTED_KEY is never set for
+  // the ride any more, spec item e), so every save silently logged the
+  // planned minutes as if she'd done exactly that, even when she typed a
+  // real 25:00 (driven repro: saved 30). cardio_minutes means "what she
+  // actually did" (ride-aim.ts/ridge.ts both read it that way) — her typed
+  // time (ellipticalTimeSec, which already prefers the typed box) or
+  // nothing, never a guess from the prescription.
+  const typedEllipticalSec = cardioLane === 'elliptical' ? ellipticalTimeSec() : null;
   const cardioMinutes =
     cardioLane === 'elliptical'
-      ? (laneDone ?? prescribedElliptical)
+      ? typedEllipticalSec !== null
+        ? Math.round(typedEllipticalSec / 60)
+        : null
       : cardioLane === 'apartment'
         ? (laneDone ?? prescribedApartment)
         : cardioLane === 'walk' && workoutWalk
@@ -6249,14 +6262,18 @@ async function saveCompletedSession(): Promise<void> {
     // asked (never gated on "stepped" the way the rest of moveFeel is) —
     // withOverrideFeel replaces/adds just the 'ride' segment, minutes = her
     // typed time on the numbers screen, rounded (ellipticalTimeSec already
-    // prefers what she typed over anything else); no typed time at all (she
-    // skipped the numbers) falls back to the ride's own chosen length.
+    // prefers what she typed over anything else).
+    // v61 fix pass (CHECK-v61 should #5): a blank Time box used to fall back
+    // to the PLANNED minutes (ellipticalMinutes() ?? 1), saving a qty she
+    // never typed — "ride=right@30min" for a ride she logged no time for at
+    // all. No typed time now saves the feel with no qty ("ride=right"), a
+    // valid move_feel shape (the slug's own CHECK — see move-feel.ts's
+    // isValidMoveFeelString — makes `@qty` optional).
     moveFeel: (() => {
       const base = moveFeelString(state.moveFeel, currentSteppedMoves());
       if (!onElliptical || !state.rideFeel) return base;
       const sec = ellipticalTimeSec();
-      const minutes =
-        sec !== null ? Math.max(1, Math.round(sec / 60)) : Math.max(1, ellipticalMinutes() ?? 1);
+      const minutes = sec !== null ? Math.max(1, Math.round(sec / 60)) : null;
       return withOverrideFeel(base, 'ride', state.rideFeel, minutes, 'min');
     })(),
     voicePlays: state.voicePlays,
@@ -11831,6 +11848,11 @@ function postLogWitnessLine(w: Workout): string {
     // counts BACKWARD (week.ts rule 3) into the week that just closed — say
     // that truth, consistent with what weekOf will resolve to once saved,
     // not the pending week's own (not-yet-real) count.
+    // v61 fix pass (Sep 28 2026, CHECK-v61 should #4): both branches below
+    // used to stay at "of 3" after the Home/weekly-review line (weekCountLine)
+    // widened to "of 4" — the same D read those use (weekHasD on the raw
+    // logs, week.ts drops D from its own model by design).
+    const dLogs = loadLogs().filter((l) => l.workout === 'D');
     const backWeek = gapCountsBackToWeekNum();
     if (backWeek !== null) {
       // WK2 fix r2 (Sep 27 2026, checker's nice #6): "(already 3 of 3)" was
@@ -11841,7 +11863,10 @@ function postLogWitnessLine(w: Workout): string {
       const { spans } = weekModel();
       const lastSpan = spans.length ? spans[spans.length - 1] : null;
       const closedDone = lastSpan ? lastSpan.done.length : 3;
-      parts.push(`an extra for Week ${backWeek} (already ${closedDone} of 3)`);
+      const closedHasD = weekHasD(lastSpan, dLogs);
+      parts.push(
+        `an extra for Week ${backWeek} (already ${closedDone + (closedHasD ? 1 : 0)} of 4)`
+      );
     } else {
       // WK2 fix r1 (Sep 27 2026, checker's should #2): `.done.length + 1`
       // overcounts a REPEAT letter — doing A a second time in a week that
@@ -11851,7 +11876,8 @@ function postLogWitnessLine(w: Workout): string {
       // same way everywhere instead of always adding one.
       const doneLetters = new Set<string>(shown.span?.done ?? []);
       if (state.selectedWorkout) doneLetters.add(state.selectedWorkout);
-      parts.push(`${doneLetters.size} of 3 in Week ${shown.key.week}`);
+      const hasD = weekHasD(shown.span, dLogs);
+      parts.push(`${doneLetters.size + (hasD ? 1 : 0)} of 4 in Week ${shown.key.week}`);
     }
   }
   return parts.join(' · ');
@@ -12260,6 +12286,11 @@ function ellipticalRideRecords(logs: LogEntry[]): RideRecord[] {
       km: cardio.km,
       kcal: cardio.kcal,
       timeSec: cardio.timeSec,
+      // v61 fix pass (CHECK-v61 must #1): carried alongside timeSec so
+      // ride-aim.ts can still bucket a row that has no typed time but does
+      // have cardio_minutes (her real Sep 28 D row — see ride-aim.ts's
+      // effectiveTimeSec()).
+      minutes: cardio.minutes,
     });
   }
   return records;
@@ -13478,6 +13509,16 @@ type PerWeekRow = {
   // real count) and "wk 7 · 1/3 · open" (the live span, in place of the old
   // "now" label).
   suffix?: string;
+  // v61 fix pass (Sep 28 2026, CHECK-v61 must #3) — her words 15:35: "she
+  // did not say one of four." A completion-model row counts D into what's
+  // SHOWN ("N / 4"), same widening weekCountLine (the Home/weekly-review
+  // line) already does — this card used to stay hard-coded at "N / 3" for
+  // EVERY row, legacy weeks included, so Home read "2 of 4" one card above
+  // the exact same week reading "1 / 3" here. `value`/pct (the bar's own
+  // "met" rule) stay on A/B/C alone (undefined on a legacy row, which keeps
+  // plain "N / 3" with no override).
+  displayValue?: number;
+  displayTarget?: number;
 };
 
 // One sessions-per-week row. v48 · P6 (Sep 24 2026): HTML, not SVG — the
@@ -13490,11 +13531,16 @@ function renderPerWeekRow(r: PerWeekRow): string {
   }
   const pct = Math.round(Math.min(1, r.value / SESSIONS_PER_WEEK_TARGET) * 100);
   const suffix = r.suffix ? ` · ${escapeHtml(r.suffix)}` : '';
+  // v61 fix pass (must #3): displayValue/displayTarget override the shown
+  // count on a completion-model row (D counted in, "/ 4") — the bar's pct
+  // above is untouched, still r.value/SESSIONS_PER_WEEK_TARGET (A/B/C only).
+  const shownValue = r.displayValue ?? r.value;
+  const shownTarget = r.displayTarget ?? SESSIONS_PER_WEEK_TARGET;
   return `
     <div class="spw-row${r.isCurrent ? ' spw-row-current' : ''}">
       <span class="spw-label">${escapeHtml(r.label)}</span>
       <span class="spw-track"><span class="spw-fill" style="width:${pct}%"></span></span>
-      <span class="spw-count">${r.value} / ${SESSIONS_PER_WEEK_TARGET}${suffix}</span>
+      <span class="spw-count">${shownValue} / ${shownTarget}${suffix}</span>
     </div>`;
 }
 
@@ -13581,7 +13627,11 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
   // added then).
   if (isNowAfterCompletionLaunch()) {
     const { spans, open } = weekModel();
+    // v61 fix pass (must #3): same D read weekLineText/Home already use —
+    // week.ts drops D from its own model, so this reads the raw logs instead.
+    const dLogs = logs.filter((l) => l.workout === 'D');
     for (const span of spans) {
+      const hasD = weekHasD(span, dLogs);
       rows.push({
         label: `wk ${span.key.week}`,
         value: span.done.length,
@@ -13589,9 +13639,12 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
         isCurrent: false,
         skipped: false,
         suffix: span.how === 'moved_on' ? 'moved on' : undefined,
+        displayValue: span.done.length + (hasD ? 1 : 0),
+        displayTarget: 4,
       });
     }
     if (open) {
+      const openHasD = weekHasD(open, dLogs);
       rows.push({
         label: `wk ${open.key.week}`,
         value: open.done.length,
@@ -13599,6 +13652,8 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
         isCurrent: true,
         skipped: false,
         suffix: 'open',
+        displayValue: open.done.length + (openHasD ? 1 : 0),
+        displayTarget: 4,
       });
     }
   }

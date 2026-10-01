@@ -47,6 +47,13 @@ export type RideRecord = {
   km: number | null;
   kcal: number | null;
   timeSec: number | null;
+  // v61 fix pass (Sep 28 2026, CHECK-v61 must #1): cardio_minutes off the
+  // same row — her real Sep 28 D row has no elliptical_time_sec (she typed
+  // nothing on the numbers screen) but DOES carry cardio_minutes 30. Optional
+  // so every pre-existing RideRecord literal (ride.test.ts, this module's own
+  // rate/total functions) stays untouched; only ride-aim.ts reads it, as a
+  // fallback when timeSec is null — see its effectiveTimeSec().
+  minutes?: number | null;
 };
 
 function round1(n: number): number {

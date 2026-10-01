@@ -43,12 +43,26 @@ function round05(n: number): number {
   return round2(Math.round(n / 0.05) * 0.05);
 }
 
+/** v61 fix pass (Sep 28 2026, CHECK-v61 must #1) — her real Sep 28 D row has
+ * elliptical_time_sec null (she typed nothing on the numbers screen after
+ * the app timer was removed, spec item e) but DOES carry cardio_minutes 30.
+ * timeSec wins when it's there (her Sep 28 A row: cardio_minutes 1, time
+ * 720 — the real elapsed time, never the rounder minutes count); only when
+ * it's null does this fall back to her typed/prescribed minutes × 60. Null
+ * when NEITHER exists — still never a guessed rate. */
+function effectiveTimeSec(r: RideRecord): number | null {
+  if (typeof r.timeSec === 'number' && r.timeSec > 0) return r.timeSec;
+  if (typeof r.minutes === 'number' && r.minutes > 0) return r.minutes * 60;
+  return null;
+}
+
 /** km covered per 10 real minutes on the machine — null when there's no
  * usable km+time pair to divide (never a guessed rate). */
 function kmPer10Min(r: RideRecord): number | null {
   if (typeof r.km !== 'number' || r.km <= 0) return null;
-  if (typeof r.timeSec !== 'number' || r.timeSec <= 0) return null;
-  return (r.km / r.timeSec) * 600;
+  const timeSec = effectiveTimeSec(r);
+  if (timeSec === null) return null;
+  return (r.km / timeSec) * 600;
 }
 
 /** A ride's own length, in whole minutes — the same Math.round(durationSec/60)
@@ -73,8 +87,9 @@ export function bestKmPer10MinAt(
   let best: number | null = null;
   for (const r of rides) {
     if (r.level !== level) continue;
-    if (typeof r.timeSec !== 'number' || r.timeSec <= 0) continue;
-    if (roundedMinutes(r.timeSec) !== plannedMinutes) continue;
+    const timeSec = effectiveTimeSec(r);
+    if (timeSec === null) continue;
+    if (roundedMinutes(timeSec) !== plannedMinutes) continue;
     const pace = kmPer10Min(r);
     if (pace === null) continue;
     if (best === null || pace > best) best = pace;
@@ -111,8 +126,9 @@ export function lastTimeAtSameAim(
   let mostRecent: RideRecord | null = null;
   for (const r of rides) {
     if (r.level !== level) continue;
-    if (typeof r.timeSec !== 'number' || r.timeSec <= 0) continue;
-    if (roundedMinutes(r.timeSec) !== plannedMinutes) continue;
+    const timeSec = effectiveTimeSec(r);
+    if (timeSec === null) continue;
+    if (roundedMinutes(timeSec) !== plannedMinutes) continue;
     if (typeof r.km !== 'number' || r.km <= 0) continue;
     if (!mostRecent || r.date > mostRecent.date) mostRecent = r;
   }

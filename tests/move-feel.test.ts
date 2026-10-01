@@ -57,6 +57,28 @@ test.describe('withOverrideFeel', () => {
       { slug: 'ride', feel: 'hard', qtyRaw: '30min' },
     ]);
   });
+
+  // v61 fix pass (Sep 28 2026, CHECK-v61 should #5): a blank Time box used
+  // to fall back to the PLANNED minutes, saving a qty she never typed. null
+  // qty saves the feel with no "@qty" at all — a shape the CHECK already
+  // allows (a plain, qty-less feel), proven here round-tripping the same way
+  // the qty-bearing cases above do.
+  test('null qty saves the feel with no "@qty" suffix at all — no typed time, nothing to scale by', () => {
+    expect(withOverrideFeel(null, 'ride', 'right', null, 'min')).toBe('ride=right');
+  });
+
+  test('null qty still replaces its own prior (qty-bearing) segment cleanly', () => {
+    expect(withOverrideFeel('ride=easy@10min', 'ride', 'hard', null, 'min')).toBe('ride=hard');
+  });
+
+  test('null qty round-trips through parseMoveFeelString and isValidMoveFeelString', () => {
+    const s = withOverrideFeel('splitsquat=right', 'ride', 'hard', null, 'min');
+    expect(isValidMoveFeelString(s)).toBe(true);
+    expect(parseMoveFeelString(s)).toEqual([
+      { slug: 'splitsquat', feel: 'right', qtyRaw: null },
+      { slug: 'ride', feel: 'hard', qtyRaw: null },
+    ]);
+  });
 });
 
 test.describe('slugFor', () => {

@@ -113,6 +113,52 @@ test('deriveRideAim: rounds to the nearest 0.05 km both ways', () => {
   expect(deriveRideAim([down], 10, 4)).toEqual({ km: 1.05 }); // 1.03 rounds UP to 1.05
 });
 
+// v61 fix pass (Sep 28 2026, CHECK-v61 must #1): her REAL Sep 28 D row shape
+// — elliptical_time_sec null (no app timer left to prefill it, spec item e,
+// and she typed nothing on the numbers screen), cardio_minutes 30. The
+// original test above made this up as timeSec: 1800, which is why it passed
+// while her actual row was silently dropped (bestKmPer10MinAt/kmPer10Min
+// both required timeSec). Same worked numbers as the task spec (D aim 2.1).
+test('deriveRideAim: her REAL Sep 28 D row (timeSec null, minutes 30 — no typed time) still produces aim 2.1', () => {
+  const realD: RideRecord = {
+    id: 'd-real',
+    date: '2026-09-28',
+    workout: 'D',
+    level: 3,
+    km: 2.1,
+    kcal: 190.8,
+    timeSec: null,
+    minutes: 30,
+  };
+  expect(deriveRideAim([realD], 30, 3)).toEqual({ km: 2.1 });
+  expect(bestKmPer10MinAt([realD], 3, 30)).toBeCloseTo(0.7, 4);
+  // timeSec still wins over minutes when both are present (her real Sep 28
+  // A row: cardio_minutes 1, elliptical_time_sec 720 — the typed time is the
+  // true elapsed 12 min, never the rounded-down "1").
+  const aRowTimeWins: RideRecord = {
+    id: 'a-real',
+    date: '2026-09-28',
+    workout: 'A',
+    level: 5,
+    km: 1.4,
+    kcal: 60,
+    timeSec: 720,
+    minutes: 1,
+  };
+  expect(bestKmPer10MinAt([aRowTimeWins], 5, 12)).toBeCloseTo((1.4 / 720) * 600, 4);
+  // Neither timeSec nor minutes — still null, never a guess.
+  const nothing: RideRecord = {
+    id: 'x',
+    date: '2026-09-28',
+    workout: 'B',
+    level: 5,
+    km: 1,
+    kcal: 50,
+    timeSec: null,
+  };
+  expect(deriveRideAim([nothing], 10, 5)).toEqual({ isFirst: true });
+});
+
 test('lastTimeAtSameAim: the most recent km at this exact level+length, or null with no match', () => {
   expect(lastTimeAtSameAim(ALL, 30, 3)).toBe(2.1);
   expect(lastTimeAtSameAim(ALL, 25, 3)).toBe(1.87);

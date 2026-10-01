@@ -6107,6 +6107,46 @@ test.describe('v48 P3 cardio', () => {
     expect(saved['ellipticalPulse']).toBe(128);
   });
 
+  // v61 fix pass (Sep 28 2026, CHECK-v61 must #2): saveCompletedSession used
+  // to set cardioMinutes = laneDone ?? prescribedElliptical — and laneDone
+  // is always null now (no app timer left to run, spec item e), so EVERY
+  // save silently logged the PLANNED length, never what she actually typed.
+  // A/B prescribe 10 min; typing a ride that really ran 25 min must save 25,
+  // never 10 — the one number that proves this isn't just coincidentally
+  // matching the plan (the test right above it, unchanged, can't tell the
+  // two apart since her typed 10:02 and the 10-min plan agree).
+  test('(f) v61 fix pass: cardioMinutes comes from her typed time, never the planned length', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page); // prescribes 10 min
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#next').click();
+    await page.locator('#ell-time').fill('25:00');
+    const saved = await finishAndRead(page);
+    expect(saved['cardioMinutes']).toBe(25); // not 10
+    expect(saved['ellipticalTimeSec']).toBe(1500);
+  });
+
+  // v61 fix pass (must #2): her real Sep 28 D row is exactly this shape —
+  // she skipped the Time box entirely. cardio_minutes must be null (honest
+  // "unknown"), never the prescribed/planned length standing in for a
+  // reading she never took.
+  test('(f) v61 fix pass: Time left blank saves cardioMinutes null, never the planned length', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4);
+    await page.goto('/');
+    await startA(page);
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#next').click();
+    await expect(page.locator('#ell-time')).toHaveValue('');
+    const saved = await finishAndRead(page);
+    expect(saved['cardioMinutes'] ?? null).toBeNull();
+    expect(saved['ellipticalTimeSec'] ?? null).toBeNull();
+  });
+
   // v61 (Sep 28 2026), spec item f — her words Sun Sep 27 15:42: "I want to
   // be able to also say if it was easy, hard, right" about the ride, EVERY
   // ride (never gated on "stepped" the way the rest of moveFeel is).
@@ -6147,6 +6187,28 @@ test.describe('v48 P3 cardio', () => {
     await expect(hard).toHaveAttribute('aria-pressed', 'false');
     const saved = await finishAndRead(page);
     expect(saved['moveFeel'] ?? null).toBeNull();
+  });
+
+  // v61 fix pass (Sep 28 2026, CHECK-v61 should #8): the (f) tests above only
+  // ever drove this through Workout A — D (its own, always-elliptical lane,
+  // no "▶ Elliptical / Walk / Apartment" choice to click) had never been
+  // exercised end-to-end; it only ever worked when driven by hand.
+  test('(f) v61 fix pass: Workout D also asks Easy/Right/Hard on the ride, saved keyed to her typed minutes', async ({
+    page,
+  }) => {
+    await movableClock(page, '2026-09-27T08:00:00.000Z'); // Sunday, after the completion-model launch
+    await page.goto('/');
+    await page.locator('button[data-workout="D"]').click();
+    await page.locator('#begin').click();
+    await page.locator('#next').click(); // opens the ride-numbers screen directly, no lane choice for D
+    const right = page.locator('[data-ride-feel="right"]');
+    await expect(right).toHaveAttribute('aria-pressed', 'false');
+    await right.click();
+    await expect(right).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('#ell-time').fill('25:00');
+    await page.locator('#ell-km').fill('2.0');
+    const saved = await finishAndRead(page);
+    expect(saved['moveFeel']).toBe('ride=right@25min');
   });
 
   // v61 (Sep 28 2026), spec item g — her words Sun Sep 27 15:42: "distance is
@@ -6399,7 +6461,11 @@ test.describe('v51 ride numbers screen', () => {
     await expect(page.locator('#ell-time')).toHaveCount(0);
     const saved = await finishAndRead(page);
     expect(saved['cardioLane']).toBe('elliptical');
-    expect(saved['cardioMinutes']).toBe(10);
+    // v61 fix pass (Sep 28 2026, CHECK-v61 must #2): used to fall back to
+    // the PLANNED length (10) — her real Sep 28 D row is exactly this case
+    // (Skip, nothing typed) and cardio_minutes must be honest "unknown",
+    // never a reading she never took standing in for one.
+    expect(saved['cardioMinutes'] ?? null).toBeNull();
     expect(saved['ellipticalKm']).toBeNull();
     expect(saved['ellipticalKcal']).toBeNull();
     expect(saved['ellipticalPulse']).toBeNull();
@@ -6982,7 +7048,7 @@ test.describe('v48 P4 home', () => {
       // No "‹ Week 4" yet — she hasn't tapped it (that's its own test below).
     });
 
-    test('post-log line: "2 of 3 in Week 5" mid-workout, then the Done card after Save', async ({
+    test('post-log line: "2 of 4 in Week 5" mid-workout, then the Done card after Save', async ({
       page,
     }) => {
       await movableClock(page, '2026-09-28T08:00:00.000Z'); // Mon, day 3
@@ -6999,14 +7065,17 @@ test.describe('v48 P4 home', () => {
         if (await page.locator('text=Quick log').isVisible()) break;
         if (!(await tapForward(page))) break;
       }
-      await expect(page.locator('.postlog-witness')).toContainText('2 of 3 in Week 5');
+      // v61 fix pass (CHECK-v61 should #4): the post-log witness now counts
+      // "of 4" the same way Home/the Done card already do (no D logged here,
+      // so it's just the denominator that moved).
+      await expect(page.locator('.postlog-witness')).toContainText('2 of 4 in Week 5');
       await page.locator('#save-log').click();
       // v61 (Sep 28 2026), spec item d: the Done card's own line counts D
       // now ("of 4") — no D logged here.
       await expect(page.locator('.home-done-line')).toHaveText('2 of 4 in Week 5 · C left');
     });
 
-    test('post-log line: a REPEAT letter (B again) still reads "1 of 3", never overcounts to "2 of 3"', async ({
+    test('post-log line: a REPEAT letter (B again) still reads "1 of 4", never overcounts to "2 of 4"', async ({
       page,
     }) => {
       // WK2 fix r1 (Sep 27 2026, checker's should #2): `.done.length + 1`
@@ -7032,8 +7101,9 @@ test.describe('v48 P4 home', () => {
         if (await page.locator('text=Quick log').isVisible()) break;
         if (!(await tapForward(page))) break;
       }
-      await expect(page.locator('.postlog-witness')).toContainText('1 of 3 in Week 5');
-      await expect(page.locator('.postlog-witness')).not.toContainText('2 of 3');
+      // v61 fix pass (CHECK-v61 should #4): "of 4" counting now.
+      await expect(page.locator('.postlog-witness')).toContainText('1 of 4 in Week 5');
+      await expect(page.locator('.postlog-witness')).not.toContainText('2 of 4');
       await page.locator('#save-log').click();
       // v61 (Sep 28 2026), spec item d: same "of 4" widening as above.
       await expect(page.locator('.home-done-line')).toHaveText('1 of 4 in Week 5 · A and C left');
@@ -10602,7 +10672,7 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
   });
 
-  test('Progress · Sessions per week: a closed completion week reads "wk 5 · 3 / 3", never a recomputed calendar count', async ({
+  test('Progress · Sessions per week: a closed completion week reads "wk 5 · 3 / 4", never a recomputed calendar count', async ({
     page,
   }) => {
     await seedLogs(page, [
@@ -10620,7 +10690,11 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     const wk5 = spw
       .locator(':scope > .spw-rows > .spw-row')
       .filter({ has: page.locator('.spw-label:text-is("wk 5")') });
-    await expect(wk5.locator('.spw-count')).toHaveText('3 / 3');
+    // v61 fix pass (CHECK-v61 must #3): this card now counts "/ 4" the same
+    // way Home/weekCountLine already does (no D logged in this seed, so
+    // it's just the denominator that moved — the bar's own A/B/C "met" rule
+    // is unaffected, see renderPerWeekRow's pct comment).
+    await expect(wk5.locator('.spw-count')).toHaveText('3 / 4');
     await expect(wk5.locator('.spw-track')).toHaveCount(1); // a real track, never held's "—"
   });
 
@@ -10649,11 +10723,12 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     const wk5 = spw
       .locator(':scope > .spw-rows > .spw-row')
       .filter({ has: page.locator('.spw-label:text-is("wk 5")') });
-    await expect(wk5.locator('.spw-count')).toHaveText('2 / 3 · moved on');
+    // v61 fix pass (must #3): "/ 4" counting now (no D in this seed).
+    await expect(wk5.locator('.spw-count')).toHaveText('2 / 4 · moved on');
     const wk6 = spw
       .locator(':scope > .spw-rows > .spw-row')
       .filter({ has: page.locator('.spw-label:text-is("wk 6")') });
-    await expect(wk6.locator('.spw-count')).toHaveText('0 / 3 · open');
+    await expect(wk6.locator('.spw-count')).toHaveText('0 / 4 · open');
   });
 
   test('planForLog: a post-launch A resolves Week 5’s own key, not the old swing/calendar model’s', async ({
