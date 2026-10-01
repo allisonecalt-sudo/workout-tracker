@@ -83,10 +83,12 @@ import {
   moveFeelString,
   isMoveFeelValue,
   canonicalMoveName,
+  withOverrideFeel,
   MOVE_FEEL_VALUES,
   type MoveFeelValue,
   type SteppedMove,
 } from './move-feel.js';
+import { deriveRideAim, lastTimeAtSameAim } from './ride-aim.js';
 
 type WorkoutId = 'A' | 'B' | 'C';
 
@@ -478,6 +480,12 @@ type AppState = {
   // armFeel). Keyed by move-feel.ts's slugFor(name), so it survives whichever
   // lane a cardio step is in (walk/apartment/elliptical all slug to "ride").
   moveFeel: MoveFeelState;
+  // v61 (Sep 28 2026), spec item f — her words: "I want to be able to also
+  // say if it was easy, hard, right" about the ride, EVERY ride (never
+  // gated on "stepped" the way moveFeel above is) — one value per session
+  // (there's only ever one ride/D step), saved through move-feel.ts's
+  // withOverrideFeel at buildLogEntry time, never through moveFeelString.
+  rideFeel: MoveFeelValue | null;
   // v55 (Sep 27 2026) — LOAD CHIP: which weight she picked for THIS session's
   // curl / row, her own call by pain, never Lisa's ("no Lisa approval, I
   // decide based on pain", Sep 26 23:15). Defaults to whatever she used last
@@ -3292,6 +3300,7 @@ const state: AppState = {
   heldSetsFor: {},
   armFeel: {},
   moveFeel: {},
+  rideFeel: null,
   armLoad: {},
   armLoadMax: {},
   setsDoneFor: {},
@@ -3473,7 +3482,6 @@ function timerLoop(): void {
       state.preCountdown = remainSec;
     } else {
       state.timerSeconds = remainSec;
-      if (activeTimer.kind === 'timed-exercise') cueRidePhase(); // v48 · P3
     }
     // Count beeps at the last COUNT_BEEP_FROM_SEC seconds (audit T6 fix:
     // only the count beep, not finish beep, fires on the way down).
@@ -4363,47 +4371,13 @@ function openRideNumbers(): void {
 }
 
 // v48 · P3 (Sep 24 2026) — decision Q7: the generic how-to card on the
-// elliptical said the same ride three times (~240 words). One live line instead,
-// derived from the countdown alone: easy for 2 min, raise the level, read the
-// pulse in the last minute, back to 3 for the last 30 s. Her walk §2: "No cue at
-// minute 2 or for the last minute" → a live cue plus a buzz.
-type RidePhase = 'easy' | 'raise' | 'grips' | 'ease-off';
-
-function ridePhase(totalSec: number, remainingSec: number): RidePhase {
-  const elapsed = totalSec - remainingSec;
-  if (elapsed < 120) return 'easy';
-  if (remainingSec > 60) return 'raise';
-  if (remainingSec > 30) return 'grips';
-  return 'ease-off';
-}
-
-const RIDE_LINE: Record<RidePhase, string> = {
-  easy: 'Easy on level 3',
-  raise: 'Raise the level until talking takes effort — then hold it',
-  grips: 'Hands on the fixed grips — read your pulse',
-  'ease-off': 'Back to level 3, easy',
-};
-
-// The phase the last tick was in, so the buzz fires once on ENTERING the grips
-// and ease-off phases — never on every re-render.
-let lastRidePhase: RidePhase | null = null;
-
-function cueRidePhase(): void {
-  const ex = getCurrentExercise();
-  if (!ex || ex.name !== ELLIPTICAL_NAME || !ex.durationSec) return;
-  const phase = ridePhase(ex.durationSec, state.timerSeconds);
-  if (phase === lastRidePhase) return;
-  const entering = lastRidePhase !== null && (phase === 'grips' || phase === 'ease-off');
-  lastRidePhase = phase;
-  if (!entering) return;
-  playCountBeep(); // silent when beeps are off (Settings)
-  try {
-    navigator.vibrate?.(200);
-  } catch {
-    /* no vibration motor / not allowed — the line still changes */
-  }
-}
-
+// elliptical said the same ride three times (~240 words). A live line,
+// derived from the countdown, used to run this ("easy for 2 min, raise the
+// level..."). v61 (Sep 28 2026), spec item e: the elliptical has no app
+// timer/countdown any more (her words — she uses the bike's own timer), so
+// there's no countdown left for a live cue to derive from; removed rather
+// than left dead (RidePhase/ridePhase/RIDE_LINE/cueRidePhase, and its one
+// call site in the tick loop below).
 function laneDoneMinutes(): number | null {
   const n = Number(localStorage.getItem(WW_LANE_DONE_MIN_KEY) ?? '');
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
@@ -5107,6 +5081,7 @@ function beginExercises(): void {
   state.heldSetsFor = {}; // v60: same as heldSecFor — a hold's sets belong to one session
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
   state.moveFeel = {}; // v58: same — a feel belongs to one session
+  state.rideFeel = null; // v61: same — the ride feel belongs to one session
   state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
   state.armLoadMax = { ...state.armLoad }; // v55 · fix r1: starts equal, then only climbs
   state.setsDoneFor = {}; // v54: sets-done belongs to one session, same as armFeel
@@ -5824,7 +5799,6 @@ function startTimedExercise(): void {
     if (isIndoorLane(exerciseName)) {
       localStorage.setItem(WW_LANE_STARTED_KEY, String(Date.now()));
       localStorage.removeItem(WW_LANE_DONE_MIN_KEY); // a fresh ride, fresh minutes
-      lastRidePhase = null;
       // v48 · P3: the setup expander never reopens after the ride — forget any
       // before-ride open/close so the after-ride face starts it closed.
       delete state.openSections[`${ELLIPTICAL_NAME}::setup`];
@@ -6271,7 +6245,20 @@ async function saveCompletedSession(): Promise<void> {
     // with THIS week's own stepped-move list so the qty/unit is always the
     // real prescription, never a stale one from a plan that changed mid-
     // session (moveFeelString's own comment).
-    moveFeel: moveFeelString(state.moveFeel, currentSteppedMoves()),
+    // v61 (Sep 28 2026), spec item f: the ride's Easy/Right/Hard is ALWAYS
+    // asked (never gated on "stepped" the way the rest of moveFeel is) —
+    // withOverrideFeel replaces/adds just the 'ride' segment, minutes = her
+    // typed time on the numbers screen, rounded (ellipticalTimeSec already
+    // prefers what she typed over anything else); no typed time at all (she
+    // skipped the numbers) falls back to the ride's own chosen length.
+    moveFeel: (() => {
+      const base = moveFeelString(state.moveFeel, currentSteppedMoves());
+      if (!onElliptical || !state.rideFeel) return base;
+      const sec = ellipticalTimeSec();
+      const minutes =
+        sec !== null ? Math.max(1, Math.round(sec / 60)) : Math.max(1, ellipticalMinutes() ?? 1);
+      return withOverrideFeel(base, 'ride', state.rideFeel, minutes, 'min');
+    })(),
     voicePlays: state.voicePlays,
     stepsSkipped: w ? skippedStepsCount(w) : null,
   });
@@ -6345,6 +6332,8 @@ type ActiveSessionSnapshot = {
   armFeel: ArmFeelState;
   // v58: same, generalized — the stepped-move feel taps survive an app close.
   moveFeel: MoveFeelState;
+  // v61: the ride's own always-on feel survives an app close too.
+  rideFeel: MoveFeelValue | null;
   // v55: her load pick so far survives an app close too, same as armFeel.
   armLoad: ArmLoadState;
   // v55 · fix r1: the heaviest-so-far tracker survives an app close too, same
@@ -6421,6 +6410,7 @@ function saveActiveSession(): void {
       stoppedEarlyLitePrev: state.stoppedEarlyLitePrev,
       armFeel: state.armFeel,
       moveFeel: state.moveFeel,
+      rideFeel: state.rideFeel,
       armLoad: state.armLoad,
       armLoadMax: state.armLoadMax,
       setsDoneFor: state.setsDoneFor,
@@ -6556,6 +6546,8 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       armFeel: sanitizeArmFeel(snap.armFeel),
       // v58: a pre-v58 snapshot has no moveFeel key at all → {}, same rule.
       moveFeel: sanitizeMoveFeel(snap.moveFeel),
+      // v61: a pre-v61 snapshot has no rideFeel key at all → null, same rule.
+      rideFeel: isMoveFeelValue(snap.rideFeel) ? snap.rideFeel : null,
       // v55: a pre-v55 snapshot has no load → {}; renderArmLoadChips already
       // falls back to '1kg' per key, so a mid-session resume never crashes.
       armLoad: sanitizeArmLoad(snap.armLoad),
@@ -6658,6 +6650,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.heldSetsFor = snap.heldSetsFor;
   state.armFeel = snap.armFeel;
   state.moveFeel = snap.moveFeel;
+  state.rideFeel = snap.rideFeel;
   state.armLoad = snap.armLoad;
   state.armLoadMax = snap.armLoadMax;
   state.setsDoneFor = snap.setsDoneFor;
@@ -6850,6 +6843,7 @@ function resetState(): void {
   state.heldSetsFor = {}; // v60
   state.armFeel = {}; // v48 · P5
   state.moveFeel = {}; // v58
+  state.rideFeel = null; // v61
   state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
   state.armLoadMax = { ...state.armLoad }; // v55 · fix r1
   state.setsDoneFor = {}; // v54
@@ -8454,10 +8448,11 @@ function lastClosedWeekForPeek(): WeekPeek | null {
   const { spans } = weekModel();
   const lastSpan = spans.length ? (spans[spans.length - 1] ?? null) : null;
   if (lastSpan) {
+    const dLogs = loadLogs().filter((l) => l.workout === 'D');
     return {
       weekNum: lastSpan.key.week,
-      dotsHtml: renderCompletionWeekDots(completionWeekDots(lastSpan)),
-      countText: weekCountLine({ span: lastSpan }),
+      dotsHtml: renderCompletionWeekDots(completionWeekDots(lastSpan, dLogs)),
+      countText: weekCountLine({ span: lastSpan }, weekHasD(lastSpan, dLogs)),
     };
   }
   return legacyLastClosedWeekPeek();
@@ -8513,22 +8508,44 @@ function weekSubLabel(shown: { span: WeekSpan | null; pending: PendingWeek | nul
   return '';
 }
 
-/** §2.4's #week-count: "0 of 3 · A, B and C to go" / "1 of 3 · B and C left" /
- * "2 of 3 · B left" — the missing letters in A→B→C order, or (mid-gap, no
- * span yet) "0 of 3 · A, B and C to go" since nothing can be done yet.
- * A CLOSED span (all 3 done — never the LIVE "shown" week, which always
- * closes itself at 3, but real for a "‹ Week N" peek at a past one) reads
- * "3 of 3 ✓" instead, same style as the legacy-peek fallback's own text. */
-function weekCountLine(shown: { span: WeekSpan | null }): string {
+// v61 (Sep 28 2026), spec item d — her words 15:35, looking at her first
+// Workout D: "she did not say one of four." D never counts toward the week
+// CLOSING (week.ts's own completion rule is untouched — three distinct
+// A/B/C letters, D never required, never part of `span.missing`), but it
+// DOES count toward the number shown to her. week.ts drops D entirely by
+// design (its own header comment), so this reads it straight off her logs
+// instead — any 'D' row dated inside the span's own open window
+// [openedAt, closedAt ?? now).
+function weekHasD(span: WeekSpan | null, logs: readonly LogEntry[]): boolean {
+  if (!span) return false;
+  const start = new Date(span.openedAt).getTime();
+  const end = span.closedAt ? new Date(span.closedAt).getTime() : Date.now();
+  return logs.some((l) => {
+    if (l.workout !== 'D') return false;
+    const t = new Date(l.date).getTime();
+    return t >= start && t <= end;
+  });
+}
+
+/** §2.4's #week-count, widened to "of 4" (spec item d): "0 of 4 · A, B and C
+ * to go" / "1 of 4 · B and C left" / "1 of 4 · A, B and C to go" (D only) —
+ * the missing A/B/C letters in order (D is never "missing", it's simply
+ * counted in or not), or (mid-gap, no span yet) nothing can be done yet.
+ * A CLOSED span (all three of A/B/C done — never the LIVE "shown" week,
+ * which always closes itself at 3, but real for a "‹ Week N" peek at a past
+ * one) reads "4 of 4 ✓" once D happened too, or "complete · 3 of 4" when it
+ * didn't — the week closed on A/B/C alone, exactly as her rule says it must. */
+function weekCountLine(shown: { span: WeekSpan | null }, hasD = false): string {
   const missing = shown.span ? shown.span.missing : (['A', 'B', 'C'] as const);
-  const done = shown.span ? shown.span.done.length : 0;
-  if (missing.length === 0) return `${done} of 3 ✓`;
+  const doneAbc = shown.span ? shown.span.done.length : 0;
+  const done = doneAbc + (hasD ? 1 : 0);
+  if (missing.length === 0) return hasD ? '4 of 4 ✓' : 'complete · 3 of 4';
   const missingWords =
     missing.length === 1
       ? (missing[0] as string)
       : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
   const tail = missing.length === 3 ? `${missingWords} to go` : `${missingWords} left`;
-  return `${done} of 3 · ${tail}`;
+  return `${done} of 4 · ${tail}`;
 }
 
 /** The PROGRAM row for a completion-model week key: an exact round+weekNum
@@ -8576,6 +8593,13 @@ type CompletionWeekDot =
       // same-day session). `workout`/`logId` still name the FIRST one
       // chronologically (unchanged tap target); this is only the honest count.
       sessionCount: number;
+      // v61 (Sep 28 2026), spec item b: "the week strip shows a D dot on the
+      // day D was done — distinct from the A/B/C dot" (the v54 spec asked for
+      // it; it wasn't showing — week.ts drops D from `span.sessions` on
+      // purpose, so this reads the raw D logs given to completionWeekDots
+      // separately, never from `span` itself).
+      hasD: boolean;
+      dLogId: string | null;
     }
   | { kind: 'fold' };
 
@@ -8588,7 +8612,7 @@ type CompletionWeekDot =
  * session PLUS the most recent 7 days, and folds any empty run in between
  * into a single "…" column (§2.4's original shape) instead of dropping real
  * session days silently. */
-function completionWeekDots(span: WeekSpan): CompletionWeekDot[] {
+function completionWeekDots(span: WeekSpan, dLogs: readonly LogEntry[] = []): CompletionWeekDot[] {
   const opened = new Date(span.openedAt);
   const openedMid = new Date(opened.getFullYear(), opened.getMonth(), opened.getDate());
   const today = new Date();
@@ -8601,18 +8625,20 @@ function completionWeekDots(span: WeekSpan): CompletionWeekDot[] {
   const dayCol = (i: number): { i: number; col: CompletionWeekDot; hasSession: boolean } => {
     const d = new Date(openedMid);
     d.setDate(d.getDate() + i);
-    const hits = span.sessions.filter((s) => {
-      const sd = new Date(s.date);
+    const sameDay = (iso: string): boolean => {
+      const sd = new Date(iso);
       return (
         sd.getFullYear() === d.getFullYear() &&
         sd.getMonth() === d.getMonth() &&
         sd.getDate() === d.getDate()
       );
-    });
+    };
+    const hits = span.sessions.filter((s) => sameDay(s.date));
+    const dHits = dLogs.filter((l) => sameDay(l.date));
     const first = hits[0];
     return {
       i,
-      hasSession: hits.length > 0,
+      hasSession: hits.length > 0 || dHits.length > 0,
       col: {
         kind: 'day',
         date: d,
@@ -8620,6 +8646,8 @@ function completionWeekDots(span: WeekSpan): CompletionWeekDot[] {
         logId: first?.id ?? null,
         isToday: d.getTime() === todayMid.getTime(),
         sessionCount: hits.length,
+        hasD: dHits.length > 0,
+        dLogId: dHits[0]?.id ?? null,
       },
     };
   };
@@ -8673,11 +8701,19 @@ function renderCompletionWeekDots(cols: CompletionWeekDot[]): string {
         c.sessionCount >= 2
           ? `<span class="week-dot-count" aria-hidden="true">${c.sessionCount}</span>`
           : '';
+      // v61 (Sep 28 2026), spec item b: a small D dot, distinct from the
+      // A/B/C bubble above it — the v54 spec asked for this and it never
+      // rendered (week.ts drops D from `span.sessions`, the only thing this
+      // function used to read).
+      const dDot = c.hasD
+        ? `<span class="week-dot-d" data-detail-d="${c.dLogId ? escapeHtml(c.dLogId) : ''}" aria-hidden="true">D</span>`
+        : '';
       return `
-        <button class="week-dot ${cls}" ${clickAttr} type="button" ${c.logId ? '' : 'tabindex="-1"'} aria-label="${letter} ${formatDate(c.date.toISOString())}${c.workout ? ` workout ${c.workout}` : ' no workout'}${c.sessionCount >= 2 ? `, ${c.sessionCount} sessions` : ''}">
+        <button class="week-dot ${cls}" ${clickAttr} type="button" ${c.logId ? '' : 'tabindex="-1"'} aria-label="${letter} ${formatDate(c.date.toISOString())}${c.workout ? ` workout ${c.workout}` : ' no workout'}${c.sessionCount >= 2 ? `, ${c.sessionCount} sessions` : ''}${c.hasD ? ', plus Workout D' : ''}">
           <span class="week-dot-label">${letter}</span>
           <span class="week-dot-bubble">${c.workout ?? ''}</span>
           ${countBadge}
+          ${dDot}
         </button>
       `;
     })
@@ -9632,13 +9668,26 @@ function renderWorkoutChipsFor(ids: WorkoutId[], lead = 'or do'): string {
 // another workout on (her words: "it can also be if it needs to be"). A
 // small standalone row under the real chips, not folded into their "or do"
 // lead, so it never reads as a 4th thing still owed this week.
-function renderWorkoutDChip(): string {
+// v61 (Sep 28 2026), spec item a — her words looking at her first D: "D
+// should be gone now cuz I just did it... have an option of two, cuz I
+// might do two in one day." The spec's own literal ask is "disabled, not
+// offered again that day" (implemented here exactly) — flagged as an open
+// tension with the SAME sentence's "option of two" (a disabled chip is,
+// today, the only door to D on Home): worth asking her which she actually
+// wants before this goes further, not silently resolved either way.
+function renderWorkoutDChip(dDoneToday: boolean): string {
   const w = getWorkoutD();
   // v54 fix (Sep 27 2026): deliberately NOT .home-chips/.home-chip — those
   // classes are what dozens of existing tests (and §2.4's own spec) use to
   // count "the other missing A/B/C letters"; reusing them here made D read
   // as a 4th missing letter to every one of those locators. Its own classes,
   // same visual weight via their own CSS.
+  if (dDoneToday) {
+    return `
+      <div class="home-chips-d">
+        <button class="btn-chip home-chip-d home-chip-d-done" type="button" disabled aria-label="Workout D already done today">D ✓ today</button>
+      </div>`;
+  }
   return `
     <div class="home-chips-d">
       <button class="btn-chip home-chip-d" data-workout="D" type="button" aria-label="Start Workout D · ${escapeHtml(w.name)}">D · Cardio 30</button>
@@ -9750,6 +9799,14 @@ function renderHome(): string {
   const lastLog = [...logs].sort((a, b) => b.date.localeCompare(a.date))[0];
   const doneToday =
     lastLog && localIsoDate(new Date(lastLog.date)) === localIsoDate(new Date()) ? lastLog : null;
+  // v61 (Sep 28 2026), spec item a: independent of `doneToday` (the LATEST
+  // log, whichever workout) — she can do D and then A the same day (her own
+  // words: "have an option of two"), so this asks the whole day's logs, not
+  // just the most recent one.
+  const todayIso = localIsoDate(new Date());
+  const dDoneToday = logs.some(
+    (l) => l.workout === 'D' && localIsoDate(new Date(l.date)) === todayIso
+  );
   const weekWalks = walksThisWeek();
   const walkStartedAt = activeWalkStart();
 
@@ -9854,6 +9911,11 @@ function renderHome(): string {
     const peek = viewingLastClosedWeek ? lastClosedWeekForPeek() : null;
 
     pick = shown.span ? (shown.span.missing[0] as WorkoutId) : 'A';
+    // v61 (Sep 28 2026), spec item d/b: D logs, read once for both the week
+    // strip's own dot (completionWeekDots) and the "of 4" counting below —
+    // week.ts drops D from its model entirely (its own header comment), so
+    // both readers go straight to the raw logs instead.
+    const dLogs = logs.filter((l) => l.workout === 'D');
 
     if (peek) {
       // Peeking at "‹ Week N" — a read-only look, so no "since/opens" or
@@ -9869,8 +9931,8 @@ function renderHome(): string {
           ? `<div class="week-sub-line week-sub-repeat">Same moves as Week ${planInfo.repeatsWeek}</div>`
           : '');
       weekCardHeadText = escapeHtml(`Week ${shown.key.week}`);
-      dotsHtml = shown.span ? renderCompletionWeekDots(completionWeekDots(shown.span)) : '';
-      weekLineText = weekCountLine(shown);
+      dotsHtml = shown.span ? renderCompletionWeekDots(completionWeekDots(shown.span, dLogs)) : '';
+      weekLineText = weekCountLine(shown, weekHasD(shown.span, dLogs));
     }
     saturdayNote = '';
 
@@ -9962,15 +10024,23 @@ function renderHome(): string {
         : shown.pending
           ? `Week ${shown.key.week} opens ${formatWeekdayDate(shown.pending.opensAt)}`
           : '';
+      // v61 (Sep 28 2026), spec item d: A/B/C alone still closes the week
+      // (week.ts's own rule, untouched) — but the Done card's own line now
+      // says "of 4", and whether D rode inside this closing week too.
+      const closedHasD = weekHasD(doneTodayClosedSpan, dLogs);
       doneCardLines = [
-        `Week ${doneTodayClosedSpan.key.week} done · 3 of 3 ✓`,
+        `Week ${doneTodayClosedSpan.key.week} done · ${closedHasD ? '4 of 4 ✓' : '3 of 4 · D optional'}`,
         ...(nextLine ? [nextLine] : []),
       ];
     } else {
-      const done = shown.span?.done.length ?? 0;
-      const missingWords = joinMissingLetters(shown.span?.missing ?? []);
+      const doneAbc = shown.span?.done.length ?? 0;
+      const openHasD = weekHasD(shown.span, dLogs);
+      const done = doneAbc + (openHasD ? 1 : 0);
+      const missing = shown.span?.missing ?? (['A', 'B', 'C'] as const);
+      const missingWords = joinMissingLetters(missing);
+      const tail = missing.length === 3 ? 'to go' : 'left';
       doneCardLines = [
-        `${done} of 3 in Week ${shown.key.week}${missingWords ? ` · ${missingWords} left` : ''}`,
+        `${done} of 4 in Week ${shown.key.week}${missingWords ? ` · ${missingWords} ${tail}` : ''}`,
       ];
     }
 
@@ -10042,7 +10112,7 @@ function renderHome(): string {
 
     ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : renderUpNextHero(pick)}
     ${chipsHtml}
-    ${renderWorkoutDChip()}
+    ${renderWorkoutDChip(dDoneToday)}
 
     <div class="card week-card" id="open-weekly-review" role="button" tabindex="0" aria-label="Open weekly review for this week">
       <div class="week-card-head">
@@ -10993,17 +11063,16 @@ function renderRideNumbersCard(ex: Exercise): string {
   const km = localStorage.getItem(WW_ELLIPTICAL_KM_KEY) ?? '';
   const pulse = localStorage.getItem(WW_ELLIPTICAL_PULSE_KEY) ?? '';
   const kcal = localStorage.getItem(WW_ELLIPTICAL_KCAL_KEY) ?? '';
-  // v49 (Sep 25 2026): calories + time — her ask "every time put in". Time is
-  // typed off the console, but a normal ride needs nothing typed: it prefills
-  // from the app's own clock — the precise capture if she's already left the
-  // step once (laneDoneMinutes), else the same "she rode the prescription"
-  // fallback the Done face already uses (renderLaneTimerCard) — never a
-  // rounder guess than what's shown right above it.
+  // v61 (Sep 28 2026), spec item e — her words 15:36: "it doesn't need a
+  // timer because I use the timer on the bike now... it just says that it
+  // only did one minute when that's not true cuz I just started — no timer
+  // for elliptical, I'll use the bike." No app-timer prefill any more (the
+  // app never ran one to begin with, but this box used to ALSO fall back to
+  // "the full planned block" as a guess on a never-started ride) — blank
+  // until she types it, same "blank = not recorded" rule as every other
+  // field here.
   const typedTime = localStorage.getItem(WW_ELLIPTICAL_TIME_KEY);
-  const fallbackSec =
-    laneDoneMinutes() !== null ? laneDoneMinutes()! * 60 : (ex.durationSec ?? null);
-  const time = typedTime ?? (fallbackSec !== null ? formatMmSs(fallbackSec) : '');
-  const timeFromApp = typedTime === null && fallbackSec !== null;
+  const time = typedTime ?? '';
   // THE RIDES PAGE / R1 (Sep 27 2026), PLAN-2026-09-26.md §4.3: "a live line,
   // no extra screen" — appears once Time + Calories are filled, adds km/h
   // once Distance is too. Computed through ride.ts's rideRate() so this line
@@ -11021,6 +11090,22 @@ function renderRideNumbersCard(ex: Exercise): string {
     liveRate.kcalPerMin !== null
       ? `= ${liveRate.kcalPerMin} kcal a minute${liveRate.kmh !== null ? ` · ${liveRate.kmh} km/h` : ''}`
       : '';
+  // v61 (Sep 28 2026), spec item g — the after-ride half of the derived aim:
+  // "2.15 km · aim 2.1" + "last time → today" (no colors, no ✗, no verdict).
+  // Uses whatever level she's ALREADY logged this ride (ellipticalLevel()) —
+  // falling back to her last-known level before she's touched the stepper —
+  // and the ride's own chosen minutes (ellipticalMinutes()), same source the
+  // ride card above used for the SAME ride's own aim line.
+  const kmVal = km ? parseKmReading(km) : null;
+  const aimLevel = level ?? last ?? ELLIPTICAL_START_LEVEL;
+  const aimMinutes = ellipticalMinutes() ?? Math.round((ex.durationSec ?? 0) / 60);
+  const rideHistory = ellipticalRideRecords(loadLogs());
+  const rideAim = deriveRideAim(rideHistory, aimMinutes, aimLevel);
+  const lastKm = lastTimeAtSameAim(rideHistory, aimMinutes, aimLevel);
+  const aimCompareLine =
+    kmVal !== null && !('isFirst' in rideAim) ? `${kmVal} km · aim ${rideAim.km} km` : '';
+  const lastTimeLine =
+    kmVal !== null && lastKm !== null ? `last time → today: ${lastKm} km → ${kmVal} km` : '';
   // "—" until she touches it: an untouched stepper saves null, never a guess.
   const sameChip =
     last !== null
@@ -11045,11 +11130,13 @@ function renderRideNumbersCard(ex: Exercise): string {
       <div class="ell-readings-title">Your ride — from the machine</div>
       <p class="ell-numbers-note">Read them before you press STOP on the machine.</p>
       <div class="ell-readings-row">
-        ${readingRow('ell-time', 'Time', time, '', { type: 'text', sub: timeFromApp ? 'app timer' : undefined })}
+        ${readingRow('ell-time', 'Time', time, '', { type: 'text' })}
         ${readingRow('ell-km', 'Distance', km, 'km', { step: '0.01', min: '0' })}
         ${readingRow('ell-kcal', 'Calories', kcal, 'kcal', { step: '0.1', min: '0' })}
       </div>
       <div class="ell-live-line" id="ride-live-line"${liveLine ? '' : ' hidden'}>${escapeHtml(liveLine)}</div>
+      <p class="ell-aim-compare" id="ell-aim-compare"${aimCompareLine ? '' : ' hidden'}>${escapeHtml(aimCompareLine)}</p>
+      <p class="ell-last-time" id="ell-last-time"${lastTimeLine ? '' : ' hidden'}>${escapeHtml(lastTimeLine)}</p>
       <div class="ell-field ell-field-level">
         <span class="ell-field-label">Level you rode at</span>
         <div class="ell-level-controls">
@@ -11064,6 +11151,33 @@ function renderRideNumbersCard(ex: Exercise): string {
       <div class="ell-readings-row">
         ${readingRow('ell-pulse', 'Pulse', pulse, 'bpm', { step: '1', min: '30', max: '230' })}
       </div>
+      <p class="ell-pulse-hint">The machine's number at the end, hands on the grips — or leave it blank.</p>
+      ${renderRideFeel()}
+    </div>`;
+}
+
+// v61 (Sep 28 2026), spec item f: the ride's Easy/Right/Hard, every ride, on
+// the numbers card (never gated on "stepped" — currentSteppedMoves() has
+// nothing to do with this). One tap selects, tapping the same one again
+// clears — same convention as the arm-feel/move-feel chips it visually
+// matches (renderArmFeel/renderMoveFeel), and just as optional: nothing
+// downstream depends on it, a ride she never taps a feel on simply saves no
+// 'ride=' segment at all.
+function renderRideFeel(): string {
+  const current = state.rideFeel;
+  const chips = MOVE_FEEL_VALUES.map((v) => {
+    const on = current === v;
+    const label = v === 'easy' ? 'Easy' : v === 'right' ? 'Right' : 'Hard';
+    return `<button class="arm-chip${on ? ' arm-chip-on' : ''}" type="button" data-ride-feel="${v}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
+  }).join('');
+  // v61 (Sep 28 2026), P8-style compactness (fix pass, checker's should):
+  // no separate visible label line (the group aria-label carries it for
+  // screen readers) — a phone-height budget can't afford one more text row
+  // on top of the hint line below.
+  return `
+    <div class="ride-feel" role="group" aria-label="How did that feel?">
+      <div class="arm-feel-chips">${chips}</div>
+      <p class="ride-feel-hint">Easy = full sentences · Right = short sentences · Hard = a few words</p>
     </div>`;
 }
 
@@ -11159,94 +11273,48 @@ function renderLaneTimerCard(ex: Exercise, laneRan: boolean, under = ''): string
   return `<div class="card timer-card">${inner}</div>`;
 }
 
-// The elliptical step, in the order she rides it (see renderRideNumbersCard).
+// The elliptical step (v61, Sep 28 2026, spec item e — her words 15:36:
+// "it doesn't need a timer because I use the timer on the bike now... it
+// just says that it only did one minute when that's not true cuz I just
+// started — no timer for elliptical, I'll use the bike"). NO app timer any
+// more — no Start, no running face, no pip, no "Right now" line, no "✓ N
+// min done" witness. One plain card the whole time she's on this step:
+// planned minutes, the level she's likely riding at (last logged, or the
+// start level on a first ride), the derived distance aim (ride-aim.ts, spec
+// item g), and "hands light". Done · Next opens the ride-numbers screen
+// directly (openRideNumbers, unchanged) — the only door in, now the only
+// door full stop. Holds (wall sit, planks, wall lean) keep their own timers;
+// walk/apartment lanes are untouched (they never went through this
+// function).
 function renderEllipticalStep(ex: Exercise, header: string): string {
-  // v51 (Sep 25 2026) — the ride-numbers sub-screen sits on top of whichever
-  // ride face she left (running/stopped/never-started). openRideNumbers()
-  // stops a running timer before setting this, so nothing below ever renders
-  // a live countdown once it's open — and reopening the app lands right back
-  // here too (the flag is in the resume snapshot).
   if (state.rideNumbersOpen) {
     return renderRideNumbersScreen(ex, header);
   }
-  const laneRan = localStorage.getItem(WW_LANE_STARTED_KEY) !== null;
-  const running = state.timerSeconds > 0 || state.preCountdown > 0;
   const minutes = Math.round((ex.durationSec ?? 0) / 60);
-
-  if (running) {
-    // DURING: v53 (Sep 26 2026) — the countdown moved into the floating pip
-    // (renderTimerPip, appended at the top-level render()); this face keeps
-    // just the name + the one live line, per her spec ("for the elliptical
-    // keep the one live 'Right now' line under the name"). No setup, no
-    // readings sentence (it re-renders every second).
-    const line = RIDE_LINE[ridePhase(ex.durationSec ?? 0, state.timerSeconds)];
-    return `
-      ${header}
-      <div class="ride-title"><span class="exercise-name">${ELLIPTICAL_NAME}</span><span class="ride-title-reps">${minutes} min</span></div>
-      <div class="card cardio-routine ride-now">
-        <div class="cardio-seg-label">Right now</div>
-        <div class="cardio-seg-now" id="ride-line">${escapeHtml(line)}</div>
-      </div>
-      ${renderStepNav('Done · Next', true)}
-    `;
-  }
-
+  const level = lastEllipticalLevel() ?? ELLIPTICAL_START_LEVEL;
   const firstRide = lastEllipticalLevel() === null;
-  const nameCard = (extra: string): string => `
+  const aim = deriveRideAim(ellipticalRideRecords(loadLogs()), minutes, level);
+  const aimText = 'isFirst' in aim ? `first ride at ${minutes} sets your aim` : `aim ${aim.km} km`;
+  const planLine = `${minutes} min · level ${level} · ${aimText} · hands light`;
+  const instead =
+    state.selectedWorkout === 'D'
+      ? ''
+      : `<button class="back-link cardio-back-out" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>`;
+  const guide = renderEllipticalGuide(firstRide);
+  return `
+    ${header}
     <div class="card">
       <div class="exercise-display">
         <div class="exercise-name-row">
           <div class="exercise-name">${ELLIPTICAL_NAME}</div>
-          ${extra}
+          ${firstRide ? `<span class="new-tonight-badge">First ride</span>` : ''}
         </div>
-        <div class="exercise-reps">${minutes} min</div>
-        ${laneRan ? '' : `<p class="exercise-safety">Start on level 3, easy · stand tall, hands light</p>`}
+        <p class="ride-plan-line" id="ride-plan-line">${escapeHtml(planLine)}</p>
+        ${instead}
       </div>
-    </div>`;
-
-  if (laneRan) {
-    // AFTER: v49 · look fix (Sep 25 2026) — the name card and the "Done ✓ N
-    // min done" card used to be two separate `.card` blocks; one compact line
-    // replaces both. v51 (Sep 25 2026): the readings card that used to sit
-    // right here is gone — she tapped Done · Next and never scrolled down to
-    // it ("it didn't show up for me"). Done · Next now OPENS the numbers
-    // screen (see the rideNumbersOpen branch above) instead of sitting below
-    // one; this face is just the witness + the way there.
-    const doneMins = laneDoneMinutes() ?? minutes;
-    return `
-      ${header}
-      <div class="card ell-done-line">
-        <span class="exercise-name">${ELLIPTICAL_NAME}</span>
-        <span class="timer-done timer-held">✓ ${doneMins} min done</span>
-      </div>
-      ${renderMoveFeel(ex, { hold: false, ready: true, isLastRoundOrNA: true })}
-      ${renderEllipticalGuide(false)}
-      ${renderStepNav('Done · Next')}
-    `;
-  }
-
-  // BEFORE: one line, then Start, then the setup. Done stays quiet — the sage
-  // is Start's (one sage per screen).
-  // v48 · fix r1 (Sep 24 2026): on the FIRST ride the 3 setup steps come BEFORE
-  // Start — she sets the machine up, then starts the timer (the verifier found
-  // Start at y≈470 and the steps under it, from y≈620). Tapping Start closes
-  // the card (it isn't drawn while the timer runs, and stays closed after).
-  // v54 (Sep 27 2026): Workout D IS the elliptical — no walk/apartment
-  // alternative exists for it, so the "instead" link would offer a lane swap
-  // into a workout that has no walk/apartment step to swap into.
-  const timer = renderLaneTimerCard(
-    ex,
-    false,
-    state.selectedWorkout === 'D'
-      ? ''
-      : `<button class="back-link cardio-back-out" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>`
-  );
-  const guide = renderEllipticalGuide(firstRide);
-  return `
-    ${header}
-    ${nameCard(firstRide ? `<span class="new-tonight-badge">First ride</span>` : '')}
-    ${firstRide ? `${guide}${timer}` : `${timer}${guide}`}
-    ${renderStepNav('Done · Next', true)}
+    </div>
+    ${guide}
+    ${renderStepNav('Done · Next')}
   `;
 }
 
@@ -12800,7 +12868,11 @@ function reviewCompletionPages(): WeekSpan[] {
 // own exact strings. No "This week" prefix (unlike the legacy title above):
 // the week number + "since"/range already say which one is current, same as
 // Home's own header reads "Week N" plainly.
-function completionReviewTitle(span: WeekSpan): string {
+// v61 (Sep 28 2026), spec item d: "Progress + weekly review show the same
+// 'of 4'." `hasD` comes from the SAME getExtraDSessionsForSpan the caller
+// already computes for this exact span (reviewWeekViewAt below) — one
+// D-detection, never a second one that could disagree with it.
+function completionReviewTitle(span: WeekSpan, hasD: boolean): string {
   // No "R{n} ·" prefix — unlike the legacy title below, §2.4's own literal
   // strings ("Week 5 · Sep 26 – Oct 1 · 3 of 3", "since Sep 26") never carry
   // one; Home already dropped "Round 2" the same way (§2.4: "It shows on
@@ -12811,8 +12883,15 @@ function completionReviewTitle(span: WeekSpan): string {
     return `${week} · since ${formatWeekdayDate(span.openedAt)}`;
   }
   const range = formatWeekRange(new Date(span.openedAt), new Date(span.closedAt));
+  const done = span.done.length + (hasD ? 1 : 0);
   const doneLine =
-    span.how === 'moved_on' ? `moved on at ${span.done.length} of 3` : `${span.done.length} of 3`;
+    span.how === 'moved_on'
+      ? `moved on at ${done} of 4`
+      : span.missing.length === 0
+        ? hasD
+          ? '4 of 4 ✓'
+          : 'complete · 3 of 4'
+        : `${done} of 4`;
   return `${week} · ${range} · ${doneLine}`;
 }
 
@@ -12831,6 +12910,11 @@ type ReviewWeekView = {
   skippedLabel: string | null;
   sessions: WeekSession[];
   prevSessions: WeekSession[];
+  // v61 (Sep 28 2026), spec item d: true only for a completion-model page —
+  // a legacy (pre-launch) week has no D concept at all, so it keeps "of 3"
+  // (renderWeeklyReview's own Sessions subtitle reads this, not a second
+  // isNowAfterCompletionLaunch() check).
+  countsD: boolean;
   // v54 fix r2 (Sep 27 2026), checker's should #1: D logs that date inside
   // this week but never count toward `sessions` (see
   // getExtraDSessionsForSpan). Empty pre-launch (D didn't exist yet).
@@ -12858,23 +12942,26 @@ function reviewWeekViewAt(offset: number): ReviewWeekView {
       sessions: getWeekSessionsForSaturday(saturday),
       prevSessions: reviewSessionsAt(offset + 1),
       extraSessions: [], // pre-launch: D didn't exist yet
+      countsD: false,
       isLiveOpen: offset === 0,
     };
   }
   const completionPages = reviewCompletionPages();
   if (offset < completionPages.length) {
     const span = completionPages[offset]!;
+    // v55: completionPages is newest-first, so index-1 is the span that
+    // opened right after this one — null (→ Infinity) only for the newest.
+    const extraSessions = getExtraDSessionsForSpan(
+      span,
+      offset > 0 ? (completionPages[offset - 1]?.openedAt ?? null) : null
+    );
     return {
-      title: completionReviewTitle(span),
+      title: completionReviewTitle(span, extraSessions.length > 0),
       skippedLabel: null,
       sessions: getWeekSessionsForSpan(span),
       prevSessions: reviewSessionsAt(offset + 1),
-      // v55: completionPages is newest-first, so index-1 is the span that
-      // opened right after this one — null (→ Infinity) only for the newest.
-      extraSessions: getExtraDSessionsForSpan(
-        span,
-        offset > 0 ? (completionPages[offset - 1]?.openedAt ?? null) : null
-      ),
+      extraSessions,
+      countsD: true,
       isLiveOpen: offset === 0 && span.closedAt === null,
     };
   }
@@ -12886,6 +12973,7 @@ function reviewWeekViewAt(offset: number): ReviewWeekView {
     sessions: getWeekSessionsForSaturday(saturday),
     prevSessions: reviewSessionsAt(offset + 1),
     extraSessions: [], // legacy pre-launch weeks: D didn't exist yet
+    countsD: false,
     isLiveOpen: false,
   };
 }
@@ -12928,12 +13016,18 @@ function renderWeeklyReview(): string {
       <button class="quit-link" id="back-home" type="button">× Back</button>
     </div>`;
 
-  // A held week (sick / break) is not a miss (her Jul 19 rule): no "of 3".
+  // A held week (sick / break) is not a miss (her Jul 19 rule): no "of 3"/"of 4".
+  // v61 (Sep 28 2026), spec item d: "Progress + weekly review show the same
+  // 'of 4'" — a completion-model page counts a D ride into the number shown;
+  // the "met" styling still keys on the real A/B/C requirement (3), D never
+  // required, exactly as the week itself closes.
   const sessionCountClass = totals.count >= 3 ? 'weekly-review-count-met' : 'weekly-review-count';
+  const reviewDenom = view.countsD ? 4 : 3;
+  const reviewShownCount = totals.count + (view.countsD && view.extraSessions.length > 0 ? 1 : 0);
   const subtitle = view.skippedLabel
     ? ''
     : `<div class="weekly-review-subtitle">
-        Sessions: <span class="${sessionCountClass}"><strong>${totals.count}</strong> of 3</span>
+        Sessions: <span class="${sessionCountClass}"><strong>${reviewShownCount}</strong> of ${reviewDenom}</span>
       </div>`;
 
   // v54 fix r2 (Sep 27 2026), checker's should #1: D never counts toward
@@ -15769,6 +15863,18 @@ function attachHandlers(): void {
       render();
     });
   });
+  // v61 (Sep 28 2026), spec item f: the ride's own always-on Easy/Right/Hard
+  // — one value per session (there's only ever one ride/D step), tap-selects
+  // /tap-clears same as every other feel chip in this app.
+  document.querySelectorAll<HTMLButtonElement>('[data-ride-feel]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const feel = btn.dataset['rideFeel'];
+      if (!isMoveFeelValue(feel)) return;
+      state.rideFeel = state.rideFeel === feel ? null : feel;
+      saveActiveSession();
+      render();
+    });
+  });
   // v55 (Sep 27 2026) — LOAD CHIP: which weight for the NEXT set. Always one
   // selected (no clear — a set needs a weight), her pick by pain, never a
   // question the app asks.
@@ -15859,6 +15965,7 @@ function attachHandlers(): void {
   ellKm?.addEventListener('input', () => {
     setEllipticalReading(WW_ELLIPTICAL_KM_KEY, ellKm.value);
     updateRideLiveLine();
+    updateRideAimCompare(); // v61, spec item g: keeps the aim-compare line current too
   });
   const ellPulse = document.getElementById('ell-pulse') as HTMLInputElement | null;
   ellPulse?.addEventListener('input', () =>
@@ -15873,10 +15980,6 @@ function attachHandlers(): void {
   const ellTime = document.getElementById('ell-time') as HTMLInputElement | null;
   ellTime?.addEventListener('input', () => {
     setEllipticalReading(WW_ELLIPTICAL_TIME_KEY, ellTime.value);
-    // v49 · look fix (Sep 25 2026): "app timer" was staying up after she
-    // typed over the prefill — this field saves per-keystroke with no
-    // re-render (keeps focus), so the caption never got the chance to drop.
-    document.getElementById('ell-time-sub')?.remove();
     updateRideLiveLine();
   });
 
@@ -16210,6 +16313,39 @@ function updateRideLiveLine(): void {
   }
   el.hidden = false;
   el.textContent = `= ${rate.kcalPerMin} kcal a minute${rate.kmh !== null ? ` · ${rate.kmh} km/h` : ''}`;
+}
+
+// v61 (Sep 28 2026), spec item g: "#ell-aim-compare"/"#ell-last-time", kept
+// current per keystroke on ell-km — same "no re-render, keeps focus" rule as
+// updateRideLiveLine above (its own fix pass found this gap: without it, the
+// two lines stayed frozen at whatever they read when the screen first opened
+// — blank, on a never-typed-yet km — and never caught up to what she typed).
+// Level/minutes don't change per keystroke here (the level stepper and any
+// other control on this screen already go through a full render()), so
+// recomputing them fresh from the same sources renderRideNumbersCard itself
+// reads can never disagree with what she saw when the screen opened.
+function updateRideAimCompare(): void {
+  const compareEl = document.getElementById('ell-aim-compare');
+  const lastEl = document.getElementById('ell-last-time');
+  if (!compareEl || !lastEl) return;
+  const kmRaw = (document.getElementById('ell-km') as HTMLInputElement | null)?.value ?? '';
+  const kmVal = kmRaw ? parseKmReading(kmRaw) : null;
+  const level = ellipticalLevel();
+  const last = lastEllipticalLevel();
+  const aimLevel = level ?? last ?? ELLIPTICAL_START_LEVEL;
+  const ex = getCurrentExercise();
+  const aimMinutes = ellipticalMinutes() ?? Math.round((ex?.durationSec ?? 0) / 60);
+  const rideHistory = ellipticalRideRecords(loadLogs());
+  const rideAim = deriveRideAim(rideHistory, aimMinutes, aimLevel);
+  const lastKm = lastTimeAtSameAim(rideHistory, aimMinutes, aimLevel);
+  const aimLine =
+    kmVal !== null && !('isFirst' in rideAim) ? `${kmVal} km · aim ${rideAim.km} km` : '';
+  const lastLine =
+    kmVal !== null && lastKm !== null ? `last time → today: ${lastKm} km → ${kmVal} km` : '';
+  compareEl.textContent = aimLine;
+  compareEl.hidden = aimLine === '';
+  lastEl.textContent = lastLine;
+  lastEl.hidden = lastLine === '';
 }
 
 // THE RIDES PAGE (Sep 27 2026) — the one door (Progress -> Your rides), its

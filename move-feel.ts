@@ -292,6 +292,30 @@ export function moveFeelString(
   return parts.length > 0 ? parts.join(';') : null;
 }
 
+// v61 (Sep 28 2026), spec item f — her words, Sun Sep 27 15:42: "I want to be
+// able to also say if it was easy, hard, right" about the elliptical ride,
+// EVERY time, not just weeks it "stepped" (steppedMovesForWorkout's own
+// gate, above). `withOverrideFeel` bypasses that gate for exactly one slug —
+// rebuilding the saved string with that slug's segment replaced (or added),
+// everything else untouched. Kept separate from moveFeelString on purpose:
+// that function's whole contract is "only slugs `stepped` can vouch for" —
+// this is the one deliberate, always-on exception the ride (and Workout D,
+// same slug) needs, not a second door into the same rule.
+export function withOverrideFeel(
+  base: string | null,
+  slug: string,
+  feel: MoveFeelValue,
+  qty: number,
+  unit: 'kg' | 's' | 'min'
+): string {
+  const kept = parseMoveFeelString(base).filter((p) => p.slug !== slug);
+  const rebuilt = kept.map(
+    (p) => `${p.slug}=${p.feel ?? ''}${p.qtyRaw !== null ? `@${p.qtyRaw}` : ''}`
+  );
+  rebuilt.push(`${slug}=${feel}@${qty}${unit}`);
+  return rebuilt.join(';');
+}
+
 export type MoveFeelPart = { slug: string; feel: MoveFeelValue | null; qtyRaw: string | null };
 
 // The reverse of moveFeelString — reads a saved "slug=feel@qty" string back

@@ -90,7 +90,19 @@ test('voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its ow
     const scriptKg = kgMentions(d.voiceScript);
     if (scriptKg.size === 0) continue; // nothing kg-shaped spoken — not this test's concern
     const repsTexts = repsByName.get(name);
-    if (!repsTexts || repsTexts.length === 0) continue; // no program reps text found — can't check, skip
+    // v61 (Sep 28 2026), checker's carry-over k (v60 round-2 should #6,
+    // CLAUDE.md's own fail-loud rule): this used to `continue` here — a
+    // voiceScript naming a kg number with NO program reps text to check it
+    // against was silently passed, not silently correct. A move whose
+    // voiceScript talks about kilos but whose own PROGRAM entry this
+    // extraction regex can't find is exactly the kind of gap the fail-loud
+    // rule exists for — flag it instead of skipping it.
+    if (!repsTexts || repsTexts.length === 0) {
+      offenders.push(
+        `"${name}" voiceScript names a kg/kilo number but no "name: '${name}', ... reps: '...'" pair was found in app.ts to check it against`
+      );
+      continue;
+    }
     const repsKg = new Set<number>();
     for (const r of repsTexts) for (const n of kgMentions(r)) repsKg.add(n);
     const missing = [...scriptKg].filter((n) => !repsKg.has(n));

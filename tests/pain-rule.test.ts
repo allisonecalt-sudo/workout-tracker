@@ -37,6 +37,11 @@ const BANNED: [RegExp, string][] = [
   [/any (wrist )?sensation/i, '"any (wrist) sensation"'],
   [/pain\s*(=|means)\s*(stop|done)/i, '"pain = stop/done" / "pain means stop/done"'],
   [/stop at pain/i, '"stop at pain"'],
+  // v61 (Sep 28 2026), checker's carry-over k: the LEFT biceps-stretch script
+  // (and its mp3) still ended "...or just stop. Never push through wrist
+  // pain." after the RIGHT side's own script had already been fixed —
+  // caught by widening the scan, not by eyeballing every script by hand.
+  [/never push through (wrist )?pain/i, '"never push through (wrist) pain"'],
 ];
 
 function violations(label: string, text: string | undefined | null): string[] {
@@ -56,8 +61,14 @@ test('pain rule: no shown or spoken exercise string uses the old alarm-toned "st
     for (const s of d.steps) offenders.push(...violations(`exercise-detail.ts "${name}" steps`, s));
     for (const s of d.dos) offenders.push(...violations(`exercise-detail.ts "${name}" dos`, s));
     for (const s of d.donts) offenders.push(...violations(`exercise-detail.ts "${name}" donts`, s));
-    for (const m of d.mistakes)
+    for (const m of d.mistakes) {
       offenders.push(...violations(`exercise-detail.ts "${name}" mistakes.fix`, m.fix));
+      // v61 (Sep 28 2026), checker's carry-over k: the mistake HEADER can say
+      // the same alarm-toned thing the fix text was already scanned for (the
+      // wall-lean repro — "Worrying that any wrist or thumb pain means stop."
+      // lived in `mistake`, not `fix`, and slipped past every earlier pass).
+      offenders.push(...violations(`exercise-detail.ts "${name}" mistakes.mistake`, m.mistake));
+    }
     offenders.push(...violations(`exercise-detail.ts "${name}" voiceScript`, d.voiceScript));
   }
 
@@ -126,5 +137,26 @@ test('pain rule: no shown or spoken exercise string uses the old alarm-toned "st
     );
   }
 
+  expect(offenders).toEqual([]);
+});
+
+// v61 (Sep 28 2026), checker's carry-over k ("v60 round-2 checker's shoulds"):
+// the pain rule kept landing in exercise-detail.ts's `donts` array as a plain
+// permission sentence ("A little pain is fine — back off if...") — true, but
+// sitting under a red ✗ in a list titled "Don't" it reads as the OPPOSITE of
+// the rule. Every donts entry must itself BE a "don't" — this test is the
+// shape check the reword above (wall lean, bird dog, hip hinge, apartment
+// cardio's "Can't go out?", Eccentric step-down) is proving out.
+test('pain rule: every exercise-detail.ts donts entry starts with "Don\'t" or "Never"', () => {
+  const offenders: string[] = [];
+  for (const [name, d] of Object.entries(EXERCISE_DETAIL)) {
+    for (const s of d.donts) {
+      if (!/^(Don't|Never)/.test(s)) {
+        offenders.push(
+          `exercise-detail.ts "${name}" donts — doesn't start with Don't/Never — "${s}"`
+        );
+      }
+    }
+  }
   expect(offenders).toEqual([]);
 });

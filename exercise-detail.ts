@@ -186,7 +186,9 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       'Start with a low step and a small range.',
     ],
     donts: [
-      'No gripping and no weight through your hand — your wrist stays out of this.',
+      // v61 (Sep 28 2026), checker's carry-over k: reworded to start with
+      // "Don't" — the whole point of the new donts-shape test.
+      "Don't grip or put weight through your hand — your wrist stays out of this.",
       "Don't let the standing knee cave inward.",
       "Don't chase height — the magic is the slow lowering, not the depth.",
     ],
@@ -281,7 +283,11 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       "Don't jump or add hops — no flight phase in this one.",
       "Don't put your hands on the floor or grip anything.",
       "Don't push the pace until your breathing goes ragged.",
-      "Can't go out? This is the lane.",
+      // v61 (Sep 28 2026), checker's carry-over k: every donts entry starts
+      // with "Don't"/"Never" (tests/pain-rule.test.ts) — this used to be a
+      // bare question ("Can't go out? This is the lane."), which read fine
+      // but broke that shape.
+      "Don't skip cardio just because you can't go outside — this is the lane.",
     ],
     mistakes: [
       {
@@ -337,7 +343,12 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Biceps stretch — left',
     voiceSrc: './assets/voice/biceps-stretch-left.mp3',
     voiceScript:
-      "Biceps stretch, left side. Stand sideways to a wall with your left arm nearest it. Raise that arm to shoulder height, turn the palm up, and place it flat on the wall with your fingers spread. Now slowly turn your body away from the wall until you feel the stretch in your biceps and the front of your shoulder. Hold for about forty-five seconds and keep breathing. Remember, this is not a wrist stretch, so don't force the wrist back and don't rotate the palm down. Keep the wrist comfortable — if it complains, bend the elbow slightly, or just stop. Never push through wrist pain.",
+      // v61 (Sep 28 2026), checker's carry-over k (v60 round-2 should #6): the
+      // tail used to end "...or just stop. Never push through wrist pain." —
+      // the same alarm-toned wording v60 already replaced on the RIGHT side's
+      // own script. Matched to it here (regenerate the mp3 in the same commit
+      // — VOICE NOTES above).
+      "Biceps stretch, left side. Stand sideways to a wall with your left arm nearest it. Raise that arm to shoulder height, turn the palm up, and place it flat on the wall with your fingers spread. Now slowly turn your body away from the wall until you feel the stretch in your biceps and the front of your shoulder. Hold for about forty-five seconds and keep breathing. Remember, this is not a wrist stretch, so don't force the wrist back and don't rotate the palm down. Keep the wrist comfortable. If it complains, bend the elbow slightly — a little pain is fine, back off if it's sharp, climbing, or still there tomorrow.",
     muscles: ['shoulders'],
     muscleLabel: 'Biceps + front of shoulder',
     steps: [
@@ -479,7 +490,12 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     ],
     donts: [
       "Don't lift a hand or an arm — the full bird dog is the next rung.",
-      "A little pain is fine — back off if it's sharp, climbing, or still there tomorrow morning.",
+      // v61 (Sep 28 2026), checker's carry-over k: reworded as a "Don't" —
+      // it used to read "A little pain is fine — back off if...", which sat
+      // under a red ✗ in the Don't list saying the OPPOSITE of a don't
+      // (tests/pain-rule.test.ts's new "every donts starts with Don't/Never"
+      // check).
+      "Don't stop for a little pain — back off if it's sharp, climbing, or still there tomorrow morning.",
       "Don't let the low back sag or the leg swing up past level.",
       "Don't crane your neck up to look forward.",
     ],
@@ -528,8 +544,10 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       // Sep 24 2026, v48 P8: the one rule, said once — the card's steps and the
       // screen's reps already say "bodyweight or the 1 kg". v55 (Sep 27 2026):
       // "nothing heavier without Lisa" retired (rule 8e) — the pain rule
-      // replaces it: her own call, by how it feels.
-      'A little pain is OK, keep moving; sharp, climbing, or still there next morning — back off.',
+      // replaces it: her own call, by how it feels. v61 (Sep 28 2026): reworded
+      // as a "Don't" — it used to read "A little pain is OK, keep moving; ...",
+      // the opposite of a don't under a red ✗ (checker's carry-over k).
+      "Don't stop for a little pain — back off if it's sharp, climbing, or still there next morning.",
     ],
     mistakes: [
       {
@@ -1832,7 +1850,9 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     donts: [
       "Don't lock your elbows.",
       "Don't push hard — this is a rehab on-ramp, not a push-up.",
-      "A little pain is fine — pressure is fine too; back off if it's sharp, climbing, or still there tomorrow.",
+      // v61 (Sep 28 2026), checker's carry-over k: reworded as a "Don't" (was
+      // "A little pain is fine — ...", the opposite of a don't under a red ✗).
+      "Don't stop for a little pain — back off if it's sharp, climbing, or still there tomorrow.",
     ],
     mistakes: [
       { mistake: 'Locking your elbows straight.', fix: 'Keep them soft and slightly bent.' },
@@ -1841,7 +1861,10 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
         fix: 'Lean gently so your palms take only LIGHT weight.',
       },
       {
-        mistake: 'Worrying that any wrist or thumb pain means stop.',
+        // v61 (Sep 28 2026), v60 round-2 checker's should #6: the old header
+        // ("Worrying that any wrist or thumb pain means stop.") named the
+        // WORRY, not the behavior to fix — this names the actual habit.
+        mistake: 'Stopping at the first twinge in the wrist or thumb.',
         fix: 'Pressure is fine, and a little pain is OK — back off if it is sharp, climbing, or still there tomorrow.',
       },
     ],

@@ -19,11 +19,45 @@ import {
   parseMoveFeelString,
   isValidMoveFeelString,
   isMoveFeelValue,
+  withOverrideFeel,
   RIDE_NAMES,
   type MoveFeelExercise,
   type MoveFeelWorkout,
   type SteppedMove,
 } from '../move-feel';
+
+// v61 (Sep 28 2026), spec item f: the ride's Easy/Right/Hard is ALWAYS asked
+// (never gated on "stepped"), saved through this one bypass function.
+test.describe('withOverrideFeel', () => {
+  test('adds the slug fresh when there is no base string', () => {
+    expect(withOverrideFeel(null, 'ride', 'right', 30, 'min')).toBe('ride=right@30min');
+  });
+
+  test('appends alongside an existing (different) stepped-move feel', () => {
+    expect(withOverrideFeel('splitsquat=easy', 'ride', 'hard', 12, 'min')).toBe(
+      'splitsquat=easy;ride=hard@12min'
+    );
+  });
+
+  test('replaces its own prior segment rather than duplicating it', () => {
+    expect(withOverrideFeel('ride=easy@10min', 'ride', 'hard', 12, 'min')).toBe('ride=hard@12min');
+  });
+
+  test('replacing keeps every OTHER segment untouched', () => {
+    expect(withOverrideFeel('wallsit=easy@45s;ride=easy@10min', 'ride', 'right', 30, 'min')).toBe(
+      'wallsit=easy@45s;ride=right@30min'
+    );
+  });
+
+  test('round-trips through parseMoveFeelString and isValidMoveFeelString', () => {
+    const s = withOverrideFeel('splitsquat=right', 'ride', 'hard', 30, 'min');
+    expect(isValidMoveFeelString(s)).toBe(true);
+    expect(parseMoveFeelString(s)).toEqual([
+      { slug: 'splitsquat', feel: 'right', qtyRaw: null },
+      { slug: 'ride', feel: 'hard', qtyRaw: '30min' },
+    ]);
+  });
+});
 
 test.describe('slugFor', () => {
   test('lowercases and strips everything but a-z', () => {

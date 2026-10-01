@@ -315,45 +315,24 @@ test.describe('golden HTML — gate 1 (structure-only refactor oracle)', () => {
     await snapshot(page, 'workout-strength-step');
   });
 
-  test('ride step — before start (Workout D)', async ({ page }) => {
+  // v61 (Sep 28 2026), spec item e: no app timer on the elliptical any more
+  // (her words — she uses the bike's own timer) — "ride step — running" and
+  // "ride step — after (done, before Save · Next)" tested DOM states that no
+  // longer exist (there's nothing left to start or to finish; the ride card
+  // is one plain, static face the whole time) and are REMOVED, not
+  // regenerated — their own golden HTML files deleted with them. This is a
+  // real behaviour change, not a structure-only step, so removing a golden
+  // whose subject no longer exists is correct here (the file's own "never
+  // delete" rule protects refactor-safety against a subject that's still
+  // live, not a feature that's gone).
+  test('ride step — the plain ride card (no timer)', async ({ page }) => {
     await movableClock(page, NOW_ISO);
     await seed(page, SEED_LOGS);
     await page.goto('/');
     await page.locator('button[data-workout="D"]').click();
     await page.locator('#begin').click();
-    await expect(page.locator('.timer-display')).toHaveText('30:00');
+    await expect(page.locator('#ride-plan-line')).toContainText('30 min');
     await snapshot(page, 'ride-before');
-  });
-
-  test('ride step — running', async ({ page }) => {
-    await movableClock(page, NOW_ISO);
-    await seed(page, SEED_LOGS);
-    await page.goto('/');
-    await page.locator('button[data-workout="D"]').click();
-    await page.locator('#begin').click();
-    await page.locator('#start-timed').click();
-    await advanceClock(page, 5 * 60_000); // 5 minutes into a 30-minute ride
-    // Found by direct inspection (scratch-debug-ride.mjs): a RUNNING ride
-    // swaps the pre-start `.timer-display` for a compact "ride-now" card +
-    // `#timer-pip` (its aria-label carries "25:00 left") — a different
-    // bespoke mechanism from the pre-start preview, not the same element
-    // with new text. The 1 Hz rAF render loop needs one real tick to redraw
-    // at the new (mocked) instant — waiting for the pip's own time to change
-    // is the deterministic condition, not a fixed sleep.
-    await expect(page.locator('#timer-pip')).not.toHaveAttribute('aria-label', /30:00/);
-    await snapshot(page, 'ride-running');
-  });
-
-  test('ride step — after (done, before Save · Next)', async ({ page }) => {
-    await movableClock(page, NOW_ISO);
-    await seed(page, SEED_LOGS);
-    await page.goto('/');
-    await page.locator('button[data-workout="D"]').click();
-    await page.locator('#begin').click();
-    await page.locator('#start-timed').click();
-    await advanceClock(page, 30 * 60_000 + 2_000);
-    await expect(page.locator('.timer-done')).toHaveText('✓ 30 min done');
-    await snapshot(page, 'ride-after');
   });
 
   test('ride numbers screen', async ({ page }) => {
@@ -362,8 +341,8 @@ test.describe('golden HTML — gate 1 (structure-only refactor oracle)', () => {
     await page.goto('/');
     await page.locator('button[data-workout="D"]').click();
     await page.locator('#begin').click();
-    await page.locator('#start-timed').click();
-    await advanceClock(page, 30 * 60_000 + 2_000);
+    // v61: no app timer to run first — Done · Next opens the numbers screen
+    // directly from the plain ride card.
     await page.locator('#next').click(); // opens the ride-numbers screen
     await expect(page.locator('#ell-time')).toBeVisible();
     await snapshot(page, 'ride-numbers');
@@ -375,9 +354,8 @@ test.describe('golden HTML — gate 1 (structure-only refactor oracle)', () => {
     await page.goto('/');
     await page.locator('button[data-workout="D"]').click();
     await page.locator('#begin').click();
-    await page.locator('#start-timed').click();
-    await advanceClock(page, 30 * 60_000 + 2_000);
     await page.locator('#next').click();
+    await page.locator('#ell-time').fill('30:00');
     await page.locator('#ell-km').fill('3.0');
     await page.locator('#ell-kcal').fill('180');
     await page.locator('#ell-pulse').fill('120');
@@ -392,9 +370,8 @@ test.describe('golden HTML — gate 1 (structure-only refactor oracle)', () => {
     await page.goto('/');
     await page.locator('button[data-workout="D"]').click();
     await page.locator('#begin').click();
-    await page.locator('#start-timed').click();
-    await advanceClock(page, 30 * 60_000 + 2_000);
     await page.locator('#next').click();
+    await page.locator('#ell-time').fill('30:00');
     await page.locator('#ell-km').fill('3.0');
     await page.locator('#ell-kcal').fill('180');
     await page.locator('#ell-pulse').fill('120');

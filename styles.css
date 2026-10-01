@@ -660,6 +660,13 @@ button:disabled {
   border-radius: 8px;
   border: 1px solid transparent;
   flex: 1;
+  /* v61 (Sep 28 2026), spec item b fix: .week-dot-d absolute-positions
+   * itself against its nearest positioned ancestor. Without this, that
+   * ancestor was further up the tree (no `position` on .week-dot at all),
+   * so the "D" badge rendered off in the wrong spot instead of pinned to
+   * its own day's circle — found by zooming a real screenshot, not by the
+   * DOM-only e2e check (which only asks the badge EXISTS, never WHERE). */
+  position: relative;
 }
 
 .week-dot:hover {
@@ -710,6 +717,25 @@ button:disabled {
   font-size: 10px;
   font-weight: 700;
   line-height: 13px;
+  text-align: center;
+}
+
+/* v61 (Sep 28 2026), spec item b: a small "D" badge on a day Workout D was
+ * done — distinct position from .week-dot-count (which sits bottom-right for
+ * a same-day repeat) so the two can coexist on one busy day. */
+.week-dot-d {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  border-radius: 999px;
+  background: var(--ink-2);
+  color: var(--bg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
   text-align: center;
 }
 
@@ -5112,6 +5138,75 @@ textarea:focus {
   margin: 0 0 8px;
 }
 
+/* v61 (Sep 28 2026), spec item e: the ride card's one line — planned
+ * minutes, level, the derived aim, "hands light" — replacing the old timer
+ * card entirely (no timer, no pip, no "Right now" line any more). */
+.ride-plan-line {
+  color: var(--text-dim);
+  font-size: var(--font-body);
+  line-height: 1.4;
+  margin: 4px 0 0;
+}
+
+/* v61, spec item g: the after-ride "2.15 km · aim 2.1" + "last time → today"
+ * comparison — no colors, no ✗, no verdict, her own rule. */
+.ell-aim-compare {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: var(--t-body);
+  line-height: 1.2;
+  text-align: left;
+  margin: 2px 0 0;
+}
+
+.ell-last-time {
+  color: var(--ink-3);
+  font-size: var(--t-caption);
+  line-height: 1.15;
+  text-align: left;
+  margin: 1px 0 4px;
+}
+
+/* v61, spec item c: the Pulse hint ("the machine's number at the end...").
+ * Tight (line-height 1.25, 2px top margin) — a phone-height budget on the
+ * numbers screen can't afford a loose caption on top of the ride-feel block
+ * right below it. */
+.ell-pulse-hint {
+  color: var(--ink-3);
+  font-size: var(--t-caption);
+  line-height: 1.15;
+  text-align: left;
+  margin: 0;
+}
+
+/* v61, spec item f: the ride's always-on Easy/Right/Hard, on the numbers
+ * card — same quiet-chip recipe as .arm-feel/.move-feel above, tightened
+ * (see .ell-pulse-hint's own comment on why). */
+.ride-feel {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 5px 6px;
+  margin: 2px 0 0;
+}
+
+/* v61: a shade tighter than the generic .arm-chip on this already-tall
+ * screen (44px targets stay comfortably tappable at 36px). */
+.ride-feel .arm-chip {
+  min-width: 56px;
+  min-height: 36px;
+  padding: 5px 10px;
+}
+
+.ride-feel-hint {
+  width: 100%;
+  color: var(--ink-3);
+  font-size: var(--t-caption);
+  line-height: 1.1;
+  margin: 1px 0 0;
+}
+
 /* "Skip — no numbers today" — a plain quiet text link under the card, not a
  * second sage (that stays Save · Next in the pinned bar). */
 .ell-numbers-skip {
@@ -5124,7 +5219,7 @@ textarea:focus {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .ell-field-label {
@@ -5379,6 +5474,14 @@ textarea:focus {
   min-height: 44px;
   padding: 8px 16px;
   white-space: nowrap;
+}
+
+/* v61 (Sep 28 2026), spec item a: "D ✓ today" — disabled, witnessed rather
+ * than offered again (same quiet register as .timer-done, never a second
+ * sage). */
+.home-chip-d-done {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* After Save, until midnight — witnessed, not sage. v53: also the door to
