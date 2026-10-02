@@ -80,6 +80,7 @@ import {
   weekHasD,
   weekCountLine,
   weekTargetForD,
+  weekWindowFor,
   type DWeekModel,
   type DWeekTarget,
   type DLogLite as WeekDLogLite,
@@ -8475,9 +8476,14 @@ function lastClosedWeekForPeek(): WeekPeek | null {
   const lastSpan = spans.length ? (spans[spans.length - 1] ?? null) : null;
   if (lastSpan) {
     const dLogs = loadLogs().filter((l) => l.workout === 'D');
+    // v61 fix pass 3 (Oct 2 2026, CHECK-v61.md round 3 must #1): the peek's
+    // own dot strip now shares `lastSpan`'s exact window with the count
+    // line below it — see completionWeekDots' own header.
+    const lastSpanTarget: DWeekTarget = { kind: 'span', key: lastSpan.key };
+    const lastSpanWindow = weekWindowFor(lastSpanTarget, model);
     return {
       weekNum: lastSpan.key.week,
-      dotsHtml: renderCompletionWeekDots(completionWeekDots(lastSpan, dLogs)),
+      dotsHtml: renderCompletionWeekDots(completionWeekDots(lastSpan, dLogs, lastSpanWindow)),
       countText: weekCountLine({ span: lastSpan }, weekHasDFor({ span: lastSpan }, model, dLogs)),
     };
   }
@@ -8657,16 +8663,69 @@ type CompletionWeekDot =
  * with no dot anywhere to back it up. Now it keeps every day that has a
  * session PLUS the most recent 7 days, and folds any empty run in between
  * into a single "…" column (§2.4's original shape) instead of dropping real
- * session days silently. */
-function completionWeekDots(span: WeekSpan, dLogs: readonly LogEntry[] = []): CompletionWeekDot[] {
-  const opened = new Date(span.openedAt);
-  const openedMid = new Date(opened.getFullYear(), opened.getMonth(), opened.getDate());
+ * session days silently.
+ *
+ * `window` (Oct 2 2026, v61 fix pass 3, CHECK-v61.md round 3 must #1, fix
+ * (b)): the SAME `[start, end)` week-d.ts's `weekHasD`/`weekCountLine` use
+ * for the "N of 4" count — passed by the caller (built via `weekWindowFor`
+ * from whichever `DWeekTarget` this span is) rather than recomputed from
+ * `span.openedAt` alone, so the dot strip can never disagree with the count
+ * about which week a D belongs to. Two things changed because of it:
+ *   - a D only lights up a day's dot when it falls INSIDE this window, not
+ *     merely on the same calendar day — a Sat/Sun close can put two weeks'
+ *     own columns on the exact same calendar day (see week-d.ts's header),
+ *     and only one of them owns any given D.
+ *   - for a CLOSED span (`window.end` non-null), the strip stops at the
+ *     window's own end day, not "today" — it used to keep running past the
+ *     week's own close and pick up days that already belong to the NEXT
+ *     week. An OPEN/PENDING span's window is unbounded (`end: null`), so
+ *     those still run to today exactly as before. */
+function completionWeekDots(
+  span: WeekSpan,
+  dLogs: readonly LogEntry[] = [],
+  window: { start: number; end: number | null } | null = null
+): CompletionWeekDot[] {
+  const win = window ?? { start: new Date(span.openedAt).getTime(), end: null };
+  const toMidnight = (ms: number): Date => {
+    const d = new Date(ms);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+  const openedMid = toMidnight(win.start);
   const today = new Date();
   const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  // A closed span's strip never runs past its own window's end day. `end`
+  // is exclusive, but it is NOT always midnight-aligned — a Sat/Sun close's
+  // own prev-close clamp (weekWindowFor's own header) can leave `end` sitting
+  // at the close's own mid-day instant (e.g. Saturday 12:00), not that day's
+  // midnight. That calendar day still belongs PARTLY to this window (00:00
+  // up to the close), so it has to stay a real column — only drop it
+  // entirely when `end` lands exactly ON that day's own midnight (the
+  // ordinary anchor-floored case, where the day truly has nothing before
+  // the next week starts).
+  const lastDayMid =
+    win.end === null
+      ? todayMid
+      : (() => {
+          const endMid = toMidnight(win.end);
+          const endIsExactlyMidnight = endMid.getTime() === win.end;
+          const candidate = endIsExactlyMidnight
+            ? (() => {
+                const d = new Date(endMid);
+                d.setDate(d.getDate() - 1);
+                return d;
+              })()
+            : endMid;
+          return candidate.getTime() < todayMid.getTime() ? candidate : todayMid;
+        })();
   const totalDays = Math.max(
     1,
-    Math.round((todayMid.getTime() - openedMid.getTime()) / 86_400_000) + 1
+    Math.round((lastDayMid.getTime() - openedMid.getTime()) / 86_400_000) + 1
   );
+
+  const inWindow = (iso: string): boolean => {
+    const t = new Date(iso).getTime();
+    return t >= win.start && (win.end === null || t < win.end);
+  };
 
   const dayCol = (i: number): { i: number; col: CompletionWeekDot; hasSession: boolean } => {
     const d = new Date(openedMid);
@@ -8680,7 +8739,7 @@ function completionWeekDots(span: WeekSpan, dLogs: readonly LogEntry[] = []): Co
       );
     };
     const hits = span.sessions.filter((s) => sameDay(s.date));
-    const dHits = dLogs.filter((l) => sameDay(l.date));
+    const dHits = dLogs.filter((l) => sameDay(l.date) && inWindow(l.date));
     const first = hits[0];
     return {
       i,
@@ -9771,9 +9830,15 @@ function renderDoneTodayCard(log: LogEntry, weekLines: string[]): string {
   const firsts = lastDone && lastDone.id === log.id ? lastDone.firsts : [];
   const km =
     typeof log.ellipticalKm === 'number' && log.ellipticalKm > 0 ? `${log.ellipticalKm} km` : '';
+  // v61 fix pass 3 (Oct 2 2026, CHECK-v61.md round 3 nice): on a D (ride)
+  // session, `rideLine` below already shows this same km as part of its own
+  // "30 min · 2.2 km · … · L3" line — the plain "Elliptical · 2.2 km"
+  // fallback used to repeat it right underneath. Skip the fallback for D;
+  // the "Firsts: first elliptical ride · 2.2 km" line (her actual first-ever
+  // ride) is untouched, that's a different, intentional km mention.
   const firstsLine = firsts.length
     ? `Firsts: ${[...firsts, ...(km ? [km] : [])].join(' · ')}`
-    : km
+    : km && log.workout !== 'D'
       ? `Elliptical · ${km}`
       : '';
   // v48 · fix r1 (Sep 24 2026): returning moves get their own honest word —
@@ -9987,8 +10052,15 @@ function renderHome(): string {
       // to open the week before it can render at all.
       const pendingHasD =
         !shown.span && shown.pending ? weekHasDFor({ pending: true }, model, dLogs) : false;
+      // v61 fix pass 3 (Oct 2 2026, CHECK-v61.md round 3 must #1): the live
+      // strip (open or pending) shares its window with the "N of 4" count
+      // below — see completionWeekDots' own header. Both are unbounded
+      // (`end: null`), so the strip still runs to today exactly as before;
+      // only the per-day D attribution changes.
       dotsHtml = shown.span
-        ? renderCompletionWeekDots(completionWeekDots(shown.span, dLogs))
+        ? renderCompletionWeekDots(
+            completionWeekDots(shown.span, dLogs, weekWindowFor({ kind: 'open' }, model))
+          )
         : pendingHasD && shown.pending
           ? renderCompletionWeekDots(
               completionWeekDots(
@@ -10001,7 +10073,8 @@ function renderHome(): string {
                   done: [],
                   missing: ['A', 'B', 'C'],
                 },
-                dLogs
+                dLogs,
+                weekWindowFor({ kind: 'pending' }, model)
               )
             )
           : '';
@@ -13752,10 +13825,12 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
     judged.length === 0
       ? 'The first week is in progress.'
       : hits === 0
-        ? // v61 fix pass 2 (Oct 2 2026, CHECK-v61.md round 2 nice): every real row
-          // reads "of 4" now (D counted in) — this empty state never actually
-          // shows for her (14 full weeks), but it shouldn't still promise "3 of 3".
-          'A full week (4 of 4) will count here.'
+        ? // v61 fix pass 3 (Oct 2 2026, CHECK-v61.md round 3 nice): "full
+          // week" in THIS card still means A/B/C met (`hits` above never
+          // counts D) — a 3-of-4 week already counts as full here, so "(4 of
+          // 4)" overpromised what actually triggers it. This empty state
+          // never actually shows for her (14 full weeks).
+          'A full week (A, B and C) will count here.'
         : `<strong>${hits}</strong> full ${hits === 1 ? 'week' : 'weeks'}`;
 
   // v48 · P6 (Sep 24 2026): the current round's weeks open; each older round

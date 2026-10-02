@@ -133,3 +133,95 @@ test.describe('weekHasD / weekTargetForD — the calendar-window fix (CHECK-v61.
     expect(weekWindowStart(iso)).toBeLessThanOrEqual(new Date(iso).getTime());
   });
 });
+
+test.describe('weekHasD on a Sat/Sun close — the anchor-floor-vs-still-open window fix (CHECK-v61.md round 3 must #1)', () => {
+  // `weekWindowStart` alone floors ANY instant on a weekend day to that same
+  // day's midnight. That's harmless after a WEEKDAY close (the next week
+  // always waits for a FUTURE Saturday/Sunday boundary, so the floor can
+  // never reach backward into the week that just closed). It's wrong after a
+  // SAT/SUN close: `closeOpen` (week.ts) opens the next span at the close
+  // instant itself — no boundary to wait for — so flooring that instant to
+  // midnight reaches back over however many hours the PREVIOUS week was
+  // still open that same calendar day. `weekWindowFor`'s own prev-close
+  // clamp (`start = max(anchor-floor, prevClosedAt)`) is what these three
+  // tests check for.
+
+  test('Sat close: a D logged hours BEFORE the closing C still belongs to the week that was open all morning, not the week the C opens right after it', () => {
+    // A Sun Sep 27, B Mon Sep 28 (both ordinary weekdays — unchanged from
+    // WEEK5_SESSIONS), then C on a SATURDAY at 12:00 local — closing Week 5
+    // on a weekend opens Week 6 immediately, AT that same 12:00 instant
+    // (week.ts's own isWeekendAnchorDay branch). A D at 09:00 local that
+    // same Saturday — while Week 5 was still open — is her real Sep 28
+    // order (D before the closing letter), replayed at a weekend close.
+    const sessions: SessionLite[] = [
+      { id: 'wk5-a', date: '2026-09-27T15:00:00.000Z', workout: 'A' },
+      { id: 'wk5-b', date: '2026-09-28T15:00:00.000Z', workout: 'B' },
+      { id: 'wk5-c-sat', date: '2026-10-03T09:00:00.000Z', workout: 'C' }, // Sat 12:00 local
+    ];
+    const model = modelFor(sessions);
+    expect(model.spans[0]?.how).toBe('three');
+    expect(model.spans[0]?.closedAt).toBe('2026-10-03T09:00:00.000Z');
+    expect(model.open?.key).toEqual({ round: 2, week: 6 });
+    expect(model.open?.openedAt).toBe('2026-10-03T09:00:00.000Z');
+    const dLogs: DLogLite[] = [{ date: '2026-10-03T06:00:00.000Z' }]; // Sat 09:00 local
+    expect(weekHasD({ kind: 'span', key: { round: 2, week: 5 } }, model, dLogs)).toBe(true);
+    expect(weekHasD({ kind: 'open' }, model, dLogs)).toBe(false);
+    expect(weekTargetForD('2026-10-03T06:00:00.000Z', model)).toEqual({
+      kind: 'span',
+      key: { round: 2, week: 5 },
+    });
+  });
+
+  test('Sun close: a D logged the Saturday BEFORE a Sunday-closing C still belongs to the closing week, not the one it opens', () => {
+    // Same shape, but the closing C lands on the SUNDAY instead — the other
+    // weekend day `closeOpen` treats as "already on the anchor, open right
+    // away."  A D on the Saturday morning before it, while Week 5 was still
+    // open, must not get swept into Week 6 by the anchor floor backing
+    // Sunday up to that same Saturday's midnight.
+    const sessions: SessionLite[] = [
+      { id: 'wk5-a', date: '2026-09-27T15:00:00.000Z', workout: 'A' },
+      { id: 'wk5-b', date: '2026-09-28T15:00:00.000Z', workout: 'B' },
+      { id: 'wk5-c-sun', date: '2026-10-04T09:00:00.000Z', workout: 'C' }, // Sun 12:00 local
+    ];
+    const model = modelFor(sessions);
+    expect(model.spans[0]?.how).toBe('three');
+    expect(model.open?.key).toEqual({ round: 2, week: 6 });
+    const dLogs: DLogLite[] = [{ date: '2026-10-03T07:00:00.000Z' }]; // Sat 10:00 local, the day before the Sun close
+    expect(weekHasD({ kind: 'span', key: { round: 2, week: 5 } }, model, dLogs)).toBe(true);
+    expect(weekHasD({ kind: 'open' }, model, dLogs)).toBe(false);
+  });
+
+  test('gap + a Sunday opening: a D logged the pending Saturday stays counted once the Sunday A actually opens the week', () => {
+    // C closes Week 5 on a WEEKDAY (Friday) — an ordinary gap, pending opens
+    // the following Saturday. A D lands on that Saturday, before anything
+    // opens Week 6 — it counts toward the pending week (unchanged from the
+    // round-2 fix). Once an A finally lands the next day (Sunday), Week 6
+    // becomes a real open span whose `openedAt` is the Sunday session's own
+    // timestamp — the anchor floor backs that up to the Saturday before it,
+    // and nothing here should clamp it forward again (Week 5's own close on
+    // the FRIDAY is well before that Saturday floor already, so the prev-
+    // close clamp is a no-op in this direction) — her round-2 complaint
+    // ("the dot disappears from Week 6") must stay fixed.
+    const baseSessions: SessionLite[] = [
+      { id: 'wk5-a', date: '2026-09-27T15:00:00.000Z', workout: 'A' },
+      { id: 'wk5-b', date: '2026-09-28T15:00:00.000Z', workout: 'B' },
+      { id: 'wk5-c-fri', date: '2026-10-02T15:00:00.000Z', workout: 'C' }, // Fri 18:00 local
+    ];
+    const dLogs: DLogLite[] = [{ date: '2026-10-03T07:00:00.000Z' }]; // Sat 10:00 local
+
+    const pendingModel = modelFor(baseSessions);
+    expect(pendingModel.open).toBeNull();
+    expect(pendingModel.pending?.key).toEqual({ round: 2, week: 6 });
+    expect(weekHasD({ kind: 'pending' }, pendingModel, dLogs)).toBe(true);
+
+    const sessionsWithSundayA: SessionLite[] = [
+      ...baseSessions,
+      { id: 'wk6-a-sun', date: '2026-10-04T07:00:00.000Z', workout: 'A' }, // Sun 10:00 local
+    ];
+    const openModel = modelFor(sessionsWithSundayA);
+    expect(openModel.open?.key).toEqual({ round: 2, week: 6 });
+    expect(weekHasD({ kind: 'open' }, openModel, dLogs)).toBe(true);
+    // And it must NOT also still claim a home in the already-closed Week 5.
+    expect(weekHasD({ kind: 'span', key: { round: 2, week: 5 } }, openModel, dLogs)).toBe(false);
+  });
+});

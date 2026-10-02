@@ -7793,6 +7793,75 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.home-header h1')).toHaveText('Week 6');
       await expect(page.locator('.home-done-line')).toContainText('1 of 4 in Week 6');
     });
+
+    // v61 fix pass 3 (Oct 2 2026) — CHECK-v61.md round 3's must #1: a D
+    // logged while the week was still open could get swept into the NEXT
+    // week when the close landed on a Saturday or Sunday (the anchor floor
+    // alone backs that instant to the SAME calendar day's midnight, which
+    // can land before the close). week-d.ts's own unit tests
+    // (tests/week-d.test.ts) cover the window math directly; these drive it
+    // through Home/the Done card/the week strip/the peek.
+    test('v61 fix pass 3: a D logged hours before a Saturday-closing C stays in the closing week, not the one the close opens', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-10-03T10:00:00.000Z'); // Sat Oct 3, 13:00 local — after the C below
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        dLog('wk5-d-sat-morning', '2026-10-03T06:00:00.000Z'), // Sat 09:00 local — Week 5 still open
+        swingLog('wk5-c-sat', '2026-10-03T09:00:00.000Z', 'C'), // Sat 12:00 local — closes Week 5, opens Week 6 right then
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6');
+      // Before the fix: 'Week 5 done · 3 of 4 · D optional' — the anchor
+      // floor swept the 09:00 D into Week 6's own window.
+      await expect(page.locator('.home-done-line')).toHaveText([
+        'Week 5 done · 4 of 4 ✓',
+        'Week 6 starts now',
+      ]);
+      // Week 6 itself: 0 of 4, no D dot anywhere in its strip — before the
+      // fix this read '1 of 4 · A, B and C to go' with a D dot on day 1,
+      // though nothing had actually happened in Week 6 yet.
+      await expect(page.locator('.week-line')).toHaveText('0 of 4 · A, B and C to go');
+      await expect(page.locator('.week-dots#week-strip .week-dot-d')).toHaveCount(0);
+      const todayCol = page.locator('.week-dot.is-today');
+      await expect(todayCol).toHaveClass(/dot-empty/);
+      // The peek ("‹ Week 5") is where that D actually belongs: 4 of 4 ✓,
+      // with its own dot on the Saturday column.
+      await page.locator('#week-nav-back').click();
+      await expect(page.locator('.week-line')).toHaveText('4 of 4 ✓');
+      await expect(page.locator('.week-dots#week-strip .week-dot-d')).toHaveCount(1);
+    });
+
+    test('v61 fix pass 3: a gap D on the Saturday keeps its dot once the Sunday A opens the next week, and the Week 5 peek shows none', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-10-04T08:00:00.000Z'); // Sun Oct 4, 11:00 local
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c-fri', '2026-10-02T15:00:00.000Z', 'C'), // Fri 18:00 local — a weekday close, gap opens
+        dLog('wk6-d-sat', '2026-10-03T07:00:00.000Z'), // Sat 10:00 local, mid-gap — the pending week
+        swingLog('wk6-a-sun', '2026-10-04T07:00:00.000Z', 'A'), // Sun 10:00 local — opens Week 6
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6');
+      // Her round-2 complaint was this exact shape going stale again: the D
+      // must stay counted AND keep its own dot once A opens the week.
+      await expect(page.locator('.week-line')).toHaveText('2 of 4 · B and C left');
+      await expect(page.locator('.week-dots#week-strip .week-dot-d')).toHaveCount(1);
+      // The strip itself shows a Saturday column (the D) ahead of today's
+      // Sunday column (the A) — not just the count agreeing by luck.
+      const strip = page.locator('.week-dots#week-strip .week-dot');
+      await expect(strip).toHaveCount(2);
+      await expect(strip.nth(0).locator('.week-dot-d')).toHaveText('D');
+      await expect(strip.nth(1)).toHaveClass(/is-today/);
+      await expect(strip.nth(1)).toHaveClass(/dot-A/);
+      // The Week 5 peek must NOT also claim that Saturday D.
+      await page.locator('#week-nav-back').click();
+      await expect(page.locator('.week-line')).toHaveText('complete · 3 of 4');
+      await expect(page.locator('.week-dots#week-strip .week-dot-d')).toHaveCount(0);
+    });
   });
 
   test('(f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress', async ({
@@ -9687,7 +9756,7 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v61 · <date, no year>", Settings "Build v61 · <full date>"', async ({
+  test('(d) the version: home "v61.1 · <date, no year>", Settings "Build v61.1 · <full date>"', async ({
     page,
   }) => {
     // code-shape R1b (Sep 27 2026): APP_VERSION/BUILD_DATE are no longer
@@ -9712,7 +9781,10 @@ test.describe('v48 P8 sweep', () => {
     // feel, the derived distance aim, optional pulse, D ✓ today + its dot,
     // the week counting D — a whole-number bump (v51/v52/v53's own shape:
     // sub-versions are same-day fixes, a new number is a new build).
-    expect(version).toBe('v61');
+    // v61.1 (Oct 2 2026, CHECK-v61.md round 3 fix): a same-day dotted bump —
+    // D on the closing Sat/Sun stays in its own week, one window for both
+    // the count and the dots.
+    expect(version).toBe('v61.1');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
       `${version} · ${built.replace(/,\s*\d{4}/, '')}`

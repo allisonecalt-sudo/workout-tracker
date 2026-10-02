@@ -1,5 +1,8 @@
 // week-d.ts — Workout D's own calendar window per completion-model week, as
-// a pure module (Oct 2 2026, v61 fix pass 2). Same discipline as week.ts
+// a pure module (Oct 2 2026, v61 fix pass 2; windowing fixed again in fix
+// pass 3 same day, see `weekWindowFor`'s own header — a Sat/Sun close could
+// still floor a week's window start back INTO the week that was still open
+// that same day). Same discipline as week.ts
 // itself (no DOM, no fetch, no Supabase): app.ts does the reading, this file
 // only decides which week a D belongs to.
 //
@@ -105,51 +108,106 @@ function spanByKey(spans: readonly WeekSpan[], key: WeekKey): WeekSpan | null {
 }
 
 /** The raw ISO this target's window starts from (before the anchor-weekend
- * floor), or null when the target doesn't exist in `model` (a stale key, or
- * `{kind: 'pending'}` with no actual gap right now) — null means "no window,
- * never has D" rather than guessing. */
+ * floor and the prev-close clamp below), or null when the target doesn't
+ * exist in `model` (a stale key, or `{kind: 'pending'}` with no actual gap
+ * right now) — null means "no window, never has D" rather than guessing. */
 function rawStartIso(target: DWeekTarget, model: DWeekModel): string | null {
   if (target.kind === 'pending') return model.pending?.opensAt ?? null;
   if (target.kind === 'open') return model.open?.openedAt ?? null;
   return spanByKey(model.spans, target.key)?.openedAt ?? null;
 }
 
-/** The raw ISO the NEXT week's window starts from — i.e. where this
- * target's own window ends (exclusive) — or null when nothing has started
- * after it yet (the open span, or the pending week: both are "the current
- * one"). For a closed span, that's the next span in the array if there is
- * one, else the live open span, else the pending week, else null (the
- * "shouldn't happen" case — every real model has an open or pending week
- * once the completion model has launched at all). */
-function rawEndIso(target: DWeekTarget, model: DWeekModel): string | null {
+/** The target whose own window ENDS where this target's begins — the
+ * previous span in `model.spans` for a span target, or (open/pending, both
+ * always "the current one") the LAST closed span if any, else null. Oct 2
+ * 2026, v61 fix pass 3 (CHECK-v61.md round 3 must #1) — see `weekWindowFor`'s
+ * own header for why this matters. */
+function previousTargetFor(target: DWeekTarget, model: DWeekModel): DWeekTarget | null {
+  if (target.kind === 'open' || target.kind === 'pending') {
+    const last = model.spans[model.spans.length - 1];
+    return last ? { kind: 'span', key: last.key } : null;
+  }
+  const idx = model.spans.findIndex(
+    (s) => s.key.round === target.key.round && s.key.week === target.key.week
+  );
+  if (idx <= 0) return null;
+  const prev = model.spans[idx - 1];
+  return prev ? { kind: 'span', key: prev.key } : null;
+}
+
+/** The target whose own window STARTS where this target's ends (exclusive)
+ * — the next span in the array if there is one, else the live open span,
+ * else the pending week, else null (nothing has started after it yet — the
+ * "shouldn't happen" case, every real model has an open or pending week once
+ * the completion model has launched at all). Only ever called for a CLOSED
+ * span — `open`/`pending` are both "the current one" and have no next; the
+ * caller (`weekWindowFor`) handles that directly. */
+function nextTargetFor(target: DWeekTarget, model: DWeekModel): DWeekTarget | null {
   if (target.kind === 'open' || target.kind === 'pending') return null;
   const idx = model.spans.findIndex(
     (s) => s.key.round === target.key.round && s.key.week === target.key.week
   );
   if (idx === -1) return null;
   const next = model.spans[idx + 1];
-  if (next) return next.openedAt;
-  if (model.open) return model.open.openedAt;
-  if (model.pending) return model.pending.opensAt;
+  if (next) return { kind: 'span', key: next.key };
+  if (model.open) return { kind: 'open' };
+  if (model.pending) return { kind: 'pending' };
   return null;
+}
+
+/** This target's own `closedAt`, as a timestamp — null for anything but a
+ * closed span (open/pending never close; a stale key has none either). */
+function closedAtMsFor(target: DWeekTarget, model: DWeekModel): number | null {
+  if (target.kind !== 'span') return null;
+  const closedAt = spanByKey(model.spans, target.key)?.closedAt ?? null;
+  return closedAt === null ? null : new Date(closedAt).getTime();
 }
 
 /** The actual `[start, end)` this target's window resolves to (`end: null` =
  * unbounded), or null when the target doesn't exist in `model` at all.
  * Shared by `weekHasD` (does ANY D fall in THIS week's window) and
  * `weekTargetForD` (which week does THIS ONE D fall in) so the two never
- * disagree about where a boundary sits. */
-function weekWindowFor(
+ * disagree about where a boundary sits. Exported so app.ts's
+ * `completionWeekDots` can build its day-strip from the SAME window
+ * (CHECK-v61.md round 3 must #1, fix (b)) instead of recomputing it.
+ *
+ * Oct 2 2026, v61 fix pass 3 (CHECK-v61.md round 3 must #1): `start` used to
+ * be JUST the anchor-weekend floor of this target's own `openedAt`/
+ * `opensAt` — right after a WEEKDAY close (the next week always waits for a
+ * FUTURE Saturday/Sunday, so the floor can never reach back into the
+ * closing week), but wrong after a SAT/SUN close: `closeOpen` (week.ts)
+ * opens the next span at the close instant itself (there's no boundary to
+ * wait for — the close already landed on the anchor day), and flooring
+ * THAT instant to midnight reaches back over however many hours the
+ * PREVIOUS week was still open for, that same calendar day. Her real Sep
+ * 28 order (D first, then A) replayed at a Sat/Sun close showed it: a D
+ * logged at 09:00 while Week N was still open (until a 12:00 close) got
+ * floored into Week N+1's own window, which starts at that Saturday's
+ * 00:00. The fix: a target's window never starts before the PREVIOUS
+ * target's own `closedAt` — `start = max(anchor-floor, prevClosedAt)`. A
+ * weekday close's `prevClosedAt` is always earlier than the next boundary
+ * Saturday, so this is a no-op there; a Sat/Sun close's `prevClosedAt` is
+ * the exact instant that made the plain floor wrong, so the `max` wins.
+ *
+ * `end` is recursive on purpose — the next target's OWN `start` (after ITS
+ * prev-clamp too), not just its raw floored start. That keeps the two
+ * windows agreeing at their shared boundary: a D sitting in neither, or
+ * both, would be the same bug the clamp above exists to close. Recursion
+ * depth is bounded by the number of closed spans (small and finite). */
+export function weekWindowFor(
   target: DWeekTarget,
   model: DWeekModel
 ): { start: number; end: number | null } | null {
   const startIso = rawStartIso(target, model);
   if (startIso === null) return null;
-  const endIso = rawEndIso(target, model);
-  return {
-    start: weekWindowStart(startIso),
-    end: endIso === null ? null : weekWindowStart(endIso),
-  };
+  const prevTarget = previousTargetFor(target, model);
+  const prevClosedAtMs = prevTarget ? closedAtMsFor(prevTarget, model) : null;
+  const start = Math.max(weekWindowStart(startIso), prevClosedAtMs ?? -Infinity);
+  if (target.kind === 'open' || target.kind === 'pending') return { start, end: null };
+  const nextTarget = nextTargetFor(target, model);
+  if (nextTarget === null) return { start, end: null };
+  const nextWin = weekWindowFor(nextTarget, model);
+  return { start, end: nextWin ? nextWin.start : null };
 }
 
 /** Does Workout D land inside THIS week's own calendar window? Replaces the
