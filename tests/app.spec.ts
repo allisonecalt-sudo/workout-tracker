@@ -7862,6 +7862,103 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.week-line')).toHaveText('complete · 3 of 4');
       await expect(page.locator('.week-dots#week-strip .week-dot-d')).toHaveCount(0);
     });
+
+    // v61.1 fix 2 (Oct 2 2026, CHECK-v61.1.md must #1): the weekly review used
+    // to carry its OWN D window (getExtraDSessionsForSpan, raw `openedAt` →
+    // the next span's own `openedAt`, or Infinity) instead of asking
+    // week-d.ts for the SAME window Home/Progress/the peek already share —
+    // so it disagreed with every other screen about the same D in exactly
+    // these three gap shapes. These three tests drive the review itself
+    // (the other screens are already covered by the repro tests above).
+    //
+    // "r1noD": a weekday close (C), then a D on the pending week's own
+    // opening day, before any A/B/C has reopened it. Before the fix: the
+    // review's Week 5 page read 'Sessions: 4 of 4' with a 'D · ... · extra
+    // ride' line — the old window never ended, so it kept claiming the D
+    // forever. The pending week itself has no review page yet (Home already
+    // shows it — same "honest, not guessed" call the fix spec makes).
+    test("v61.1 fix 2 (r1noD): a D on the pending week's own opening day, nothing else logged yet, reads Week 5's review at 3 of 4 with no D line", async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-10-03T07:05:00.000Z'); // Sat Oct 3, 10:05 local
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-09-29T15:00:00.000Z', 'C'), // closes Week 5 — Week 6 pending, opens Sat Oct 3
+        dLog('wk6-d', '2026-10-03T07:00:00.000Z'), // 10:00 local — before any A/B/C, nothing open yet
+      ]);
+      await page.goto('/');
+      // Week 6 has no open span yet (mid-gap), so reviewCompletionPages'
+      // page 0 is Week 5 — the last CLOSED span — same as the "repro 3"
+      // Done-card test above reaching it via #week-nav-back.
+      await page.locator('#open-weekly-review .week-card-head').click();
+      // Not a full exact-string match on the title — formatWeekRange's own
+      // day formatting isn't this test's concern — just that it's Week 5,
+      // closed, and reads "3 of 4" (never the pre-fix "4 of 4 ✓").
+      await expect(page.locator('.review-title')).toContainText('Week 5');
+      await expect(page.locator('.review-title')).toContainText('complete · 3 of 4');
+      await expect(page.locator('.weekly-review-subtitle')).toContainText('Sessions:');
+      await expect(page.locator('.weekly-review-subtitle strong')).toHaveText('3');
+      await expect(page.locator('.weekly-review-subtitle')).toContainText('of 4');
+      await expect(page.locator('.weekly-review-extra-row')).toHaveCount(0);
+    });
+
+    // "gap + Sunday opening": C Fri (weekday close), D Sat (mid-gap, the
+    // pending week), A Sun (opens Week 6). Before the fix: Week 6's review
+    // page read 'Sessions: 1 of 4' (the D fell before the SAME window's own
+    // `openedAt`, the Sunday A) while Week 5's page wrongly claimed it —
+    // 'Sessions: 4 of 4' with the Sat D listed, even though Home/Progress/
+    // the peek had already moved it to Week 6.
+    test('v61.1 fix 2 (gap + Sunday opening): the review and Home agree — Week 6 reads 2 of 4 with the Sat D line, Week 5 reads 3 of 4 with none', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-10-04T08:00:00.000Z'); // Sun Oct 4, 11:00 local
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c-fri', '2026-10-02T15:00:00.000Z', 'C'), // Fri 18:00 local — a weekday close, gap opens
+        dLog('wk6-d-sat', '2026-10-03T07:00:00.000Z'), // Sat 10:00 local, mid-gap — the pending week
+        swingLog('wk6-a-sun', '2026-10-04T07:00:00.000Z', 'A'), // Sun 10:00 local — opens Week 6
+      ]);
+      await page.goto('/');
+      // Page 0 is the live open span, Week 6, once the Sunday A has opened it.
+      await page.locator('#open-weekly-review .week-card-head').click();
+      await expect(page.locator('.review-title')).toContainText('Week 6');
+      await expect(page.locator('.weekly-review-subtitle strong')).toHaveText('2');
+      await expect(page.locator('.weekly-review-subtitle')).toContainText('of 4');
+      await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
+      await expect(page.locator('.weekly-review-extra-row')).toContainText('D');
+      await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
+      // Page 1, Week 5, must not also claim that same Saturday D.
+      await page.locator('#prev-week').click();
+      await expect(page.locator('.review-title')).toContainText('Week 5');
+      await expect(page.locator('.review-title')).toContainText('complete · 3 of 4');
+      await expect(page.locator('.weekly-review-subtitle strong')).toHaveText('3');
+      await expect(page.locator('.weekly-review-extra-row')).toHaveCount(0);
+    });
+
+    // "D then A on the same Saturday" (her real Sep 28 order, replayed at the
+    // Oct 3 boundary — same seed as "repro 2" above). Before the fix: the
+    // review's Week 6 page read 'Sessions: 1 of 4' while Home already read
+    // '2 of 4 · B and C left' for the exact same D.
+    test("v61.1 fix 2 (D then A on the same Saturday): the review's Week 6 page also reads 2 of 4, matching Home", async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-10-03T07:30:00.000Z'); // Sat Oct 3, 10:30 local
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-09-29T15:00:00.000Z', 'C'), // closes Week 5
+        dLog('wk6-d', '2026-10-03T05:00:00.000Z'), // 08:00 local — BEFORE the A below
+        swingLog('wk6-a', '2026-10-03T07:00:00.000Z', 'A'), // 10:00 local — opens Week 6, later than the D
+      ]);
+      await page.goto('/');
+      await page.locator('#open-weekly-review .week-card-head').click();
+      await expect(page.locator('.review-title')).toContainText('Week 6');
+      await expect(page.locator('.weekly-review-subtitle strong')).toHaveText('2');
+      await expect(page.locator('.weekly-review-subtitle')).toContainText('of 4');
+      await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
+    });
   });
 
   test('(f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress', async ({

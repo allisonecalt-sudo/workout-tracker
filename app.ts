@@ -12850,24 +12850,37 @@ function getWeekSessionsForSpan(span: WeekSpan): WeekSession[] {
 // span so the review can list them as an honest extra, same reasoning as
 // renderRidesTotalsCard's "This week" fix above.
 //
-// v55 (Sep 27 2026) — CHECK round 3 N1: bounding by this span's OWN closedAt
-// dropped a "gap-dated" D ride on the floor — one ridden after a weekday
-// close but before the next Saturday, when nothing has opened yet to claim
-// it either. The true boundary is "up to whenever the NEXT span opened" (or
-// forever, for the newest span/the live one) — a date in that gap belongs to
-// no other week, so it belongs to the one it follows. `nextSpanOpenedAt` is
-// the span chronologically after this one (reviewCompletionPages is
-// newest-first, so that's completionPages[offset-1]); null for the newest.
-function getExtraDSessionsForSpan(span: WeekSpan, nextSpanOpenedAt: string | null): LogEntry[] {
-  const sinceMs = new Date(span.openedAt).getTime();
-  const untilMs = nextSpanOpenedAt ? new Date(nextSpanOpenedAt).getTime() : Infinity;
+// v61.1 fix 2 (Oct 2 2026, CHECK-v61.1.md must #1): the span-local version of
+// this function (v55's own "up to whenever the NEXT span opened, or forever
+// for the newest" window) is DELETED — it carried its own D window instead of
+// asking week-d.ts for the SAME one Home/Progress/the peek already use
+// (weekHasDFor/completionWeekDots, v61 fix passes 2-3), so the review
+// disagreed with every other screen about the same D in every gap case. Her
+// real rows: r1noD (C Fri, D Sat, nothing else yet) put the Sat D in the
+// review's Week 5 forever — `sinceMs` was Week 5's own `openedAt` and
+// `untilMs` was `Infinity` since no span had opened after it — while
+// Home/Progress/the peek had already moved it to Week 6's open window
+// (week-d.ts's anchor-weekend floor). Gap + Sunday opening (C Fri, D Sat, A
+// Sun) attributed the Sat D to Week 5 too, since Week 6's own `openedAt` is
+// the Sunday A — strictly AFTER the Saturday D — while the other three
+// screens already count it in Week 6. One D-window, built by week-d.ts,
+// never two that can drift apart: `target` is `{kind:'open'}` for the page
+// that's still live (`span.closedAt === null` — the same open/closed test
+// `isLiveOpen` below already uses) and `{kind:'span', key}` otherwise; the
+// span itself is looked up again by its own KEY inside `model.spans`
+// (week-d.ts's own "key-based, not reference-based" note), not by object
+// identity, since `model` here is a fresh `weekModel()` call, not the one
+// `reviewCompletionPages()` used internally to build `span` in the first
+// place — two structurally-identical-but-not-reference-equal results still
+// have to agree.
+function getExtraDSessionsForTarget(target: DWeekTarget, model: DWeekModel): LogEntry[] {
+  const win = weekWindowFor(target, model);
+  if (win === null) return [];
   return loadLogs()
     .filter((l) => l.workout === 'D')
     .filter((l) => {
       const t = new Date(l.date).getTime();
-      // Exclusive upper bound: a ride exactly at the next span's openedAt IS
-      // the session that opened it, so it belongs there, not here.
-      return t >= sinceMs && t < untilMs;
+      return t >= win.start && (win.end === null || t < win.end);
     })
     .sort((a, b) => a.date.localeCompare(b.date));
 }
@@ -13051,7 +13064,7 @@ function reviewCompletionPages(): WeekSpan[] {
 // the week number + "since"/range already say which one is current, same as
 // Home's own header reads "Week N" plainly.
 // v61 (Sep 28 2026), spec item d: "Progress + weekly review show the same
-// 'of 4'." `hasD` comes from the SAME getExtraDSessionsForSpan the caller
+// 'of 4'." `hasD` comes from the SAME getExtraDSessionsForTarget the caller
 // already computes for this exact span (reviewWeekViewAt below) — one
 // D-detection, never a second one that could disagree with it.
 function completionReviewTitle(span: WeekSpan, hasD: boolean): string {
@@ -13099,7 +13112,7 @@ type ReviewWeekView = {
   countsD: boolean;
   // v54 fix r2 (Sep 27 2026), checker's should #1: D logs that date inside
   // this week but never count toward `sessions` (see
-  // getExtraDSessionsForSpan). Empty pre-launch (D didn't exist yet).
+  // getExtraDSessionsForTarget). Empty pre-launch (D didn't exist yet).
   extraSessions: LogEntry[];
   // True only for the ONE page that's still actually live/open right now —
   // gates the "vs previous week" card vs "Week still open." (see
@@ -13131,12 +13144,15 @@ function reviewWeekViewAt(offset: number): ReviewWeekView {
   const completionPages = reviewCompletionPages();
   if (offset < completionPages.length) {
     const span = completionPages[offset]!;
-    // v55: completionPages is newest-first, so index-1 is the span that
-    // opened right after this one — null (→ Infinity) only for the newest.
-    const extraSessions = getExtraDSessionsForSpan(
-      span,
-      offset > 0 ? (completionPages[offset - 1]?.openedAt ?? null) : null
-    );
+    // v61.1 fix 2 (Oct 2 2026): one shared window for count AND the review's
+    // extra-ride list — see getExtraDSessionsForTarget's own header. A fresh
+    // `weekModel()` call here (not the one `reviewCompletionPages()` used
+    // internally) is fine: `target` is key-based, never an object-identity
+    // check against this `span`.
+    const model = weekModel();
+    const target: DWeekTarget =
+      span.closedAt === null ? { kind: 'open' } : { kind: 'span', key: span.key };
+    const extraSessions = getExtraDSessionsForTarget(target, model);
     return {
       title: completionReviewTitle(span, extraSessions.length > 0),
       skippedLabel: null,
@@ -14427,11 +14443,29 @@ function renderRidesTotalsCard(rides: RideRecord[]): string {
   // stays date-based. In a gap (no span open yet), membership/since both
   // fall back to the last CLOSED span, same source r2 already used for
   // `since` alone.
-  const { open, spans } = weekModel();
+  const model = weekModel();
+  const { open, spans } = model;
   const activeSpan = open ?? (spans.length ? spans[spans.length - 1]! : null);
-  const since = activeSpan
-    ? new Date(activeSpan.openedAt).getTime()
-    : new Date(COMPLETION_WEEKS_FROM.at).getTime();
+  // v61.1 fix 2 (Oct 2 2026, CHECK-v61.1.md must #1's grep sweep): `since`
+  // used to be JUST `activeSpan.openedAt`, unbounded — the same event-to-
+  // event window week-d.ts replaced everywhere else in the v61 fix passes
+  // (see its own header). Two of the same gap bugs applied here: a D logged
+  // before `openedAt` (her real Sep 28 order, D first then A) dropped out of
+  // "This week" even though the other D-counting screens already moved it
+  // in, and — with no upper bound at all — a D logged after a weekday close
+  // would have stayed counted in "This week" forever instead of moving to
+  // the next week once one opens. Route through the SAME window
+  // weekHasDFor/getExtraDSessionsForTarget use: `open` when a week is live,
+  // else the last CLOSED span (mid-gap — matches the membership fallback
+  // already below), else the pre-model edge `since` already fell back to.
+  const activeTarget: DWeekTarget | null = open
+    ? { kind: 'open' }
+    : activeSpan
+      ? { kind: 'span', key: activeSpan.key }
+      : null;
+  const activeWindow = activeTarget ? weekWindowFor(activeTarget, model) : null;
+  const since = activeWindow ? activeWindow.start : new Date(COMPLETION_WEEKS_FROM.at).getTime();
+  const until = activeWindow ? activeWindow.end : null;
   const openIds = new Set((activeSpan?.sessions ?? []).map((s) => s.id));
   // v54 fix r2 (Sep 27 2026), checker's must #2: "This week" was filtered by
   // weekModel().open.sessions — but week.ts excludes 'D' from the completion
@@ -14439,11 +14473,15 @@ function renderRidesTotalsCard(rides: RideRecord[]): string {
   // buildWeeklyTargetRows above). That made a D ride real Sun Sep 27 2026 —
   // her own data, 42 rows -> 43 after saving it — read "This week 0 rides"
   // while "This month" already said 4. D still isn't session-membership
-  // eligible (it never joins a span's `sessions`), so it stays on the r2
-  // date rule; A/B/C use the r3 membership rule above instead.
-  const weekRides = rides.filter(
-    (r) => openIds.has(r.id) || (r.workout === 'D' && new Date(r.date).getTime() >= since)
-  );
+  // eligible (it never joins a span's `sessions`), so it stays on the
+  // window-based date rule above; A/B/C use the r3 membership rule above
+  // instead.
+  const weekRides = rides.filter((r) => {
+    if (openIds.has(r.id)) return true;
+    if (r.workout !== 'D') return false;
+    const t = new Date(r.date).getTime();
+    return t >= since && (until === null || t < until);
+  });
   const monthPrefix = localIsoDate(new Date()).slice(0, 7);
   // v55 (Sep 27 2026) — CHECK N4 (round 2): `r.date` is a UTC ISO timestamp;
   // slicing it straight gave the UTC month, one off from the local one for a
