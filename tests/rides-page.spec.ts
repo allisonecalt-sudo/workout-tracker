@@ -37,7 +37,11 @@ function rideLog(
     km?: number | null;
     kcal?: number | null;
     timeSec?: number | null;
-    workout?: 'A' | 'B' | 'C';
+    // v61.1 fix 3 (Oct 2 2026): 'D' added so a genuine Workout D ride can be
+    // seeded here too (it never joins week.ts's own A/B/C session model —
+    // see sessionsForWeekModel's own filter — so it's a real test of the
+    // D-fallback path, unlike WEEK6_D below which uses 'A' on purpose).
+    workout?: 'A' | 'B' | 'C' | 'D';
   } = {}
 ): Row {
   return {
@@ -548,6 +552,52 @@ test.describe('week by week (v57)', () => {
     expect(result.tieAfterRounding).toBe('0');
     expect(result.positive).toBe('+2');
     expect(result.negative).toBe('-2.28');
+  });
+});
+
+// v61.1 fix 3 (Oct 2 2026, CHECK-v61.1.md check 2's must #1): the Totals
+// card's "This week" (renderRidesTotalsCard) had already moved onto
+// week-d.ts's own calendar window in the commit right before this one —
+// but its neighbours on the SAME screen (the vs-card, the table, the
+// per-week chart — all built from weeklyRideRows/assignRidesToWeeks) were
+// left on the old [openedAt, next openedAt)/Infinity window. This is
+// CHECK-v61.1.md's own "r2" repro (C Fri closes Week 5, then D before the
+// Saturday session that opens Week 6 — her real Sep 28 order), driven
+// through the real page instead of the pure module.
+test.describe('v61.1 fix 3: "This week" and "Week by week" agree on the same D', () => {
+  test('r2: C closes Week 5 on Friday, D lands Saturday before the A that opens Week 6 — "This week" and "Week 6 · so far" read the same ride count', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      rideLog('r2-a', '2026-09-27', { ...RIDE_A, workout: 'A' }), // Sun — Week 5
+      rideLog('r2-b', '2026-09-29', { ...RIDE_B, workout: 'B' }), // Tue — Week 5
+      rideLog('r2-c', '2026-10-02T12:00:00.000Z', { ...RIDE_C, workout: 'C' }), // Fri 15:00 local — closes Week 5
+      rideLog('r2-d', '2026-10-03T05:00:00.000Z', {
+        level: 4,
+        km: 1,
+        kcal: 70,
+        timeSec: 900,
+        workout: 'D',
+      }), // Sat 08:00 local — BEFORE the A below, her real order
+      rideLog('r2-a6', '2026-10-03T10:00:00.000Z', { ...RIDE_A, workout: 'A' }), // Sat 13:00 local — opens Week 6
+    ]);
+    await page.goto('/');
+    await openRides(page);
+
+    const thisWeekRow = page.locator('.rides-totals-row').filter({ hasText: 'This week' });
+    await expect(thisWeekRow).toContainText('2 rides'); // the Sat A + the Sat D, both in the open Week 6 window
+
+    const rows = page.locator('.rides-week-row');
+    const week6Row = rows.filter({ hasText: 'Week 6' });
+    await expect(week6Row).toContainText('so far');
+    // Before this fix: "1 ride" here — assignRidesToWeeks' own date-range
+    // fallback put the Sat D in Week 5 (its window ran up to the A's own
+    // 13:00 openedAt, which the 08:00 D fell before) while "This week"
+    // above had already moved it to Week 6.
+    await expect(week6Row).toContainText('2 rides');
+
+    const week5Row = rows.filter({ hasText: 'Week 5' }).first();
+    await expect(week5Row).not.toContainText('2 rides'); // the D never counted here either
   });
 });
 

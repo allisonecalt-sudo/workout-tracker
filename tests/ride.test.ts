@@ -469,7 +469,7 @@ test.describe('weeklyRideRows: the table — last N weeks, newest first, "so far
       span(2, 7, '2026-09-12', '2026-09-19'),
     ];
     const weekOf = new Map<string, WeekKey>();
-    const rows = weeklyRideRows([], weekOf, spans, null, 6);
+    const rows = weeklyRideRows([], weekOf, spans, null, null, 6);
     expect(rows).toHaveLength(6);
     expect(rows.map((r) => r.key.week)).toEqual([7, 6, 5, 4, 3, 2]); // week 1 dropped
     // Every row here has 0 rides — the "—" the app shows is app.ts's own
@@ -479,5 +479,64 @@ test.describe('weeklyRideRows: the table — last N weeks, newest first, "so far
 
   test('no spans and no open week -> an empty table, never a crash', () => {
     expect(weeklyRideRows([], new Map(), [], null)).toEqual([]);
+  });
+});
+
+// v61.1 fix 3 (Oct 2 2026, CHECK-v61.1.md check 2's must #1): the D fallback
+// used to invent its own [openedAt, next openedAt)/Infinity window instead
+// of asking week-d.ts for the SAME calendar window every other D-counting
+// screen already shares (weekTargetForD) — so the Rides screen could name a
+// different week than Home for the same D. These two cases are the exact
+// shapes CHECK-v61.1.md's "r2" and "r1noD" repros drove through the app;
+// tests/week-d.test.ts covers the underlying window math directly.
+test.describe("weeklyRideRows: the D fallback shares week-d.ts's own window, not a second one", () => {
+  test("a D logged BEFORE the session that opens a new week still lands in the OPEN week's row, never the one that just closed", () => {
+    // C (Tue Sep 29) closes Week 5 — a weekday close, so Week 6 waits for
+    // the next Sat/Sun (Oct 3). An A on Sat Oct 3 at 10:00 local opens
+    // Week 6 right then (it falls ON the anchor day). A D at 08:00 local
+    // that same Saturday — before the A that actually opens the week — is
+    // her real Sep 28 order, replayed at this boundary (same shape as
+    // week-d.test.ts's own "repro 2").
+    const sessions = [
+      { id: 'a1', date: '2026-09-27T15:00:00.000Z', workout: 'A' as const },
+      { id: 'b1', date: '2026-09-28T15:00:00.000Z', workout: 'B' as const },
+      { id: 'c1', date: '2026-09-29T15:00:00.000Z', workout: 'C' as const },
+      { id: 'a2', date: '2026-10-03T07:00:00.000Z', workout: 'A' as const }, // 10:00 local — opens Week 6
+    ];
+    const { spans, open, pending, weekOf } = walkWeeks(sessions, [], []);
+    expect(spans).toHaveLength(1);
+    expect(open?.key).toEqual({ round: 2, week: 6 });
+    const dRide: RideRecord = {
+      ...RIDE_A,
+      id: 'd1',
+      date: '2026-10-03T05:00:00.000Z',
+      workout: 'D',
+    }; // 08:00 local, before a2
+    const rows = weeklyRideRows([dRide], weekOf, spans, open, pending);
+    const week5 = rows.find((r) => r.key.week === 5);
+    const week6 = rows.find((r) => r.key.week === 6);
+    expect(week6?.rides).toBe(1); // the open week claims it
+    expect(week5?.rides).toBe(0); // never also the week that already closed
+  });
+
+  test('"r1noD" shape — C closes the week, D lands mid-gap before any A/B/C reopens it: the D is in NO closed row (it belongs to the pending week, which has no row yet)', () => {
+    const sessions = [
+      { id: 'a1', date: '2026-09-27T15:00:00.000Z', workout: 'A' as const },
+      { id: 'b1', date: '2026-09-28T15:00:00.000Z', workout: 'B' as const },
+      { id: 'c1', date: '2026-09-29T15:00:00.000Z', workout: 'C' as const }, // closes Week 5 — Week 6 pending, opens Sat Oct 3
+    ];
+    const { spans, open, pending, weekOf } = walkWeeks(sessions, [], []);
+    expect(open).toBeNull();
+    expect(pending?.key).toEqual({ round: 2, week: 6 });
+    const dRide: RideRecord = {
+      ...RIDE_A,
+      id: 'd1',
+      date: '2026-10-03T07:00:00.000Z',
+      workout: 'D',
+    }; // 10:00 local, Week 6's own opening day — mid-gap
+    const rows = weeklyRideRows([dRide], weekOf, spans, open, pending);
+    expect(rows).toHaveLength(1); // only Week 5's closed row — no open row exists to add Week 6's D to
+    expect(rows[0]?.key).toEqual({ round: 2, week: 5 });
+    expect(rows[0]?.rides).toBe(0); // and Week 5 never claims it either
   });
 });

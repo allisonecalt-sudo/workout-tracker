@@ -4476,17 +4476,28 @@ function apartmentSegmentRemainingSec(totalSec: number, remainingSec: number): n
 // yet, the "shouldn't happen" edge week.ts's own comment names) the launch
 // instant itself — never "today's calendar Saturday", which the completion
 // model has already replaced for "now" (same reasoning as isNowAfterCompletionLaunch).
+//
+// v61.1 fix 3 (Oct 2 2026, CHECK-v61.1.md check 2's nice): `since` used to
+// be the raw `open.openedAt` — the exact event-to-event window week-d.ts
+// replaced everywhere else (see its own header). A walk logged on the
+// anchor day BEFORE the session that opens the week (the same class of gap
+// week-d.ts exists to close for D) dropped out of "this week" even though
+// it falls on the week's own calendar day. Routed through the SAME window
+// weekWindowFor/weekTargetForD give every other D/ride/walk attribution.
 function walksThisWeek(): number {
   if (!isNowAfterCompletionLaunch()) {
     const weekStart = saturdayForOffset(0).getTime();
     return loadWalks().filter((w) => new Date(w.date).getTime() >= weekStart).length;
   }
-  const { open, spans } = weekModel();
-  const since = open
-    ? new Date(open.openedAt).getTime()
+  const model = weekModel();
+  const { open, spans } = model;
+  const target: DWeekTarget | null = open
+    ? { kind: 'open' }
     : spans.length
-      ? new Date(spans[spans.length - 1]!.openedAt).getTime()
-      : new Date(COMPLETION_WEEKS_FROM.at).getTime();
+      ? { kind: 'span', key: spans[spans.length - 1]!.key }
+      : null;
+  const win = target ? weekWindowFor(target, model) : null;
+  const since = win ? win.start : new Date(COMPLETION_WEEKS_FROM.at).getTime();
   return loadWalks().filter((w) => new Date(w.date).getTime() >= since).length;
 }
 
@@ -14888,8 +14899,12 @@ function renderRides(): string {
   // card on this page already reads for "This week"/"This month" (never a
   // second meaning of week). `weekRows` feeds the vs-block, the table, AND
   // the chart's "per week" mode — one computation, three views of it.
-  const { spans, open, weekOf } = weekModel();
-  const weekRows = weeklyRideRows(rides, weekOf, spans, open, 6);
+  // v61.1 fix 3 (Oct 2 2026, CHECK-v61.1.md check 2's must #1): `pending` now
+  // goes through too — weeklyRideRows' own D fallback (ride.ts) needs the
+  // full week-d.ts model to resolve a mid-gap D the same way every other
+  // D-counting call site already does.
+  const { spans, open, pending, weekOf } = weekModel();
+  const weekRows = weeklyRideRows(rides, weekOf, spans, open, pending, 6);
   // v57 fix pass (CHECK-v57 M1): the legacy row is always the OLDEST of the
   // two kinds of week (week.ts weeks come after it, her own real Week 4
   // never overlaps a weekModel span), so it goes at the END of the

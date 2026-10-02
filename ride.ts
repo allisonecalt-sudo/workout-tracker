@@ -36,7 +36,21 @@
 // (task text): "the week = the app's week rule" — never a second, new
 // meaning of week invented here, same discipline renderRidesTotalsCard
 // (app.ts) already follows for "This week"/"This month".
-import type { WeekSpan, WeekKey } from './week.js';
+import type { WeekSpan, WeekKey, PendingWeek } from './week.js';
+// v61.1 fix 3 (Oct 2 2026, CHECK-v61.1.md check 2's must #1): the D fallback
+// below used to invent its own date-range window ([openedAt, next openedAt),
+// or Infinity) instead of asking week-d.ts for the SAME calendar window
+// Home/Progress/the peek/the weekly review already share (see week-d.ts's
+// own file header for why an event-to-event window undercounts her real
+// rows) — so the Rides screen's "This week vs last week"/"Week by week"/the
+// per-week chart could name a different week for the same D than the
+// "This week" totals card right above them on the same screen (her real r2
+// shape: C Fri closes, D Sat before the Sat A that opens the next week — the
+// D landed in the OLD week here while renderRidesTotalsCard's own fix had
+// already moved it to the new one). `weekTargetForD` is the one place every
+// D-counting screen now resolves "which week," so this module can never
+// reopen that drift.
+import { weekTargetForD, type DWeekModel } from './week-d.js';
 
 export type RideRecord = {
   id: string;
@@ -292,15 +306,32 @@ export type WeeklyRideRow = WeekRideAggregate & {
 
 // A ride's week — membership FIRST (`weekOf`, week.ts's own attribution for
 // A/B/C, including a gap session counted backward to the week it closed),
-// falling back to date-range bucketing only for a ride `weekOf` never placed
-// (a D ride — week.ts's sessionsForWeekModel drops D on purpose, app.ts's own
-// comment on renderRidesTotalsCard — or a ride from before the first span
-// here). Membership must come first: a week that closes ON a Saturday/Sunday
-// opens its NEXT span at that SAME instant (week.ts's weekendAnchorDay
-// branch), so a plain date>=openedAt bucketing would put the CLOSING A/B/C
-// ride into the week it just closed OUT of — the exact double-count bug
-// renderRidesTotalsCard's v54 fix r3 comment (app.ts) already fixed once for
-// "This week"; membership-first here means this table can never reopen it.
+// falling back to week-d.ts's own calendar window ONLY for a D ride (D never
+// gets weekOf membership — week.ts's sessionsForWeekModel drops it on
+// purpose, app.ts's own comment on renderRidesTotalsCard). Membership must
+// come first: a week that closes ON a Saturday/Sunday opens its NEXT span at
+// that SAME instant (week.ts's weekendAnchorDay branch), so a plain
+// date>=openedAt bucketing would put the CLOSING A/B/C ride into the week it
+// just closed OUT of — the exact double-count bug renderRidesTotalsCard's
+// v54 fix r3 comment (app.ts) already fixed once for "This week";
+// membership-first here means this table can never reopen it.
+//
+// v61.1 fix 3 (Oct 2 2026, CHECK-v61.1.md check 2's must #1 — a regression
+// caught while wiring this in, not in the check itself): an A/B/C ride with
+// no `weekOf` membership is never a mid-completion-model gap (every real
+// post-launch A/B/C session gets a weekOf entry, even one that opens or
+// closes nothing) — it's always a LEGACY ride from before the real
+// completion-model launch (week.ts's own HISTORY/afterLaunch filter), which
+// `legacyWeek4RideRow` (app.ts) already attributes on its own and must stay
+// unattributed here. week-d.ts's anchor-weekend floor can land EARLIER than
+// the launch instant itself (Week 5 opens mid-day on launch Saturday; its
+// window floors to that same Saturday's midnight), so routing a legacy A/B/C
+// ride through `weekTargetForD` could wrongly sweep it into Week 5's "so
+// far" row. D never has this problem — it didn't exist before the launch —
+// so the fallback is gated to `r.workout === 'D'` specifically; anything
+// else with no membership is a legacy ride and stays unattributed here,
+// exactly as the old date-range fallback already left it (its own comment:
+// "predates what this table can show — left unattributed on purpose").
 function weekKeyStr(k: WeekKey): string {
   return `${k.round}-${k.week}`;
 }
@@ -308,7 +339,8 @@ function weekKeyStr(k: WeekKey): string {
 function assignRidesToWeeks(
   rides: RideRecord[],
   weekOf: ReadonlyMap<string, WeekKey>,
-  ordered: readonly WeekSpan[]
+  ordered: readonly WeekSpan[],
+  model: DWeekModel
 ): Map<string, RideRecord[]> {
   const buckets = new Map<string, RideRecord[]>();
   for (const span of ordered) buckets.set(weekKeyStr(span.key), []);
@@ -318,26 +350,17 @@ function assignRidesToWeeks(
       buckets.get(weekKeyStr(membership))?.push(r);
       continue;
     }
-    // Date-range fallback (D, or anything weekOf never saw): the span whose
-    // [openedAt, next span's openedAt) window contains this ride's date — a
-    // date landing in a weekday gap (no week open yet) counts backward to
-    // the span just before it, same as week.ts's own gap rule for A/B/C.
-    const t = new Date(r.date).getTime();
-    for (let i = 0; i < ordered.length; i++) {
-      const span = ordered[i] as WeekSpan;
-      const opened = new Date(span.openedAt).getTime();
-      const nextOpened =
-        i + 1 < ordered.length
-          ? new Date((ordered[i + 1] as WeekSpan).openedAt).getTime()
-          : Infinity;
-      if (t >= opened && t < nextOpened) {
-        buckets.get(weekKeyStr(span.key))?.push(r);
-        break;
-      }
-      // A ride dated before the very first span's own opening (i === 0, t <
-      // opened) predates what this table can show — left unattributed on
-      // purpose, same as week.ts's own launch-instant filter.
-    }
+    if (r.workout !== 'D') continue; // a legacy pre-launch ride — left for legacyWeek4RideRow
+    // week-d.ts fallback: the SAME calendar window Home/Progress/the
+    // peek/the weekly review already share — never a second, date-range
+    // meaning of "week" invented here. A D landing in the pending week (no
+    // span open yet, before its own opening day) gets no row at all, same
+    // as the weekly review's own getExtraDSessionsForTarget — it has
+    // nothing to show yet either.
+    const target = weekTargetForD(r.date, model);
+    if (target === null || target.kind === 'pending') continue;
+    const key = target.kind === 'open' ? (model.open as WeekSpan).key : target.key;
+    buckets.get(weekKeyStr(key))?.push(r);
   }
   return buckets;
 }
@@ -349,16 +372,23 @@ function assignRidesToWeeks(
 // caller (app.ts) is the one that turns a 0/null into the "—" her spec asks
 // for; this module only ever returns real numbers or null, never a display
 // string (same discipline as the rest of ride.ts).
+//
+// v61.1 fix 3 (Oct 2 2026): takes `pending` now too (app.ts passes
+// `weekModel().pending`) — week-d.ts's `weekTargetForD` needs the full
+// {spans, open, pending} shape to resolve a mid-gap D correctly, same as
+// every other D-counting call site (getExtraDSessionsForTarget,
+// renderRidesTotalsCard).
 export function weeklyRideRows(
   rides: RideRecord[],
   weekOf: ReadonlyMap<string, WeekKey>,
   spans: readonly WeekSpan[],
   open: WeekSpan | null,
+  pending: PendingWeek | null = null,
   count = 6
 ): WeeklyRideRow[] {
   const ordered: WeekSpan[] = open ? [...spans, open] : [...spans];
   const last = ordered.slice(-count);
-  const buckets = assignRidesToWeeks(rides, weekOf, ordered);
+  const buckets = assignRidesToWeeks(rides, weekOf, ordered, { spans, open, pending });
   return last
     .map((span): WeeklyRideRow => {
       const bucketRides = buckets.get(weekKeyStr(span.key)) ?? [];
