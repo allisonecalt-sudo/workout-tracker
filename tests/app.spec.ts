@@ -7674,6 +7674,125 @@ test.describe('v48 P4 home', () => {
       await expect(reopened.locator('.exercise-name')).not.toHaveText('TEST-MARKER-WEEK6');
       await reopened.close();
     });
+
+    // v61 fix pass 2 (Oct 2 2026) — CHECK-v61.md round 2's must #1: D's own
+    // window used to be the span's strict [openedAt, closedAt] — undercounting
+    // a D logged before the session that opens a week, or after the one that
+    // closes it. week-d.ts's own unit tests (tests/week-d.test.ts) cover the
+    // same three repros directly on the model; these drive them through Home.
+    const dLog = (id: string, date: string) => ({
+      id,
+      date,
+      workout: 'D' as const,
+      capacityBefore: 8,
+      capacityAfter: 8,
+      wallSitSec: 0,
+      backPain: 0,
+      word: '',
+      synced: true,
+    });
+
+    test('v61 fix pass 2 (repro 1): a D logged before ANY A/B/C still counts toward the pending week, with its own dot', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-10-03T07:05:00.000Z'); // Sat Oct 3, 10:05 local
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-09-29T15:00:00.000Z', 'C'), // closes Week 5 — Week 6 pending, opens Sat Oct 3
+        dLog('wk6-d', '2026-10-03T07:00:00.000Z'), // 10:00 local — before any A/B/C
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6');
+      // The spec's own example (CHECK-v61.md): "after D only: 1 of 4 · A, B
+      // and C to go" — not "0 of 4", the bug's exact symptom.
+      await expect(page.locator('.week-line')).toHaveText('1 of 4 · A, B and C to go');
+      const todayDot = page.locator('.week-dot.is-today');
+      await expect(todayDot.locator('.week-dot-d')).toHaveText('D');
+    });
+
+    test('v61 fix pass 2 (repro 2): a D logged before the session that opens the week still counts (her real Sep 28 order, replayed at the Oct 3 boundary)', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-10-03T07:30:00.000Z'); // Sat Oct 3, 10:30 local
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-09-29T15:00:00.000Z', 'C'), // closes Week 5
+        dLog('wk6-d', '2026-10-03T05:00:00.000Z'), // 08:00 local — BEFORE the A below
+        swingLog('wk6-a', '2026-10-03T07:00:00.000Z', 'A'), // 10:00 local — opens Week 6, later than the D
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6');
+      // Before the fix: "1 of 4 · B and C left" — the D fell before the
+      // span's own `openedAt` (A's timestamp) and dropped out.
+      await expect(page.locator('.week-line')).toHaveText('2 of 4 · B and C left');
+    });
+
+    test('v61 fix pass 2 (repro 3): a D logged minutes after the closing session reads the CLOSED week — never "0 of 4 in Week 6"', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-09-29T18:30:00.000Z'); // Tue Sep 29, 21:30 local — just after the D below
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-09-29T15:00:00.000Z', 'C'), // closes Week 5 at 18:00 local
+        dLog('wk5-d-after-close', '2026-09-29T18:00:00.000Z'), // 21:00 local, same day, AFTER the close
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6'); // the live/pending week, unaffected
+      // Before the fix: ['0 of 4 in Week 6 · A, B and C to go'] — this D
+      // belongs to Week 5's own close, not a week she hasn't reached yet.
+      await expect(page.locator('.home-done-line')).toHaveText([
+        'Week 5 done · 4 of 4 ✓',
+        'Week 6 opens Sat Oct 3',
+      ]);
+      // The peek ("‹ Week 5") reads 4 of 4 too.
+      await page.locator('#week-nav-back').click();
+      await expect(page.locator('.week-line')).toHaveText('4 of 4 ✓');
+      await page.locator('#week-nav-forward').click(); // back to the live view before navigating away
+      // Progress · Sessions per week reads "4 / 4" for the same week.
+      await page.locator('#open-progress-link').click();
+      const wk5Row = page
+        .locator('.spw-card')
+        .locator(':scope > .spw-rows > .spw-row')
+        .filter({ has: page.locator('.spw-label:text-is("wk 5")') });
+      await expect(wk5Row.locator('.spw-count')).toHaveText('4 / 4');
+    });
+
+    // v61 fix pass 2 (Oct 2 2026) — CHECK-v61.md round 2's should #9
+    // (pre-existing since WK2): gapCountsBackToWeekKey used to keep naming
+    // the OLD week's "extra" on and after the pending week's own opening
+    // day, with nothing logged yet — true only DURING the gap, not once its
+    // anchor day has arrived.
+    test('v61 fix pass 2 (should): on the day the pending week opens, with nothing logged yet, the sub-line drops the stale "extra" clause', async ({
+      page,
+    }) => {
+      await movableClock(page, '2026-10-03T07:00:00.000Z'); // Sat Oct 3, 10:00 local — its own opening day, nothing logged yet
+      await seedLogs(page, [
+        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
+        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
+        swingLog('wk5-c', '2026-09-29T15:00:00.000Z', 'C'), // closes Week 5 Tue — Week 6 pending, opens Sat Oct 3
+      ]);
+      await page.goto('/');
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6');
+      // Before the fix: "opens Sat Oct 3 · a session before then counts as
+      // an extra for Week 5" — stale, since "then" has already arrived.
+      await expect(page.locator('.week-sub-line').first()).toHaveText('opens Sat Oct 3');
+      await page.locator('button[data-workout="A"]').click();
+      await page.locator('#begin').click();
+      for (let i = 0; i < 60; i++) {
+        if (await page.locator('text=Quick log').isVisible()) break;
+        if (!(await tapForward(page))) break;
+      }
+      // Before the fix: "an extra for Week 5 (already 4 of 4)" while the
+      // save itself actually opens Week 6.
+      await expect(page.locator('.postlog-witness')).toContainText('1 of 4 in Week 6');
+      await expect(page.locator('.postlog-witness')).not.toContainText('Week 5');
+      await page.locator('#save-log').click();
+      await expect(page.locator('.home-header h1')).toHaveText('Week 6');
+      await expect(page.locator('.home-done-line')).toContainText('1 of 4 in Week 6');
+    });
   });
 
   test('(f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress', async ({

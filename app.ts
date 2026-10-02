@@ -77,6 +77,14 @@ import {
   type PendingWeek,
 } from './week.js';
 import {
+  weekHasD,
+  weekCountLine,
+  weekTargetForD,
+  type DWeekModel,
+  type DWeekTarget,
+  type DLogLite as WeekDLogLite,
+} from './week-d.js';
+import {
   steppedMovesForWorkout,
   steppedLineText,
   steppedLineFor,
@@ -8462,14 +8470,15 @@ function legacyLastClosedWeekPeek(): WeekPeek | null {
  * That fallback only ever matters until the FIRST new week closes; after
  * that, spans is never empty again and this always reads the new model. */
 function lastClosedWeekForPeek(): WeekPeek | null {
-  const { spans } = weekModel();
+  const model = weekModel();
+  const { spans } = model;
   const lastSpan = spans.length ? (spans[spans.length - 1] ?? null) : null;
   if (lastSpan) {
     const dLogs = loadLogs().filter((l) => l.workout === 'D');
     return {
       weekNum: lastSpan.key.week,
       dotsHtml: renderCompletionWeekDots(completionWeekDots(lastSpan, dLogs)),
-      countText: weekCountLine({ span: lastSpan }, weekHasD(lastSpan, dLogs)),
+      countText: weekCountLine({ span: lastSpan }, weekHasDFor({ span: lastSpan }, model, dLogs)),
     };
   }
   return legacyLastClosedWeekPeek();
@@ -8495,7 +8504,19 @@ let viewingLastClosedWeek = false;
 // PROGRAM row during a gap (see its own comment). gapCountsBackToWeekNum
 // keeps its old (number-only) signature for its existing callers.
 function gapCountsBackToWeekKey(): WeekKey | null {
-  if (!shownWeek().pending) return null;
+  const shown = shownWeek();
+  if (!shown.pending) return null;
+  // v61 fix pass 2 (Oct 2 2026, CHECK-v61.md round 2 should #9, pre-existing
+  // since WK2): a gap is only real BEFORE the pending week's own opening day
+  // — week.ts's own gap-resolution (resolveGapSession) opens the week the
+  // instant "now" reaches that anchor, whatever weekday it is, whether or
+  // not an A/B/C session has actually landed yet to make `open` non-null.
+  // This used to keep saying "a session before then counts as an extra for
+  // Week N" (and the post-log's "already N of 4") on and after that very
+  // day — true only during the gap itself, false the moment the pending
+  // week's own day arrives, even with 0 sessions logged (her real complaint
+  // was never about the DATE, only the stale CLAIM once it arrived).
+  if (new Date().getTime() >= new Date(shown.pending.opensAt).getTime()) return null;
   const { spans } = weekModel();
   const last = spans.length ? spans[spans.length - 1] : null;
   return last ? last.key : null;
@@ -8531,38 +8552,46 @@ function weekSubLabel(shown: { span: WeekSpan | null; pending: PendingWeek | nul
 // A/B/C letters, D never required, never part of `span.missing`), but it
 // DOES count toward the number shown to her. week.ts drops D entirely by
 // design (its own header comment), so this reads it straight off her logs
-// instead — any 'D' row dated inside the span's own open window
-// [openedAt, closedAt ?? now).
-function weekHasD(span: WeekSpan | null, logs: readonly LogEntry[]): boolean {
-  if (!span) return false;
-  const start = new Date(span.openedAt).getTime();
-  const end = span.closedAt ? new Date(span.closedAt).getTime() : Date.now();
-  return logs.some((l) => {
-    if (l.workout !== 'D') return false;
-    const t = new Date(l.date).getTime();
-    return t >= start && t <= end;
-  });
+// instead.
+//
+// v61 fix pass 2 (Oct 2 2026, CHECK-v61.md round 2 must #1): the window a D
+// counts against moved out of here into week-d.ts (a pure module, unit-
+// tested — round 1's should #7) — a strict [openedAt, closedAt] window
+// undercounted a D logged before the opening session or after the closing
+// one, both real on her rows. `weekHasDFor` below is a thin app.ts-side
+// wrapper: it builds the `DWeekTarget` week-d.ts needs from whichever of
+// `span`/`open`/`pending` a call site already has in hand, so every call
+// site below only changes its OWN local target-selection, never the window
+// math itself (that lives once, in week-d.ts, covered by its own tests).
+function weekHasDFor(
+  which: { span: WeekSpan } | { open: WeekSpan } | { pending: true } | null,
+  model: DWeekModel,
+  dLogs: readonly WeekDLogLite[]
+): boolean {
+  if (!which) return false;
+  const target: DWeekTarget =
+    'open' in which
+      ? { kind: 'open' }
+      : 'pending' in which
+        ? { kind: 'pending' }
+        : { kind: 'span', key: which.span.key };
+  return weekHasD(target, model, dLogs);
 }
 
-/** §2.4's #week-count, widened to "of 4" (spec item d): "0 of 4 · A, B and C
- * to go" / "1 of 4 · B and C left" / "1 of 4 · A, B and C to go" (D only) —
- * the missing A/B/C letters in order (D is never "missing", it's simply
- * counted in or not), or (mid-gap, no span yet) nothing can be done yet.
- * A CLOSED span (all three of A/B/C done — never the LIVE "shown" week,
- * which always closes itself at 3, but real for a "‹ Week N" peek at a past
- * one) reads "4 of 4 ✓" once D happened too, or "complete · 3 of 4" when it
- * didn't — the week closed on A/B/C alone, exactly as her rule says it must. */
-function weekCountLine(shown: { span: WeekSpan | null }, hasD = false): string {
-  const missing = shown.span ? shown.span.missing : (['A', 'B', 'C'] as const);
-  const doneAbc = shown.span ? shown.span.done.length : 0;
-  const done = doneAbc + (hasD ? 1 : 0);
-  if (missing.length === 0) return hasD ? '4 of 4 ✓' : 'complete · 3 of 4';
-  const missingWords =
-    missing.length === 1
-      ? (missing[0] as string)
-      : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
-  const tail = missing.length === 3 ? `${missingWords} to go` : `${missingWords} left`;
-  return `${done} of 4 · ${tail}`;
+/** The {kind:'open'|'pending'} target for whichever week is LIVE right now
+ * (never a specific past span — that's always `{span: ...}` at its own call
+ * site) — `shown.span` set means an open week exists; `shown.pending` set
+ * (mid-gap, nothing open yet) means the pending week itself owns any D from
+ * its own anchor forward (week-d.ts's whole point — see its header). Both
+ * null (the "shouldn't happen" launch-fallback week.ts's own comment names)
+ * falls through to `weekHasDFor(null, ...)` → false, same as always. */
+function liveWeekDTarget(shown: {
+  span: WeekSpan | null;
+  pending: PendingWeek | null;
+}): { span: WeekSpan } | { open: WeekSpan } | { pending: true } | null {
+  if (shown.span) return { open: shown.span };
+  if (shown.pending) return { pending: true };
+  return null;
 }
 
 /** The PROGRAM row for a completion-model week key: an exact round+weekNum
@@ -9948,8 +9977,35 @@ function renderHome(): string {
           ? `<div class="week-sub-line week-sub-repeat">Same moves as Week ${planInfo.repeatsWeek}</div>`
           : '');
       weekCardHeadText = escapeHtml(`Week ${shown.key.week}`);
-      dotsHtml = shown.span ? renderCompletionWeekDots(completionWeekDots(shown.span, dLogs)) : '';
-      weekLineText = weekCountLine(shown, weekHasD(shown.span, dLogs));
+      // v61 fix pass 2 (Oct 2 2026, CHECK-v61.md round 2 must #1, repro 1):
+      // mid-gap, with nothing of A/B/C logged yet, `shown.span` is null — no
+      // real WeekSpan exists to hand completionWeekDots a day-range from.
+      // But a D CAN already belong to the pending week (week-d.ts's own
+      // point — see its header): once one does, show the same day-strip a
+      // real span would, built from the pending week's own anchor day, so
+      // her D dot still has somewhere to land instead of waiting for A/B/C
+      // to open the week before it can render at all.
+      const pendingHasD =
+        !shown.span && shown.pending ? weekHasDFor({ pending: true }, model, dLogs) : false;
+      dotsHtml = shown.span
+        ? renderCompletionWeekDots(completionWeekDots(shown.span, dLogs))
+        : pendingHasD && shown.pending
+          ? renderCompletionWeekDots(
+              completionWeekDots(
+                {
+                  key: shown.pending.key,
+                  openedAt: shown.pending.opensAt,
+                  closedAt: null,
+                  how: null,
+                  sessions: [],
+                  done: [],
+                  missing: ['A', 'B', 'C'],
+                },
+                dLogs
+              )
+            )
+          : '';
+      weekLineText = weekCountLine(shown, weekHasDFor(liveWeekDTarget(shown), model, dLogs));
     }
     saturdayNote = '';
 
@@ -9991,11 +10047,29 @@ function renderHome(): string {
     // Did TODAY'S save close its own week? (its week resolves to a CLOSED
     // span, not the currently open/pending one.)
     const doneTodayWeekKey = doneToday?.id ? (model.weekOf.get(doneToday.id) ?? null) : null;
-    const doneTodayClosedSpan = doneTodayWeekKey
+    let doneTodayClosedSpan = doneTodayWeekKey
       ? (model.spans.find(
           (s) => s.key.round === doneTodayWeekKey.round && s.key.week === doneTodayWeekKey.week
         ) ?? null)
       : null;
+    // v61 fix pass 2 (Oct 2 2026, CHECK-v61.md round 2 must #1, repro 3): D
+    // is invisible to `weekOf` (week.ts drops it on purpose — her rule,
+    // unchanged), so the check above never finds it, even when THIS D's own
+    // calendar window (week-d.ts) already belongs to an already-closed
+    // week — "C closes then D the same day" fell through to the generic
+    // `else` below and read "0 of 4 in Week 6", talking about a week she
+    // hasn't reached yet instead of the one this D actually landed in. A D
+    // that lands in the OPEN or PENDING week's own window (the ordinary
+    // case) still correctly falls through unchanged.
+    if (!doneTodayClosedSpan && doneToday?.workout === 'D') {
+      const dTarget = weekTargetForD(doneToday.date, model);
+      doneTodayClosedSpan =
+        dTarget?.kind === 'span'
+          ? (model.spans.find(
+              (s) => s.key.round === dTarget.key.round && s.key.week === dTarget.key.week
+            ) ?? null)
+          : null;
+    }
 
     // WK2 fix r1 (Sep 27 2026, checker's nice #1): a session saved BEFORE the
     // real launch instant is invisible to the completion model — week.ts
@@ -10044,14 +10118,14 @@ function renderHome(): string {
       // v61 (Sep 28 2026), spec item d: A/B/C alone still closes the week
       // (week.ts's own rule, untouched) — but the Done card's own line now
       // says "of 4", and whether D rode inside this closing week too.
-      const closedHasD = weekHasD(doneTodayClosedSpan, dLogs);
+      const closedHasD = weekHasDFor({ span: doneTodayClosedSpan }, model, dLogs);
       doneCardLines = [
         `Week ${doneTodayClosedSpan.key.week} done · ${closedHasD ? '4 of 4 ✓' : '3 of 4 · D optional'}`,
         ...(nextLine ? [nextLine] : []),
       ];
     } else {
       const doneAbc = shown.span?.done.length ?? 0;
-      const openHasD = weekHasD(shown.span, dLogs);
+      const openHasD = weekHasDFor(liveWeekDTarget(shown), model, dLogs);
       const done = doneAbc + (openHasD ? 1 : 0);
       const missing = shown.span?.missing ?? (['A', 'B', 'C'] as const);
       const missingWords = joinMissingLetters(missing);
@@ -11852,7 +11926,11 @@ function postLogWitnessLine(w: Workout): string {
     // used to stay at "of 3" after the Home/weekly-review line (weekCountLine)
     // widened to "of 4" — the same D read those use (weekHasD on the raw
     // logs, week.ts drops D from its own model by design).
+    // v61 fix pass 2 (Oct 2 2026): one `weekModel()` call shared by both
+    // branches — the gap branch needs `open`/`pending` too now (not just
+    // `spans`), for week-d.ts's own window end (see its header).
     const dLogs = loadLogs().filter((l) => l.workout === 'D');
+    const model = weekModel();
     const backWeek = gapCountsBackToWeekNum();
     if (backWeek !== null) {
       // WK2 fix r2 (Sep 27 2026, checker's nice #6): "(already 3 of 3)" was
@@ -11860,10 +11938,10 @@ function postLogWitnessLine(w: Workout): string {
       // close, since WK3's "moved on" isn't shipped yet), but it'll be wrong
       // the day a moved-on week (1 or 2 done) exists. Read the real count off
       // the actual closed span instead of assuming it.
-      const { spans } = weekModel();
+      const { spans } = model;
       const lastSpan = spans.length ? spans[spans.length - 1] : null;
       const closedDone = lastSpan ? lastSpan.done.length : 3;
-      const closedHasD = weekHasD(lastSpan, dLogs);
+      const closedHasD = weekHasDFor(lastSpan ? { span: lastSpan } : null, model, dLogs);
       parts.push(
         `an extra for Week ${backWeek} (already ${closedDone + (closedHasD ? 1 : 0)} of 4)`
       );
@@ -11876,7 +11954,7 @@ function postLogWitnessLine(w: Workout): string {
       // same way everywhere instead of always adding one.
       const doneLetters = new Set<string>(shown.span?.done ?? []);
       if (state.selectedWorkout) doneLetters.add(state.selectedWorkout);
-      const hasD = weekHasD(shown.span, dLogs);
+      const hasD = weekHasDFor(liveWeekDTarget(shown), model, dLogs);
       parts.push(`${doneLetters.size + (hasD ? 1 : 0)} of 4 in Week ${shown.key.week}`);
     }
   }
@@ -13626,12 +13704,16 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
   // honestly covered by the last closed span above it, so nothing extra is
   // added then).
   if (isNowAfterCompletionLaunch()) {
-    const { spans, open } = weekModel();
+    // v61 fix pass 2 (Oct 2 2026): the full model, not just `spans`/`open` —
+    // the LAST closed span's own D-window (week-d.ts) needs to know where
+    // the NEXT week starts, which during a gap is `pending`, not `open`.
+    const model = weekModel();
+    const { spans, open } = model;
     // v61 fix pass (must #3): same D read weekLineText/Home already use —
     // week.ts drops D from its own model, so this reads the raw logs instead.
     const dLogs = logs.filter((l) => l.workout === 'D');
     for (const span of spans) {
-      const hasD = weekHasD(span, dLogs);
+      const hasD = weekHasDFor({ span }, model, dLogs);
       rows.push({
         label: `wk ${span.key.week}`,
         value: span.done.length,
@@ -13644,7 +13726,7 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
       });
     }
     if (open) {
-      const openHasD = weekHasD(open, dLogs);
+      const openHasD = weekHasDFor({ open }, model, dLogs);
       rows.push({
         label: `wk ${open.key.week}`,
         value: open.done.length,
@@ -13670,7 +13752,10 @@ function renderSessionsPerWeekCard(logs: LogEntry[]): string {
     judged.length === 0
       ? 'The first week is in progress.'
       : hits === 0
-        ? 'A full week (3 of 3) will count here.'
+        ? // v61 fix pass 2 (Oct 2 2026, CHECK-v61.md round 2 nice): every real row
+          // reads "of 4" now (D counted in) — this empty state never actually
+          // shows for her (14 full weeks), but it shouldn't still promise "3 of 3".
+          'A full week (4 of 4) will count here.'
         : `<strong>${hits}</strong> full ${hits === 1 ? 'week' : 'weeks'}`;
 
   // v48 · P6 (Sep 24 2026): the current round's weeks open; each older round
