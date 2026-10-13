@@ -178,21 +178,6 @@ function sickIntervals(sickWeeks: SickWeek[], launchAt: string, now: Date): Paus
   );
 }
 
-/** The calendar date whose PROGRAM row is program week N of a round: the
- * round's plain "N-1 weeks after its start" date (`plain`), pushed one
- * calendar week later for every sick week at or before the date reached so
- * far (ascending, so they cascade). Sick weeks before the round start don't
- * count. Pure; agrees with walkWeeks, which holds the clock the same way. */
-export function shiftPastSickWeeks(plain: Date, roundStart: Date, sickWeeks: SickWeek[]): Date {
-  const d = new Date(plain);
-  for (const sat of [...sickWeeks].sort()) {
-    const [y, m, day] = sat.split('-').map(Number) as [number, number, number];
-    const t = new Date(y, m - 1, day).getTime();
-    if (t >= roundStart.getTime() && t <= d.getTime()) d.setDate(d.getDate() + 7);
-  }
-  return d;
-}
-
 export type WeekSpan = {
   key: WeekKey;
   openedAt: string;

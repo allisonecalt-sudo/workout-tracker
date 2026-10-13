@@ -107,9 +107,10 @@ import {
   injectMarkerProgramWeek,
   weekPlanTitle,
   programWeekPlan,
-  programWorkoutById,
   programFutureWeekPlans,
+  programFutureWeekPlansAfter,
   programPastWeekPlans,
+  programPastWeekPlansBefore,
   type WorkoutId,
   type AnyWorkoutId,
   type Exercise,
@@ -167,7 +168,7 @@ type AppState = {
   // before midnight, still running after) could switch which week's moves
   // it's showing mid-workout. Set once in startWorkout(); null = no session
   // chosen yet (Home reads live). Pre-launch: an ISO date string, feeding
-  // straight into getWeekPlan(date)'s existing lookup (see planDateNow()).
+  // straight into getWeekPlan(date)'s calendar lookup (see preLaunchPlanDate()).
   pinnedPlanDateIso: string | null;
   // WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.3's own "land WK4's planForLog
   // before any Week 6 PROGRAM row is written": at/after the launch, the pin
@@ -547,24 +548,27 @@ function genId(): string {
   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-// Thin wrappers over program.ts's pure resolvers: they supply the
-// `planDateNow()` default (Sep 26 2026, the swing fix — see that function,
-// next to `homeWeekOffset()` below) so every call site stays untouched and
-// tests can still mock the system clock.
-function getWeekPlan(date: Date = planDateNow()): WeekPlan {
-  return programWeekPlan(date);
+// Thin wrappers over program.ts's pure resolvers. With NO date they answer for
+// "now": program-week.ts's currentWeekPlan() - post-launch the completion
+// model's week KEY resolves straight to its PROGRAM row (v62, step 5c; no
+// synthetic calendar date), pre-launch the original calendar + swing lookup.
+// With a date they are the plain calendar scan (history, pinned pre-launch
+// sessions). Every call site stays untouched and tests can still mock the
+// system clock.
+function getWeekPlan(date?: Date): WeekPlan {
+  return date ? programWeekPlan(date) : pw.currentWeekPlan(weekClockInput());
 }
 
-function getWorkoutById(id: WorkoutId, date: Date = planDateNow()): Workout {
-  return programWorkoutById(id, date);
+function getWorkoutById(id: WorkoutId, date?: Date): Workout {
+  return getWeekPlan(date).workouts[id];
 }
 
-function getFutureWeekPlans(date: Date = planDateNow()): WeekPlan[] {
-  return programFutureWeekPlans(date);
+function getFutureWeekPlans(date?: Date): WeekPlan[] {
+  return date ? programFutureWeekPlans(date) : programFutureWeekPlansAfter(getWeekPlan());
 }
 
-function getPastWeekPlans(date: Date = planDateNow()): WeekPlan[] {
-  return programPastWeekPlans(date);
+function getPastWeekPlans(date?: Date): WeekPlan[] {
+  return date ? programPastWeekPlans(date) : programPastWeekPlansBefore(getWeekPlan());
 }
 
 // v54 (Sep 27 2026) — Workout D: "Cardio · 30 min elliptical". Her Sep 27
@@ -630,7 +634,7 @@ function steppedMovesForWorkoutId(id: AnyWorkoutId | null): SteppedMove[] {
     if (repeatsWeek !== null) return [];
     current = plan;
   } else if (state.pinnedPlanDateIso) {
-    // Pre-launch pin — same synthetic-date lookup getCurrentWorkout's own
+    // Pre-launch pin — same calendar-date lookup getCurrentWorkout's own
     // pinnedPlanDateIso branch uses; PROGRAM has no "repeat" concept there.
     current = getWeekPlan(new Date(state.pinnedPlanDateIso));
   } else if (isNowAfterCompletionLaunch()) {
@@ -2380,8 +2384,9 @@ function getCurrentWorkout(): Workout | null {
   // completion model's own week key — the SAME lookup that drives every
   // "Week N" / "same moves as" string she reads (preLogWeekLabel,
   // homeWeekTitle, the post-log line) — instead of round-tripping through a
-  // SYNTHETIC calendar date (completionWeekSyntheticDate) and re-deriving the
-  // week from it via getWeekPlan's date scan. That round trip can disagree
+  // SYNTHETIC calendar date and re-deriving the week from it via a date scan
+  // (deleted in v62, step 5c; getWeekPlan() now resolves the same way). That
+  // round trip could disagree
   // with planForWeekKey the moment a future PROGRAM row's own `startsOn`
   // lands off the round's 7-day grid — she'd train one week's moves while
   // the screen names a different one, with no repeat line to flag it.
@@ -2398,7 +2403,7 @@ function getCurrentWorkout(): Workout | null {
     const key = gapCountsBackToWeekKey() ?? shownWeek().key;
     return planForWeekKey(key).plan.workouts[state.selectedWorkout];
   }
-  return getWorkoutById(state.selectedWorkout, planDateNow());
+  return getWorkoutById(state.selectedWorkout);
 }
 
 // The step exactly as PROGRAM has it — no substitutions. Use this whenever the
@@ -2446,7 +2451,7 @@ function startWorkout(id: AnyWorkoutId): void {
     state.pinnedPlanDateIso = null;
   } else {
     state.pinnedWeekKey = null;
-    state.pinnedPlanDateIso = planDateNow().toISOString();
+    state.pinnedPlanDateIso = preLaunchPlanDate().toISOString();
   }
   state.screen = 'pre-log';
   state.liteDay = false; // fresh pick, full program until she says otherwise
@@ -3803,7 +3808,7 @@ type ActiveSessionSnapshot = {
   rideNumbersOpen: boolean;
   // WK2 (Sep 27 2026): the plan pinned at startWorkout() — see its comment.
   // null on a pre-WK2 snapshot (nothing to pin then); getCurrentWorkout()
-  // falls back to planDateNow() when it's absent, same as a fresh session.
+  // falls back to getWeekPlan() (the live "now" plan) when it's absent, same as a fresh session.
   pinnedPlanDateIso: string | null;
   // WK4 (Sep 27 2026): the resolved-key pin (post-launch sessions) — see
   // AppState.pinnedWeekKey's own comment. null on a pre-WK4 snapshot.
@@ -4023,7 +4028,7 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       // snapshot has no flag → false, same as a fresh session.
       rideNumbersOpen: snap.rideNumbersOpen === true && stepIsElliptical,
       // WK2: a pre-WK2 snapshot (or a corrupt string) has none → null, which
-      // getCurrentWorkout() already treats as "fall back to planDateNow()".
+      // getCurrentWorkout() already treats as "fall back to the live plan".
       pinnedPlanDateIso:
         typeof snap.pinnedPlanDateIso === 'string' &&
         !Number.isNaN(new Date(snap.pinnedPlanDateIso).getTime())
@@ -5047,8 +5052,9 @@ function homeWeekOffset(): number {
   return pw.homeWeekOffset(loadLogs(), new Date());
 }
 
-function planDateNow(): Date {
-  return pw.planDateNow(weekClockInput());
+/** PRE-launch only: the date a new session pins (see startWorkout). */
+function preLaunchPlanDate(): Date {
+  return pw.preLaunchPlanDate(weekClockInput());
 }
 
 function planKeyForLog(entry: LogEntry): WeekKey | null {
@@ -6569,7 +6575,7 @@ function renderGearCard(): string {
 // different week (e.g. mid-round, before that week's row is encoded), say so
 // — fail-loud (ux.md #10: the banner said Week 5 while pre-log said Week 4).
 // R2W5 shipped Sep 26 2026, so this no longer fires on a plain Saturday — only
-// on a genuinely un-encoded week, or (via planDateNow) a swing Saturday whose
+// on a genuinely un-encoded week, or (via preLaunchPlanDate) a swing Saturday whose
 // NEXT week exists but hasn't been approved yet. Returns HTML: the plan note
 // is a smaller span so the title stays on one line.
 // WK2 (Sep 27 2026), §2.4 "Home header": plain "Week N" — no "Round 2 ·" (it

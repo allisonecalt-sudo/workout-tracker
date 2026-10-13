@@ -2382,19 +2382,25 @@ export function programWorkoutById(id: WorkoutId, date: Date): Workout {
 }
 
 export function programFutureWeekPlans(date: Date): WeekPlan[] {
-  const current = programWeekPlan(date);
+  return programFutureWeekPlansAfter(programWeekPlan(date));
+}
+
+/** The encoded weeks AFTER `current` (a row of PROGRAM), oldest -> newest. */
+export function programFutureWeekPlansAfter(current: WeekPlan): WeekPlan[] {
   // indexOf, not findIndex-by-weekNum: week numbers repeat across rounds.
-  const currentIdx = PROGRAM.indexOf(current);
-  return PROGRAM.slice(currentIdx + 1);
+  return PROGRAM.slice(PROGRAM.indexOf(current) + 1);
 }
 
 // Encoded weeks BEFORE the current one, oldest → newest. Powers the collapsed
 // "Past weeks" surface on home so previous programming stays browsable (the
 // archive-not-delete principle) without expanding heavy blocks by default.
 export function programPastWeekPlans(date: Date): WeekPlan[] {
-  const current = programWeekPlan(date);
-  const currentIdx = PROGRAM.indexOf(current);
-  return PROGRAM.slice(0, currentIdx);
+  return programPastWeekPlansBefore(programWeekPlan(date));
+}
+
+/** The encoded weeks BEFORE `current` (a row of PROGRAM), oldest -> newest. */
+export function programPastWeekPlansBefore(current: WeekPlan): WeekPlan[] {
+  return PROGRAM.slice(0, PROGRAM.indexOf(current));
 }
 
 export function getProgramWeekCount(): number {

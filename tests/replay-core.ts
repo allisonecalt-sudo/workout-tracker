@@ -21,7 +21,7 @@ import {
   getTodaysPick,
   homeWeekOffset,
   isNowAfterCompletionLaunch,
-  planDateNow,
+  currentWeekPlan,
   planForLog,
   planKeyForLog,
   shownWeek,
@@ -30,13 +30,7 @@ import {
   type WeekClockInput,
 } from '../program-week';
 import { canMoveOn } from '../week';
-import {
-  planForWeekKey,
-  programWeekPlan,
-  programWorkoutById,
-  ROUNDS,
-  type Workout,
-} from '../program';
+import { planForWeekKey, ROUNDS, type Workout } from '../program';
 import { weekStartIso } from '../dates';
 import type { LogEntry } from '../types';
 
@@ -145,10 +139,11 @@ function snapshotAt(now: Date, input: ReplayInput): ReplaySnapshot {
   try {
     const model = weekModel(wc);
     const shown = shownWeek(wc);
-    const planDate = planDateNow(wc);
-    const row = programWeekPlan(planDate);
+    // Step 5c: the plan row for "now" is found by week key (pre-5c it went via a
+    // synthetic calendar date, captured here as plan.date and programWeek.plan -
+    // both gone with it; every plan-ROW field below is unchanged).
+    const row = currentWeekPlan(wc);
     const pw = getProgramWeek(now);
-    const pwPlan = getProgramWeek(planDate);
     const planKeys: Record<string, string | null> = {};
     const planNames: Record<string, string> = {};
     for (const l of [...logs].sort((a, b) => a.date.localeCompare(b.date))) {
@@ -194,7 +189,6 @@ function snapshotAt(now: Date, input: ReplayInput): ReplaySnapshot {
         weekOf: [...model.weekOf.entries()].map(([id, k]) => `${id}=${keyStr(k)}`).sort(),
       },
       plan: {
-        date: weekStartIso(planDate),
         row: { round: row.round ?? 1, weekNum: row.weekNum, label: row.label ?? null },
         byKey: {
           key: keyStr(lookupKey),
@@ -203,9 +197,9 @@ function snapshotAt(now: Date, input: ReplayInput): ReplaySnapshot {
           label: keyed.plan.label ?? null,
           repeatsWeek: keyed.repeatsWeek,
         },
-        A: programWorkoutById('A', planDate).name,
-        B: programWorkoutById('B', planDate).name,
-        C: programWorkoutById('C', planDate).name,
+        A: row.workouts.A.name,
+        B: row.workouts.B.name,
+        C: row.workouts.C.name,
       },
       programWeek: {
         now: {
@@ -213,12 +207,6 @@ function snapshotAt(now: Date, input: ReplayInput): ReplaySnapshot {
           num: pw.num,
           start: weekStartIso(pw.start),
           skipped: pw.skippedLabel,
-        },
-        plan: {
-          round: pwPlan.round,
-          num: pwPlan.num,
-          start: weekStartIso(pwPlan.start),
-          skipped: pwPlan.skippedLabel,
         },
       },
       homeWeekOffset: homeWeekOffset(logs, now),

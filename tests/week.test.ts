@@ -13,7 +13,6 @@
 import { test, expect } from '@playwright/test';
 import {
   walkWeeks,
-  shiftPastSickWeeks,
   mergedSickSpans,
   dayOfWeek,
   canMoveOn,
@@ -818,15 +817,34 @@ test.describe('#13 — a Sick week pauses the clock (v61.2)', () => {
   });
 
   test('shiftPastSickWeeks (the plan-date lookup) agrees: one sick week -> Oct 10, two -> Oct 17, none -> unchanged', () => {
-    const roundStart = new Date(2026, 7, 29);
-    const week6 = new Date(2026, 9, 3); // Aug 29 + 5 weeks
-    expect(shiftPastSickWeeks(week6, roundStart, []).getDate()).toBe(3);
-    const one = shiftPastSickWeeks(week6, roundStart, ['2026-10-03']);
-    expect([one.getMonth(), one.getDate()]).toEqual([9, 10]);
-    const two = shiftPastSickWeeks(week6, roundStart, ['2026-10-10', '2026-10-03']);
-    expect([two.getMonth(), two.getDate()]).toEqual([9, 17]);
-    // a sick week before the round start (July, Round 1) never counts
-    expect(shiftPastSickWeeks(week6, roundStart, ['2026-07-11']).getDate()).toBe(3);
+    // Step 5c deleted shiftPastSickWeeks: the plan row is found by week KEY now,
+    // so nothing needs a "shifted date". What this test pinned was where Week 6
+    // starts after N sick weeks; that is the clock's answer, asserted directly.
+    const week6Opens = (sick: string[], now = new Date('2026-12-01T12:00:00+02:00')): string =>
+      walkWeeks([], [], [], COMPLETION_WEEKS_FROM, sick, now).open!.openedAt.slice(0, 10);
+    expect(week6Opens(['2026-10-03'])).toBe('2026-10-10');
+    expect(week6Opens(['2026-10-10', '2026-10-03'])).toBe('2026-10-17');
+    // none: Week 5 is still the open week (the launch instant), nothing shifted
+    const none = walkWeeks(
+      [],
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      [],
+      new Date('2026-12-01T12:00:00+02:00')
+    );
+    expect(none.open!.key).toEqual({ round: 2, week: 5 });
+    // a sick week before the launch (July, Round 1) never counts
+    const july = walkWeeks(
+      [],
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      ['2026-07-11'],
+      new Date('2026-12-01T12:00:00+02:00')
+    );
+    expect(july.spans).toEqual([]);
+    expect(july.open!.key).toEqual({ round: 2, week: 5 });
   });
 });
 

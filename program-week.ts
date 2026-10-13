@@ -15,12 +15,13 @@
 // DECIDED: viewedWeekOffset / viewingLastClosedWeek (UI state) stay in app.ts;
 // the "peek" helpers (legacyLastClosedWeekPeek / lastClosedWeekForPeek) stay
 // too — they render dot HTML. The week_moves sync stays in app.ts (step 9b).
-// NEXT: step 5 (v62) swaps the synthetic-date round-trip for a key lookup.
+// v62 (step 5c): the plan row for "now" is found BY WEEK KEY (planForWeekKey),
+// never by turning the key into a synthetic calendar date; only PRE-launch
+// dates still use the calendar scan (history fidelity).
 // Tests: tests/program-week.test.ts (Node) + the existing Playwright suite.
 
 import {
   walkWeeks,
-  shiftPastSickWeeks,
   dayOfWeek as weekDayOfWeek,
   COMPLETION_WEEKS_FROM,
   type SessionLite as WeekSessionLite,
@@ -35,9 +36,11 @@ import {
   SKIPPED_WEEKS,
   getRoundFor,
   planForWeekKey,
+  programWeekPlan,
   programWorkoutById,
   type WorkoutId,
   type Workout,
+  type WeekPlan,
 } from './program.js';
 import { formatWeekdayDate, weekStartIso } from './dates.js';
 import type { LogEntry, StoredWeekMove } from './types.js';
@@ -217,32 +220,33 @@ export function homeWeekOffset(logs: LogEntry[], now: Date): number {
 // through the new model instead.
 // second-brain/self/health/workout-app-audit-2026-09-24/next-level-2026-09-26/WEEK5-PROPOSAL-2026-09-26.md §e
 
-/** The date whose plan applies to a session starting NOW — WK2: the
- * completion-based week model's current (or pending) key, translated to a
- * calendar date via completionWeekSyntheticDate() so it flows straight into
- * getWeekPlan(date)'s existing "highest startsOn <= date" scan (see that
- * function's own comment on why this is also the repeat/fallback rule).
- * Pre-launch (or a test mocking an earlier date) keeps the original swing
- * rule untouched — see isNowAfterCompletionLaunch's own comment.
- * WK2 fix r2 (Sep 27 2026, checker's should #2): during a GAP, shownWeek().key
- * is the PENDING week (it hasn't opened yet) — a session started right now
- * doesn't train that week's moves, it counts BACKWARD into the week that just
- * closed (week.ts rule 3, gapCountsBackToWeekKey), same truth preLogWeekLabel
- * and postLogWitnessLine already say. Before this fix, a session started
- * during a gap trained the PENDING week's plan while every screen around it
- * said the save would count toward the closed one — invisible only because
- * PROGRAM had no row for the pending week yet (it silently repeated the
- * closed week's own moves either way); it breaks the day a real row exists. */
-export function planDateNow(input: WeekClockInput): Date {
+/** The plan row that applies to a session starting NOW.
+ * Post-launch (v62, step 5c): the completion model's current key resolves
+ * STRAIGHT to its PROGRAM row via planForWeekKey - no synthetic calendar date
+ * and no scan of PROGRAM's startsOn column (the old round trip went key ->
+ * date -> "highest startsOn <= date" and had to be told about Sick weeks; a
+ * Sick week is now just an entry in SKIPPED_WEEKS and this code never sees it).
+ * During a GAP the key is the week that just CLOSED, not the pending one: a
+ * session started now counts backward into it (week.ts rule 3), so it trains
+ * that week's moves (WK2 fix r2, checker's should #2, Sep 27 2026).
+ * Pre-launch (or a test mocking an earlier date) keeps the original calendar +
+ * swing rule: programWeekPlan(preLaunchPlanDate()). */
+export function currentWeekPlan(input: WeekClockInput): WeekPlan {
   if (!isNowAfterCompletionLaunch(input.now)) {
-    return homeWeekOffset(input.logs, input.now) === 1
-      ? saturdayForOffset(1, input.now)
-      : new Date(input.now);
+    return programWeekPlan(preLaunchPlanDate(input));
   }
-  return completionWeekSyntheticDate(
-    gapCountsBackToWeekKey(input) ?? shownWeek(input).key,
-    input.ignoreSick
-  );
+  return planForWeekKey(gapCountsBackToWeekKey(input) ?? shownWeek(input).key).plan;
+}
+
+/** PRE-launch only: the calendar date whose PROGRAM row applies now - last
+ * Saturday on a swing Saturday (homeWeekOffset), else "now" itself. This is
+ * also what startWorkout pins as pinnedPlanDateIso for a pre-launch session
+ * (resumed later by looking the row up again from that date). Post-launch
+ * sessions pin a week KEY instead (pinnedWeekKey). */
+export function preLaunchPlanDate(input: WeekClockInput): Date {
+  return homeWeekOffset(input.logs, input.now) === 1
+    ? saturdayForOffset(1, input.now)
+    : new Date(input.now);
 }
 
 /** The date whose plan applied to a SAVED session: the Saturday of the week it counts toward. */
@@ -518,29 +522,6 @@ export function weekSubLabel(
       : `${opens} · a session before then counts as an extra for Week ${backWeek}`;
   }
   return '';
-}
-
-/** The calendar date getWeekPlan(date)'s existing "highest startsOn <= date"
- * scan needs to land on the SAME row planForWeekKey would pick — reusing
- * that scan (rather than returning a WeekPlan directly) keeps every one of
- * the ~15 getWeekPlan/getWorkoutById call sites (§2.6) working unchanged. A
- * key with no exact PROGRAM row resolves past the highest row it has in the
- * SAME round, which is exactly what the fallback-to-latest scan already
- * does — so this only has to place the round correctly, at the round's own
- * start plus 7 days per elapsed week. */
-export function completionWeekSyntheticDate(key: WeekKey, ignoreSick: boolean): Date {
-  const round = ROUNDS.find((r) => r.num === key.round) ?? ROUNDS[ROUNDS.length - 1]!;
-  const d = new Date(round.start + 'T00:00:00');
-  d.setDate(d.getDate() + (key.week - 1) * 7);
-  // v61.2 (Oct 13 2026): a Sick week pauses the completion clock, so week N's
-  // PROGRAM row (found by startsOn) sits one calendar week later for every
-  // Sick week at or before the date reached so far. Skips only count inside
-  // this round, same as getProgramWeek. Ascending, so skips cascade.
-  return shiftPastSickWeeks(
-    d,
-    new Date(round.start + 'T00:00:00'),
-    sickWeeksForWeekModel(ignoreSick)
-  );
 }
 
 // WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.6 "Small ones": the week key the

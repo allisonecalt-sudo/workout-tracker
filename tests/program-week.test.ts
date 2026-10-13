@@ -15,14 +15,15 @@ import { test, expect } from '@playwright/test';
 import {
   type WeekClockInput,
   completionClosingSessionIds,
-  completionWeekSyntheticDate,
   currentHowToWeekKey,
+  currentWeekPlan,
+  preLaunchPlanDate,
+  saturdayForOffset,
   gapCountsBackToWeekKey,
   getProgramWeek,
   getTodaysPick,
   homeWeekOffset,
   isNowAfterCompletionLaunch,
-  planDateNow,
   planForLog,
   planKeyForLog,
   shownWeek,
@@ -30,7 +31,7 @@ import {
   weekModel,
   weekSubLabel,
 } from '../program-week';
-import { SKIPPED_WEEKS, planForWeekKey, type Workout } from '../program';
+import { SKIPPED_WEEKS, planForWeekKey, programWeekPlan, type Workout } from '../program';
 import type { LogEntry } from '../types';
 
 /** A minimal saved session; only the fields the week clock reads matter. */
@@ -95,10 +96,9 @@ test.describe('program-week — the Sick week and the clock it pauses', () => {
       expect(spans[0]!.how).toBe('sick');
       expect(open!.key).toEqual({ round: 2, week: 6 });
       expect(open!.openedAt.startsWith('2026-10-17')).toBe(true);
-      // and the plan-date lookup shifts by both weeks
-      expect(completionWeekSyntheticDate({ round: 2, week: 6 }, false).toDateString()).toBe(
-        new Date(2026, 9, 17).toDateString()
-      );
+      // (step 5c) the plan row is found by KEY, so the extra Sick week moves
+      // nothing there: Week 6 is still the R2 W6 row
+      expect(currentWeekPlan(i)).toBe(planForWeekKey({ round: 2, week: 6 }).plan);
     } finally {
       if (before === undefined) delete SKIPPED_WEEKS['2026-10-10'];
       else SKIPPED_WEEKS['2026-10-10'] = before;
@@ -136,7 +136,7 @@ test.describe('program-week — before the launch the calendar model is kept', (
   test('a pre-launch "now" uses the calendar: planDateNow is just now; the how-to week is the calendar week', () => {
     const now = new Date(2026, 8, 15, 12, 0, 0); // Tue Sep 15, Round 2 calendar week 3
     const i = input({ now, logs: [] });
-    expect(planDateNow(i).getTime()).toBe(now.getTime());
+    expect(preLaunchPlanDate(i).getTime()).toBe(now.getTime()); // (was planDateNow before step 5c)
     expect(currentHowToWeekKey(i)).toMatchObject({ num: 3, round: 2 });
   });
 
@@ -213,5 +213,136 @@ test.describe('program-week — the swing Saturday (calendar model)', () => {
 
   test("no sessions at all: today's pick is A", () => {
     expect(getTodaysPick([], OCT_13)).toBe('A');
+  });
+});
+
+// Step 5c (Oct 13 2026) — the plan row for "now" is found BY WEEK KEY
+// (planForWeekKey), not by turning the key into a synthetic calendar date and
+// scanning PROGRAM's startsOn column. Written BEFORE the change: these name the
+// new surface (currentWeekPlan / preLaunchPlanDate) and the old one's absence.
+test.describe('program-week — step 5c: the plan row is found by week key', () => {
+  const rowOf = (i: WeekClockInput): string => {
+    const p = currentWeekPlan(i);
+    return `R${p.round ?? 1}W${p.weekNum}`;
+  };
+
+  test('Week 6 open (Oct 13): the plan is the R2 W6 row, resolved by key', () => {
+    const i = input({ now: OCT_13 });
+    expect(currentWeekPlan(i)).toBe(planForWeekKey({ round: 2, week: 6 }).plan);
+    expect(rowOf(i)).toBe('R2W6');
+  });
+
+  test('inside the Sick week (Oct 6): a session counts back, so the plan is the CLOSED Week 5 row', () => {
+    const i = input({ now: new Date('2026-10-06T12:00:00+03:00') });
+    expect(gapCountsBackToWeekKey(i)).toEqual({ round: 2, week: 5 });
+    expect(currentWeekPlan(i)).toBe(planForWeekKey({ round: 2, week: 5 }).plan);
+  });
+
+  test('before the Sick week (Sep 29) the plan is the Week 5 row', () => {
+    expect(rowOf(input({ now: new Date('2026-09-29T09:00:00+03:00') }))).toBe('R2W5');
+  });
+
+  test('the repeat case: Week 7 has no PROGRAM row, so it repeats the Week 6 row', () => {
+    const w6: LogEntry[] = [
+      ...WEEK5,
+      log('w6a', '2026-10-12T10:00:00+03:00', 'A'),
+      log('w6c', '2026-10-14T10:00:00+03:00', 'C'),
+    ];
+    const moves = [
+      { round: 2, week: 6, at: '2026-10-24T10:00:00+03:00', missing: '' },
+    ] as WeekClockInput['moves'];
+    const i = input({ now: new Date('2026-10-25T12:00:00+03:00'), logs: w6, moves });
+    expect(shownWeek(i).key).toEqual({ round: 2, week: 7 });
+    expect(planForWeekKey({ round: 2, week: 7 }).repeatsWeek).toBe(6);
+    expect(currentWeekPlan(i)).toBe(planForWeekKey({ round: 2, week: 6 }).plan);
+  });
+
+  test('the gap case: Week 6 closed on a Wednesday; Thu-Fri a session counts back (Week 6 row), Sat on Week 7 (repeat of 6)', () => {
+    const three: LogEntry[] = [
+      ...WEEK5,
+      log('g1', '2026-10-12T10:00:00+03:00', 'A'),
+      log('g2', '2026-10-13T10:00:00+03:00', 'B'),
+      log('g3', '2026-10-14T10:00:00+03:00', 'C'),
+    ];
+    const thu = input({ now: new Date('2026-10-15T12:00:00+03:00'), logs: three });
+    expect(shownWeek(thu).pending!.key).toEqual({ round: 2, week: 7 });
+    expect(gapCountsBackToWeekKey(thu)).toEqual({ round: 2, week: 6 });
+    expect(currentWeekPlan(thu)).toBe(planForWeekKey({ round: 2, week: 6 }).plan);
+    const sat = input({ now: new Date('2026-10-17T09:00:00+03:00'), logs: three });
+    expect(shownWeek(sat).key).toEqual({ round: 2, week: 7 });
+    expect(currentWeekPlan(sat)).toBe(planForWeekKey({ round: 2, week: 6 }).plan);
+  });
+
+  test('a SECOND Sick week does not move the row: the key still finds the R2 W6 row', () => {
+    const before = SKIPPED_WEEKS['2026-10-10'];
+    SKIPPED_WEEKS['2026-10-10'] = 'Sick';
+    try {
+      const i = input({ now: new Date('2026-10-20T12:00:00+03:00') });
+      expect(shownWeek(i).key).toEqual({ round: 2, week: 6 });
+      expect(currentWeekPlan(i)).toBe(planForWeekKey({ round: 2, week: 6 }).plan);
+    } finally {
+      if (before === undefined) delete SKIPPED_WEEKS['2026-10-10'];
+      else SKIPPED_WEEKS['2026-10-10'] = before;
+    }
+  });
+
+  test('pre-launch keeps the calendar scan: a mocked Sep 15 finds the row whose startsOn it is past', () => {
+    const now = new Date(2026, 8, 15, 12, 0, 0);
+    const i = input({ now, logs: [] });
+    expect(currentWeekPlan(i)).toBe(programWeekPlan(now));
+    expect(rowOf(i)).toBe('R2W3');
+  });
+
+  test("pre-launch swing Saturday: the plan is LAST week's row, and the pinned ISO round-trips to the same row", () => {
+    const logs = [
+      log('s1', new Date(2026, 8, 14, 10).toISOString(), 'A'), // Mon Sep 14
+      log('s2', new Date(2026, 8, 16, 10).toISOString(), 'B'), // Wed Sep 16
+    ];
+    const sat = new Date(2026, 8, 19, 20, 0, 0); // Sat Sep 19 evening: last week has 2 of 3
+    const i = input({ now: sat, logs });
+    expect(homeWeekOffset(logs, sat)).toBe(1);
+    const date = preLaunchPlanDate(i);
+    expect(date.getTime()).toBe(saturdayForOffset(1, sat).getTime());
+    const last = programWeekPlan(date);
+    expect(currentWeekPlan(i)).toBe(last);
+    // startWorkout stores pinnedPlanDateIso = preLaunchPlanDate().toISOString();
+    // resuming reads it back as a Date and looks the row up again
+    expect(programWeekPlan(new Date(date.toISOString()))).toBe(last);
+    // and the row really is the previous week's, not this Saturday's
+    expect(last).not.toBe(programWeekPlan(sat));
+  });
+
+  test('a non-swing pre-launch day pins "now" itself', () => {
+    const now = new Date(2026, 8, 17, 9, 0, 0); // Thu Sep 17
+    expect(preLaunchPlanDate(input({ now, logs: [] })).getTime()).toBe(now.getTime());
+  });
+
+  test("getProgramWeek's skip count reads SKIPPED_WEEKS and nothing else (one data source)", () => {
+    const num = (): number => getProgramWeek(new Date(2026, 9, 24, 12)).num; // Sat Oct 24
+    const base = num();
+    const added = SKIPPED_WEEKS['2026-10-17'];
+    SKIPPED_WEEKS['2026-10-17'] = 'Sick'; // data row only, zero code
+    try {
+      expect(num()).toBe(base - 1);
+    } finally {
+      if (added === undefined) delete SKIPPED_WEEKS['2026-10-17'];
+      else SKIPPED_WEEKS['2026-10-17'] = added;
+    }
+    expect(num()).toBe(base);
+    const sick = SKIPPED_WEEKS['2026-10-03'];
+    delete SKIPPED_WEEKS['2026-10-03'];
+    try {
+      expect(num()).toBe(base + 1);
+    } finally {
+      SKIPPED_WEEKS['2026-10-03'] = sick!;
+    }
+  });
+
+  test('the synthetic-date round trip is gone: no completionWeekSyntheticDate, no planDateNow, no shiftPastSickWeeks', () => {
+    const pw = require('../program-week') as Record<string, unknown>;
+    const wk = require('../week') as Record<string, unknown>;
+    expect(pw['completionWeekSyntheticDate']).toBeUndefined();
+    expect(pw['planDateNow']).toBeUndefined();
+    expect(wk['shiftPastSickWeeks']).toBeUndefined();
   });
 });
