@@ -724,6 +724,10 @@ week by week (v57) › the table: last weeks newest first, real numbers, the ope
 week by week (v57) › v58: ridesVsDelta — "0" not "+0" on a real tie, at each metric's own precision
 week by week (v57) › v58: tapping a per-week bar shows that week's own one-line readout
 week by week (v57) › v58: the Km Δ keeps its own 2-decimal precision (Week 6 1 km vs Week 5 3.28 km)
+week-clock replay — synthetic golden (step 5a) › every instant and field equals the golden
+week-clock replay — synthetic golden (step 5a) › the comparison itself notices a change (one field flipped)
+week-clock replay — synthetic golden (step 5a) › the fixture covers the shapes it claims to
+week-clock replay — synthetic golden (step 5a) › the grid is the full window: 78 days x 3 times
 week-dots row is rendered with 7 day labels
 weekCountLine › 0 done, D only: "1 of 4 · A, B and C to go" — her exact repro 1 text (CHECK-v61.md round 2)
 weekCountLine › 0 done, no D: "0 of 4 · A, B and C to go"

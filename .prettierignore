@@ -10,3 +10,6 @@ archive/
 # capture is compared against). Never format these; regenerate with
 # `npm run golden:update` instead.
 tests/golden/
+# code-shape step 5a (Oct 13 2026): generated replay golden, one snapshot per
+# line on purpose (regenerate with scripts/replay-week-clock.mjs --fixture ...).
+tests/fixtures/replay-expected.json

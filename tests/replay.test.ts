@@ -1,0 +1,75 @@
+// tests/replay.test.ts — the week-clock replay golden (code-shape step 5a,
+// Oct 13 2026). Pure Node, no browser.
+//
+// WHAT: replays a SYNTHETIC set of sessions through the current week clock for
+// every day 2026-09-26 .. 2026-12-12 at 09:00 / 21:00 / 23:59 Asia/Jerusalem
+// (tests/replay-core.ts) and requires the answers to equal
+// tests/fixtures/replay-expected.json, generated from the code as it stood
+// BEFORE step 5's week.ts reshape. The fixture mirrors her real shape and holds
+// no real data: Round 2 from Aug 29, 3-4 sessions a week incl. D, the Oct 1
+// B-labelled hike, nothing Oct 3-12 (the Sick week), a Move on, and the DST
+// change on Oct 25.
+// WHY: week.ts / program-week.ts are being reshaped with "same inputs, same
+// outputs" as the whole contract. This is the CI half of that proof; the other
+// half is scripts/replay-week-clock.mjs on her real rows (local only).
+//
+// If a diff here is on purpose (a real behaviour change), regenerate with
+//   node scripts/replay-week-clock.mjs --fixture tests/fixtures/replay-shape.json \
+//        --today 2026-10-13 --out tests/fixtures/replay-expected.json
+// and say why in the commit. A refactor never regenerates it.
+
+import { test, expect } from '@playwright/test';
+import {
+  addDays,
+  compareReplays,
+  computeReplay,
+  REPLAY_FROM,
+  type ReplayInput,
+} from './replay-core';
+
+const fs = require('fs') as typeof import('fs');
+const path = require('path') as typeof import('path');
+
+const FIXTURES = path.join(__dirname, 'fixtures');
+const TODAY = '2026-10-13'; // frozen: the golden never moves with the calendar
+const input = JSON.parse(
+  fs.readFileSync(path.join(FIXTURES, 'replay-shape.json'), 'utf8')
+) as ReplayInput;
+const expected = JSON.parse(
+  fs.readFileSync(path.join(FIXTURES, 'replay-expected.json'), 'utf8')
+) as ReturnType<typeof computeReplay>;
+
+test.describe('week-clock replay — synthetic golden (step 5a)', () => {
+  const actual = computeReplay(input, REPLAY_FROM, addDays(TODAY, 60));
+
+  test('the grid is the full window: 78 days x 3 times', () => {
+    expect(actual.meta.snapshots).toBe(78 * 3);
+    expect(expected.snapshots.length).toBe(78 * 3);
+  });
+
+  test('every instant and field equals the golden', () => {
+    const r = compareReplays(expected, actual);
+    expect(r.diffs.slice(0, 20)).toEqual([]);
+    expect(r.fields).toBeGreaterThan(5000);
+  });
+
+  test('the comparison itself notices a change (one field flipped)', () => {
+    const tampered = JSON.parse(JSON.stringify(actual)) as typeof actual;
+    (tampered.snapshots[100]!['week'] as Record<string, unknown>)['shown'] = 'R9W9';
+    expect(compareReplays(expected, tampered).diffs.length).toBe(1);
+  });
+
+  test('the fixture covers the shapes it claims to', () => {
+    const at = (t: string): Record<string, any> =>
+      // eslint-disable-line @typescript-eslint/no-explicit-any
+      actual.snapshots.find((s) => s['t'] === t) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Oct 3-9 Sick: Week 5 closed 'sick', Week 6 pending until Oct 10
+    expect(at('2026-10-05T21:00')['week'].spans.at(-1).how).toBe('sick');
+    expect(at('2026-10-05T21:00')['week'].pending.key).toBe('R2W6');
+    // Week 6 open from Oct 10, and Moved on on Oct 24
+    expect(at('2026-10-12T09:00')['week'].open.key).toBe('R2W6');
+    expect(at('2026-10-24T21:00')['week'].spans.at(-1).how).toBe('moved_on');
+    // the Oct 1 B-labelled hike is a repeated letter in Week 5
+    expect(at('2026-10-02T09:00')['week'].open.done).toBe('AB');
+  });
+});
