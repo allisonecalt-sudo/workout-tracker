@@ -109,7 +109,9 @@ test('multi-week: Settings About shows Program weeks count (17) — pre-launch, 
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 16" row
+  // About section has a "Program weeks: 17" row. The 17 is ONE constant:
+  // PROGRAM_WEEK_COUNT in tests/program.test.ts (it pins PROGRAM.length to it) —
+  // change them together.
   // (11 round-1 weeks + R2 W1 + R2 W2 + R2 W3 + R2 W4 + R2 W5 (v52.2, Sep 26 2026)
   // + R2 W6 (v61.2, Oct 13 2026 — the light restart after being sick)).
   await expect(

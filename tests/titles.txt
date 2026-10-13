@@ -42,6 +42,15 @@ List button sits beside Pause, 44px, opens and closes the sheet
 Lite day: the list shows only Main round 1
 MIN_PHASE_N is 3 (spec: "If a phase has n < 3... never an average of 1-2")
 PLAIN_PHASE_ORDER / PLAIN_PHASE_LABEL / PLAIN_PHASE_HEADER_LABEL — her exact wording, no jargon
+PROGRAM — names resolve where the app looks them up › every SAFETY_LINE key is an exercise name that is actually in the program
+PROGRAM — names resolve where the app looks them up › every exercise name in every row has an EXERCISE_DETAIL entry
+PROGRAM — names resolve where the app looks them up › move-feel slugs: every name slugs to letters only, and no two names share a slug
+PROGRAM — names resolve where the app looks them up › the exceptions list holds no stale name (every listed name is still in the program)
+PROGRAM — shape › (round, weekNum) is unique and ascending; startsOn strictly ascends with it
+PROGRAM — shape › every startsOn is a Saturday (weeks are Sat-Fri throughout the app)
+PROGRAM — shape › has exactly 17 weeks (the Settings "Program weeks" number)
+PROGRAM — the Jul 8 timer rule › every sustained hold has durationSec AND isTimed (except the named Round-1 W1-W4 stretches)
+PROGRAM — the Jul 8 timer rule › isTimed and durationSec always travel together (never one without the other)
 Progress: one door row, nothing else (spec §1) › the row names the page and today's phase, in plain words
 R2 W2: a date inside Sep 5-11 2026 resolves to Round 2 · Week 2
 R2 W2: bird dog legs-only sits at the END of the upper-back block in A and B
