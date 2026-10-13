@@ -116,6 +116,13 @@ test.describe('clock guard — no test reads the real clock (step 1b-3)', () => 
       // caught on purpose: this guards against drift, not a hostile author.
       const names = new Set(['ignoreSickWeeks']);
       for (const m of src.matchAll(/\bignoreSickWeeks\s+as\s+(\w+)/g)) names.add(m[1]);
+      // Also a plain alias (`const x = ignoreSickWeeks`, `const x = h.ignoreSickWeeks`)
+      // or a destructure rename (`{ ignoreSickWeeks: x }`).
+      for (const m of src.matchAll(
+        /\b(?:const|let|var)\s+(\w+)\s*=\s*(?:\w+\.)?ignoreSickWeeks\b(?!\s*\()/g
+      ))
+        names.add(m[1]);
+      for (const m of src.matchAll(/\bignoreSickWeeks\s*:\s*(\w+)/g)) names.add(m[1]);
       const call = new RegExp(
         String.raw`(?<![\w.])(?:\w+\.)?(?:${[...names].join('|')})\s*\(`,
         'g'

@@ -170,7 +170,7 @@ test.describe('the default test clock: a fixed start that keeps RUNNING', () => 
     await page.waitForTimeout(200);
     await page.reload();
     const afterReload = await page.evaluate(() => Date.now());
-    expect(afterReload).toBeGreaterThan(before); // reload continued the clock, not restarted at TEST_NOW
+    expect(afterReload).toBeGreaterThanOrEqual(before + 200); // reload continued the clock, not restarted at TEST_NOW
     const second = await context.newPage();
     await second.goto('/');
     const onSecond = await second.evaluate(() => Date.now());

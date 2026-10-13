@@ -13,7 +13,7 @@
 // imports, nested folders included).
 
 import { test, expect } from '@playwright/test';
-import { bundledSourceFiles } from './helpers';
+import { bundledSourceFiles, relativeImports } from './helpers';
 
 const path = require('path') as typeof import('path');
 
@@ -21,10 +21,9 @@ const path = require('path') as typeof import('path');
 function importGraph(files: { file: string; src: string }[]): Map<string, string[]> {
   const graph = new Map<string, string[]>();
   for (const { file, src } of files) {
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
-    const deps: string[] = [];
-    for (const m of code.matchAll(/(?:from|import)\s+'(\.{1,2}\/[\w./-]+)\.js'/g))
-      deps.push(path.posix.normalize(path.posix.join(path.posix.dirname(file), `${m[1]}.ts`)));
+    const deps = relativeImports(src).map((spec) =>
+      path.posix.normalize(path.posix.join(path.posix.dirname(file), spec))
+    );
     graph.set(file, [...new Set(deps)].sort());
   }
   return graph;
@@ -73,6 +72,24 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
       ['y.ts', []],
     ]);
     expect(findCycles(clean)).toEqual([]);
+  });
+
+  test('the guard itself: the import reader sees .js, .ts, extensionless, side-effect, export-from, dynamic and double-quoted imports, and skips comments and packages', () => {
+    const src = [
+      "import { a } from './a.js';",
+      "import type { b } from './b.ts';",
+      "import { c } from './c';",
+      "import './d.js';",
+      "export { e } from '../e.js';",
+      "const f = await import('./f.js');",
+      'import { g } from "./g";',
+      "import { h } from 'node:path';",
+      "// import { i } from './i.js';",
+      "/* import { j } from './j.js'; */",
+    ].join('\n');
+    expect(relativeImports(src)).toEqual(
+      ['./a.ts', './b.ts', './c.ts', './d.ts', '../e.ts', './f.ts', './g.ts'].sort()
+    );
   });
 
   test('the graph was actually read: app.ts reaches program-week.ts, types.ts and week.ts', () => {

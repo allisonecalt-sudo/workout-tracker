@@ -345,6 +345,18 @@ export function allSourceFiles(): AppSourceFile[] {
 /** Old name, same thing: = allSourceFiles(). */
 export const appSourceFiles = allSourceFiles;
 
+/** Every relative import in a source text, as a '<path>.ts' specifier relative
+ *  to the importing file: `from './x.js'`, `from './x.ts'`, extensionless
+ *  `from './x'`, side-effect `import './x.js'`, dynamic `import('./x.js')`,
+ *  `export ... from`, either quote style. Comments are blanked first. */
+export function relativeImports(src: string): string[] {
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+  const out: string[] = [];
+  for (const m of code.matchAll(/\b(?:from|import)\s*\(?\s*['"](\.{1,2}\/[^'"\s]+)['"]/g))
+    out.push(`${m[1]!.replace(/\.(?:js|ts)$/, '')}.ts`);
+  return [...new Set(out)].sort();
+}
+
 /** bundledSourceFiles: only the modules that actually ship in the app bundle —
  *  app.ts plus everything it imports, followed recursively (type-only imports
  *  included: erased, but still app source). For checks about what the app can
@@ -365,8 +377,8 @@ export function bundledSourceFiles(): AppSourceFile[] {
     seen.set(file, { file, src });
     // Follow every relative import ('./x.js', './dir/x.js', '../x.js'),
     // resolved against the importing file's own folder (root-relative keys).
-    for (const m of src.matchAll(/(?:from|import)\s+'(\.{1,2}\/[\w./-]+)\.js'/g))
-      queue.push(path.posix.normalize(path.posix.join(path.posix.dirname(file), `${m[1]}.ts`)));
+    for (const spec of relativeImports(src))
+      queue.push(path.posix.normalize(path.posix.join(path.posix.dirname(file), spec)));
   }
   return [...seen.keys()].sort().map((file) => seen.get(file)!);
 }

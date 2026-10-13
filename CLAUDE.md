@@ -39,9 +39,11 @@ ride=right@12min"`. `slug=feel@qty`, `;`-joined; slug is `move-feel.ts`'s
   `moveFeelString` (move-feel.ts), CHECK in
   `migrations/2026-09-28-v58-move-feel.sql`.
 
-## File map (as of R1d — before the R3+ module split)
+## File map (code-shape step 5, Oct 13 2026 — the split is in progress)
 
-- `app.ts` — still the monolith (~15k lines): every screen's render + handlers + state + sync. **The split (program.ts/state.ts/sync.ts/screens/\*) is R3+, not done yet.**
+- `app.ts` — still the big one (~13.6k lines): every screen's render + handlers + state + sync. It is the ONLY entry: **only `app.ts` imports `app.ts`, and no import cycles** (enforced by `tests/import-graph.test.ts`). The screen split (state/sync/screens/\*) is steps 7+.
+- `program.ts` — the PROGRAM rows + the week-plan lookup. `program-week.ts` — the week clock glue (completion model, sick weeks, plan row per week key); pure, takes `logs`/`moves` as parameters, app.ts keeps thin same-named wrappers. `types.ts` — `LogEntry`, `StoredWeekMove` and friends. `dates.ts` — date/label helpers.
+- `week-d.ts` (the optional D day), `hold-sets.ts`, `ride-aim.ts` — small pure modules, imported by `app.ts` and/or `program-week.ts`.
 - `exercise-visuals.ts` / `exercise-howto.ts` / `exercise-detail.ts` — exercise content data.
 - `cycle.ts` / `step-list.ts` / `pain-feel.ts` / `week.ts` / `timing.ts` / `ride.ts` / `chart.ts` / `move-feel.ts` — already-extracted pure modules, imported by `app.ts`. `ladders.ts` / `progression.ts` are tested pure modules, not yet wired into `app.ts` (not in the bundle) — `progression.ts` imports `ladders.ts`; only tests import `progression.ts`.
 - `sw.js` — service worker. Reads `dist/build-info.js` (generated) at runtime for the version + bundle filename — never hand-edit a version or file name in here. `CRITICAL_ASSETS` (shell + the app bundle) install with strict `Promise.all` — any one failing aborts the WHOLE install and the OLD worker/cache keeps serving; `OPTIONAL_ASSETS` (photos, voice notes) stay tolerant (`.catch()`), never blocking.
@@ -90,7 +92,7 @@ Feature changes, Supabase writes, a golden hand-edit, `--no-verify`, touching `.
 
 ## Test commands (code-shape step 0, Oct 13 2026)
 
-- `npm run test:fast` = all `tests/*.test.ts` + `golden.spec.ts` (327 tests, ~19 s on this laptop); it is the pre-commit gate. `npm run test:full` = the whole suite on a free port with a fresh server (725 tests, ~1m47s); `test:ci` = plain `playwright test` for CI.
+- `npm run test:fast` = all `tests/*.test.ts` + `golden.spec.ts` (~365 tests, ~10 s on this laptop); it is the pre-commit gate. `npm run test:full` = the whole suite on a free port with a fresh server (~765 tests, ~1.2 min); `test:ci` = plain `playwright test` for CI.
 - `scripts/pw-run.mjs` picks a FREE port itself when `PW_PORT` is unset (and then never reuses an existing server), so the hook never needs port 3100. `titles:check` also runs in the pre-commit hook (after `test:fast`) and in CI before the tests.
 - `npm run titles:check` compares `describe › title` strings (no file/line) with `tests/titles.txt`; a title may never disappear, additions need `npm run titles:update`.
 - The version string is stubbed in goldens (`GOLDEN-STUB-VERSION`): a version bump changes no golden and no test.
