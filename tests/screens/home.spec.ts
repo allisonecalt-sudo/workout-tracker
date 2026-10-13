@@ -9,6 +9,8 @@ import {
   openWeekByWeek,
   mockDate,
   movableClock,
+  ignoreSickWeeks,
+  PLAIN_WEEK5_HANDOVER,
 } from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
@@ -628,6 +630,7 @@ test.describe('v48 P4 home', () => {
     test('a closing save that lands ON a Sat/Sun: "Week 6 starts now", not a gap', async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       await mockDate(page, '2026-10-03T16:00:00.000Z'); // Sat Oct 3 — an anchor day itself
       await seedLogs(page, [
         swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
@@ -679,6 +682,7 @@ test.describe('v48 P4 home', () => {
     test('"‹ Week 4" stays pinned to Week 4 even once "today" drifts past it (checker\'s must #2 repro)', async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       // Her 42 live rows plus A on Mon Sep 28 and B on Wed Sep 30, clock set to
       // Sat Oct 3 — Week 5 is still open at day 8 (canMoveOn's own threshold).
       // Before the fix, the legacy fallback read `saturdayForOffset(1)` off
@@ -733,6 +737,7 @@ test.describe('v48 P4 home', () => {
     test('week strip: a repeat day gets a small "2" badge, and an 11-day short week folds its empty middle', async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       // WK2 fix r1 (Sep 27 2026, checker's should #4). Week 5 opens Sat Sep 26
       // (day 1, A logged) and is STILL short at day 11 (Tue Oct 6) — two
       // sessions land on Oct 6 itself (B, then a repeat B). Before the fix,
@@ -891,10 +896,7 @@ test.describe('v48 P4 home', () => {
       // against Week 5 anyway — the ride still read as "stepped" on a week
       // that changed NOTHING.
       await mockDate(page, '2026-10-18T10:00:00.000Z'); // Sun Oct 18 — inside the open Week 7
-      await page.addInitScript(() => {
-        // Week 7 only exists once the Oct 3 Sick week is honoured (see the v61.2 test below).
-        (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = false;
-      });
+      // Week 7 only exists because the Oct 3 Sick week is honoured (the default now).
       await seedLogs(page, [
         swingLog('wk6-a', '2026-10-11T15:00:00.000Z', 'A'),
         swingLog('wk6-b', '2026-10-12T15:00:00.000Z', 'B'),
@@ -919,11 +921,6 @@ test.describe('v48 P4 home', () => {
       page,
     }) => {
       await mockDate(page, '2026-10-13T10:00:00.000Z'); // Tue Oct 13 — inside Week 6
-      // The suite's default hides the Sick weeks (older tests use Oct 3-4 as
-      // an ordinary Week 5 -> 6 hand-over); this test is the one that wants them.
-      await page.addInitScript(() => {
-        (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = false;
-      });
       // Real-shaped Week 5 (C never came): B Sep 26 (after the launch), A
       // Sep 28, a B-labeled hike Oct 1. The Sick week (Oct 3-9) pauses the
       // completion clock, so Week 6 is open with no Move on and no wait.
@@ -1216,6 +1213,7 @@ test.describe('v48 P4 home', () => {
     test('v61 fix pass 2 (repro 1): a D logged before ANY A/B/C still counts toward the pending week, with its own dot', async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       await mockDate(page, '2026-10-03T07:05:00.000Z'); // Sat Oct 3, 10:05 local
       await seedLogs(page, [
         swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
@@ -1235,6 +1233,7 @@ test.describe('v48 P4 home', () => {
     test('v61 fix pass 2 (repro 2): a D logged before the session that opens the week still counts (her real Sep 28 order, replayed at the Oct 3 boundary)', async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       await mockDate(page, '2026-10-03T07:30:00.000Z'); // Sat Oct 3, 10:30 local
       await seedLogs(page, [
         swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
@@ -1289,6 +1288,7 @@ test.describe('v48 P4 home', () => {
     test('v61 fix pass 2 (should): on the day the pending week opens, with nothing logged yet, the sub-line drops the stale "extra" clause', async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       await movableClock(page, '2026-10-03T07:00:00.000Z'); // Sat Oct 3, 10:00 local — its own opening day, nothing logged yet
       await seedLogs(page, [
         swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
@@ -1325,6 +1325,7 @@ test.describe('v48 P4 home', () => {
     test('v61 fix pass 3: a D logged hours before a Saturday-closing C stays in the closing week, not the one the close opens', async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       await mockDate(page, '2026-10-03T10:00:00.000Z'); // Sat Oct 3, 13:00 local — after the C below
       await seedLogs(page, [
         swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
@@ -1357,6 +1358,7 @@ test.describe('v48 P4 home', () => {
     test('v61 fix pass 3: a gap D on the Saturday keeps its dot once the Sunday A opens the next week, and the Week 5 peek shows none', async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       await mockDate(page, '2026-10-04T08:00:00.000Z'); // Sun Oct 4, 11:00 local
       await seedLogs(page, [
         swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
@@ -1401,6 +1403,7 @@ test.describe('v48 P4 home', () => {
     test("v61.1 fix 2 (r1noD): a D on the pending week's own opening day, nothing else logged yet, reads Week 5's review at 3 of 4 with no D line", async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       await mockDate(page, '2026-10-03T07:05:00.000Z'); // Sat Oct 3, 10:05 local
       await seedLogs(page, [
         swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
@@ -1433,6 +1436,7 @@ test.describe('v48 P4 home', () => {
     test('v61.1 fix 2 (gap + Sunday opening): the review and Home agree — Week 6 reads 2 of 4 with the Sat D line, Week 5 reads 3 of 4 with none', async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       await mockDate(page, '2026-10-04T08:00:00.000Z'); // Sun Oct 4, 11:00 local
       await seedLogs(page, [
         swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
@@ -1465,6 +1469,7 @@ test.describe('v48 P4 home', () => {
     test("v61.1 fix 2 (D then A on the same Saturday): the review's Week 6 page also reads 2 of 4, matching Home", async ({
       page,
     }) => {
+      await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
       await mockDate(page, '2026-10-03T07:30:00.000Z'); // Sat Oct 3, 10:30 local
       await seedLogs(page, [
         swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),

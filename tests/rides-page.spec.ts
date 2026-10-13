@@ -16,14 +16,6 @@ type Row = Record<string, unknown>;
 
 test.beforeEach(async ({ page, context }) => {
   await installTestClock(context);
-  // v61.2 (Oct 13 2026): the Oct 3-9 Sick week now pauses the completion
-  // clock (week.ts), and several older tests drive Week 5 -> 6 hand-overs on
-  // those very dates, or run on the real clock (which has reached Oct 13).
-  // They see the plain model by default; the v61.2 tests opt back in. Set on
-  // the CONTEXT so a reopened page gets it too.
-  await context.addInitScript(() => {
-    (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = true;
-  });
   await page.addInitScript(() => {
     window.localStorage.clear();
   });

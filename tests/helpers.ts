@@ -49,6 +49,21 @@ export async function installTestClock(context: BrowserContext): Promise<void> {
   }, offsetMs);
 }
 
+// code-shape step 1b-3 (Oct 13 2026): the ONE way a test may ask for the plain
+// (no Sick weeks) week model. The app's test-only switch is set HERE and
+// nowhere else; a reason is mandatory, and tests/clock-guard.test.ts caps how
+// many tests may call this and bans the raw switch name outside this file.
+// Context-level, so a reopened page (context.newPage()) gets it too.
+export const PLAIN_WEEK5_HANDOVER =
+  'this test IS the Week 5 -> 6 hand-over on Oct 3-6, which the Oct 3-9 Sick week now pauses (plain model only)';
+
+export async function ignoreSickWeeks(page: Page, reason: string): Promise<void> {
+  if (reason.trim().length < 10) throw new Error('ignoreSickWeeks needs a real reason');
+  await page.context().addInitScript(() => {
+    (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = true;
+  });
+}
+
 // The old top-level test.beforeEach of tests/app.spec.ts, as a plain function.
 // Every tests/screens/*.spec.ts registers it as its first hook:
 //   test.beforeEach(async ({ page, context }) => setupPage(page, context));
@@ -56,14 +71,6 @@ export async function installTestClock(context: BrowserContext): Promise<void> {
 // without inheriting the sick-week switch or the goto.
 export async function setupPage(page: Page, context: BrowserContext): Promise<void> {
   await installTestClock(context);
-  // v61.2 (Oct 13 2026): the Oct 3-9 Sick week now pauses the completion
-  // clock (week.ts), and several older tests drive Week 5 -> 6 hand-overs on
-  // those very dates, or run on the real clock (which has reached Oct 13).
-  // They see the plain model by default; the v61.2 tests opt back in. Set on
-  // the CONTEXT so a reopened page gets it too.
-  await context.addInitScript(() => {
-    (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = true;
-  });
   await page.addInitScript(() => {
     window.localStorage.clear();
   });

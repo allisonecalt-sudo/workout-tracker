@@ -1,7 +1,7 @@
 // Split out of tests/app.spec.ts by scripts/split-spec.mjs (code-shape step 1, Oct 13 2026);
 // the test bodies below are copied line for line.
 import { test, expect, type Page } from '@playwright/test';
-import { setupPage, mockDate } from '../helpers';
+import { setupPage, mockDate, ignoreSickWeeks, PLAIN_WEEK5_HANDOVER } from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -106,6 +106,7 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
   test('a gap-dated D ride is listed under the CLOSED week it follows, mid-gap and after the next week opens', async ({
     page,
   }) => {
+    await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
     const week5Rows = [
       log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
       log('wk5-b', '2026-09-28T10:00:00+03:00', 'B'),
@@ -175,6 +176,7 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
   test('Progress · Sessions per week: a moved-on week reads "moved on", the live week reads "open"', async ({
     page,
   }) => {
+    await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
     await seedLogs(page, [
       log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
       log('wk5-b', '2026-09-29T10:00:00+03:00', 'B'), // 2 of 3 — C never comes

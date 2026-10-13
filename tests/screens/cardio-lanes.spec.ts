@@ -549,17 +549,18 @@ test("rides \"This week\": the Saturday-closing ride doesn't leak into the new w
   // closing on Sat/Sun), reproduced here on the checker's own dates: her
   // real Thu/Fri/Sat A/C/B pattern, moved one week past the completion-model
   // launch (Sat Sep 26 22:30) so it lands inside the completion model
-  // instead of the legacy calendar week — A Thu Oct 1, C Fri Oct 2, B Sat
-  // Oct 3 closes the week (Oct 3 is a Saturday, same as Sep 26); D Sun Oct 4
-  // opens the new one.
-  await movableClock(page, '2026-10-03T23:00:00+03:00'); // Sat night, just after B closed the week
+  // instead of the legacy calendar week — A Thu Oct 15, C Fri Oct 16, B Sat
+  // Oct 17 closes the week (Oct 17 is a Saturday, same as Sep 26); D Sun Oct 18
+  // opens the new one. (Step 1b-3, Oct 13 2026: re-dated +14 days from Oct 1-4 so it
+  // clears the Oct 3-9 Sick week; the assertions name no date or week number.)
+  await movableClock(page, '2026-10-17T23:00:00+03:00'); // Sat night, just after B closed the week
   await page.addInitScript(() => {
     window.localStorage.setItem(
       'workout-tracker:logs',
       JSON.stringify([
         {
           id: 'r3-thu-a',
-          date: '2026-10-01T15:56:00+03:00',
+          date: '2026-10-15T15:56:00+03:00',
           workout: 'A',
           capacityBefore: 8,
           capacityAfter: 8,
@@ -571,7 +572,7 @@ test("rides \"This week\": the Saturday-closing ride doesn't leak into the new w
         },
         {
           id: 'r3-fri-c',
-          date: '2026-10-02T11:53:00+03:00',
+          date: '2026-10-16T11:53:00+03:00',
           workout: 'C',
           capacityBefore: 8,
           capacityAfter: 8,
@@ -583,7 +584,7 @@ test("rides \"This week\": the Saturday-closing ride doesn't leak into the new w
         },
         {
           id: 'r3-sat-b',
-          date: '2026-10-03T22:14:00+03:00',
+          date: '2026-10-17T22:14:00+03:00',
           workout: 'B',
           capacityBefore: 8,
           capacityAfter: 8,
@@ -606,14 +607,14 @@ test("rides \"This week\": the Saturday-closing ride doesn't leak into the new w
   // rows above survive (same storage, same origin); this init script just
   // appends the D ride to them before the app itself ever reads the store.
   const sunday = await context.newPage();
-  await movableClock(sunday, '2026-10-04T10:00:00+03:00');
+  await movableClock(sunday, '2026-10-18T10:00:00+03:00');
   await sunday.addInitScript(() => {
     const rows = JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]') as Array<
       Record<string, unknown>
     >;
     rows.push({
       id: 'r3-sun-d',
-      date: '2026-10-04T09:00:00+03:00',
+      date: '2026-10-18T09:00:00+03:00',
       workout: 'D',
       capacityBefore: 8,
       capacityAfter: 8,

@@ -1,7 +1,7 @@
 // Split out of tests/app.spec.ts by scripts/split-spec.mjs (code-shape step 1, Oct 13 2026);
 // the test bodies below are copied line for line.
 import { test, expect, type Page } from '@playwright/test';
-import { setupPage, mockDate } from '../helpers';
+import { setupPage, mockDate, ignoreSickWeeks, PLAIN_WEEK5_HANDOVER } from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -64,6 +64,7 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
   });
 
   test('shown on day 8 with 2 of 3 done — "Move on to Week 6 without C"', async ({ page }) => {
+    await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
     await seedLogs(page, TWO_DONE);
     await mockDate(page, DAY_8);
     await page.goto('/');
@@ -76,9 +77,6 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
     // The Oct 3-9 Sick week closed Week 5 and opened Week 6 on Sat Oct 10 (no
     // tap). Week 6 opened at Oct 10 00:00, so Sun Oct 18 is day 9: A + B done,
     // C missing -> the quiet button shows, and tapping it opens Week 7.
-    await page.addInitScript(() => {
-      (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = false;
-    });
     await seedLogs(page, [
       log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
       log('wk6-a', '2026-10-11T10:00:00+03:00', 'A'),
@@ -93,6 +91,7 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
   });
 
   test('never shown at 0 done, even well past day 8', async ({ page }) => {
+    await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
     // No logs seeded at all — Week 5 sits at 0 of 3.
     await mockDate(page, '2026-10-16T12:00:00+03:00');
     await page.goto('/');
@@ -102,6 +101,7 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
   });
 
   test('tap → Week 6 opens; the moved-note + Undo appear under the header', async ({ page }) => {
+    await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
     await seedLogs(page, TWO_DONE);
     await mockDate(page, DAY_8);
     await page.goto('/');
@@ -117,6 +117,7 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
   test('a WEEKDAY tap: Week 6 is next but stays a gap until the coming Saturday — the note says so', async ({
     page,
   }) => {
+    await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
     // Checker's should #3: every other WK3 test in this file taps on a
     // Saturday (DAY_8 itself is an anchor day, so Week 6 opens immediately).
     // canMoveOn only requires day 8+, not day 8 exactly — a tap on day 10
@@ -152,6 +153,7 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
   test('Undo → back to Week 5 open, "Move on" reappears (tombstone queued, not silently dropped)', async ({
     page,
   }) => {
+    await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
     await seedLogs(page, TWO_DONE);
     await mockDate(page, DAY_8);
     await page.goto('/');
@@ -178,6 +180,7 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
     page,
     context,
   }) => {
+    await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
     // Checker's exact race (must #1): "If she tapped Move on while online (so
     // the row reached Supabase), then taps Undo while offline, or the DELETE
     // fails, the next pull ... merges the remote row back in as
@@ -237,6 +240,7 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
   test('a stale move (a week that was never the open one) is ignored, not thrown', async ({
     page,
   }) => {
+    await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
     // week.ts's own rule (§2.1): a move for a week that isn't the currently
     // open one is stale and is ignored with a console.warn, never a throw.
     // round 2 week 99 was never open at any point in this fixture's history
@@ -273,6 +277,7 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
     page,
     context,
   }) => {
+    await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
     await seedLogs(page, TWO_DONE);
     await mockDate(page, DAY_8);
     await page.goto('/');
