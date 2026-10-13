@@ -28,7 +28,7 @@ export default defineConfig({
   timeout: 60_000,
   retries: process.env.CI ? 2 : 1,
   workers: process.env.CI ? 1 : undefined,
-  reporter: 'list',
+  reporter: process.env.CI ? 'list' : 'line',
   // Port 3100 (not 3000): on this Windows dev box the Gmail MCP server holds
   // port 3000, so `serve -l 3000` silently falls back to a random port and the
   // webServer wait times out. 3100 is free locally and in CI. (food-log hit the
@@ -46,7 +46,9 @@ export default defineConfig({
   webServer: {
     command: `npx serve -l ${PORT} .`,
     url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    // PW_FRESH_SERVER (set by scripts/pw-run.mjs with its own free port): never
+    // reuse a server already on the port - a stale one could serve old code.
+    reuseExistingServer: !process.env.CI && !process.env.PW_FRESH_SERVER,
     timeout: 120_000,
   },
 });

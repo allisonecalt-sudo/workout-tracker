@@ -10,7 +10,11 @@
     "format": "prettier --write \"**/*.{ts,html,css,json,md}\" --ignore-path .prettierignore",
     "format:check": "prettier --check \"**/*.{ts,html,css,json,md}\" --ignore-path .prettierignore",
     "test": "playwright test",
+    "test:full": "playwright test",
+    "test:fast": "node scripts/pw-run.mjs --fast",
     "test:ci": "playwright test",
+    "titles:check": "node scripts/check-titles.mjs",
+    "titles:update": "node scripts/check-titles.mjs --update",
     "golden:update": "node scripts/update-golden.mjs",
     "serve": "serve -l 3000 .",
     "prepare": "husky"

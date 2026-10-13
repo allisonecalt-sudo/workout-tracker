@@ -87,3 +87,10 @@ Check `git status` / `git stash list` for another window's uncommitted `app.ts` 
 ## Never in a code-shape commit
 
 Feature changes, Supabase writes, a golden hand-edit, `--no-verify`, touching `../workout-tracker`'s or `../wt-hotfix`'s working tree.
+
+## Test commands (code-shape step 0, Oct 13 2026)
+
+- `npm run test:fast` = all `tests/*.test.ts` + `golden.spec.ts` (327 tests, ~19 s on this laptop); it is the pre-commit gate. `npm run test:full` / `test:ci` = the whole suite (725 tests, ~1m47s); CI keeps running the full suite.
+- `scripts/pw-run.mjs` picks a FREE port itself when `PW_PORT` is unset (and then never reuses an existing server), so the hook never needs port 3100. `node scripts/pw-run.mjs [playwright args]` runs the full suite on a free port too.
+- `npm run titles:check` compares `describe › title` strings (no file/line) with `tests/titles.txt`; a title may never disappear, additions need `npm run titles:update`.
+- The version string is stubbed in goldens (`GOLDEN-STUB-VERSION`): a version bump changes no golden and no test.

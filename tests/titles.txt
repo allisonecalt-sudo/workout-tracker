@@ -1,0 +1,725 @@
+"Your usual" / "Your best" gates › 5+ rides with numbers: "Your usual" shows the median, in plain numbers
+"Your usual" / "Your best" gates › fewer than 5 rides with numbers: usual is a gap line, best already shows
+#1 — pre-launch rows predate the launch and are filtered out (NOT a full parity test) › all 42 of her real rows predate the launch and are filtered out untouched
+#10 — an offline session synced out of array order still resolves by its own date › C before A before B in the array still closes Week 5 chronologically on Wed
+#11 — canMoveOn: day 7 hidden, day 8 shown, and only at 1-2 done › hidden on day 7 (Fri), shown on day 8 (Sat), with 1 done
+#11 — canMoveOn: day 7 hidden, day 8 shown, and only at 1-2 done › never shown at 0 done, even on day 20
+#11 — canMoveOn: day 7 hidden, day 8 shown, and only at 1-2 done › never shown once all 3 are done
+#11 — canMoveOn: day 7 hidden, day 8 shown, and only at 1-2 done › never shown once the week has already closed
+#12 — dayOfWeek: today counts as day 1 › the day a week opens is day 1, not day 0
+#13 — a Sick week pauses the clock (v61.2) › CONTROL: with no sick week, the same sessions leave Week 5 open (unchanged)
+#13 — a Sick week pauses the clock (v61.2) › Week 5 closes as "sick" at the start of the sick week, C stays missing
+#13 — a Sick week pauses the clock (v61.2) › Week 6 opens immediately on Sat Oct 10 with no session and no Move on
+#13 — a Sick week pauses the clock (v61.2) › a session INSIDE the sick week counts back to the week that closed
+#13 — a Sick week pauses the clock (v61.2) › a session in Week 6 counts to Week 6, not back to Week 5
+#13 — a Sick week pauses the clock (v61.2) › a sick week after a Mon-Fri close delays the next week to the end of the sick span
+#13 — a Sick week pauses the clock (v61.2) › general, not Oct-only: a later sick week pauses the same way; the July one (pre-launch) is ignored
+#13 — a Sick week pauses the clock (v61.2) › mergedSickSpans joins contiguous and overlapping weeks only
+#13 — a Sick week pauses the clock (v61.2) › shiftPastSickWeeks (the plan-date lookup) agrees: one sick week -> Oct 10, two -> Oct 17, none -> unchanged
+#13 — a Sick week pauses the clock (v61.2) › time-aware: before the sick week the clock is untouched; inside it, Week 6 is pending
+#13 — a Sick week pauses the clock (v61.2) › two CONTIGUOUS sick weeks are one held span: Week 6 opens Oct 17, not inside the second
+#13 — a Sick week pauses the clock (v61.2) › two NON-contiguous sick weeks each hold separately (Oct 3 and Oct 24)
+#13 — invariant: a span never opens on a weekday, except the launch instant or a Round start › every non-launch, non-round-start openedAt falls on Saturday or Sunday
+#14 — pending: the gap is visible to callers even with 0 sessions › Fri close, then a query on Sat with no session yet: Week 6 pending, opening that Saturday
+#14 — pending: the gap is visible to callers even with 0 sessions › pending is null once a week is actually open (no gap)
+#2 — closes on the 3rd letter, then a weekday gap counts backward, then Sat opens the next week › Sun/Mon/Wed closes Week 5; Thu+Fri repeats count back; Sat opens Week 6
+#2b — a weekday session AFTER the boundary has passed still opens the next week › Mon A / Thu B / Fri C after a Wed close = Week 6 at 3 of 3, opened on the anchor Saturday
+#2c — replaying her real Round 2 rows, shifted after launch, keeps 4 weeks as 4 weeks › 4 real 3/3 weeks, shifted +28 days, are still 4 closed weeks at 3/3 (not 2)
+#3 — a short week stays open past Friday, into a second weekend › A, A (repeat), B across 10 days → still open, missing = [C]
+#4 — "Move on without it" closes the week; a duplicate tap is ignored › a valid move-on closes Week 5 at 2 of 3; a later duplicate for the same week warns and is ignored
+#4a — a move for the open week at 0 done is ignored, not accepted › a move for Week 5 at 0 done warns and leaves Week 5 open
+#4b — a gap session counting back into a moved-on week updates its done/missing too › a gap C after "moved on without it" (missing C) updates missing to []
+#5 — Undo (the move row is deleted) → back to Week 5 open › the same sessions, without the move event, leave Week 5 open at 2 of 3
+#6 — the anchor is whichever day she actually starts on, not always Saturday › Week 5 closes Wed; she skips Saturday and starts Week 6 on the SUNDAY instead
+#7 — ties: a session sorts before a move dated the same instant › a move-on for Week 5 fired at the same instant the 3rd letter is saved loses to the session
+#8 — deleting a repeat session from a closed week leaves it closed › removing the Thu repeat from Week 5 does not reopen it or disturb Week 6
+#9 — a Round start closes whatever was open and begins Week 1 › Week 5 sitting at 1 of 3 is force-closed "round_ended" the moment Round 3 starts
+Card B: the current phase (spec §2.3) › 0 workouts in the current phase: one line, no Mood line
+Done marks the step done and goes to the next undone one
+Done safety net: a session that comes out longer than 3h logs no duration, with a note
+ENGINE_VERSION is a non-empty string (stamped onto every progression_steps row)
+List button sits beside Pause, 44px, opens and closes the sheet
+Lite day: the list shows only Main round 1
+MIN_PHASE_N is 3 (spec: "If a phase has n < 3... never an average of 1-2")
+PLAIN_PHASE_ORDER / PLAIN_PHASE_LABEL / PLAIN_PHASE_HEADER_LABEL — her exact wording, no jargon
+Progress: one door row, nothing else (spec §1) › the row names the page and today's phase, in plain words
+R2 W2: a date inside Sep 5-11 2026 resolves to Round 2 · Week 2
+R2 W2: bird dog legs-only sits at the END of the upper-back block in A and B
+R2 W2: every exercise name in the week has a detail card or a how-to guide entry
+R2 W2: workout A carries the full dead bug, bird dog legs-only, the tilted plank and a 40 s wall sit
+R2 W2: workout C stays on the MODIFIED dead bug (no full dead bug, no bird dog)
+R2 W3 (v41): the forearm plank now runs in B too, and stays on FOREARMS
+R2 W3 (v41): the plank in B is the SAME prescription as the one in A
+R2 W3 (v41): the wall lean is back in A and B, after the bird dog
+R2 W3: a date inside Sep 12-18 2026 resolves to Round 2 · Week 3
+R2 W3: gear card no longer says the band is waiting for a future week
+R2 W3: the band is in B ONLY, and the bird dog has NOT been levelled up
+R2 W3: the clamshell step carries a tying explanation AND its own video, open by default
+R2 W3: the tying setup does NOT leak onto Week 2, whose clamshell is bodyweight
+R2 W3: workout B carries the yellow band on the clamshells, reps back to 10
+R2 W3: workout C carries no setup block anywhere
+R2 W4: split squat replaces the squat in A only, wall sit reads 45, the 1 kg is back in A+B
+R2 W4: the split squat does NOT leak onto Week 3
+R2 W4: the wall sit step itself reads 45 sec (the earned nudge from 40)
+REAL parity (WK2 GATE 2) — her actual Round 2 dates, UNSHIFTED, anchored at the real Aug 29 launch › her real S31-S42 timestamps resolve to exactly 4 closed 3/3 weeks (1-4), then an empty Week 5 open
+RESTART: folding the decision drops every ladder one rung (floor 0), never raises one
+RIDE_NAMES is exactly the three cardio-slot display names
+Settings (spec §3) › the quiet row still logs, with the updated caption
+Settings About: post-launch shows the completion model’s own Round/Week, not a raw program-week count
+T1 · Timing: her start/finish "Right?" + breaks › Breaks: tap ~15 min (subtracts from the result), tap again clears back to null — never 0
+T1 · Timing: her start/finish "Right?" + breaks › finish before start: the warning shows, Save still works, and both times save unconfirmed
+T1 · Timing: her start/finish "Right?" + breaks › untouched: the Start-tap time becomes her_start_at (confirmed false); Save finalizes her_end_at the same way; breaks stay null
+T1 · Timing: her start/finish "Right?" + breaks › ✎ Fix + "10 min ago": the time moves 10 min and confirms immediately
+T1 · Timing: her start/finish "Right?" + breaks › ✓ Right on both ends: confirmed true, and the result line shows the training minutes
+Tips audit: no exercise notes string leaks PROGRAM bookkeeping instead of movement guidance
+W5 sample: step = row+curl 2×12 → 2×15 (her ask), nudge = B calf raises 12 → 15
+WK3 · "Move on without it" + week_moves › Undo holds even after a pull still carrying the row it undid — the tombstone outranks it
+WK3 · "Move on without it" + week_moves › Undo → back to Week 5 open, "Move on" reappears (tombstone queued, not silently dropped)
+WK3 · "Move on without it" + week_moves › a WEEKDAY tap: Week 6 is next but stays a gap until the coming Saturday — the note says so
+WK3 · "Move on without it" + week_moves › a stale move (a week that was never the open one) is ignored, not thrown
+WK3 · "Move on without it" + week_moves › an offline tap queues (synced:false), survives a reload, and reconnecting never throws or drops it
+WK3 · "Move on without it" + week_moves › hidden on day 7, even with 2 of 3 done
+WK3 · "Move on without it" + week_moves › never shown at 0 done, even well past day 8
+WK3 · "Move on without it" + week_moves › shown on day 8 with 2 of 3 done — "Move on to Week 6 without C"
+WK3 · "Move on without it" + week_moves › tap → Week 6 opens; the moved-note + Undo appear under the header
+WK3 · "Move on without it" + week_moves › the push payload + pure merge are exact (window hooks, no real network)
+WK3 · "Move on without it" + week_moves › v61.2: a week that reopened after a Sick week can be moved on from — Week 6 on day 9, "Move on to Week 7 without C"
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › Progress · Sessions per week: a closed completion week reads "wk 5 · 3 / 4", never a recomputed calendar count
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › Progress · Sessions per week: a moved-on week reads "moved on", the live week reads "open"
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › a D-only live week (no A/B/C yet) reads "None of A, B, C yet.", never the old blanket line that contradicted the D row below it
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › a gap-dated D ride is listed under the CLOSED week it follows, mid-gap and after the next week opens
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › planForLog: a post-launch A resolves Week 5’s own key, not the old swing/calendar model’s
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › planForLog: a session dated BEFORE the launch still resolves through the old calendar model (null key)
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › the how-to "seen this week" key follows the completion model’s OPEN week post-launch, the calendar model pre-launch
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › walksThisWeek counts since the completion model’s own week start, not today’s calendar Saturday
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › weekly review pages from the legacy calendar week (Week 4) into the completion model (Week 5) — a FIXED anchor, never "today minus N weeks"
+Workout D survives a second read: Done card, Sessions, the rides page and the push queue all still see it, and Week 5 still reads 0 of 3
+Workout D today: the home chip reads "D ✓ today" (disabled), A/B/C are still offered, and the week strip shows a D dot on today's column
+Workout D: straight onto the 30-min ride, no lane picker, no cool-down, saves as D and never counts toward the week
+a Lite day → HOLD
+a flare still fires from a low FEEL reading (feel 1 -> pain 9, well over the pain >= 3 gate)
+a genuinely fine session (feel 10 -> pain 0) never trips the flare gate
+a missing timestamp (confirmed true, no value) -> null, never a guess
+a new rung "too much" on both of its first 2 exposures → STEP_BACK, that rung specifically
+a new rung "too much" once → HOLD (not a step-back yet)
+a small phase (spec §4.3) › a phase under 3 workouts shows — and the real count, and the footnote appears once
+at phone size (412x892) › the cycle page causes no sideways scroll, and the table fits the viewport
+back & wrist in Card B (spec §2.3) › 2 readings: no Back pain row
+back & wrist in Card B (spec §2.3) › 3+ readings: the Back pain row appears with the real average
+back (v47): Back steps to the previous exercise, and crosses the round boundary; v53 fix: step 1 has a Back too (see the dedicated pre-log test)
+back STEP_BACK: LEGS and CORE rest for the next 2 weeks (no step or nudge in either lane)
+back at 1 in two separate sessions of the same week → STEP_BACK (not two separate HOLDs)
+back at 1-2 once → HOLD, not a step-back
+back at 3 in a partial (2-session) week → STEP_BACK, not the partial-week HOLD
+back at 3 → STEP_BACK + the ask-Lisa line
+back ≥3 then a week off: the flare is still caught, not lost behind the z=1 break check
+backup restore (v34): a row with null after-capacity / back pain survives the import
+bestKmPer10MinAt: exact level + rounded-minutes match only, best (not average) of the matches
+bestRide: the highest kcal/min, with its date — never a verdict word › a "no numbers" ride is never picked as best
+bestRide: the highest kcal/min, with its date — never a verdict word › a 1s ride (broken timer) is never picked as best, even though it "has numbers"
+bestRide: the highest kcal/min, with its date — never a verdict word › no rate-eligible rides -> null
+bestRide: the highest kcal/min, with its date — never a verdict word › picks the highest among her three real rides
+body chip: tap selects the number, a second tap clears it
+both confirmed, no break: the plain minutes between them
+break: z=1 (one zero-session week) → HOLD, rotation pointer unmoved
+break: z=2 → WELCOME_BACK, reverts the newest step (no nudge yet to revert)
+break: z=3 → still WELCOME_BACK (not a full restart)
+break: z=4 → RESTART, round increments, no step
+break: z=5 → still RESTART (the 4+ tier, not a new tier)
+breaks are subtracted before the bounds check
+buildPlainPhaseTable / buildPlainMoodPhaseTable — bucketed into the 4 plain phases › a phase gathers sessions from across its technical sub-phases (ovulatory + early luteal -> mid-cycle)
+buildPlainPhaseTable / buildPlainMoodPhaseTable — bucketed into the 4 plain phases › all 4 plain phases are always present, even with zero data
+buildPlainPhaseTable / buildPlainMoodPhaseTable — bucketed into the 4 plain phases › back: 3+ readings averages before -> after, independently gated from capacity/mood
+buildPlainPhaseTable / buildPlainMoodPhaseTable — bucketed into the 4 plain phases › back: under 3 readings stays null ("not enough yet"), same gate as mood
+buildPlainPhaseTable / buildPlainMoodPhaseTable — bucketed into the 4 plain phases › mood shares the same bucketing, independently gated from capacity
+buildPlainPhaseTable / buildPlainMoodPhaseTable — bucketed into the 4 plain phases › under 3 sessions: n is still reported, but avgBefore/avgAfter stay null ("not enough yet")
+buildPlainPhaseTable / buildPlainMoodPhaseTable — bucketed into the 4 plain phases › wrist: same shape as back, its own field names
+canonicalMoveName › a plain move name passes through unchanged
+canonicalMoveName › any ride-name lane maps back to the one PROGRAM ever encodes
+capacity before (v39): a missing reading stays missing through the sync, the week average and the import
+capacity before (v39): the history row shows an em dash, never "0"
+cardio either/or: finishing after the apartment option saves the lane + its minutes, and never POSTs
+cardio either/or: the walk step offers an apartment option that swaps in a same-length timer
+completedCount / reachedCount › completedCount only counts steps actually marked done
+completedCount / reachedCount › reachedCount = completed steps + the current one if it is not done
+completedCount / reachedCount › reachedCount does NOT add a bonus for viewing an already-done step
+composeWeekPlan deload (RESTART): rounds drop by 1 and timed holds scale by ~0.8
+composeWeekPlan never throws when every ladder is still at R0
+composeWeekPlan: a rung silent on a letter INHERITS that letter from the last rung that set it
+composeWeekPlan: deadbug.r2.cfull (C only) does not drop A/B's Full dead bug
+content integrity: every NOT-ready rung really is missing something (no rung marked false by mistake)
+content integrity: every contentReady rung name has a card, a voice file, and a visual
+cool-down renders as a single stretch list with no per-stretch video
+cooler-look: the hero names its letter; the chips lead with theirs
+cycle page back-pain average shows the aligned (pain) direction — a low feel reads as high pain
+cycleLengths / medianCycleLength › median of the last 6 (drops the oldest, Feb->Mar 27)
+cycleLengths / medianCycleLength › null with fewer than 2 starts (no cycle length yet)
+cycleLengths / medianCycleLength › reads the real 27-29 day gaps between her logged starts
+cycleSummaryLine › null if any phase is missing an average
+cycleSummaryLine › null when a spread is >=1 and plainQuestionLine is null
+cycleSummaryLine › returns plainQuestionLine text verbatim when that line is non-null
+cycleSummaryLine › the T1 string, with the correct lo/hi, once all 4 phases are ready and tight
+decideWeek never throws on a completely empty history
+deploy hygiene: index.html's <script src> matches dist/build-info.js's bundle
+deploy hygiene: sw.js precaches exactly the bundle dist/build-info.js names
+deploy hygiene: version is single-sourced (package.json → build-info.js → sw.js, never hand-typed)
+deriveRideAim: a new planned length at a level she HAS ridden before → first ride, no number
+deriveRideAim: her REAL Sep 28 D row (timeSec null, minutes 30 — no typed time) still produces aim 2.1
+deriveRideAim: her very first ride ever — no history at all → first ride
+deriveRideAim: her worked examples — D aim 2.1, C aim 1.85 (task spec, verified)
+deriveRideAim: rounds to the nearest 0.05 km both ways
+detail card: Do & Don't dropdown shows do + don't cues
+detail card: a dropdown section opens and closes on click
+detail card: face shows the voice note + muscle target on the first exercise
+either confirmed flag missing entirely (a pre-T1 row) -> null
+elliptical: finishing saves the minutes + level + readings, never POSTs, and clears the lane
+elliptical: the cardio step offers three lanes and the elliptical swaps in a same-length timer
+elliptical: the next ride opens on the elliptical and offers the last level again
+elliptical: the reading boxes never show on the plain ride card, only after Done · Next opens the numbers screen
+elliptical: the step carries how-to guidance
+empty lane falls through: an all-frozen UPPER is skipped this week and queued first next week
+empty states (spec §2.5) › no periods logged: Card A says so, and there is no compare table
+empty states (spec §2.5) › one period logged: "Not placed yet"
+end not confirmed -> null, even with both timestamps present
+enriched detail card: face shows voice + muscle, sections are click-to-open dropdowns
+exactly 180 min is kept — the ceiling is inclusive
+exactly 5 min is kept — the floor is inclusive
+exercise visual renders for known exercises
+finish before start -> null, the same bounds check catches it without a special case
+finishing the last of 2 skipped moves goes straight to cool-down, not back through finished moves
+flattenSteps › a Lite (1-round) workout lists only Main round 1
+flattenSteps › carries the exercise through untouched (name/reps/label)
+flattenSteps › group labels: Warm-up, Main round N, Upper back
+flattenSteps › no upperBack block -> no upper-back steps, no crash
+flattenSteps › warm-up -> main (each round) -> upper back, in order
+formatHeldSeconds › one set: "20 s"
+formatHeldSeconds › two sets: "20 s · 18 s" — her exact plan wording
+formatWorkoutTime is blank, never "about 0 min", when there is nothing to show
+formatWorkoutTime rounds to the nearest 5, both directions
+freeze: a ladder that changed within 2 weeks cannot step again
+full workout C flow: pre-log → exercises → post-log → save → home with 1 session
+golden HTML — gate 1 (structure-only refactor oracle) › cool-down list (stretches, after the last round)
+golden HTML — gate 1 (structure-only refactor oracle) › cycle page
+golden HTML — gate 1 (structure-only refactor oracle) › done card (Home, just after saving)
+golden HTML — gate 1 (structure-only refactor oracle) › home — empty log (fresh install, no prior session)
+golden HTML — gate 1 (structure-only refactor oracle) › home — seeded, mid-week
+golden HTML — gate 1 (structure-only refactor oracle) › paused overlay
+golden HTML — gate 1 (structure-only refactor oracle) › post-log (Quick log)
+golden HTML — gate 1 (structure-only refactor oracle) › pre-log A
+golden HTML — gate 1 (structure-only refactor oracle) › pre-log B
+golden HTML — gate 1 (structure-only refactor oracle) › pre-log C
+golden HTML — gate 1 (structure-only refactor oracle) › pre-log D
+golden HTML — gate 1 (structure-only refactor oracle) › progress
+golden HTML — gate 1 (structure-only refactor oracle) › rest screen (between two main-block moves)
+golden HTML — gate 1 (structure-only refactor oracle) › ride numbers screen
+golden HTML — gate 1 (structure-only refactor oracle) › ride step — the plain ride card (no timer)
+golden HTML — gate 1 (structure-only refactor oracle) › rides page
+golden HTML — gate 1 (structure-only refactor oracle) › round break (round 1 done, before round 2)
+golden HTML — gate 1 (structure-only refactor oracle) › session detail
+golden HTML — gate 1 (structure-only refactor oracle) › session detail — edit
+golden HTML — gate 1 (structure-only refactor oracle) › sessions list (History)
+golden HTML — gate 1 (structure-only refactor oracle) › settings
+golden HTML — gate 1 (structure-only refactor oracle) › step list open (the ☰ jump list)
+golden HTML — gate 1 (structure-only refactor oracle) › weekly review
+golden HTML — gate 1 (structure-only refactor oracle) › workout — a strength step (a plain resistance exercise)
+golden cutover: composeWeekPlan(START_STATE) matches the R2W4 exercise set
+golden cutover: warmup/cooldown/rounds pass through from `base` untouched
+hard guard: at most 2 changes a week, at most 1 V/LISA, across a 20-week clean simulation
+hard guard: never a step in a WELCOME_BACK or RESTART week
+hard guard: the engine can NEVER emit a Lisa-gated rung without a clearance
+hasRideNumbers / rateEligible: §4.2's exact exclusion rule › a real ride with both -> has numbers
+hasRideNumbers / rateEligible: §4.2's exact exclusion rule › kcal 0 -> excluded, "no numbers"
+hasRideNumbers / rateEligible: §4.2's exact exclusion rule › km missing does not block the kcal/min rate — only km/h+pace go null
+hasRideNumbers / rateEligible: §4.2's exact exclusion rule › missing (null) time -> excluded, "no numbers"
+hasRideNumbers / rateEligible: §4.2's exact exclusion rule › missing kcal -> excluded even with a real time
+her-ask is used up once that ladder steps (W9 does not re-prioritize rowcurl)
+her-ask: rowcurl steps first in UPPER even though it is not the stalest UPPER ladder
+holdSetsFace — the 3 done-face states a multi-set hold walks through › a 3-set hold, 2 of 3 done -> still more-sets (generalizes past 2 sets)
+holdSetsFace — the 3 done-face states a multi-set hold walks through › a redo that raised the LAST set stays reflected (app.ts writes via max, this just reads the array back)
+holdSetsFace — the 3 done-face states a multi-set hold walks through › both sets done -> all-done, "2 sets ✓ · 20 s · 18 s"
+holdSetsFace — the 3 done-face states a multi-set hold walks through › nothing held yet -> ready (app.ts keeps its own existing Ready face for this)
+holdSetsFace — the 3 done-face states a multi-set hold walks through › set 1 of 2 done -> more-sets, "Set 1 ✓ 20 s" + Start set 2
+home order: the workout sits first; the week-by-week list is collapsed in Weekly review
+home screen shows three workout options and zero sessions
+honest readings — the pre-v48 untouched-5 exclusion › a post-cutoff exact 5 is trusted (v48+ only saves a 5 when she chose it)
+honest readings — the pre-v48 untouched-5 exclusion › a pre-cutoff exact 5 is excluded (ambiguous: chosen, or the untouched default)
+honest readings — the pre-v48 untouched-5 exclusion › a pre-cutoff non-5 reading is trusted (only the ambiguous default is dropped)
+honest readings — the pre-v48 untouched-5 exclusion › excludedUntouchedCount counts each ambiguous 5, before and after separately
+honest readings — the pre-v48 untouched-5 exclusion › null stays null either side of the cutoff
+in-workout walk: does NOT auto-start on the step — needs an explicit Start tap
+indoor strip: a 25-minute block cycles past segment five back to segment one
+indoor strip: choosing the apartment option shows the first segment, ready to go
+indoor strip: the card carries no baked duration (the block is 10 min in A/B, 25 in C)
+indoor strip: the live segment advances by itself as the countdown crosses a boundary
+indoor strip: the outdoor walk is untouched — no strip, tracking still starts on tap
+isComparable › 0 ready rows -> false
+isComparable › 1 ready row -> false
+isComparable › 2 ready rows -> true
+isMoveFeelValue › accepts exactly the three values, rejects everything else
+isPlausibleRideRate: guards a broken-timer outlier out of best/usual › "no numbers" is never plausible either
+isPlausibleRideRate: guards a broken-timer outlier out of best/usual › a normal real ride is plausible
+isPlausibleRideRate: guards a broken-timer outlier out of best/usual › exactly at the boundary (3 min, 20 kcal/min) is still plausible
+isPlausibleRideRate: guards a broken-timer outlier out of best/usual › over 20 kcal/min is implausible even at a normal length
+isPlausibleRideRate: guards a broken-timer outlier out of best/usual › under 3 min is implausible even with an ordinary-looking rate
+isValidLogEntry (v50): moodBefore/moodAfter are optional, nullable, and typed
+isValidLogEntry (v51): backPainBefore/wristPainBefore are optional, nullable, and typed
+isValidMoveFeelString — matches the live DB CHECK › accepts every real shape moveFeelString can produce
+isValidMoveFeelString — matches the live DB CHECK › rejects a digit in the slug, an unknown feel word, and a bad unit
+jump forward three steps lands there and logs nothing
+jumping back to a skipped step, completing it, and the count reading "reached" not "position"
+lastTimeAtSameAim: the most recent km at this exact level+length, or null with no match
+left-open gate: "Keep going" resumes the workout where she left it
+left-open gate: "No, throw it away" discards it and clears the snapshot
+left-open gate: "Yes, I did it" logs it for the day it was STARTED with no invented numbers
+left-open gate: a 10-minute-old workout still resumes silently (no card)
+left-open gate: a 4-day-old workout is a question on home, not a silent resume
+length gate: 44 min (under the 45-min brake) does not block; a 90-min runaway row is excluded, not counted as a violation
+length gate: a minutesDelta rung is blocked when the last 2 sessions of that letter ran over the brake
+lite day: pre-log toggle drops one round and marks the session lite
+logging from the page (spec §2.6) › logs today, confirms with Undo, and the date-picker path
+median › empty -> null
+median › even count: the average of the two middle values, rounded to 1dp
+median › odd count: the middle value
+mood (spec §2.3, §2.4) › 0 mood readings: the quiet line shows once, no chip row
+mood (spec §2.3, §2.4) › mood ready in 2 phases: the chips appear, and Mood swaps the table + drops the summary
+mood chip: tap selects the number, a second tap clears it — independent of the BODY row
+mood chips (v50): a moved mood chip saves her number; the untouched half stays null
+moveFeelString / parseMoveFeelString — tap saves the right slug/qty › a move she never tapped is simply absent from the string
+moveFeelString / parseMoveFeelString — tap saves the right slug/qty › a stale feel for a slug that is no longer stepped is silently dropped
+moveFeelString / parseMoveFeelString — tap saves the right slug/qty › nothing tapped -> null, never an empty string
+moveFeelString / parseMoveFeelString — tap saves the right slug/qty › only the moves she actually tapped a feel on are saved, with the stepped qty attached
+moveFeelString / parseMoveFeelString — tap saves the right slug/qty › parseMoveFeelString on null/empty returns []
+moveFeelString / parseMoveFeelString — tap saves the right slug/qty › parseMoveFeelString reverses moveFeelString exactly
+multi-week: "Coming next week" preview renders in Progress with diff
+multi-week: Settings About shows Program weeks count (17) — pre-launch, unchanged
+multi-week: Week 4 content active for May 25 (Session A holds — squats 12, plank 1x15s)
+multi-week: home week-banner reads Week 3 for May 16-22 range
+multi-week: pre-log overview shows Week 3 badge in May 16-22 range
+nextStartEstimateISO › her real data: Sep1 + median 27.5 (rounds to 28) = Sep29
+nextStartEstimateISO › null with no periods logged
+nextStartEstimateISO › null with only one period ever logged (nothing to estimate from)
+nextUndoneStep › an unrecognized afterKey (e.g. the cool-down sentinel) scans from the start
+nextUndoneStep › forward from the current step to the next undone one
+nextUndoneStep › never hands back the step she started from
+nextUndoneStep › null on an empty list
+nextUndoneStep › null when every other step is already done
+nextUndoneStep › wraps to an earlier skipped step when nothing is undone ahead
+no jargon (spec §4) › no technical phase words, no "n=", no Δ, no "est." anywhere on the page
+open and back (spec §2.2) › opens to "Your cycle", and back returns to Progress at the same scroll spot
+over 180 min -> null
+pain rule: every exercise-detail.ts donts entry starts with "Don't" or "Never"
+pain rule: no shown or spoken exercise string uses the old alarm-toned "stop ..." wording
+painFromFeel / feelFromPain — the ONE conversion at the UI edge › every whole feel 1-10 round-trips through pain and back to the same feel
+painFromFeel / feelFromPain — the ONE conversion at the UI edge › feel 1 (hurts a lot) -> pain 9, not pain 10 — the row only ever reaches 9 from the top end
+painFromFeel / feelFromPain — the ONE conversion at the UI edge › feel 10 (feels fine) -> pain 0 — the Fine tap and the "10" chip mean the same thing
+painFromFeel / feelFromPain — the ONE conversion at the UI edge › mid-scale check from her own logged example: back 9 / wrist 7 (feel) -> pain 1 / pain 3
+painFromFeel / feelFromPain — the ONE conversion at the UI edge › pain 0 (Fine, stored) reads back as feel 10
+partial week: 1-2 sessions last week → HOLD, and it is a non-safety hold
+pause overlay opens and resume returns to the same exercise
+periodLogUrgency — the quiet/primary window around a predicted start › primary from 3 days before the prediction
+periodLogUrgency — the quiet/primary window around a predicted start › primary on the predicted day itself
+periodLogUrgency — the quiet/primary window around a predicted start › primary stays through 7 days after the prediction (a late period is still open)
+periodLogUrgency — the quiet/primary window around a predicted start › quiet the rest of the month
+periodLogUrgency — the quiet/primary window around a predicted start › quiet when there is no estimate yet (no periods, or only one ever logged)
+phaseForDate — past cycles (known next start) › a 26-day cycle (Mar20->Apr15) still partitions cleanly, no gap or overlap
+phaseForDate — past cycles (known next start) › a 29-day cycle (Jun10->Jul9) shifts the ovulatory window later
+phaseForDate — past cycles (known next start) › day 1 (the start itself) is menstrual
+phaseForDate — past cycles (known next start) › day 5 is still menstrual, day 6 is follicular
+phaseForDate — past cycles (known next start) › null before her first logged period
+phaseForDate — past cycles (known next start) › the day before the next start is luteal, and pre-period
+phaseForDate — past cycles (known next start) › the ovulatory window is centred on (next start - 14)
+phaseForDate — the current/open cycle (estimated) › a session logged today (open cycle) still gets a phase, marked estimated
+phaseForDate — the current/open cycle (estimated) › a whole-number median estimates the next start correctly, independent of the runtime timezone
+phaseForDate — the current/open cycle (estimated) › an overdue open cycle (past the estimated next start) still reads as luteal, not a crash
+phaseForDate — the current/open cycle (estimated) › estimates the next start from the median of the last 6 cycle lengths
+phaseForDate — the current/open cycle (estimated) › null when there is only one period ever logged (nothing to estimate from)
+phone width › no horizontal scroll with a full page (hero, usual/best, totals, week-by-week, chart, list)
+pickStep walks the WHOLE queue: CARDIO capped and UPPER frozen still lets CORE/LEGS step
+plainPhaseFor › an overdue open cycle still reads as week-before, not a crash
+plainPhaseFor › early luteal (not yet within 7 days of the next start) -> mid-cycle, not week-before
+plainPhaseFor › follicular -> week-after
+plainPhaseFor › menstrual -> on-period
+plainPhaseFor › ovulatory -> mid-cycle
+plainPhaseFor › the 7 days before the next start -> week-before, even though it is technically luteal
+plainQuestionLine — the one optional line, in plain words › names the direction and workout counts, in words, and asks rather than tells
+plainQuestionLine — the one optional line, in plain words › null when n<3 on either side
+plainQuestionLine — the one optional line, in plain words › null when the gap is under 1 point, same gate as prePeriodVsRest
+post-log: the free-text note saves verbatim on a session with no cardio lane picked
+pre-log body reading asks about the BODY, not mood, and shows anchor labels
+pre-log wrist line: one grey line on A (pressure fine, the pain rule), no amber banner
+prePeriodVsRest › null (no line) when n<3 on either side
+prePeriodVsRest › reports the gap when n>=3 both sides and the diff is >=1
+progress: "N full weeks" counts training weeks only — no break, sick, in-progress or held weeks
+projections: her toggle — "10 min, 30, hour" › 10 min at 6.3 kcal/min -> 63 kcal
+projections: her toggle — "10 min, 30, hour" › 30 min at 6.3 kcal/min -> 189 kcal
+projections: her toggle — "10 min, 30, hour" › an hour at 6.3 kcal/min -> 378 kcal
+projections: her toggle — "10 min, 30, hour" › projectedKm scales the raw km/time ratio by the window
+projections: her toggle — "10 min, 30, hour" › v55 fix — uses the raw ratio, not a pre-rounded km/h (CHECK N1)
+pull merge (T1 fix r1, must #1): her timing answers survive a push -> pull round trip; a pre-T1 row merges as null
+pull merge (WK2 fix r2, GATE 1): a DELETED closing session survives instead of silently reopening + renumbering the week
+pull merge (v33): a row deleted on the server disappears; unsynced, out-of-window and empty-answer cases stay safe
+pull merge (v50): mood_before/mood_after round-trip; a pre-v50 row (no mood keys) merges as null
+pull merge (v51): back_pain_before/wrist_pain_before round-trip; a pre-v51 row (no keys) merges as null
+pull merge (v55 fix r3, must): the "@2kg"/"@1kg" LOAD CHIP suffix survives a push -> pull round trip
+quit during workout asks for confirmation and returns home
+quit panel Cancel keeps user in workout
+readiness floor: a T rung needs 2 clean exposures, not 1
+redesign: cards use border-elevation, not drop shadow
+redesign: role-named accent tokens are defined on :root
+redesign: the home hero title uses the heading type scale (>=30px)
+replay: folding a chain of stored decisions reproduces incremental state exactly
+resume: quitting clears the session so reopening goes home
+resume: reopening the app returns to the in-progress workout
+rideRate: her three real rides › Sep 24 A: 63.4 kcal / 10:02 -> 6.3 kcal/min, 4.3 km/h
+rideRate: her three real rides › Sep 25 C: 140.5 kcal / 25:01 -> 5.6 kcal/min
+rideRate: her three real rides › Sep 26 B: 62.4 kcal / 10:00 -> 6.2 kcal/min, 4.1 km/h
+rideRate: her three real rides › paceMinPerKm is km/h's inverse, mm:ss per km
+rideRate: her three real rides › v55 fix — pace never rolls to ":60" seconds (CHECK N2)
+rideTotals: rides · minutes · km · kcal › a "no numbers" ride still counts toward `rides`, contributes nothing else
+rideTotals: rides · minutes · km · kcal › empty list -> all zero, never a crash
+rideTotals: rides · minutes · km · kcal › her three real rides sum plainly
+rides "This month" reads the LOCAL date: a ride at local Oct 1 00:30 (+03:00) counts in October, not September
+rides "This week": the Saturday-closing ride doesn't leak into the new week (membership, not date); Sunday's D still counts (v54 fix r3, checker's must)
+round 2 + upper back done first: finishing round 1 skips the floor and returns to the skipped warm-up move
+round 2: banner reads Round 2 · Week 1 from Aug 29 2026 and restart numbers are live
+round 2: break weeks Jul 25–Aug 28 hold blank labeled rows, round-1 weeks keep plain labels
+scroll (v46): Done·Next opens the next step at the top of the page
+selecting workout A goes to pre-log screen
+service worker: a same-appVersion deploy must not corrupt the live cache › one online reload after the deploy (must #2: the fetch handler must not write html its bundle never cached)
+service worker: a same-appVersion deploy must not corrupt the live cache › update() only, no online navigation (must #1: cache-name isolation)
+service worker: install only after a full download › failed critical download → the OLD app keeps controlling and still starts offline
+service worker: install only after a full download › successful critical download → the NEW build takes control and starts offline
+setsPrescribed — generalized off the reps text, never hardcoded to Wall lean › "1 × 20 sec" -> 1 (a leading "1 ×" is still single-set, same as no count at all)
+setsPrescribed — generalized off the reps text, never hardcoded to Wall lean › "2 × 15-20 sec" (Wall lean, the real PROGRAM text) -> 2
+setsPrescribed — generalized off the reps text, never hardcoded to Wall lean › a future 3-set hold ("3 × 30 sec") -> 3 — generalizes without a code change
+setsPrescribed — generalized off the reps text, never hardcoded to Wall lean › a lowercase "x" and a plain "2x" both read as 2
+setsPrescribed — generalized off the reps text, never hardcoded to Wall lean › a plain single-set hold ("45 sec", Wall sit/Forearm plank) -> 1, untouched
+setsPrescribed — generalized off the reps text, never hardcoded to Wall lean › no reps text at all -> 1
+setup blocks (v40): every phase that renders an Exercise also renders its setup
+sheet groups by phase: Warm-up, Main round 1, Main round 2, Upper back, Cool-down
+ship 3 (replaced): weekly-target grid renders with 3 slots per row
+ship 3: sparkline NOT rendered for row with 0 or 1 wall-sit value
+ship 3: sparkline renders for history row with >=2 wall-sit values
+ship 4: weekly review empty state for week with no sessions
+ship 4: weekly review header shows session count for current week
+ship 4: weekly review reachable from home button
+ship 4: weekly review shows one-word verbatim including typos
+ship 5: back-pain bars render only for sessions with backPain > 0
+ship 5: empty state renders for fewer than 2 sessions
+ship 5: progress screen reachable from home button
+ship 5: wall-sit line chart renders with 2+ wall-sit values
+ship 6: beep toggle persists to localStorage
+ship 6: clear-data hold-to-confirm wipes localStorage
+ship 6: export sessions downloads a JSON file
+ship 6: rest duration stepper updates value and persists
+ship 6: settings reachable from gear icon in home header
+sick week Jul 11-17 holds a blank slot and Jul 18-24 is Week 11
+skipped-count shows on the log and saves to the row
+slugFor › every cardio-slot name (walk / apartment / elliptical) slugs to "ride"
+slugFor › lowercases and strips everything but a-z
+stalest tiebreak: LEGS picks hinge (Jun 20) over squat/wallsit (Sep 19); bridge (staler still, May 16) is skipped with a gapNote because its next rung (march bridge) has no content yet
+start not confirmed -> null, even with both timestamps present
+stepKey builds the phase:round:index shape
+steppedLineFor / steppedLineText — the pre-log preview text › never drops to zero shown moves, even asked for 0
+steppedLineFor / steppedLineText — the pre-log preview text › nothing stepped -> empty string, no line at all
+steppedLineFor / steppedLineText — the pre-log preview text › steppedLineFor(stepped, shown) shows exactly `shown` moves, "+N more" for the rest
+steppedLineFor / steppedLineText — the pre-log preview text › steppedLineText is untrimmed — every stepped move, no "more" — the live fit (app.ts) does the trimming
+steppedMovesForPhase / steppedMovesForWorkout — which moves ask › a brand-new variant (not in prev at all, by name) steps
+steppedMovesForPhase / steppedMovesForWorkout — which moves ask › a hold whose seconds went up steps with a seconds qty
+steppedMovesForPhase / steppedMovesForWorkout — which moves ask › a move REMOVED from next (in prev, not in next) is never "stepped" — nothing to ask a feel about
+steppedMovesForPhase / steppedMovesForWorkout — which moves ask › a reps bump steps, carries NO qty (her spec: "reps? no")
+steppedMovesForPhase / steppedMovesForWorkout — which moves ask › an unchanged move (same reps, same durationSec) never steps
+steppedMovesForPhase / steppedMovesForWorkout — which moves ask › curl/row (an excluded name) never steps here even when its reps changed — arm_feel owns it
+steppedMovesForPhase / steppedMovesForWorkout — which moves ask › steppedMovesForWorkout walks warmup -> main -> upper back, never cooldown
+steppedMovesForPhase / steppedMovesForWorkout — which moves ask › the cardio slot (walk/elliptical/apartment) steps with a MINUTES qty, read off reps text
+steppedMovesForPhase / steppedMovesForWorkout — which moves ask › the very first encoded week (no predecessor) reads every move as new
+steppedMovesForPhase / steppedMovesForWorkout — which moves ask › v59 (CHECK-v58 round 2 nice #R2-N1): a reps move whose only real change is a LATER, appended segment shows THAT segment — not the unchanged first one
+stopped early at a hands/grip move → STEP_BACK reverting UPPER
+stopped early at the 1 kg curl (a grip move, not bird dog/wall) → STEP_BACK reverting UPPER
+stopped early at the hinge (holding the 1 kg) → STEP_BACK reverting UPPER
+swing (v46): on the Saturday itself the week card carries the week it closed
+swing (v52, was v46): Saturday morning with last week at 2 says today will count for it
+swing: a SUNDAY session never swings, even when last week is short
+swing: a Saturday session completes a 2-session week — last week shows 3 of 3, this week 0
+swing: a Saturday session does NOT swing when last week already has 3 — it opens the new week
+the 4-exposure backstop: a V rung with 4 clean-but-never-"fine" exposures is still ready
+the chart + tap readout › each bar carries its level ("L5"/"L3") under the date, from ChartBar.sublabel
+the chart + tap readout › fewer than 2 rides with numbers: an honest gap line, no chart
+the chart + tap readout › renders one bar per ride with numbers, latest highlighted, and a tap opens a one-line readout
+the door on Progress › an honest empty state when she has never ridden
+the door on Progress › opens Your rides, and back returns to Progress
+the hero + its 3-chip toggle › a ride with no numbers says so honestly instead of a hero built from a guess
+the hero + its 3-chip toggle › kcal a minute, km/h, pace, level/time/date — and the toggle projects kcal+km
+the list: date · workout letter · min · km · kcal · level, newest first › rows are ordered newest-first, and a "no numbers" ride is listed honestly, not hidden
+the nudge: never the same lane as the step, never V/MIN/LISA/cardio
+the predicted window (spec §3, §2.3) › inside the window: Progress sub, the sage button, and the Home door
+the predicted window (spec §3, §2.3) › outside the window: no Home door, and the page button is quiet
+the predicted window (spec §3, §2.3) › overdue: the Progress sub reads "due any day"
+the resume snapshot survives a reload
+the round-1 floor still shows even with an earlier step skipped
+the summary sentence under Card C (spec §2.3) › all 4 phases ready and tight: the "about the same" line
+the summary sentence under Card C (spec §2.3) › the pre-period question line, when it applies
+today's pick highlights A when no history exists
+todayCycleStatus — the card header › null before her first logged period (nothing to place today in)
+todayCycleStatus — the card header › on her period: plain phase + cycleDay, not overdue
+todayCycleStatus — the card header › overdue: the estimated next start has passed with nothing new logged
+todayCycleStatus — the card header › the week before period: not overdue while the prediction is still ahead
+under 5 min -> null (§3.4 "under 5 or over 180 -> null")
+untouched breakMinutes (null) reads as zero, never as a guessed break
+untouched sliders (v46): a slider she DID move saves her number; the others stay null
+untouched sliders (v46): a workout with no slider moved saves null, not 5/5/0
+usualKcalPerMin: "median of last 5 rides, shown when >= 5 rides" › a "no numbers" ride in the mix is skipped, never treated as a 0
+usualKcalPerMin: "median of last 5 rides, shown when >= 5 rides" › a 1s implausible ride in the mix is skipped, same as "no numbers"
+usualKcalPerMin: "median of last 5 rides, shown when >= 5 rides" › exactly 5 rate-eligible rides -> the median of those 5
+usualKcalPerMin: "median of last 5 rides, shown when >= 5 rides" › fewer than 5 rate-eligible rides -> null (not shown)
+v48 P1 data › (a) an elliptical A session sends the lane, minutes and readings as columns
+v48 P1 data › (a2) arm_feel sent to Supabase carries the "@load" suffix as-is — matches the widened live CHECK
+v48 P1 data › (b) wall_sit_seconds is null on B and C (no wall sit), the number on A
+v48 P1 data › (b2) mood_before/mood_after send her numbers, or null when untouched
+v48 P1 data › (b3) back_pain_before/wrist_pain_before send her numbers, or null when untouched
+v48 P1 data › (c) the post-log note lands in session_note, never in notes
+v48 P1 data › (d) Lite on pre-log saves liteDay true
+v48 P1 data › (e) each voice-note play that starts is counted onto the saved session
+v48 P1 data › (f) the nine new columns round-trip through the pull; a row without them still loads
+v48 P1 data › (g) the import accepts an old-shape and a new-shape entry, and refuses junk in a new field
+v48 P1 data › (h) the Week-4 hinge reads 2 sets in EACH round
+v48 P1 data › (h) the hip-hinge step contradicts nothing: no "ceiling", no fixed "1 kg"
+v48 P1 data › (i) the next ride reads the level column first, and a marker-only legacy row still works
+v48 P1 data › legacy push: a server without the v48 columns gets the v47 row, nothing lost
+v48 P1 data › push (T1 fix r1): two PGRST204s in a row fall back to the full legacy row and still save
+v48 P1 data › push (T1 fix r1, must #2): a faked PGRST204 retries with ONLY the timing columns dropped; mood/wrist/ride numbers survive
+v48 P1 data › session detail shows her note verbatim under "Note", apart from system notes
+v48 P2 shell › (b) one count for the whole workout: 1 of N, +1 per Done across phases and rounds
+v48 P2 shell › (c) the split squat face shows the safety line, and the full tip only behind "Tips ▸"
+v48 P2 shell › (c2) no visible "Cue" on any A/B/C step; Tips opens where an exercise has one
+v48 P2 shell › (d) "New tonight" on the split squat until an A is logged this plan week
+v48 P2 shell › (d) a move from an earlier week reads "Again tonight", not "New tonight"
+v48 P2 shell › (d) no "New tonight" once an A is logged on/after the week started
+v48 P2 shell › (e) wall sit: Stop mid-hold saves the REAL seconds to the post-log
+v48 P2 shell › (e)(f) wall sit: Stop instead of "Running…", then "✓ held 45 s · last time 43"; one sage either side
+v48 P2 shell › (fix) "Finish here" never counts the round-2/upper-back moves it deliberately dropped as skipped
+v48 P2 shell › (g) Back from the lite cool-down undoes "Finish here" (round-break screen, Lite as before)
+v48 P2 shell › (g) round-1 floor: "Finish here — it still counts" lands on the lite cool-down and saves lite
+v48 P2 shell › (g) round-1 floor: "Start round 2" lands on round 2 step 1; Back returns to round 1
+v48 P2 shell › (h) "‹ Back to the workout" after a stop returns to the step she stopped on and undoes the stop
+v48 P2 shell › (h) the quit panel's "Log what I did" keeps the half session
+v48 P2 shell › (h) v49 · look fix: "Finish here" on A witnesses "1 round", never "both rounds"
+v48 P2 shell › (h) v49 · look fix: Lite toggled before Start on C (2 → 1 round) witnesses "1 round", never "both rounds"
+v48 P2 shell › (i) round 2: the split squat shows the compact "Watch how it looks" row, never the poster
+v48 P2 shell › (should) T2 fix r1: the post-log right after Start shows no app-time duration
+v48 P2 shell › at phone size › (a) Done is inside the fold on every step of A, without scrolling
+v48 P2 shell › rest screen: one "Next ·" line and a quiet ‹ Back link
+v48 P3 cardio › (b) lane memory: last lane elliptical → straight onto the Elliptical; walk → the choice
+v48 P3 cardio › (d) no timer/3-2-1 on the ride card any more; the wall sit still gets its 3-2-1
+v48 P3 cardio › (f) "7 again" sets the last level in one tap and saves 7
+v48 P3 cardio › (f) v49 · look fix: bare "958" (no colon) reads as 9:58, not 958 raw seconds
+v48 P3 cardio › (f) v49 · look fix: the Time box reads bare digits as mm:ss (the numeric pad has no colon key)
+v48 P3 cardio › (f) v51: Done · Next opens "Your ride — from the machine" — time, km, kcal, level, pulse, in that order; untouched time/level save null
+v48 P3 cardio › (f) v61 fix pass: Time left blank saves cardioMinutes null, never the planned length
+v48 P3 cardio › (f) v61 fix pass: Workout D also asks Easy/Right/Hard on the ride, saved keyed to her typed minutes
+v48 P3 cardio › (f) v61 fix pass: cardioMinutes comes from her typed time, never the planned length
+v48 P3 cardio › (f) v61: tapping the same ride-feel chip again clears it — no "ride=" segment saved at all
+v48 P3 cardio › (f) v61: the ride always asks Easy · Right · Hard, tap-selects / tap-again clears, saved as a move_feel "ride=" segment keyed to her typed minutes
+v48 P3 cardio › (g) v61: her very first ride at a level/length shows "first ride ... sets your aim", never a guessed number
+v48 P3 cardio › (g) v61: the ride card shows a derived distance aim from history, and the numbers screen compares today's km to it
+v48 P3 cardio › (g) walk lane: "Walking · N min", no km or steps anywhere; saved walkMeters null
+v48 P3 cardio › (h) v49 · look fix: Home says "level not recorded yet" after a real ride with no level — not "first ride tonight"
+v48 P3 cardio › (h) v49 · look fix: the after-ride "N again" chip never guesses a level from an old notes marker once cardioLane is set
+v48 P3 cardio › at phone size › (a) fresh A: one sage (Elliptical), Walk + Apartment side by side, Skip; no picture, no Done
+v48 P3 cardio › at phone size › (c) elliptical first ride: plain ride card, "First ride", setup open, no boxes yet
+v48 P3 cardio › display name: the pre-log list says "Cardio", never "Outdoor walk"
+v48 P4 home › (b) the B and C chips start their own workout: chip → pre-log → Start (2 taps)
+v48 P4 home › (c) a Saturday that swung to last week reads in words on Thursday: 0 of 3 · Sat's C went to Week 3
+v48 P4 home › (d) what left home: no title/subtitle/pick copy, no Recent, no streak, no week arrows
+v48 P4 home › (e) after Save today: "Done ✓ · Workout A", no sage; a first elliptical ride + 1.4 km are its firsts
+v48 P4 home › (e) the next day the hero is back, pointing at the next workout
+v48 P4 home › (e2) swing Saturday: Up next is the workout last week is still missing
+v48 P4 home › (e2b) swing Saturday: home shows LAST week — Week 4 on top, its 8 days, A + C done, B left
+v48 P4 home › (e2c) after Saturday's B the Done card reports Week 4, not the new week
+v48 P4 home › (e3) once Saturday completes last week, Up next starts the new week at A
+v48 P4 home › (f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress
+v48 P4 home › (f) the week card opens from the keyboard too
+v48 P4 home › (h) the walk row: "4,210 steps today" only when Fit answered; one row, no paragraph
+v48 P4 home › (swing-plan a) Sat Sep 26 evening, Thu A + Fri C logged: B still trains on Week 4's plan (10-min ride) — the swing
+v48 P4 home › (swing-plan b → WK2) Sun Sep 27, now past the real launch: A opens on Week 5's plan (12-min ride), header plain
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › "‹ Week 4" peeks at the OLD model's last week (nothing has closed under the new one yet); "Week 5 ›" returns
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › "‹ Week 4" stays pinned to Week 4 even once "today" drifts past it (checker's must #2 repro)
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › Home on Week 5 day 3, one session (A) done: sub-line, count, Up next = B, one chip (C)
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › REAL parity (GATE 2, checker's should #6): her 14 real weeks are each exactly 3 of 3 under the LIVE attributeSessionsToWeeks
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › a closing save mid-week (Tue): "Week 5 done · 3 of 3 ✓" then "Week 6 opens" the next Sat/Sun
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › a closing save that lands ON a Sat/Sun: "Week 6 starts now", not a gap
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › a doneToday from BEFORE the launch reads the OLD model's line, not "0 of 3 in Week 5" (checker's nice #1)
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › during the gap, pre-log and post-log say the truth: this session is an extra for the CLOSED week, not the pending one
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › during the gap, the workout actually TRAINS the closed week's plan too, not just its label (checker's should #2)
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › once a NEW week has closed, "‹ Week 4" becomes "‹ Week 5" (the completion model's own, not the legacy fallback)
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › post-log line: "2 of 4 in Week 5" mid-workout, then the Done card after Save
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › post-log line: a REPEAT letter (B again) still reads "1 of 4", never overcounts to "2 of 4"
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › the pinned plan survives an app close — even once a background sync closes the week under it (§2.8 item 4)
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v58 fix pass (Sep 28 2026, checker's must): a REPEAT week (no new PROGRAM row yet) never says a move stepped
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v59 (R2-N2): the walk-outside feel chip waits for real elapsed time, not "Walking · 0 min"
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v59 (a) post-launch, a real (non-repeat) week: A/B logged, C not yet — stepped is still [ride 12 min]
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v59 (b) pinned crossing: a session started at the END of Week 5 (Fri) still asks about Week 5's own stepped move after resuming past the Week-6 boundary (Sun, C logged Sat)
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61 fix pass 2 (repro 1): a D logged before ANY A/B/C still counts toward the pending week, with its own dot
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61 fix pass 2 (repro 2): a D logged before the session that opens the week still counts (her real Sep 28 order, replayed at the Oct 3 boundary)
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61 fix pass 2 (repro 3): a D logged minutes after the closing session reads the CLOSED week — never "0 of 4 in Week 6"
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61 fix pass 2 (should): on the day the pending week opens, with nothing logged yet, the sub-line drops the stale "extra" clause
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61 fix pass 3: a D logged hours before a Saturday-closing C stays in the closing week, not the one the close opens
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61 fix pass 3: a gap D on the Saturday keeps its dot once the Sunday A opens the next week, and the Week 5 peek shows none
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.1 fix 2 (D then A on the same Saturday): the review's Week 6 page also reads 2 of 4, matching Home
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.1 fix 2 (gap + Sunday opening): the review and Home agree — Week 6 reads 2 of 4 with the Sat D line, Week 5 reads 3 of 4 with none
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.1 fix 2 (r1noD): a D on the pending week's own opening day, nothing else logged yet, reads Week 5's review at 3 of 4 with no D line
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.2: the Oct 3 week is a Sick skip and Oct 10-16 is R2 Week 6 — light, one 10-min ride, no strength
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › week strip: a repeat day gets a small "2" badge, and an 11-day short week folds its empty middle
+v48 P4 home › at phone size › (a) 39 sessions, last = C: one sage thing (the A hero), the whole hero in the fold, home < 1300 px
+v48 P4 home › at phone size › (g) Sat Sep 26 morning (Week 5 now encoded, no sessions yet): the header reads Week 5 clean, still one line
+v48 P4 home › at phone size › (g) the version tag is one line and carries the version + a time
+v48 P5 logs › (a) chip 7 then Start saves capacityBefore 7; untouched saves null
+v48 P5 logs › (a) the wrist + back line shows on A and not on C; What's in it is one closed row
+v48 P5 logs › (b) a body reading of 2 SUGGESTS Lite (outline) but never switches it on
+v48 P5 logs › (b) once Lite is on, the outline goes and the chip says how to undo it
+v48 P5 logs › (c) post-log on A after a held wall sit: the field is pre-filled with the real seconds
+v48 P5 logs › (c) post-log on C has no wall-sit field
+v48 P5 logs › (d) back: "Fine" saves 0
+v48 P5 logs › (d) back: "Something" opened but no number tapped saves null
+v48 P5 logs › (d) back: "Something" opens a blank 1-10 row; tapping feel 4 saves pain 6
+v48 P5 logs › (d) back: untouched saves null; "Fine" tapped twice is untouched again
+v48 P5 logs › (d2) back & wrist BEFORE: "Fine" saves both 0
+v48 P5 logs › (d2) back & wrist BEFORE: untouched saves null; "Fine" tapped twice is untouched again
+v48 P5 logs › (d2) back BEFORE: "Something" opens a blank 1-10 row; tapping feel 4 saves pain 6
+v48 P5 logs › (d2) wrist BEFORE: "Something" opens a blank 1-10 row; tapping feel 3 saves pain 7, back stays untouched
+v48 P5 logs › (e) "‹ Back to the stretches" returns to the cool-down list without saving
+v48 P5 logs › (f) LOAD CHIP: 2 kg + both sets done + no feel tap still saves the load ("curl=@2kg")
+v48 P5 logs › (f) LOAD CHIP: 2 kg on set 1, back to 1 kg for set 2 — the save still remembers the 2 kg
+v48 P5 logs › (f) LOAD CHIP: a feel-less past load ("curl=@2kg") still sets the default
+v48 P5 logs › (f) LOAD CHIP: defaults to last used, not always 1 kg
+v48 P5 logs › (f) LOAD CHIP: tap 2 kg on the row saves "@2kg"; the curl stays at its own default (1 kg)
+v48 P5 logs › (f) LOAD CHIP: the picked chip looks different from the other one
+v48 P5 logs › (f) arm feel: Right on the row and Easy on the curl save "curl=easy@1kg;row=right@1kg" (v55: default load)
+v48 P5 logs › (f) arm feel: no tap on either move saves null; no chips (feel or load) on other moves
+v48 P5 logs › (f) the pace-rule caption shows once on the curl step, then never again
+v48 P5 logs › (f) v55 fix r3: the how-to still SVG drops the fixed "1 kg" caption too
+v48 P5 logs › (f) v55: no "Ask Lisa" card exists any more, no matter how many easy sessions in a row
+v48 P5 logs › (f) v55: reps text says "1–2 kg (your pick)", never a fixed 1 kg, for both loaded moves
+v48 P5 logs › at phone size › (a) pre-log: blank chips, one quiet line, Start in the fold on A, B and C with Lite on and off
+v48 P5 logs › at phone size › (d2) pre-log Start stays visible without scrolling on every workout
+v48 P5 logs › at phone size › (e) one note box: no #word, the note saves verbatim, Save stays in view while typing
+v48 P5 logs › v58 (a) which moves ask: Workout A has real stepped moves this week, unchanged Workout C has none
+v48 P5 logs › v58 (b) the pre-log "Stepped this week" line names the real moves, with their real qty
+v48 P5 logs › v58 (c) the chip waits for the LAST round, then a tap saves the right slug — no qty on a reps-only move
+v48 P5 logs › v58 (d) a hold step (Wall sit, 40s -> 45s) never shows the chip before the hold has actually run
+v48 P5 logs › v58 (e) push -> pull round trip: move_feel survives sessionPayload + mergeRemoteSessions untouched
+v48 P5 logs › v58 (f) a tapped feel survives an app close mid-session (the resume snapshot)
+v48 P6 mirror › (a) live week: no "vs previous week", one quiet "Week still open."; ‹ to last week compares with units
+v48 P6 mirror › (b) a held (break) week: "Held the slot — doesn't count.", no "of 3"
+v48 P6 mirror › (c) back pain 2 is plain; 3 (her stop line) is amber
+v48 P6 mirror › (d) a session opened from the review: × Back lands on the review, on the same week
+v48 P6 mirror › (e) Session: B has no Wall sit row; a ride shows one Cardio row from columns or the old marker; Note = her words only
+v48 P6 mirror › (e2) T2: one time formatter — the once-only Sessions note, "about N min" only on a confirmed row, never the app tap-time
+v48 P6 mirror › (f) Progress: Start → Now first, no breakdown; A/B/C chips; latest by date; held weeks "—"; Round 1 folded; v51 "Your cycle" card present (no data yet)
+v48 P6 mirror › (g) Settings: no auto-suggest, Gear chips + Neck release, Data folded, honest captions, 44 px steppers
+v48 P6 mirror › at phone size › (e) Sessions: header × Back, no bottom slab, "Sat …" rows; Back from a Session keeps the scroll
+v48 P7 cool-down › (a) A has 11 rows, the chip reads "Stretch · 11", pairs read "~45 s each side"
+v48 P7 cool-down › (b) one honest line: "no timer" in the subtitle, no "45 sec" anywhere on the list
+v48 P7 cool-down › (c) no per-stretch tick: the rows are read-only, no [data-stretch-tick] anywhere
+v48 P7 cool-down › (d) a placeholder cue has no ▸; a real cue opens behind ▸, closed by default
+v48 P7 cool-down › (f) a lite day keeps its own subtitle
+v48 P7 cool-down › (g) Done stretching ✓ lands on the post-log; nothing about the stretches is saved
+v48 P7 cool-down › (h) Skip lands on the post-log too — same handler as Done stretching ✓
+v48 P7 cool-down › at phone size › (e) the whole list fits: Done stretching ✓ pinned in view, page ≤ 1400 px, one sage, a quiet Skip
+v48 P8 sweep › (a) no "streak", "Do a workout", "app.ts", "localStorage" or "oEmbed" on any screen
+v48 P8 sweep › (b) label tier (timer label, session meta, review tile label) >= 4.5:1 on its card
+v48 P8 sweep › (d) the version: home "<version> · <date, no year>", Settings "Build <version> · <full date>"
+v48 P8 sweep › at phone size › (c) every Workout A screen has at most one sage primary
+v48 P8 sweep › at phone size › (e) every tap target on home, Settings and each Workout A step is >= 44 px tall
+v49 · look fix: .timer-display renders tabular digits — "1:11" and "0:00" measure the same width
+v49 · look: the retired glass/gradient tokens still resolve, to flat/no-op values
+v49 · look: today's-pick card is a flat hair-strong card, no gradient or glow
+v51 ride numbers screen › Done · Next opens the numbers screen straight from the plain ride card (no app timer any more)
+v51 ride numbers screen › Skip — no numbers today advances with every reading left null
+v51 ride numbers screen › at 412×915, Save · Next and all 5 fields sit above the pinned bar with no page scroll
+v51 ride numbers screen › reload on the numbers screen restores it, values kept
+v51 ride numbers screen › the step count ("N of M") is unchanged by opening the numbers screen
+v51 ride numbers screen › walk lane: Done · Next still advances directly — no numbers screen
+v51 ride numbers screen › ‹ Back returns to the plain ride card with her values kept, and Done · Next reopens the screen holding them
+v51: a before-reading of back ≥3 STEP_BACKs even when the after-reading was Fine
+v53 · edit a past session (A5) › (a) open → edit → save: the detail shows the new numbers, only the ride fields + note change
+v53 · edit a past session (A5) › (b) × Back on the edit screen discards the draft — nothing saved
+v53 · edit a past session (A5) › (c) an edit made offline queues (synced:false, pendingEdit:true), survives an app close, and reconnecting never corrupts or drops it
+v53 · edit a past session (A5) › (d) the Done card on Home opens today's session — same Edit door as Sessions
+v53 · edit a past session (A5) › (e) a pull mid-flush never marks a pendingEdit row synced off the server’s still-stale copy
+v53 · edit a past session (A5) › (f) the PATCH body — CHECK M3: only the 6 ride/note columns, never date, workout_type or anything else on the row
+v53 · edit a past session (A5) › (g) CHECK M2 — a PATCH matching 0 rows never reads as success
+v53 · edit a past session (A5) › (h) CHECK M2 — editing a session that never reached Supabase keeps it a normal queued row (POST path), not pendingEdit (PATCH path)
+v53 · edit a past session (A5) › (i) CHECK M2 — a still-queued edit shows "Not saved online yet — will retry" on the session screen
+v53: timer as a pip + Back while it runs › at phone size › running pip: no horizontal scroll, and it never sits over Done · Next
+v53: timer as a pip + Back while it runs › hold: Back is visible while a hold is running, stops the timer, and keeps the real seconds
+v53: timer as a pip + Back while it runs › pip: shows the running countdown and a shrinking progress ring
+v53: timer as a pip + Back while it runs › ride: Back from step 1 (this week opens A/B/C on the ride) goes to the pre-log, keeps her answer
+v53: timer as a pip + Back while it runs › ride: Back is visible on the plain ride card (no timer to stop any more)
+v53: timer as a pip + Back while it runs › tap the pip → Cancel closes the sheet without touching the timer
+v53: timer as a pip + Back while it runs › tap the pip → Pause/Stop sheet → Stop keeps the real seconds
+v55 fix r2: the engine decides identically for easy@1kg and easy@2kg (load recorded, not read)
+v55 · fix r1: armFeelPart reads "curl=easy@2kg" — feel AND load, per key, not a loose match
+v55 · fix r1: rowcurl.r4/r5 (the 2 kg rungs) are no longer kind LISA
+v57 fix pass: legacy Week 4 (Sep 28 2026) › rides logged before the completion launch (her real Week 4) show as a legacy row, not dropped
+v60: wall lean multi-set hold — Set 1 ✓, Start set 2, both sets done turns Next sage, Redo keeps the max
+v61.1 fix 3: "This week" and "Week by week" agree on the same D › r2: C closes Week 5 on Friday, D lands Saturday before the A that opens Week 6 — "This week" and "Week 6 · so far" read the same ride count
+video-only exercise still shows a picture, with the video one tap away
+voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
+voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"
+voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "Prone row (bodyweight)"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"
+walk credit: start/stop timer logs a walk, bumps week count, streak untouched
+walk distance (GPS granted) › v48 · P3: a walk is minutes only — GPS movement shows no km and saves no meters
+walk step: shows no form card — Start walk is the whole interface
+walk: Cancel discards an opened walk without logging it
+week by week (v57) › "This week vs last week": the same 7 numbers side by side, plain Δ, never a verdict word
+week by week (v57) › S1: the per-week chart runs oldest to newest, left to right, same as the per-ride chart
+week by week (v57) › S2: every bar in per-week mode shows its own minutes, not just the open one
+week by week (v57) › S3: the vs-card header carries short column labels; full week names sit on their own line
+week by week (v57) › a week with 0 rides shows a plain "—", nothing hidden
+week by week (v57) › re-opening the page resets the chart toggle to "Per ride"
+week by week (v57) › the chart's "per ride · per week" toggle
+week by week (v57) › the table: last weeks newest first, real numbers, the open week marked "so far"
+week by week (v57) › v58: ridesVsDelta — "0" not "+0" on a real tie, at each metric's own precision
+week by week (v57) › v58: tapping a per-week bar shows that week's own one-line readout
+week by week (v57) › v58: the Km Δ keeps its own 2-decimal precision (Week 6 1 km vs Week 5 3.28 km)
+week-dots row is rendered with 7 day labels
+weekCountLine › 0 done, D only: "1 of 4 · A, B and C to go" — her exact repro 1 text (CHECK-v61.md round 2)
+weekCountLine › 0 done, no D: "0 of 4 · A, B and C to go"
+weekCountLine › a CLOSED week, no D: "complete · 3 of 4" (the peek's own line)
+weekCountLine › a CLOSED week, with D: "4 of 4 ✓"
+weekCountLine › one A/B/C done, no D: "... left", not "... to go"
+weekHasD / weekTargetForD — the calendar-window fix (CHECK-v61.md round 2 must #1) › a D logged well into the gap (before the pending week even opens) counts back to the last closed week — week.ts's own gap promise, rule 3
+weekHasD / weekTargetForD — the calendar-window fix (CHECK-v61.md round 2 must #1) › a stale span key (no such week in the model) never has D — fails honest, not guessed
+weekHasD / weekTargetForD — the calendar-window fix (CHECK-v61.md round 2 must #1) › repro 1: a D logged before ANY A/B/C still counts toward the pending week it falls in
+weekHasD / weekTargetForD — the calendar-window fix (CHECK-v61.md round 2 must #1) › repro 2: a D logged BEFORE the session that actually opens the week (her real Sep 28 order, replayed at the Oct 3 boundary) still counts
+weekHasD / weekTargetForD — the calendar-window fix (CHECK-v61.md round 2 must #1) › repro 3: a D logged minutes AFTER the closing session still belongs to the week that just closed, not the pending one
+weekHasD / weekTargetForD — the calendar-window fix (CHECK-v61.md round 2 must #1) › weekTargetForD on an empty model (no spans, no open, no pending) returns null
+weekHasD / weekTargetForD — the calendar-window fix (CHECK-v61.md round 2 must #1) › weekWindowStart never lands LATER than the ISO instant it is given
+weekHasD on a Sat/Sun close — the anchor-floor-vs-still-open window fix (CHECK-v61.md round 3 must #1) › Sat close: a D logged hours BEFORE the closing C still belongs to the week that was open all morning, not the week the C opens right after it
+weekHasD on a Sat/Sun close — the anchor-floor-vs-still-open window fix (CHECK-v61.md round 3 must #1) › Sun close: a D logged the Saturday BEFORE a Sunday-closing C still belongs to the closing week, not the one it opens
+weekHasD on a Sat/Sun close — the anchor-floor-vs-still-open window fix (CHECK-v61.md round 3 must #1) › gap + a Sunday opening: a D logged the pending Saturday stays counted once the Sunday A actually opens the week
+weekRideAggregate: the week-level rate (sum first, divide once) › a "no numbers" ride counts toward rides but not the rate averages
+weekRideAggregate: the week-level rate (sum first, divide once) › empty week -> zero totals, null averages, never a crash
+weekRideAggregate: the week-level rate (sum first, divide once) › her real Week 4 (Sep 24 A / Sep 25 C / Sep 26 B) — verified by hand
+weekRideAggregate: the week-level rate (sum first, divide once) › level averages independently of kcal/time (km/h-only or kcal-only rides)
+weekly total (v34, rebased on confirmed timing T2 fix r1): a week with an unconfirmed session says how many it counted
+weeklyRideRows: the D fallback shares week-d.ts's own window, not a second one › "r1noD" shape — C closes the week, D lands mid-gap before any A/B/C reopens it: the D is in NO closed row (it belongs to the pending week, which has no row yet)
+weeklyRideRows: the D fallback shares week-d.ts's own window, not a second one › a D logged BEFORE the session that opens a new week still lands in the OPEN week's row, never the one that just closed
+weeklyRideRows: the table — last N weeks, newest first, "so far" › a D ride (never in weekOf) is bucketed by date into the open week
+weeklyRideRows: the table — last N weeks, newest first, "so far" › a D ride landing in a weekday gap (no open week) counts back to the closed week
+weeklyRideRows: the table — last N weeks, newest first, "so far" › her real Week 4 as a closed span + an empty open Week 5, D-ride-free
+weeklyRideRows: the table — last N weeks, newest first, "so far" › no spans and no open week -> an empty table, never a crash
+weeklyRideRows: the table — last N weeks, newest first, "so far" › only the last N weeks are returned, newest first
+withOverrideFeel › adds the slug fresh when there is no base string
+withOverrideFeel › appends alongside an existing (different) stepped-move feel
+withOverrideFeel › null qty round-trips through parseMoveFeelString and isValidMoveFeelString
+withOverrideFeel › null qty saves the feel with no "@qty" suffix at all — no typed time, nothing to scale by
+withOverrideFeel › null qty still replaces its own prior (qty-bearing) segment cleanly
+withOverrideFeel › replaces its own prior segment rather than duplicating it
+withOverrideFeel › replacing keeps every OTHER segment untouched
+withOverrideFeel › round-trips through parseMoveFeelString and isValidMoveFeelString
+workout B reaches the upper-back phase after main (wall angels, unloaded)
+workout C has no upper-back phase in its overview
+wrist at 3 → STEP_BACK reverting an UPPER change, no ask-Lisa line (that is the back-only line)
+wrist climbing 2 weeks running → HOLD

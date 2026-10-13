@@ -9931,7 +9931,7 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v61.2 · <date, no year>", Settings "Build v61.2 · <full date>"', async ({
+  test('(d) the version: home "<version> · <date, no year>", Settings "Build <version> · <full date>"', async ({
     page,
   }) => {
     // code-shape R1b (Sep 27 2026): APP_VERSION/BUILD_DATE are no longer
@@ -9960,7 +9960,7 @@ test.describe('v48 P8 sweep', () => {
     // D on the closing Sat/Sun stays in its own week, one window for both
     // the count and the dots.
     // v61.2 (Oct 13 2026): R2 Week 6 — the light restart after being sick.
-    expect(version).toBe('v61.2');
+    expect(version).toMatch(/^v\d+(\.\d+)*$/);
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
       `${version} · ${built.replace(/,\s*\d{4}/, '')}`

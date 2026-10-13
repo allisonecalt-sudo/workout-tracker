@@ -180,12 +180,15 @@ async function walkWorkoutA(page: Page, stopSelectors: string[]): Promise<void> 
 //   changes it even with zero source changes, so the version tag ("v54 ·
 //   Sep 27 · 23:02" on Home, "Build v54 · Sep 27, 2026 · 22:04." on
 //   Settings) would otherwise fail every re-build. Only the DATE/TIME half
-//   is stubbed; the version number itself stays real and checkable.
+//   is stubbed here. Step 0 (Oct 13 2026): the version that precedes the date
+//   is stubbed too (GOLDEN-STUB-VERSION), so a version bump changes no golden;
+//   the real version stays checked by app.spec.ts's version test.
 function normalize(html: string): string {
   return html
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'GOLDEN-STUB-UUID')
     .replace(/local-\d+-[a-z0-9]{8}/gi, 'GOLDEN-STUB-LOCAL-ID')
     .replace(/[A-Z][a-z]{2} \d{1,2}(?:,\s*\d{4})? · \d{2}:\d{2}/g, 'GOLDEN-STUB-BUILD-DATE')
+    .replace(/v\d+(?:\.\d+)*(?= · GOLDEN-STUB-BUILD-DATE)/g, 'GOLDEN-STUB-VERSION')
     .replace(/>\s+</g, '><')
     .replace(/[ \t\r\n]+/g, ' ')
     .trim();
