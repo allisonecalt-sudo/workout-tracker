@@ -281,6 +281,7 @@ honest readings — the pre-v48 untouched-5 exclusion › null stays null either
 import graph — no cycles, nothing imports the entry (step 4c) › no import cycle among the app modules
 import graph — no cycles, nothing imports the entry (step 4c) › no module other than the entry imports app.ts
 import graph — no cycles, nothing imports the entry (step 4c) › program-week.ts is pure and imports only week, week-d, program, types and dates
+import graph — no cycles, nothing imports the entry (step 4c) › state.ts and bus.ts are in the graph and import neither app.ts nor each other (step 7)
 import graph — no cycles, nothing imports the entry (step 4c) › the graph was actually read: app.ts reaches program-week.ts, types.ts and week.ts
 import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: it finds a 2-cycle, a 3-cycle through a type-only edge, and passes a clean graph
 import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: the import reader sees .js, .ts, extensionless, side-effect, export-from, dynamic and double-quoted imports, and skips comments and packages

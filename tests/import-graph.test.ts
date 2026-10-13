@@ -129,6 +129,15 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
     expect(importers).toEqual([]);
   });
 
+  test('state.ts and bus.ts are in the graph and import neither app.ts nor each other (step 7)', () => {
+    expect([...graph.keys()]).toEqual(expect.arrayContaining(['state.ts', 'bus.ts']));
+    expect(graph.get('app.ts')).toEqual(expect.arrayContaining(['state.ts', 'bus.ts']));
+    // bus.ts imports nothing; state.ts only the pure data modules its types come from
+    expect(graph.get('bus.ts')).toEqual([]);
+    const allowed = ['move-feel.ts', 'program.ts', 'types.ts', 'week.ts'];
+    expect((graph.get('state.ts') ?? []).filter((d) => !allowed.includes(d))).toEqual([]);
+  });
+
   test('program-week.ts is pure and imports only week, week-d, program, types and dates', () => {
     const allowed = ['dates.ts', 'program.ts', 'types.ts', 'week-d.ts', 'week.ts'];
     const deps = graph.get('program-week.ts') ?? [];

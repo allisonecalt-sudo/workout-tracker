@@ -39,9 +39,10 @@ ride=right@12min"`. `slug=feel@qty`, `;`-joined; slug is `move-feel.ts`'s
   `moveFeelString` (move-feel.ts), CHECK in
   `migrations/2026-09-28-v58-move-feel.sql`.
 
-## File map (code-shape step 5, Oct 13 2026 — the split is in progress)
+## File map (code-shape step 7, Oct 14 2026 — the split is in progress)
 
-- `app.ts` — still the big one (~13.6k lines): every screen's render + handlers + state + sync. It is the ONLY entry: **only `app.ts` imports `app.ts`, and no import cycles** (enforced by `tests/import-graph.test.ts`). The screen split (state/sync/screens/\*) is steps 7+.
+- `app.ts` — still the big one (~13.1k lines): every screen's render + handlers + state + sync. It is the ONLY entry: **only `app.ts` imports `app.ts`, and no import cycles** (enforced by `tests/import-graph.test.ts`). The screen split (sync/screens/\*) is steps 8+.
+- `state.ts` — the `state` object, the AppState/ActiveSessionSnapshot types, EVERY localStorage key constant (add a new key here), the settings getters/setters (`getSetting`/`setSetting`), `loadLogs`/`writeLogs`, `loadWeekMoves`/`writeWeekMoves` + `isValidLogEntry`. `bus.ts` — `setRenderer`/`requestRender`: a screen outside `app.ts` asks for a redraw through it (app.ts registers `render` at boot). Neither imports `app.ts`. ESLint warns (`max-lines`, 800) on new files only: `state.ts`, `bus.ts`, `screens/**`.
 - `program.ts` — the PROGRAM rows + the week-plan lookup. `program-week.ts` — the week clock glue (completion model, sick weeks, plan row per week key); pure, takes `logs`/`moves` as parameters, app.ts keeps thin same-named wrappers. `types.ts` — `LogEntry`, `StoredWeekMove` and friends. `dates.ts` — date/label helpers.
 - `week-d.ts` (the optional D day), `hold-sets.ts`, `ride-aim.ts` — small pure modules, imported by `app.ts` and/or `program-week.ts`.
 - `exercise-visuals.ts` / `exercise-howto.ts` / `exercise-detail.ts` — exercise content data.
