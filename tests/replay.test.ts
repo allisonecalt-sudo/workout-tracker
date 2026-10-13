@@ -111,6 +111,37 @@ test.describe('week-clock replay — synthetic golden (step 5a)', () => {
   });
 });
 
+// v62.1 (Oct 14 2026): a ROUNDS entry dated in the FUTURE changes nothing until its
+// date. Round 3 is put on ROUNDS from Oct 1 (long before its Nov 28 start) and every
+// instant before Nov 28 must equal the run with no Round 3 at all.
+test.describe('week-clock replay — a future round takes effect on its date (v62.1)', () => {
+  const from = REPLAY_FROM;
+  const to = addDays(TODAY, 60);
+  const none = computeReplay({ ...input, rounds: [] }, from, to);
+  const early = computeReplay(
+    { ...input, rounds: [{ num: 3, start: '2026-11-28', addedAt: '2026-10-01T00:00:00' }] },
+    from,
+    to
+  );
+  const before = (r: typeof none): (typeof none)['snapshots'] =>
+    r.snapshots.filter((s) => String(s['t']) < '2026-11-28T00:00');
+
+  test('every instant before the round start is identical to a run without the round', () => {
+    expect(before(early).length).toBeGreaterThan(150);
+    const a = { ...none, snapshots: before(none) };
+    const b = { ...early, snapshots: before(early) };
+    expect(compareReplays(a, b).diffs.slice(0, 10)).toEqual([]);
+  });
+
+  test('from its own date it is Round 3 Week 1, whenever it was added', () => {
+    const at = (r: typeof none, t: string): Record<string, any> =>
+      // eslint-disable-line @typescript-eslint/no-explicit-any
+      r.snapshots.find((s) => s['t'] === t) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(at(early, '2026-11-27T21:00')['week'].shown).toBe('R2W10');
+    expect(at(early, '2026-11-28T09:00')['week'].shown).toBe('R3W1');
+  });
+});
+
 // Step 5f (Oct 13 2026): the real-data replay writes her actual session ids and
 // dates, so it must refuse to put them inside ANY git checkout - not only this
 // repo. The refusal happens before any network read, so this needs no secrets.

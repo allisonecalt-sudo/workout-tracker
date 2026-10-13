@@ -467,7 +467,9 @@ test.describe('#9 — a Round start closes whatever was open and begins Week 1',
       { id: 'G1', date: '2026-10-06T10:00:00+03:00', workout: 'B' }, // after the restart
     ];
     const rounds: RoundStart[] = [{ round: 3, at: '2026-10-05T09:00:00+03:00' }]; // a Monday — no anchor needed
-    const { spans, open } = walkWeeks(sessions, [], rounds);
+    // v62.1: explicit `now` after the start (a future start is not applied yet)
+    const now = new Date('2026-10-07T12:00:00+03:00');
+    const { spans, open } = walkWeeks(sessions, [], rounds, COMPLETION_WEEKS_FROM, [], now);
 
     expect(spans).toHaveLength(1);
     const wk5 = spans[0] as WeekSpan;
@@ -572,7 +574,10 @@ test.describe('#13 — invariant: a span never opens on a weekday, except the la
     ];
     const rounds: RoundStart[] = [{ round: 3, at: '2026-11-02T09:00:00+03:00' }]; // Monday — her own restart
 
-    const { spans, open } = walkWeeks(sessions, [], rounds);
+    // v62.1: `now` is explicit and AFTER the round start - a round start still in
+    // the future no longer moves the clock, and the real wall clock must not decide.
+    const now = new Date('2026-11-03T12:00:00+02:00');
+    const { spans, open } = walkWeeks(sessions, [], rounds, COMPLETION_WEEKS_FROM, [], now);
 
     expect(spans).toHaveLength(3);
     const [wk5, wk6, wk7] = spans as [WeekSpan, WeekSpan, WeekSpan];
@@ -1238,5 +1243,43 @@ test.describe('#16 — sick pause hardening (step 5f)', () => {
     );
     expect(open!.key).toEqual({ round: 2, week: 6 });
     expect(pending).toBeNull();
+  });
+});
+
+// v62.1 (Oct 14 2026) — a ROUNDS entry dated in the FUTURE must not move the
+// clock until its date. walkWeeks used to apply every RoundStart after the
+// launch whatever `now` was, so adding Round 3 to ROUNDS a week early would
+// have jumped the Home screen to "Round 3 Week 1" at once.
+test.describe('v62.1 — a future round start takes effect on its date, not at once', () => {
+  const R3: RoundStart[] = [{ round: 3, at: '2026-11-28T00:00:00+02:00' }];
+
+  test('before its date: the walk is exactly as if the round did not exist', () => {
+    const now = new Date('2026-11-01T12:00:00+02:00');
+    const without = walkWeeks([], [], [], COMPLETION_WEEKS_FROM, [], now);
+    const withR3 = walkWeeks([], [], R3, COMPLETION_WEEKS_FROM, [], now);
+    expect(withR3.open?.key).toEqual(without.open?.key);
+    expect(withR3.open?.key).toEqual({ round: 2, week: 5 });
+    expect(withR3.spans).toEqual(without.spans);
+  });
+
+  test('on its date (the instant itself): Round 3 Week 1 opens and Round 2 closes as round_ended', () => {
+    const now = new Date('2026-11-28T00:00:00+02:00');
+    const { open, spans } = walkWeeks([], [], R3, COMPLETION_WEEKS_FROM, [], now);
+    expect(open?.key).toEqual({ round: 3, week: 1 });
+    expect(spans.at(-1)?.how).toBe('round_ended');
+  });
+
+  test('one minute before its instant it is still not applied', () => {
+    const now = new Date('2026-11-27T23:59:00+02:00');
+    const { open } = walkWeeks([], [], R3, COMPLETION_WEEKS_FROM, [], now);
+    expect(open?.key).toEqual({ round: 2, week: 5 });
+  });
+
+  test('a session logged before the round date still counts in Round 2 once the date has passed', () => {
+    const s: SessionLite[] = [{ id: 'x1', date: '2026-11-20T10:00:00+02:00', workout: 'A' }];
+    const now = new Date('2026-12-01T12:00:00+02:00');
+    const { weekOf, open } = walkWeeks(s, [], R3, COMPLETION_WEEKS_FROM, [], now);
+    expect(weekOf.get('x1')).toEqual({ round: 2, week: 5 });
+    expect(open?.key).toEqual({ round: 3, week: 1 });
   });
 });

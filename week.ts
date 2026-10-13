@@ -363,7 +363,16 @@ export function walkWeeks(
 } {
   const sessions = sessionsIn.filter((s) => afterLaunch(s.date, launch.at));
   const moves = movesIn.filter((m) => afterLaunch(m.at, launch.at));
-  const rounds = roundsIn.filter((r) => afterLaunch(r.at, launch.at));
+  // v62.1 (Oct 14 2026): a round start dated AFTER `now` has not happened yet - it
+  // must not move the clock. (Before, every start past the launch was applied
+  // whatever `now` was, so a Round 3 added to ROUNDS early would have jumped
+  // Home to "Round 3 Week 1" at once.) A start takes effect at its own instant.
+  // An Invalid `now` (never a real clock) keeps the plain "apply all" walk.
+  const nowMs = now.getTime();
+  const rounds = roundsIn.filter(
+    (r) =>
+      afterLaunch(r.at, launch.at) && (Number.isNaN(nowMs) || new Date(r.at).getTime() <= nowMs)
+  );
   // v61.2 (Oct 13 2026) — a Sick week PAUSES the completion clock. Step 5b
   // (Oct 13 2026): the sick Saturdays are merged BEFORE the walk into closed
   // [start, end) intervals (sorted, de-duplicated, back-to-back weeks joined),

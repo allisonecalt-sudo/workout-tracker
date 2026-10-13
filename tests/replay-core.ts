@@ -54,9 +54,10 @@ export type ReplayInput = {
   /** Hypothetical extra rounds (e.g. a Round 3), put on ROUNDS only while a
    *  snapshot is computed, and only from `addedAt` (default: the round's own
    *  start) - i.e. the code "gained" the round when it began, as a real Round 3
-   *  would be added to program.ts. (A round put on ROUNDS BEFORE its start date
-   *  makes the walk jump to it at once: week.ts applies a RoundStart event
-   *  whatever "now" is. The replay would show that, so it does not model it.)
+   *  would be added to program.ts. Since v62.1 a round put on ROUNDS BEFORE its
+   *  start date takes effect on its date, not at once (week.ts applies a
+   *  RoundStart only when its instant <= now), so an earlier `addedAt` is safe
+   *  and tests/replay.test.ts proves it. The golden fixture keeps the default.
    *  Synthetic fixtures only; absent = the real ROUNDS. */
   rounds?: { num: number; start: string; addedAt?: string }[];
 };
