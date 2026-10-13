@@ -85,7 +85,7 @@ test('pain rule: no shown or spoken exercise string uses the old alarm-toned "st
   // `notes:` string literal from source text, same regex tests/screens/program-weeks.spec.ts's
   // "Tips audit" test already proved out.
   const noteRe = /notes:\s*\n?\s*(['"])((?:\\.|(?!\1).)*)\1/g;
-  for (const file of ['app.ts', 'ladders.ts']) {
+  for (const file of ['app.ts', 'program.ts', 'ladders.ts']) {
     const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
     let m: RegExpExecArray | null;
     while ((m = noteRe.exec(src))) {
@@ -97,32 +97,42 @@ test('pain rule: no shown or spoken exercise string uses the old alarm-toned "st
   // app.ts's SAFETY_LINE map — 'Exercise name': 'the card face line', not
   // shaped like `notes:` so it needs its own small extraction.
   const appSrc = fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
-  const safetyBlock = /const SAFETY_LINE: Record<string, string> = \{([\s\S]*?)\n\};/.exec(appSrc);
+  // Step 2 (Oct 13 2026): SAFETY_LINE + EXERCISE_GUIDE moved to program.ts.
+  const programSrc = fs.readFileSync(path.join(__dirname, '..', 'program.ts'), 'utf8');
+  const safetyBlock = /const SAFETY_LINE: Record<string, string> = \{([\s\S]*?)\n\};/.exec(
+    programSrc
+  );
   if (safetyBlock) {
     const lineRe = /'([^']+)':\s*\n?\s*'((?:\\.|[^'])*)'/g;
     let sm: RegExpExecArray | null;
     while ((sm = lineRe.exec(safetyBlock[1]!))) {
-      offenders.push(...violations(`app.ts SAFETY_LINE["${sm[1]}"]`, sm[2]));
+      offenders.push(...violations(`program.ts SAFETY_LINE["${sm[1]}"]`, sm[2]));
     }
   } else {
-    offenders.push("app.ts — SAFETY_LINE block not found by this test's own regex — fix the test");
+    offenders.push(
+      "program.ts — SAFETY_LINE block not found by this test's own regex — fix the test"
+    );
   }
 
   // app.ts's EXERCISE_GUIDE map — 'Exercise name': { howTo: '...' }, same
   // shape as SAFETY_LINE's own extraction (checker's must, exercise item
   // "Bird dog (legs only)" howTo).
   const guideBlock =
-    /const EXERCISE_GUIDE: Record<string, \{ howTo: string \}> = \{([\s\S]*?)\n\};/.exec(appSrc);
+    /const EXERCISE_GUIDE: Record<string, \{ howTo: string \}> = \{([\s\S]*?)\n\};/.exec(
+      programSrc
+    );
   if (guideBlock) {
     const howToRe = /howTo:\s*\n?\s*(['"])((?:\\.|(?!\1).)*)\1/g;
     let hm: RegExpExecArray | null;
     while ((hm = howToRe.exec(guideBlock[1]!))) {
-      const line = appSrc.slice(0, appSrc.indexOf(guideBlock[1]!) + hm.index).split(/\r?\n/).length;
-      offenders.push(...violations(`app.ts:${line} EXERCISE_GUIDE.howTo`, hm[2]));
+      const line = programSrc
+        .slice(0, programSrc.indexOf(guideBlock[1]!) + hm.index)
+        .split(/\r?\n/).length;
+      offenders.push(...violations(`program.ts:${line} EXERCISE_GUIDE.howTo`, hm[2]));
     }
   } else {
     offenders.push(
-      "app.ts — EXERCISE_GUIDE block not found by this test's own regex — fix the test"
+      "program.ts — EXERCISE_GUIDE block not found by this test's own regex — fix the test"
     );
   }
 

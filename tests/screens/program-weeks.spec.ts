@@ -545,7 +545,8 @@ test('R2 W2: every exercise name in the week has a detail card or a how-to guide
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
   const root = path.join(__dirname, '..');
-  const appSrc = fs.readFileSync(path.join(root, 'app.ts'), 'utf8');
+  // Step 2 (Oct 13 2026): the PROGRAM region lives in program.ts now.
+  const appSrc = fs.readFileSync(path.join(root, 'program.ts'), 'utf8');
   const detailSrc = fs.readFileSync(path.join(root, 'exercise-detail.ts'), 'utf8');
 
   const weekStart = appSrc.indexOf('// --- ROUND 2 · WEEK 2');

@@ -71,7 +71,11 @@ test('voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its ow
   // char window, which a first pass got wrong: a too-tight window missed
   // that object's own "1–2 kg" reps text and flagged its voiceScript as a
   // false positive).
-  const appSrc = fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
+  // Step 2 (Oct 13 2026): the PROGRAM lives in program.ts now; app.ts keeps a
+  // few Exercise literals of its own (e.g. the ride step), so scan both.
+  const appSrc =
+    fs.readFileSync(path.join(__dirname, '..', 'program.ts'), 'utf8') +
+    fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
   const nameRepsRe =
     /name:\s*'((?:\\.|[^'])*)',(?:(?!name:\s*')[\s\S])*?reps:\s*'((?:\\.|[^'])*)'/g;
   const repsByName = new Map<string, string[]>();
