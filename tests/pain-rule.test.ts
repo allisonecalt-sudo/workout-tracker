@@ -27,8 +27,7 @@
 // that shape either.
 
 import { test, expect } from '@playwright/test';
-import * as fs from 'fs';
-import * as path from 'path';
+import { appSourceFiles } from './helpers';
 import { EXERCISE_DETAIL } from '../exercise-detail';
 import { EXERCISE_HOWTO } from '../exercise-howto';
 
@@ -85,8 +84,7 @@ test('pain rule: no shown or spoken exercise string uses the old alarm-toned "st
   // `notes:` string literal from source text, same regex tests/screens/program-weeks.spec.ts's
   // "Tips audit" test already proved out.
   const noteRe = /notes:\s*\n?\s*(['"])((?:\\.|(?!\1).)*)\1/g;
-  for (const file of ['app.ts', 'program.ts', 'ladders.ts']) {
-    const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+  for (const { file, src } of appSourceFiles()) {
     let m: RegExpExecArray | null;
     while ((m = noteRe.exec(src))) {
       const line = src.slice(0, m.index).split(/\r?\n/).length;
@@ -96,9 +94,13 @@ test('pain rule: no shown or spoken exercise string uses the old alarm-toned "st
 
   // app.ts's SAFETY_LINE map — 'Exercise name': 'the card face line', not
   // shaped like `notes:` so it needs its own small extraction.
-  const appSrc = fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
-  // Step 2 (Oct 13 2026): SAFETY_LINE + EXERCISE_GUIDE moved to program.ts.
-  const programSrc = fs.readFileSync(path.join(__dirname, '..', 'program.ts'), 'utf8');
+  // Found by content across every app module, not by file name (step 2c): the
+  // two maps live in program.ts today, the pre-log <p> in app.ts.
+  const allSrc = appSourceFiles()
+    .map((f) => f.src)
+    .join('\n');
+  const appSrc = allSrc;
+  const programSrc = allSrc;
   const safetyBlock = /const SAFETY_LINE: Record<string, string> = \{([\s\S]*?)\n\};/.exec(
     programSrc
   );

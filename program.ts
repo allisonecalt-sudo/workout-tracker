@@ -2353,6 +2353,10 @@ PROGRAM.push({
 // `date` defaults to `planDateNow()` (Sep 26 2026, the swing fix — see that
 // function, next to `homeWeekOffset()` below) so tests can mock the system
 // clock and still get deterministic answers.
+//
+// Note (step 2, Oct 13 2026): the paragraph above is the original wording. In
+// THIS file `date` is a required parameter (program.ts never imports app.ts);
+// the `planDateNow()` default now lives in app.ts's same-named thin wrappers.
 
 export function programWeekPlan(date: Date): WeekPlan {
   // Pick the highest-weekNum plan whose startsOn is on or before `date`. If

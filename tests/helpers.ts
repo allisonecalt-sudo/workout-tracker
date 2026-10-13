@@ -268,3 +268,24 @@ export async function advanceToExercise(
   }
   throw new Error(`advanceToExercise: did not reach "${name}" within ${maxSteps} steps`);
 }
+
+// code-shape step 2c (Oct 13 2026): EVERY test that scans app SOURCE text
+// reads it through this, never from a hand-written file list. The Tips audit
+// once looped over ['app.ts','ladders.ts'] and, after step 2 moved the program
+// into program.ts, quietly went from 143 notes checked to 7 — green while
+// checking almost nothing. Derived, not listed: every root-level *.ts module
+// (the app's source lives flat at the repo root) except the Playwright config.
+// A new module is therefore scanned the day it is created.
+// Node-side only, registers no test hook.
+export type AppSourceFile = { file: string; src: string };
+
+export function appSourceFiles(): AppSourceFile[] {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const root = path.join(__dirname, '..');
+  return fs
+    .readdirSync(root)
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts') && f !== 'playwright.config.ts')
+    .sort()
+    .map((file) => ({ file, src: fs.readFileSync(path.join(root, file), 'utf8') }));
+}

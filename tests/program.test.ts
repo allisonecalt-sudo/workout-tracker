@@ -15,6 +15,7 @@ import { test, expect } from '@playwright/test';
 import { PROGRAM, SAFETY_LINE, type Exercise, type Phase, type WeekPlan } from '../program';
 import { EXERCISE_DETAIL } from '../exercise-detail';
 import { slugFor } from '../move-feel';
+import { appSourceFiles } from './helpers';
 
 // The ONE "how many program weeks" constant. The Settings > About "Program
 // weeks" assertion in tests/screens/program-weeks.spec.ts reads the same number
@@ -126,7 +127,9 @@ test.describe('PROGRAM — the Jul 8 timer rule', () => {
     !!ex.reps && SUSTAINED_HOLD.test(ex.reps) && !/holds/.test(ex.reps);
 
   // Today's one legitimate gap: the first four Round-1 weeks' cool-down
-  // stretches (COOLDOWN_AB / COOLDOWN_C, written in May) predate the Jul 8
+  // stretches — both the cool-down phase (COOLDOWN_AB / COOLDOWN_C) AND the
+  // R1W1 C main-phase Knees-to-chest hold + Figure-4 stretch — written in May,
+  // predate the Jul 8
   // rule and were never retrofitted — and the cool-down list is self-paced
   // anyway (her Jun 6 call; see the Exercise type's TIMER RULE comment).
   const UNTIMED_BEFORE_RULE: Record<string, string> = {
@@ -148,6 +151,16 @@ test.describe('PROGRAM — the Jul 8 timer rule', () => {
     expect(offenders).toEqual([]);
   });
 
+  test('the exceptions list holds no stale name (each listed stretch still occurs in Round 1 weeks 1-4)', () => {
+    const early = allExercises().filter(({ wp }) => (wp.round ?? 1) === 1 && wp.weekNum <= 4);
+    for (const name of Object.keys(UNTIMED_BEFORE_RULE)) {
+      expect(
+        early.some(({ ex }) => ex.name === name && isSustainedHold(ex) && !ex.isTimed),
+        name
+      ).toBe(true);
+    }
+  });
+
   test('isTimed and durationSec always travel together (never one without the other)', () => {
     const offenders: string[] = [];
     for (const { where, ex } of allExercises()) {
@@ -155,5 +168,19 @@ test.describe('PROGRAM — the Jul 8 timer rule', () => {
       if (Boolean(ex.isTimed) !== hasDur) offenders.push(`${where}: ${ex.name}`);
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+test.describe('appSourceFiles() — the source-scan tests can never go quiet again', () => {
+  test('includes app.ts AND program.ts, and every module app.ts imports', () => {
+    const files = appSourceFiles();
+    const names = files.map((f) => f.file);
+    expect(names).toContain('app.ts');
+    expect(names).toContain('program.ts');
+    for (const f of files) expect(f.src.length, f.file).toBeGreaterThan(0);
+    const app = files.find((f) => f.file === 'app.ts')!.src;
+    const imported = [...app.matchAll(/from '\.\/([\w-]+)\.js'/g)].map((m) => `${m[1]}.ts`);
+    expect(imported.length).toBeGreaterThan(0);
+    for (const mod of imported) expect(names, `app.ts imports ${mod}`).toContain(mod);
   });
 });

@@ -7,6 +7,7 @@ import {
   mockDate,
   movableClock,
   advanceClock,
+  appSourceFiles,
   TESTS_DIR as __dirname,
 } from '../helpers';
 
@@ -733,9 +734,10 @@ test('elliptical: the next ride opens on the elliptical and offers the last leve
 });
 
 test('elliptical: the step carries how-to guidance', () => {
-  const fs = require('fs') as typeof import('fs');
-  const path = require('path') as typeof import('path');
-  const appSrc = fs.readFileSync(path.join(__dirname, '..', 'program.ts'), 'utf8');
+  // Whichever module holds EXERCISE_GUIDE today (program.ts since step 2) —
+  // found by scanning every app module, not by file name.
+  const appSrc = appSourceFiles().find((f) => f.src.includes('const EXERCISE_GUIDE'))?.src ?? '';
+  expect(appSrc, 'EXERCISE_GUIDE not found in any app module').not.toBe('');
   const guideStart = appSrc.indexOf('const EXERCISE_GUIDE');
   const guideBlock = appSrc.slice(guideStart, appSrc.indexOf('\n};', guideStart));
   // Prettier unquotes a single-word key, so accept either spelling.

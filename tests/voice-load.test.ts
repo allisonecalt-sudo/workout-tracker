@@ -17,8 +17,7 @@
 // reps text doesn't also carry — the exact bug class the curl mp3 had.
 
 import { test, expect } from '@playwright/test';
-import * as fs from 'fs';
-import * as path from 'path';
+import { appSourceFiles } from './helpers';
 import { EXERCISE_DETAIL } from '../exercise-detail';
 
 // The two 1–2 kg LOAD CHIP moves (app.ts's ARM_FEEL_STEPS — curl/row, rule
@@ -71,11 +70,11 @@ test('voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its ow
   // char window, which a first pass got wrong: a too-tight window missed
   // that object's own "1–2 kg" reps text and flagged its voiceScript as a
   // false positive).
-  // Step 2 (Oct 13 2026): the PROGRAM lives in program.ts now; app.ts keeps a
-  // few Exercise literals of its own (e.g. the ride step), so scan both.
-  const appSrc =
-    fs.readFileSync(path.join(__dirname, '..', 'program.ts'), 'utf8') +
-    fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
+  // Step 2c (Oct 13 2026): every app module, not a hand list — the PROGRAM
+  // moved to program.ts, app.ts keeps a few Exercise literals of its own.
+  const appSrc = appSourceFiles()
+    .map((f) => f.src)
+    .join('\n');
   const nameRepsRe =
     /name:\s*'((?:\\.|[^'])*)',(?:(?!name:\s*')[\s\S])*?reps:\s*'((?:\\.|[^'])*)'/g;
   const repsByName = new Map<string, string[]>();

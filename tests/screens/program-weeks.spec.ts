@@ -7,6 +7,7 @@ import {
   openCue,
   openWeekByWeek,
   mockDate,
+  appSourceFiles,
   TESTS_DIR as __dirname,
 } from '../helpers';
 
@@ -109,9 +110,9 @@ test('multi-week: Settings About shows Program weeks count (17) — pre-launch, 
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 17" row. The 17 is ONE constant:
-  // PROGRAM_WEEK_COUNT in tests/program.test.ts (it pins PROGRAM.length to it) —
-  // change them together.
+  // About section has a "Program weeks: 17" row. The 17 is written in two
+  // places: here, and as PROGRAM_WEEK_COUNT in tests/program.test.ts (which pins
+  // PROGRAM.length to it) — change them together; if one drifts, the other fails.
   // (11 round-1 weeks + R2 W1 + R2 W2 + R2 W3 + R2 W4 + R2 W5 (v52.2, Sep 26 2026)
   // + R2 W6 (v61.2, Oct 13 2026 — the light restart after being sick)).
   await expect(
@@ -163,14 +164,12 @@ test('home order: the workout sits first; the week-by-week list is collapsed in 
 // v53 (Sep 26 2026) Tips audit: her words, "Cue in the app? It says to cue
 // something, that seems to do nothing" — the fold worked, the label and the
 // program bookkeeping leaking through it didn't. Scans every exercise `notes`
-// string the app can show (PROGRAM's every week/round in app.ts + every rung
-// in ladders.ts) and fails on the PROGRAM-not-movement tells: another
+// string the app can show (every app source module, via appSourceFiles() —
+// PROGRAM's weeks/rounds in program.ts, the ladders, app.ts) and fails on the PROGRAM-not-movement tells: another
 // workout letter, "keeps its", a stale number ("was N"), a version tag, or a
 // week number. Reading straight from source, not a live page, so it covers
 // past/future weeks too — not just whatever week today happens to land on.
 test('Tips audit: no exercise notes string leaks PROGRAM bookkeeping instead of movement guidance', () => {
-  const fs = require('fs') as typeof import('fs');
-  const path = require('path') as typeof import('path');
   const bannedPatterns: [RegExp, string][] = [
     [/\b(in|for) [ABC]\b/, 'references another workout (in/for A|B|C)'],
     [/keeps its/i, '"keeps its" (program comparison)'],
@@ -190,10 +189,11 @@ test('Tips audit: no exercise notes string leaks PROGRAM bookkeeping instead of 
   ];
   const noteRe = /notes:\s*\n?\s*(['"])((?:\\.|(?!\1).)*)\1/g;
   const offenders: string[] = [];
-  for (const file of ['app.ts', 'ladders.ts']) {
-    const src = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+  let scanned = 0;
+  for (const { file, src } of appSourceFiles()) {
     let m: RegExpExecArray | null;
     while ((m = noteRe.exec(src))) {
+      scanned += 1;
       const text = m[2]!;
       const line = src.slice(0, m.index).split(/\r?\n/).length;
       for (const [re, why] of bannedPatterns) {
@@ -202,6 +202,8 @@ test('Tips audit: no exercise notes string leaks PROGRAM bookkeeping instead of 
     }
   }
   expect(offenders).toEqual([]);
+  // Fail loud if the scan ever goes quiet again (it was 143 notes at step 2).
+  expect(scanned).toBeGreaterThan(100);
 });
 
 // code-shape R1b (Sep 27 2026): both deploy-hygiene tests below moved from
@@ -548,6 +550,8 @@ test('R2 W2: every exercise name in the week has a detail card or a how-to guide
   const path = require('path') as typeof import('path');
   const root = path.join(__dirname, '..');
   // Step 2 (Oct 13 2026): the PROGRAM region lives in program.ts now.
+  // ONE file on purpose: the test slices the PROGRAM region (R2 W2 .. the
+  // resolvers) by its section-comment markers, and those live only in program.ts.
   const appSrc = fs.readFileSync(path.join(root, 'program.ts'), 'utf8');
   const detailSrc = fs.readFileSync(path.join(root, 'exercise-detail.ts'), 'utf8');
 

@@ -13,6 +13,7 @@ import {
   SWING_SAT_C,
   openWeekByWeek,
   mockDate,
+  appSourceFiles,
   TESTS_DIR as __dirname,
 } from '../helpers';
 
@@ -715,9 +716,9 @@ test('setup blocks (v40): every phase that renders an Exercise also renders its 
   // non-exported function, and the bundle is now content-hashed, so a
   // structural source check reads the TypeScript source directly instead.
   // Same assertion (1 definition + 2 call sites), source of truth moved.
-  const fs = require('fs') as typeof import('fs');
-  const path = require('path') as typeof import('path');
-  const src = fs.readFileSync(path.join(__dirname, '..', 'app.ts'), 'utf8');
+  const src = appSourceFiles()
+    .map((f) => f.src)
+    .join('\n');
   const callSites = (src.match(/renderExerciseSetup\(/g) ?? []).length;
   // 1 definition + 2 call sites.
   expect(callSites).toBeGreaterThanOrEqual(3);

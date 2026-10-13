@@ -51,6 +51,7 @@ PROGRAM — shape › every startsOn is a Saturday (weeks are Sat-Fri throughout
 PROGRAM — shape › has exactly 17 weeks (the Settings "Program weeks" number)
 PROGRAM — the Jul 8 timer rule › every sustained hold has durationSec AND isTimed (except the named Round-1 W1-W4 stretches)
 PROGRAM — the Jul 8 timer rule › isTimed and durationSec always travel together (never one without the other)
+PROGRAM — the Jul 8 timer rule › the exceptions list holds no stale name (each listed stretch still occurs in Round 1 weeks 1-4)
 Progress: one door row, nothing else (spec §1) › the row names the page and today's phase, in plain words
 R2 W2: a date inside Sep 5-11 2026 resolves to Round 2 · Week 2
 R2 W2: bird dog legs-only sits at the END of the upper-back block in A and B
@@ -112,6 +113,7 @@ a missing timestamp (confirmed true, no value) -> null, never a guess
 a new rung "too much" on both of its first 2 exposures → STEP_BACK, that rung specifically
 a new rung "too much" once → HOLD (not a step-back yet)
 a small phase (spec §4.3) › a phase under 3 workouts shows — and the real count, and the footnote appears once
+appSourceFiles() — the source-scan tests can never go quiet again › includes app.ts AND program.ts, and every module app.ts imports
 at phone size (412x892) › the cycle page causes no sideways scroll, and the table fits the viewport
 back & wrist in Card B (spec §2.3) › 2 readings: no Back pain row
 back & wrist in Card B (spec §2.3) › 3+ readings: the Back pain row appears with the real average
