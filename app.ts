@@ -62,17 +62,12 @@ import {
 } from './step-list.js';
 import {
   walkWeeks,
-  shiftPastSickWeeks,
-  dayOfWeek as weekDayOfWeek,
   // WK3 (Sep 27 2026): "Move on without it" — wired into movesForWeekModel /
   // renderHome below. Schema-gated (§2.2's week_moves table needs her yes
   // before the migration is applied), but the pure check itself has no
   // schema dependency, so it's safe to read now.
   canMoveOn as weekCanMoveOn,
   COMPLETION_WEEKS_FROM,
-  type SessionLite as WeekSessionLite,
-  type MoveOn as WeekMoveOn,
-  type RoundStart as WeekRoundStart,
   type WeekSpan,
   type WeekKey,
   type PendingWeek,
@@ -105,7 +100,6 @@ import {
   SAFETY_LINE,
   PROGRAM_START_DATE,
   ROUNDS,
-  SKIPPED_WEEKS,
   getRoundFor,
   getProgramWeekCount,
   diffWorkout,
@@ -124,7 +118,15 @@ import {
   type WeekPlan,
 } from './program.js';
 import type { LogEntry, StoredWeekMove } from './types.js';
-import { formatDate, formatWeekdayDate, localIsoDate, weekStartIso } from './dates.js';
+import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
+import * as pw from './program-week.js';
+import {
+  SESSIONS_PER_WEEK_TARGET,
+  calendarSaturdayMs,
+  attributeSessionsToWeeks,
+  sessionsAttributedTo,
+  type WeekClockInput,
+} from './program-week.js';
 
 type AppScreen =
   | 'home'
@@ -5004,33 +5006,93 @@ function formatTimerDisplay(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function getProgramWeek(date: Date = new Date()): {
-  num: number;
-  round: number;
-  start: Date;
-  end: Date;
-  skippedLabel: string | null;
-} {
-  const round = getRoundFor(date);
-  const start = new Date(round.start + 'T00:00:00');
-  const diffDays = Math.floor((date.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-  const calNum = Math.max(1, Math.floor(diffDays / 7) + 1);
-  const weekStart = new Date(start);
-  weekStart.setDate(start.getDate() + (calNum - 1) * 7);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  // Skips only count within the active round — each round's clock starts fresh.
-  const skipsBefore = Object.keys(SKIPPED_WEEKS).filter((s) => {
-    const t = new Date(s + 'T00:00:00').getTime();
-    return t >= start.getTime() && t < weekStart.getTime();
-  }).length;
-  return {
-    num: Math.max(1, calNum - skipsBefore),
-    round: round.num,
-    start: weekStart,
-    end: weekEnd,
-    skippedLabel: SKIPPED_WEEKS[weekStartIso(weekStart)] ?? null,
-  };
+// ---------------------------------------------------------------------------
+// THE WEEK CLOCK — thin wrappers (code-shape step 4, Oct 13 2026).
+// The logic lives in program-week.ts and is PURE: it takes the logs, the
+// stored week moves, the clock ("now") and the test-only sick-week switch as
+// parameters. These wrappers keep every call site in this file unchanged by
+// supplying today's values — the storage reads (loadLogs, loadWeekMoves), the
+// browser-global switch and `new Date()` all stay HERE, in app.ts.
+// ---------------------------------------------------------------------------
+
+/** Test-only switch (automation only, like the __wt hooks): the older
+ * week-model tests drive Week 5 -> 6 transitions on the real Oct 3-4 dates,
+ * which are now the Sick week. They set this to see the plain model. */
+function ignoreSickWeeksSwitch(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    navigator.webdriver === true &&
+    (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks === true
+  );
+}
+
+/** Everything the week clock reads, gathered from today's storage + clock. */
+function weekClockInput(logs: LogEntry[] = loadLogs(), now: Date = new Date()): WeekClockInput {
+  return { logs, moves: loadWeekMoves(), ignoreSick: ignoreSickWeeksSwitch(), now };
+}
+
+function getProgramWeek(date: Date = new Date()): ReturnType<typeof pw.getProgramWeek> {
+  return pw.getProgramWeek(date);
+}
+
+function getTodaysPick(): WorkoutId {
+  return pw.getTodaysPick(loadLogs(), new Date());
+}
+
+function saturdayForOffset(offset: number): Date {
+  return pw.saturdayForOffset(offset, new Date());
+}
+
+function homeWeekOffset(): number {
+  return pw.homeWeekOffset(loadLogs(), new Date());
+}
+
+function planDateNow(): Date {
+  return pw.planDateNow(weekClockInput());
+}
+
+function planKeyForLog(entry: LogEntry): WeekKey | null {
+  return pw.planKeyForLog(entry, weekClockInput());
+}
+
+function planForLog(entry: LogEntry): Workout {
+  return pw.planForLog(entry, weekClockInput(), getWorkoutD);
+}
+
+function getViewedProgramWeek(offset = 0): ReturnType<typeof pw.getProgramWeek> {
+  return pw.getViewedProgramWeek(offset, new Date());
+}
+
+function isNowAfterCompletionLaunch(now: Date = new Date()): boolean {
+  return pw.isNowAfterCompletionLaunch(now);
+}
+
+function weekModel(): ReturnType<typeof walkWeeks> {
+  return pw.weekModel(weekClockInput());
+}
+
+function completionClosingSessionIds(logs: LogEntry[]): Set<string> {
+  return pw.completionClosingSessionIds(weekClockInput(logs));
+}
+
+function shownWeek(): ReturnType<typeof pw.shownWeek> {
+  return pw.shownWeek(weekClockInput());
+}
+
+function gapCountsBackToWeekKey(): WeekKey | null {
+  return pw.gapCountsBackToWeekKey(weekClockInput());
+}
+
+function gapCountsBackToWeekNum(): number | null {
+  return pw.gapCountsBackToWeekNum(weekClockInput());
+}
+
+function weekSubLabel(shown: { span: WeekSpan | null; pending: PendingWeek | null }): string {
+  return pw.weekSubLabel(shown, weekClockInput());
+}
+
+function currentHowToWeekKey(): { num: number; round: number } {
+  return pw.currentHowToWeekKey(weekClockInput());
 }
 
 function formatWeekRange(start: Date, end: Date): string {
@@ -5063,33 +5125,6 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#039;');
 }
 
-// Today's pick (Sat Sep 26 2026): "Up next" = the first of A/B/C still missing
-// from the week the next session will COUNT toward — last week on a swing
-// Saturday (same rule as attributeSessionsToWeeks), else this week. Her words,
-// 21:21: "its saturday night i was supposed to be able to do workout b of last
-// week tonight" — home said A (rotation after Friday's C) while last week still
-// needed its B. Falls back to the old A→B→C rotation (group 2I) once that week
-// has all three.
-function getTodaysPick(): WorkoutId {
-  const logs = loadLogs();
-  if (logs.length === 0) return 'A';
-  const attribution = attributeSessionsToWeeks(logs);
-  const lastWeek = sessionsAttributedTo(logs, saturdayForOffset(1), attribution);
-  const swings =
-    new Date().getDay() === 6 && lastWeek.length > 0 && lastWeek.length < SESSIONS_PER_WEEK_TARGET;
-  const countsToward = swings
-    ? lastWeek
-    : sessionsAttributedTo(logs, saturdayForOffset(0), attribution);
-  const done = new Set(countsToward.map((l) => l.workout));
-  const missing = (['A', 'B', 'C'] as const).find((w) => !done.has(w));
-  if (missing) return missing;
-  const last = logs[0];
-  if (!last) return 'A';
-  if (last.workout === 'A') return 'B';
-  if (last.workout === 'B') return 'C';
-  return 'A';
-}
-
 // Week dots (group 2J): one entry per weekday. Color is the workout letter.
 type WeekDotInfo = {
   letter: string;
@@ -5102,204 +5137,9 @@ type WeekDotInfo = {
 // (current) Sat-Fri week. 1 = one week ago. Etc. Module-level — purely UI state.
 let viewedWeekOffset = 0;
 
-// Saturday of the Sat-Fri week that's `offset` weeks before today.
-function saturdayForOffset(offset: number): Date {
-  const today = new Date();
-  const day = today.getDay(); // 0=Sun..6=Sat
-  const satOffset = (day + 1) % 7; // Sat=0, Sun=1, Mon=2, ..., Fri=6
-  const saturday = new Date(today);
-  saturday.setDate(today.getDate() - satOffset - offset * 7);
-  saturday.setHours(0, 0, 0, 0);
-  return saturday;
-}
-
-// ---------------------------------------------------------------------------
-// SATURDAY IS THE SWING DAY (v42, Sep 19 2026) — her rule, now automatic.
-// May 15 2026: "a week is saturday to friday, but i can be flexible if i need
-// saturday to be brought into week bf if i didnt do 3." That was recorded as
-// "her call, situational — don't auto-attribute". Sep 19 2026, 22:46, after she
-// finished Week 3's third session on Saturday night: "you just set it up, sat is
-// swing." So it is a RULE now: a session logged on a SATURDAY counts toward the
-// week that just ended (the previous Sat→Fri) if that week is still short of 3;
-// otherwise it opens the new week. Sunday→Friday sessions never swing.
-// Attribution runs chronologically, so a Saturday that swung back is already
-// counted before the next Saturday is judged. The Supabase row keeps its TRUE
-// timestamp — the swing lives in how the app COUNTS, never in the data.
-// Every "sessions in week X" surface goes through attributeSessionsToWeeks so
-// the count, the 3-slot rows, the week card and the progress bars agree.
-// ---------------------------------------------------------------------------
-const SESSIONS_PER_WEEK_TARGET = 3;
-
-// Local-midnight Saturday on/before the given moment, as ms. DST-safe (setDate).
-function calendarSaturdayMs(dateIso: string): number {
-  const d = new Date(dateIso);
-  const back = (d.getDay() + 1) % 7; // Sat=0, Sun=1, …, Fri=6
-  const sat = new Date(d);
-  sat.setDate(d.getDate() - back);
-  sat.setHours(0, 0, 0, 0);
-  return sat.getTime();
-}
-
-function previousSaturdayMs(saturdayMs: number): number {
-  const d = new Date(saturdayMs);
-  d.setDate(d.getDate() - 7);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
-}
-
-/** Each log → the local-midnight Saturday (ms) of the week it COUNTS toward. */
-function attributeSessionsToWeeks(logs: LogEntry[]): Map<LogEntry, number> {
-  const out = new Map<LogEntry, number>();
-  const counts = new Map<number, number>();
-  const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
-  for (const l of sorted) {
-    const base = calendarSaturdayMs(l.date);
-    const isSaturday = new Date(l.date).getDay() === 6;
-    let weekMs = base;
-    if (isSaturday) {
-      const prev = previousSaturdayMs(base);
-      const prevCount = counts.get(prev) ?? 0;
-      // Swing only to COMPLETE a week she was working (1 or 2 sessions). A week
-      // with zero sessions is a skipped week (break, sickness, pre-program), and
-      // the rule is "bring Saturday in if I didn't do 3", not "resurrect a week I
-      // never started" — that would also make a fresh Saturday session vanish
-      // from "this week" for no reason she could see.
-      if (prevCount > 0 && prevCount < SESSIONS_PER_WEEK_TARGET) weekMs = prev;
-    }
-    out.set(l, weekMs);
-    counts.set(weekMs, (counts.get(weekMs) ?? 0) + 1);
-  }
-  return out;
-}
-
-/** Sessions attributed to the week whose local-midnight Saturday is `saturday`, oldest first. */
-function sessionsAttributedTo(
-  logs: LogEntry[],
-  saturday: Date,
-  attribution: Map<LogEntry, number> = attributeSessionsToWeeks(logs)
-): LogEntry[] {
-  const key = saturday.getTime();
-  return logs
-    .filter((l) => attribution.get(l) === key)
-    .sort((a, b) => a.date.localeCompare(b.date));
-}
-
 // (v48 · P6, Sep 24 2026: swungOutOfWeek() retired — its one reader, the
 // "Sat counted for last week" note on the Week-by-week summary, is gone; home's
 // week line names the swing in words.)
-
-// A swing Saturday: today is Saturday and last week still needs 1-2 sessions,
-// so tonight's session counts for LAST week. Home then shows last week — its
-// number, its dots, its count. Her words, Sat Sep 26 2026 21:32: "I want to be
-// very clear that I'm in week 4 right now like it says week 5 on top" / "I also
-// would like to see workout A and c done so I feel good about that" / "if I'm on
-// week 4 … I don't want to see five yet". Same condition as
-// attributeSessionsToWeeks' swing, so the screen and the count always agree.
-function homeWeekOffset(): number {
-  if (new Date().getDay() !== 6) return 0;
-  const logs = loadLogs();
-  const lastWeek = sessionsAttributedTo(logs, saturdayForOffset(1)).length;
-  return lastWeek > 0 && lastWeek < SESSIONS_PER_WEEK_TARGET ? 1 : 0;
-}
-
-// THE SWING FIX (Sep 26 2026), SUPERSEDED for "now" by WK2 (Sep 27 2026).
-// The original problem: `getWeekPlan(date)` was a pure calendar lookup, but a
-// swing-Saturday session COUNTED toward last week (attributeSessionsToWeeks).
-// That swing rule only ever existed to patch the calendar-week model's three-
-// meanings-of-week confusion (PLAN-2026-09-26.md §2) — the completion-based
-// model (week.ts) replaces it outright for "now": there IS no swing concept
-// once a week only closes on its 3rd distinct letter. `homeWeekOffset` /
-// `attributeSessionsToWeeks` / the swing itself stay defined and correct for
-// every date BEFORE the launch (weekly review, Progress, Settings — WK4's
-// job, untouched here); "now" is always after it, so this always resolves
-// through the new model instead.
-// second-brain/self/health/workout-app-audit-2026-09-24/next-level-2026-09-26/WEEK5-PROPOSAL-2026-09-26.md §e
-
-/** The date whose plan applies to a session starting NOW — WK2: the
- * completion-based week model's current (or pending) key, translated to a
- * calendar date via completionWeekSyntheticDate() so it flows straight into
- * getWeekPlan(date)'s existing "highest startsOn <= date" scan (see that
- * function's own comment on why this is also the repeat/fallback rule).
- * Pre-launch (or a test mocking an earlier date) keeps the original swing
- * rule untouched — see isNowAfterCompletionLaunch's own comment.
- * WK2 fix r2 (Sep 27 2026, checker's should #2): during a GAP, shownWeek().key
- * is the PENDING week (it hasn't opened yet) — a session started right now
- * doesn't train that week's moves, it counts BACKWARD into the week that just
- * closed (week.ts rule 3, gapCountsBackToWeekKey), same truth preLogWeekLabel
- * and postLogWitnessLine already say. Before this fix, a session started
- * during a gap trained the PENDING week's plan while every screen around it
- * said the save would count toward the closed one — invisible only because
- * PROGRAM had no row for the pending week yet (it silently repeated the
- * closed week's own moves either way); it breaks the day a real row exists. */
-function planDateNow(): Date {
-  if (!isNowAfterCompletionLaunch()) {
-    return homeWeekOffset() === 1 ? saturdayForOffset(1) : new Date();
-  }
-  return completionWeekSyntheticDate(gapCountsBackToWeekKey() ?? shownWeek().key);
-}
-
-/** The date whose plan applied to a SAVED session: the Saturday of the week it counts toward. */
-function planDateForLog(entry: LogEntry): Date {
-  const same = (l: LogEntry): boolean =>
-    entry.id ? l.id === entry.id : l.date === entry.date && l.workout === entry.workout;
-  const logs = loadLogs(); // fresh objects every call, so match by id, never by identity
-  const all = logs.some(same) ? logs : [...logs, entry]; // sessionPayload can run before the save
-  for (const [l, weekMs] of attributeSessionsToWeeks(all)) {
-    if (same(l)) return new Date(weekMs);
-  }
-  return new Date(entry.date);
-}
-
-/** WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.6 "Saved-session plan": the plan a
- * SAVED session actually used. Before the launch (or a session dated before
- * it — a real log's own date, not "now"), unchanged: planDateForLog's
- * calendar/swing lookup. At/after it, resolves through the completion
- * model's own `weekOf` map instead of round-tripping through a synthetic
- * calendar date — the SAME key Home/pre-log/post-log showed her at the time,
- * including a gap session counting backward (week.ts rule 3). sessionPayload
- * can run BEFORE the save lands in loadLogs() (same "not saved yet" case
- * planDateForLog's own comment names), so `entry` is folded into the walked
- * list exactly like planDateForLog does. Falls back to the calendar lookup in
- * the "shouldn't happen" case (an id-less entry, or a date the walk somehow
- * never attached a key to) rather than guessing — fail-loud, not silent.
- */
-// WK4 (Sep 27 2026): the completion-model WeekKey a saved session resolves
-// to — extracted from planForLog so a test can assert the KEY directly (via
-// the __wtPlanKeyForLog hook) rather than only the plan CONTENT, which two
-// adjacent weeks can share byte-for-byte (a repeat) and so can't tell apart.
-// null pre-launch (that path never uses a completion key at all) or in the
-// "shouldn't happen" case (see planForLog's own comment).
-function planKeyForLog(entry: LogEntry): WeekKey | null {
-  if (!isNowAfterCompletionLaunch(new Date(entry.date))) return null;
-  const same = (l: WeekSessionLite): boolean =>
-    entry.id ? l.id === entry.id : l.date === entry.date && l.workout === entry.workout;
-  const logs = loadLogs();
-  const all = logs.some((l) => (entry.id ? l.id === entry.id : false)) ? logs : [...logs, entry];
-  const { weekOf } = walkWeeks(
-    sessionsForWeekModel(all),
-    movesForWeekModel(),
-    roundStartsForWeekModel(),
-    COMPLETION_WEEKS_FROM,
-    sickWeeksForWeekModel()
-  );
-  const matched = sessionsForWeekModel(all).find(same);
-  return matched ? (weekOf.get(matched.id) ?? null) : null;
-}
-
-function planForLog(entry: LogEntry): Workout {
-  // v54 (Sep 27 2026): D never has a completion-model week key (week.ts
-  // filters it out of sessionsForWeekModel below) and isn't in any
-  // PROGRAM/plan.workouts row — it's the one fixed Workout, always.
-  if (entry.workout === 'D') return getWorkoutD();
-  const key = planKeyForLog(entry);
-  if (key) return planForWeekKey(key).plan.workouts[entry.workout];
-  if (isNowAfterCompletionLaunch(new Date(entry.date))) {
-    console.warn(
-      `[week] planForLog: no completion-model week found for session ${entry.id ?? entry.date}`
-    );
-  }
-  return getWorkoutById(entry.workout, planDateForLog(entry));
-}
 
 // WK2 fix r1 (Sep 27 2026, must #2): the offset-based dots every existing
 // caller reads, factored out so lastClosedWeekForPeek's legacy fallback below
@@ -5374,17 +5214,6 @@ function renderLegacyWeekDots(weekDots: WeekDotInfo[]): string {
     .join('');
 }
 
-// Program week info anchored on the Saturday of the viewed Sat-Fri week.
-function getViewedProgramWeek(offset = 0): {
-  num: number;
-  round: number;
-  start: Date;
-  end: Date;
-  skippedLabel: string | null;
-} {
-  return getProgramWeek(saturdayForOffset(offset));
-}
-
 // ---------------------------------------------------------------------------
 // THE COMPLETION-BASED WEEK MODEL (WK2, Sep 27 2026) — week.ts, wired in.
 // PLAN-2026-09-26.md §2: "once all three are done then it can go to the next
@@ -5398,51 +5227,6 @@ function getViewedProgramWeek(offset = 0): {
 // instant (2026-09-26T22:30, already past), so Home/pre-log/post-log — which
 // only ever show the CURRENT moment — read the new model exclusively.
 // ---------------------------------------------------------------------------
-
-/** logs -> week.ts's SessionLite shape. saveLog() assigns a local id (genId())
- * the instant a session is saved, offline or not, so in practice every real
- * log has one by the time it reaches here; the filter is a fail-loud guard
- * against a malformed/legacy row, not a live gap — an id-less log is dropped
- * rather than silently miscounted (week.ts's weekOf keys by id). */
-function sessionsForWeekModel(logs: LogEntry[]): WeekSessionLite[] {
-  // v54 (Sep 27 2026), her Sep 27 words ("we definitely need a 4th element a
-  // week... call it Workout D"), and PLAN's own rule for it: D is EXTRA — it
-  // never counts toward the week's "N of 3" and never closes/opens a week.
-  // week.ts's own Letter type is 'A'|'B'|'C' on purpose (unchanged by D), so
-  // a D session is dropped here, before it ever reaches walkWeeks — the one
-  // place completion-model week-counting reads from a log list.
-  return logs
-    .filter(
-      (l): l is LogEntry & { id: string; workout: 'A' | 'B' | 'C' } =>
-        typeof l.id === 'string' && l.id.length > 0 && l.workout !== 'D'
-    )
-    .map((l) => ({ id: l.id, date: l.date, workout: l.workout }));
-}
-
-/** ROUNDS -> week.ts's RoundStart events. walkWeeks filters out anything
- * before its launch itself, so passing every round (not just future ones) is
- * harmless — and means a future Round 3 entry in ROUNDS needs no separate
- * wiring here. */
-function roundStartsForWeekModel(): WeekRoundStart[] {
-  return ROUNDS.map((r) => ({ round: r.num, at: `${r.start}T00:00:00+03:00` }));
-}
-
-/** v61.2 (Oct 13 2026): SKIPPED_WEEKS' 'Sick' Saturdays -> week.ts's sick
- * pause (the completion clock stops for them). Only 'Sick' pauses the
- * completion model; 'Break' rows predate it (Round 1 -> 2). */
-function sickWeeksForWeekModel(): string[] {
-  // Test-only switch (automation only, like the __wt hooks): the older
-  // week-model tests drive Week 5 -> 6 transitions on the real Oct 3-4
-  // dates, which are now the Sick week. They set this to see the plain model.
-  if (
-    typeof navigator !== 'undefined' &&
-    navigator.webdriver === true &&
-    (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks === true
-  ) {
-    return [];
-  }
-  return Object.keys(SKIPPED_WEEKS).filter((k) => SKIPPED_WEEKS[k] === 'Sick');
-}
 
 // ---------- WK3 · week_moves sync (Sep 27 2026) ----------
 //
@@ -5665,92 +5449,6 @@ function todaysWeekMove(): StoredWeekMove | null {
   return loadWeekMoves().find((m) => !m.deleted && localIsoDate(new Date(m.at)) === today) ?? null;
 }
 
-/** week.ts's MoveOn events, from the synced local week_moves table (WK3). */
-function movesForWeekModel(): WeekMoveOn[] {
-  // WK3 fix r1: a pending Undo tombstone must not count as a move — that's
-  // the whole point of the tombstone (see StoredWeekMove.deleted's comment).
-  return loadWeekMoves()
-    .filter((m) => !m.deleted)
-    .map((m) => ({ round: m.round, week: m.week, at: m.at }));
-}
-
-/** Is "now" (or a caller-supplied instant — tests mock the clock) at/after
- * the real launch? Dozens of existing Playwright tests mockDate() to dates
- * well before Sep 26 2026 to exercise the OLD calendar/swing model on
- * purpose (Round 1, skipped weeks, the Aug 30 restart, …) — every Home/
- * pre-log/post-log function below branches on this FIRST, so those tests
- * keep seeing exactly the old behavior, and only genuinely-current (or
- * later-mocked) "now" ever reads the completion model. */
-function isNowAfterCompletionLaunch(now: Date = new Date()): boolean {
-  return now.getTime() >= new Date(COMPLETION_WEEKS_FROM.at).getTime();
-}
-
-/** The completion-based week model, recomputed fresh from the live session
- * list on every call. Pure + cheap (week.ts is a plain array walk over at
- * most a few dozen post-launch sessions) — cheaper than caching it wrong
- * across a save. See week.ts's own file header for the one known open edge
- * (a closing session can't yet be deleted from any UI, so it's a flagged
- * risk, not a live bug — WK3's schema decision is what actually closes it). */
-function weekModel(): ReturnType<typeof walkWeeks> {
-  return walkWeeks(
-    sessionsForWeekModel(loadLogs()),
-    movesForWeekModel(),
-    roundStartsForWeekModel(),
-    COMPLETION_WEEKS_FROM,
-    sickWeeksForWeekModel()
-  );
-}
-
-/** WK2 fix r2 (Sep 27 2026, checker's must #1 / GATE 1): which session ids are
- * the CLOSING session (the one whose save reached 3 distinct letters) of an
- * ALREADY-CLOSED completion-model week, over the given log list. Once even
- * one span has closed, every week after it — open, pending, or another closed
- * span — depends on that span's own NUMBER staying put: mergeRemoteSessions
- * uses this to refuse silently dropping one of these ids just because a pull
- * no longer has it (a naive recompute without it would reopen the span and
- * renumber everything after it — the exact risk the WK1 fix r2 checker named,
- * carried forward as WK2's GATE 1). The real fix the plan asks for
- * (counted_round/counted_week audit columns, or a stored closed-week record
- * next to week_moves) is a SCHEMA decision that needs her yes first
- * (CLAUDE.md's schema-change rule) — this is the non-schema guard that closes
- * the practical risk in the meantime. Only 'three' closes are ever session-
- * driven ('moved_on'/'round_ended' close on a MoveOn/RoundStart event, not a
- * deletable session, so they're out of scope here on purpose). */
-function completionClosingSessionIds(logs: LogEntry[]): Set<string> {
-  const { spans } = walkWeeks(
-    sessionsForWeekModel(logs),
-    movesForWeekModel(),
-    roundStartsForWeekModel(),
-    COMPLETION_WEEKS_FROM,
-    sickWeeksForWeekModel()
-  );
-  const ids = new Set<string>();
-  for (const span of spans) {
-    if (span.how !== 'three') continue;
-    // The closing session is the one whose OWN date closeOpen used as
-    // closedAt — never just "the last one in .sessions", which can also hold
-    // a later gap session counted backward as an extra (week.ts's own rule 3).
-    const closing = span.sessions.find((s) => s.date === span.closedAt);
-    if (closing) ids.add(closing.id);
-  }
-  return ids;
-}
-
-/** The week to show RIGHT NOW: the open span if one exists, or (mid-gap,
- * waiting for the next Sat/Sun) the pending key with no span yet. Falls back
- * to the launch key itself only in the "shouldn't happen" case week.ts's own
- * comment names (the launch instant always opens Week 1 immediately). */
-function shownWeek(): { key: WeekKey; span: WeekSpan | null; pending: PendingWeek | null } {
-  const { open, pending } = weekModel();
-  if (open) return { key: open.key, span: open, pending: null };
-  if (pending) return { key: pending.key, span: null, pending };
-  return {
-    key: { round: COMPLETION_WEEKS_FROM.round, week: COMPLETION_WEEKS_FROM.week },
-    span: null,
-    pending: null,
-  };
-}
-
 /** What "‹ Week 4" (§8c amendment) peeks at: a plain weekNum + rendered dots
  * + count line, from WHICHEVER model actually closed that week. */
 type WeekPeek = { weekNum: number; dotsHtml: string; countText: string };
@@ -5823,62 +5521,6 @@ function lastClosedWeekForPeek(): WeekPeek | null {
 // never changes what week a new session counts toward or trains.
 let viewingLastClosedWeek = false;
 
-/** During a gap (pending, no span open yet), a session logged NOW resolves
- * BACKWARD into the week that just closed (week.ts rule 3 — an extra rep for
- * the week that just ended), never into the pending week itself, which
- * hasn't opened yet. Returns that already-closed week's number, or null when
- * there's no gap (an open span already exists). WK2 fix r1 (Sep 27 2026,
- * checker's should #1): Home/pre-log/post-log all used to name the PENDING
- * week during a gap — true only once it actually opens; a session saved now
- * counts back into the week that just closed instead, and the screens must
- * say so rather than promise a week number the save won't use. */
-// WK2 fix r2 (Sep 27 2026, checker's should #2): the FULL key, not just the
-// week number — planDateNow() needs the round too, to resolve the right
-// PROGRAM row during a gap (see its own comment). gapCountsBackToWeekNum
-// keeps its old (number-only) signature for its existing callers.
-function gapCountsBackToWeekKey(): WeekKey | null {
-  const shown = shownWeek();
-  if (!shown.pending) return null;
-  // v61 fix pass 2 (Oct 2 2026, CHECK-v61.md round 2 should #9, pre-existing
-  // since WK2): a gap is only real BEFORE the pending week's own opening day
-  // — week.ts's own gap-resolution (resolveGapSession) opens the week the
-  // instant "now" reaches that anchor, whatever weekday it is, whether or
-  // not an A/B/C session has actually landed yet to make `open` non-null.
-  // This used to keep saying "a session before then counts as an extra for
-  // Week N" (and the post-log's "already N of 4") on and after that very
-  // day — true only during the gap itself, false the moment the pending
-  // week's own day arrives, even with 0 sessions logged (her real complaint
-  // was never about the DATE, only the stale CLAIM once it arrived).
-  if (new Date().getTime() >= new Date(shown.pending.opensAt).getTime()) return null;
-  const { spans } = weekModel();
-  const last = spans.length ? spans[spans.length - 1] : null;
-  return last ? last.key : null;
-}
-
-function gapCountsBackToWeekNum(): number | null {
-  return gapCountsBackToWeekKey()?.week ?? null;
-}
-
-/** "since Sat Sep 26 · day 3" (open) / "opens Sat Oct 3 · a session before
- * then counts as an extra for Week 5" (pending gap) — §2.4's #week-sub,
- * generalised for the Sat/Sun-anchor amendment (the original spec's exact
- * string predates it; open/gap are the two real states week.ts can report
- * "now" in). The gap clause is said ONCE, here, truthfully (checker's should
- * #1 — see gapCountsBackToWeekNum's own comment). */
-function weekSubLabel(shown: { span: WeekSpan | null; pending: PendingWeek | null }): string {
-  if (shown.span) {
-    return `since ${formatWeekdayDate(shown.span.openedAt)} · day ${weekDayOfWeek(shown.span, new Date())}`;
-  }
-  if (shown.pending) {
-    const opens = `opens ${formatWeekdayDate(shown.pending.opensAt)}`;
-    const backWeek = gapCountsBackToWeekNum();
-    return backWeek === null
-      ? opens
-      : `${opens} · a session before then counts as an extra for Week ${backWeek}`;
-  }
-  return '';
-}
-
 // v61 (Sep 28 2026), spec item d — her words 15:35, looking at her first
 // Workout D: "she did not say one of four." D never counts toward the week
 // CLOSING (week.ts's own completion rule is untouched — three distinct
@@ -5925,25 +5567,6 @@ function liveWeekDTarget(shown: {
   if (shown.span) return { open: shown.span };
   if (shown.pending) return { pending: true };
   return null;
-}
-
-/** The calendar date getWeekPlan(date)'s existing "highest startsOn <= date"
- * scan needs to land on the SAME row planForWeekKey would pick — reusing
- * that scan (rather than returning a WeekPlan directly) keeps every one of
- * the ~15 getWeekPlan/getWorkoutById call sites (§2.6) working unchanged. A
- * key with no exact PROGRAM row resolves past the highest row it has in the
- * SAME round, which is exactly what the fallback-to-latest scan already
- * does — so this only has to place the round correctly, at the round's own
- * start plus 7 days per elapsed week. */
-function completionWeekSyntheticDate(key: WeekKey): Date {
-  const round = ROUNDS.find((r) => r.num === key.round) ?? ROUNDS[ROUNDS.length - 1]!;
-  const d = new Date(round.start + 'T00:00:00');
-  d.setDate(d.getDate() + (key.week - 1) * 7);
-  // v61.2 (Oct 13 2026): a Sick week pauses the completion clock, so week N's
-  // PROGRAM row (found by startsOn) sits one calendar week later for every
-  // Sick week at or before the date reached so far. Skips only count inside
-  // this round, same as getProgramWeek. Ascending, so skips cascade.
-  return shiftPastSickWeeks(d, new Date(round.start + 'T00:00:00'), sickWeeksForWeekModel());
 }
 
 type CompletionWeekDot =
@@ -6487,21 +6110,6 @@ function renderHowToCard(exerciseName: string): string {
 // it from round 2 on. Round-1 keys stay bare numbers (backwards compatible).
 function howToWeekKey(week: { num: number; round: number }): string {
   return week.round > 1 ? `r${week.round}-${week.num}` : `${week.num}`;
-}
-
-// WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.6 "Small ones": the week key the
-// "seen this week" how-to state keys off. Before the launch, unchanged
-// (getProgramWeek()'s calendar lookup). At/after it, the completion model's
-// currently OPEN week — or, mid-gap (nothing open yet), the week that just
-// closed (same fallback truth gapCountsBackToWeekKey/shownWeek already use
-// everywhere a "what does now count toward" question is asked) — so "seen
-// this week" tracks the week she's actually training, not a calendar week the
-// completion model no longer reads for "now".
-function currentHowToWeekKey(): { num: number; round: number } {
-  if (!isNowAfterCompletionLaunch()) return getProgramWeek();
-  const shown = shownWeek();
-  const key = shown.pending ? (gapCountsBackToWeekKey() ?? shown.key) : shown.key;
-  return { num: key.week, round: key.round };
 }
 
 function markHowToSeenThisWeek(exerciseName: string): void {
