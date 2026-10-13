@@ -1,0 +1,106 @@
+// tests/import-graph.test.ts — the app's import graph stays a tree-like DAG
+// (code-shape step 4c, Oct 13 2026).
+//
+// Rules, from CLAUDE.md "Import direction": app.ts is the ENTRY and sits on
+// top; nothing it imports may import it back, and no two modules may import
+// each other (directly or through a chain) — type-only imports included, since
+// a type cycle is still a cycle the next refactor trips over. program-week.ts
+// is held to its own stricter contract: pure (no DOM / globals / storage) and
+// importing only the modules it was built on.
+//
+// Pure Node, no `page`: reads the source text, like clock-guard.test.ts. The
+// module set is helpers.ts's bundledSourceFiles() (app.ts + everything it
+// imports, nested folders included).
+
+import { test, expect } from '@playwright/test';
+import { bundledSourceFiles } from './helpers';
+
+const path = require('path') as typeof import('path');
+
+/** file -> the root-relative files it imports (relative imports only). */
+function importGraph(files: { file: string; src: string }[]): Map<string, string[]> {
+  const graph = new Map<string, string[]>();
+  for (const { file, src } of files) {
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+    const deps: string[] = [];
+    for (const m of code.matchAll(/(?:from|import)\s+'(\.{1,2}\/[\w./-]+)\.js'/g))
+      deps.push(path.posix.normalize(path.posix.join(path.posix.dirname(file), `${m[1]}.ts`)));
+    graph.set(file, [...new Set(deps)].sort());
+  }
+  return graph;
+}
+
+/** Every import cycle in the graph, each as "a.ts -> b.ts -> a.ts". */
+function findCycles(graph: Map<string, string[]>): string[] {
+  const cycles: string[] = [];
+  const state = new Map<string, 'visiting' | 'done'>();
+  const stack: string[] = [];
+  const visit = (n: string): void => {
+    state.set(n, 'visiting');
+    stack.push(n);
+    for (const d of graph.get(n) ?? []) {
+      if (state.get(d) === 'visiting') {
+        cycles.push([...stack.slice(stack.indexOf(d)), d].join(' -> '));
+      } else if (!state.has(d)) visit(d);
+    }
+    stack.pop();
+    state.set(n, 'done');
+  };
+  for (const n of [...graph.keys()].sort()) if (!state.has(n)) visit(n);
+  return cycles;
+}
+
+test.describe('import graph — no cycles, nothing imports the entry (step 4c)', () => {
+  const files = bundledSourceFiles();
+  const graph = importGraph(files);
+
+  test('the guard itself: it finds a 2-cycle, a 3-cycle through a type-only edge, and passes a clean graph', () => {
+    const two = new Map([
+      ['a.ts', ['b.ts']],
+      ['b.ts', ['a.ts']],
+    ]);
+    expect(findCycles(two)).toEqual(['a.ts -> b.ts -> a.ts']);
+    const three = new Map([
+      ['app.ts', ['x.ts']],
+      ['x.ts', ['y.ts']],
+      ['y.ts', ['z.ts']],
+      ['z.ts', ['x.ts']],
+    ]);
+    expect(findCycles(three)).toEqual(['x.ts -> y.ts -> z.ts -> x.ts']);
+    const clean = new Map([
+      ['app.ts', ['x.ts', 'y.ts']],
+      ['x.ts', ['y.ts']],
+      ['y.ts', []],
+    ]);
+    expect(findCycles(clean)).toEqual([]);
+  });
+
+  test('the graph was actually read: app.ts reaches program-week.ts, types.ts and week.ts', () => {
+    const names = files.map((f) => f.file);
+    expect(names).toEqual(
+      expect.arrayContaining(['app.ts', 'program-week.ts', 'types.ts', 'week.ts'])
+    );
+    expect(graph.get('app.ts')).toContain('program-week.ts');
+  });
+
+  test('no import cycle among the app modules', () => {
+    expect(findCycles(graph)).toEqual([]);
+  });
+
+  test('no module other than the entry imports app.ts', () => {
+    const importers = [...graph.entries()]
+      .filter(([file, deps]) => file !== 'app.ts' && deps.includes('app.ts'))
+      .map(([file]) => file);
+    expect(importers).toEqual([]);
+  });
+
+  test('program-week.ts is pure and imports only week, week-d, program, types and dates', () => {
+    const allowed = ['dates.ts', 'program.ts', 'types.ts', 'week-d.ts', 'week.ts'];
+    const deps = graph.get('program-week.ts') ?? [];
+    expect(deps.filter((d) => !allowed.includes(d))).toEqual([]);
+    const src = files.find((f) => f.file === 'program-week.ts')!.src;
+    expect(src.match(/\b(document|window|localStorage|sessionStorage|navigator)\b/g) ?? []).toEqual(
+      []
+    );
+  });
+});

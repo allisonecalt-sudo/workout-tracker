@@ -261,6 +261,11 @@ honest readings — the pre-v48 untouched-5 exclusion › a pre-cutoff exact 5 i
 honest readings — the pre-v48 untouched-5 exclusion › a pre-cutoff non-5 reading is trusted (only the ambiguous default is dropped)
 honest readings — the pre-v48 untouched-5 exclusion › excludedUntouchedCount counts each ambiguous 5, before and after separately
 honest readings — the pre-v48 untouched-5 exclusion › null stays null either side of the cutoff
+import graph — no cycles, nothing imports the entry (step 4c) › no import cycle among the app modules
+import graph — no cycles, nothing imports the entry (step 4c) › no module other than the entry imports app.ts
+import graph — no cycles, nothing imports the entry (step 4c) › program-week.ts is pure and imports only week, week-d, program, types and dates
+import graph — no cycles, nothing imports the entry (step 4c) › the graph was actually read: app.ts reaches program-week.ts, types.ts and week.ts
+import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: it finds a 2-cycle, a 3-cycle through a type-only edge, and passes a clean graph
 in-workout walk: does NOT auto-start on the step — needs an explicit Start tap
 indoor strip: a 25-minute block cycles past segment five back to segment one
 indoor strip: choosing the apartment option shows the first segment, ready to go
@@ -364,6 +369,23 @@ pre-log body reading asks about the BODY, not mood, and shows anchor labels
 pre-log wrist line: one grey line on A (pressure fine, the pain rule), no amber banner
 prePeriodVsRest › null (no line) when n<3 on either side
 prePeriodVsRest › reports the gap when n>=3 both sides and the diff is >=1
+program-week — before the launch the calendar model is kept › a pre-launch "now" uses the calendar: planDateNow is just now; the how-to week is the calendar week
+program-week — before the launch the calendar model is kept › a pre-launch session has no completion-model week key and its plan comes from the calendar lookup
+program-week — before the launch the calendar model is kept › isNowAfterCompletionLaunch: Sep 1 is before, Oct 13 is after
+program-week — getProgramWeek counts Sick weeks out of the number › Round 1 skips (the July Sick week) never leak into Round 2 numbering
+program-week — getProgramWeek counts Sick weeks out of the number › Round 2 started Sat Aug 29: Oct 10 is calendar week 7 but program Week 6 (one Sick skip)
+program-week — getProgramWeek counts Sick weeks out of the number › the Sick week itself keeps the number it would have had, and says why
+program-week — the Sick week and the clock it pauses › completionClosingSessionIds: nothing closed by a session yet (Week 5 closed as sick); a third letter closes it
+program-week — the Sick week and the clock it pauses › ignoreSick = true is the plain model: Week 5 stays open, no Sick weeks listed
+program-week — the Sick week and the clock it pauses › inside the Sick week Week 6 is pending, and a session started now counts BACK into Week 5
+program-week — the Sick week and the clock it pauses › the Oct 3 Sick week closes Week 5 (sick) and opens Week 6 on Sat Oct 10
+program-week — the Sick week and the clock it pauses › two CONTIGUOUS Sick weeks (Oct 3 + Oct 10) open Week 6 on Oct 17
+program-week — the swing Saturday (calendar model) › Saturday with last week at 2 of 3: home shows last week, and today's pick is the missing letter
+program-week — the swing Saturday (calendar model) › no sessions at all: today's pick is A
+program-week — which plan a saved session used › Workout D never has a week key: planForLog hands back the fixed D workout
+program-week — which plan a saved session used › a Week 5 session (Sep 28) still resolves to 2/5, not the week after the Sick pause
+program-week — which plan a saved session used › a session in Week 6 (Oct 11) resolves to key 2/6 and to that week's own A
+program-week — which plan a saved session used › the same answer when the session is not saved yet (sessionPayload runs before the save)
 progress: "N full weeks" counts training weeks only — no break, sick, in-progress or held weeks
 projections: her toggle — "10 min, 30, hour" › 10 min at 6.3 kcal/min -> 63 kcal
 projections: her toggle — "10 min, 30, hour" › 30 min at 6.3 kcal/min -> 189 kcal
