@@ -17,7 +17,7 @@
 // reps text doesn't also carry — the exact bug class the curl mp3 had.
 
 import { test, expect } from '@playwright/test';
-import { appSourceFiles } from './helpers';
+import { bundledSourceFiles } from './helpers';
 import { EXERCISE_DETAIL } from '../exercise-detail';
 
 // The two 1–2 kg LOAD CHIP moves (app.ts's ARM_FEEL_STEPS — curl/row, rule
@@ -72,7 +72,9 @@ test('voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its ow
   // false positive).
   // Step 2c (Oct 13 2026): every app module, not a hand list — the PROGRAM
   // moved to program.ts, app.ts keeps a few Exercise literals of its own.
-  const appSrc = appSourceFiles()
+  // Step 1b-1: only the BUNDLED modules — ladders.ts is unwired engine data,
+  // not shown to her, and gave two moves false "accepted kg" values.
+  const appSrc = bundledSourceFiles()
     .map((f) => f.src)
     .join('\n');
   const nameRepsRe =

@@ -15,7 +15,7 @@ import { test, expect } from '@playwright/test';
 import { PROGRAM, SAFETY_LINE, type Exercise, type Phase, type WeekPlan } from '../program';
 import { EXERCISE_DETAIL } from '../exercise-detail';
 import { slugFor } from '../move-feel';
-import { appSourceFiles } from './helpers';
+import { allSourceFiles, appSourceFiles, bundledSourceFiles } from './helpers';
 
 // The ONE "how many program weeks" constant. The Settings > About "Program
 // weeks" assertion in tests/screens/program-weeks.spec.ts reads the same number
@@ -182,5 +182,27 @@ test.describe('appSourceFiles() — the source-scan tests can never go quiet aga
     const imported = [...app.matchAll(/from '\.\/([\w-]+)\.js'/g)].map((m) => `${m[1]}.ts`);
     expect(imported.length).toBeGreaterThan(0);
     for (const mod of imported) expect(names, `app.ts imports ${mod}`).toContain(mod);
+  });
+
+  test('bundledSourceFiles() is a subset of allSourceFiles(): app.ts, program.ts and every import, and the unwired engine only if app.ts reaches it', () => {
+    const all = allSourceFiles().map((f) => f.file);
+    expect(appSourceFiles().map((f) => f.file)).toEqual(all);
+    const bundledFiles = bundledSourceFiles();
+    const bundled = bundledFiles.map((f) => f.file);
+    for (const f of bundled) expect(all, f).toContain(f);
+    expect(bundled).toContain('app.ts');
+    expect(bundled).toContain('program.ts');
+    const app = bundledFiles.find((f) => f.file === 'app.ts')!.src;
+    for (const m of app.matchAll(/from '\.\/([\w-]+)\.js'/g))
+      expect(bundled, `app.ts imports ${m[1]}`).toContain(`${m[1]}.ts`);
+    // ladders.ts / progression.ts are tested pure modules not wired into app.ts
+    // (CLAUDE.md file map). They stay out of the bundled set exactly as long as
+    // nothing in the bundle imports them; this goes red the day that changes
+    // and tells the next person voice-load's scope just grew.
+    for (const f of ['ladders', 'progression']) {
+      const reached = bundledFiles.some((b) => new RegExp(`from '\\./${f}\\.js'`).test(b.src));
+      expect(bundled.includes(`${f}.ts`), `${f}.ts`).toBe(reached);
+      expect(reached, `${f}.ts is not imported by the bundle`).toBe(false);
+    }
   });
 });

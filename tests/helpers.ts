@@ -279,7 +279,10 @@ export async function advanceToExercise(
 // Node-side only, registers no test hook.
 export type AppSourceFile = { file: string; src: string };
 
-export function appSourceFiles(): AppSourceFile[] {
+/** allSourceFiles: every root module, INCLUDING engine data that is not in the
+ *  shipped bundle (ladders.ts, progression.ts). For audits that deliberately
+ *  cover the unwired engine too (Tips audit, pain rule). */
+export function allSourceFiles(): AppSourceFile[] {
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
   const root = path.join(__dirname, '..');
@@ -288,4 +291,27 @@ export function appSourceFiles(): AppSourceFile[] {
     .filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts') && f !== 'playwright.config.ts')
     .sort()
     .map((file) => ({ file, src: fs.readFileSync(path.join(root, file), 'utf8') }));
+}
+
+/** Old name, same thing: = allSourceFiles(). */
+export const appSourceFiles = allSourceFiles;
+
+/** bundledSourceFiles: only the modules that actually ship in the app bundle —
+ *  app.ts plus everything it imports, followed recursively (type-only imports
+ *  included: erased, but still app source). For checks about what the app can
+ *  show (voice-load's "accepted kg" sweep), which ladders.ts polluted. */
+export function bundledSourceFiles(): AppSourceFile[] {
+  const byFile = new Map(allSourceFiles().map((f) => [f.file, f]));
+  const seen = new Set<string>();
+  const queue = ['app.ts'];
+  while (queue.length) {
+    const file = queue.pop()!;
+    if (seen.has(file)) continue;
+    const entry = byFile.get(file);
+    if (!entry) throw new Error(`bundledSourceFiles: ${file} is imported but is not a root module`);
+    seen.add(file);
+    for (const m of entry.src.matchAll(/(?:from|import)\s+'\.\/([\w-]+)\.js'/g))
+      queue.push(`${m[1]}.ts`);
+  }
+  return [...seen].sort().map((file) => byFile.get(file)!);
 }

@@ -113,6 +113,7 @@ a missing timestamp (confirmed true, no value) -> null, never a guess
 a new rung "too much" on both of its first 2 exposures → STEP_BACK, that rung specifically
 a new rung "too much" once → HOLD (not a step-back yet)
 a small phase (spec §4.3) › a phase under 3 workouts shows — and the real count, and the footnote appears once
+appSourceFiles() — the source-scan tests can never go quiet again › bundledSourceFiles() is a subset of allSourceFiles(): app.ts, program.ts and every import, and the unwired engine only if app.ts reaches it
 appSourceFiles() — the source-scan tests can never go quiet again › includes app.ts AND program.ts, and every module app.ts imports
 at phone size (412x892) › the cycle page causes no sideways scroll, and the table fits the viewport
 back & wrist in Card B (spec §2.3) › 2 readings: no Back pain row
