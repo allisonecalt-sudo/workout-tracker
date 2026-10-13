@@ -57,9 +57,14 @@ export type ReplayMove = { round: number; week: number; at: string };
 export type ReplayInput = {
   sessions: ReplaySession[];
   moves: ReplayMove[];
-  /** Hypothetical extra rounds (e.g. a Round 3), pushed onto ROUNDS for the
-   *  duration of the replay only. Synthetic fixtures only; absent = real ROUNDS. */
-  rounds?: { num: number; start: string }[];
+  /** Hypothetical extra rounds (e.g. a Round 3), put on ROUNDS only while a
+   *  snapshot is computed, and only from `addedAt` (default: the round's own
+   *  start) - i.e. the code "gained" the round when it began, as a real Round 3
+   *  would be added to program.ts. (A round put on ROUNDS BEFORE its start date
+   *  makes the walk jump to it at once: week.ts applies a RoundStart event
+   *  whatever "now" is. The replay would show that, so it does not model it.)
+   *  Synthetic fixtures only; absent = the real ROUNDS. */
+  rounds?: { num: number; start: string; addedAt?: string }[];
 };
 
 export const REPLAY_FROM = '2026-09-26'; // the completion launch day
@@ -235,22 +240,28 @@ export type ReplayResult = {
 /** Run the whole grid. `to` is the last day replayed (callers pass today+60). */
 export function computeReplay(input: ReplayInput, from: string, to: string): ReplayResult {
   const grid = replayGrid(from, to);
-  // Hypothetical rounds live on the shared ROUNDS array only while we compute.
-  const added = (input.rounds ?? []).filter((r) => !ROUNDS.some((x) => x.num === r.num));
-  ROUNDS.push(...added);
-  try {
-    return {
-      meta: {
-        from,
-        to,
-        times: REPLAY_TIMES.map(([h, m]) => `${pad(h)}:${pad(m)}`),
-        snapshots: grid.length,
-      },
-      snapshots: grid.map((now) => snapshotAt(now, input)),
-    };
-  } finally {
-    for (const r of added) ROUNDS.splice(ROUNDS.indexOf(r), 1);
-  }
+  const snapshots = grid.map((now) => {
+    const t = now.getTime();
+    const added = (input.rounds ?? [])
+      .filter((r) => new Date(r.addedAt ?? `${r.start}T00:00:00`).getTime() <= t)
+      .filter((r) => !ROUNDS.some((x) => x.num === r.num))
+      .map((r) => ({ num: r.num, start: r.start }));
+    ROUNDS.push(...added);
+    try {
+      return snapshotAt(now, input);
+    } finally {
+      for (const r of added) ROUNDS.splice(ROUNDS.indexOf(r), 1);
+    }
+  });
+  return {
+    meta: {
+      from,
+      to,
+      times: REPLAY_TIMES.map(([h, m]) => `${pad(h)}:${pad(m)}`),
+      snapshots: grid.length,
+    },
+    snapshots,
+  };
 }
 
 /** One snapshot per line, so a diff points at the instant that moved. */

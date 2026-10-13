@@ -742,6 +742,7 @@ week-clock replay — synthetic golden (step 5a) › every instant and field equ
 week-clock replay — synthetic golden (step 5a) › the comparison itself notices a change (one field flipped)
 week-clock replay — synthetic golden (step 5a) › the fixture covers the shapes it claims to
 week-clock replay — synthetic golden (step 5a) › the grid is the full window: 78 days x 3 times
+week-clock replay — synthetic golden (step 5a) › the widened fixture (step 5f) also covers the edges and the rare shapes it claims
 week-clock replay — the real-data tool refuses git checkouts (step 5f) › --out inside ANOTHER checkout (a .git FILE, as in a worktree) is refused too
 week-clock replay — the real-data tool refuses git checkouts (step 5f) › --out inside this repo (a .git directory above it) is refused, nothing written
 week-dots row is rendered with 7 day labels
