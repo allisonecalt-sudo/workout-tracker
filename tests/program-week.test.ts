@@ -33,6 +33,8 @@ import {
 } from '../program-week';
 import {
   SKIPPED_WEEKS,
+  PROGRAM,
+  ROUNDS,
   planForWeekKey,
   programWeekPlan,
   replaceCalendarMarks,
@@ -376,5 +378,22 @@ test.describe('program-week — step 5c: the plan row is found by week key', () 
     expect(pw['completionWeekSyntheticDate']).toBeUndefined();
     expect(pw['planDateNow']).toBeUndefined();
     expect(wk['shiftPastSickWeeks']).toBeUndefined();
+  });
+});
+// v62.1 (Oct 14 2026) — a round with no PROGRAM rows through the week clock's own
+// plan lookup: the last written row, never PROGRAM[0] "Starter".
+test.describe('program-week — v62.1: a round with no plan rows shows the last written plan', () => {
+  test('Round 3 open, no rows: currentWeekPlan is the last PROGRAM row, not Round 1 Week 1', () => {
+    ROUNDS.push({ num: 3, start: '2026-10-17' });
+    try {
+      const i = input({ now: new Date('2026-10-18T12:00:00+03:00') });
+      expect(shownWeek(i).key).toEqual({ round: 3, week: 1 });
+      const plan = currentWeekPlan(i);
+      expect(plan).toBe(PROGRAM[PROGRAM.length - 1]);
+      expect(plan).not.toBe(PROGRAM[0]);
+      expect(planForWeekKey(shownWeek(i).key).noPlanForRound).toBe(3);
+    } finally {
+      ROUNDS.pop();
+    }
   });
 });

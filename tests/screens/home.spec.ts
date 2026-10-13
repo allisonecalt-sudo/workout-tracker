@@ -10,6 +10,7 @@ import {
   mockDate,
   movableClock,
   ignoreSickWeeks,
+  seedRounds,
   PLAIN_WEEK5_HANDOVER,
 } from '../helpers';
 
@@ -1535,5 +1536,33 @@ test.describe('v48 P4 home', () => {
     await expect(page.locator('#finish-walk')).toHaveText('■ Done');
     await page.locator('#finish-walk').click();
     await expect(walk.locator('.walk-text')).toHaveText('1 this week · 4,210 steps today');
+  });
+});
+
+// v62.1 (Oct 14 2026) - a round whose plan rows are not written yet. Home used
+// to fall to PROGRAM[0] ("Round 1 Week 1 Starter") with no word about it. Her
+// rule: fail loud. It now shows the last written plan AND says so.
+test.describe('v62.1 home - a round with no plan rows says so', () => {
+  test('Round 3 open, no PROGRAM rows: Home names the gap and shows the last plan, not Round 1 Starter', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-12-01T10:00:00.000Z');
+    await seedRounds(page, [{ num: 3, start: '2026-11-28' }], 'Round 3 has no PROGRAM rows yet');
+    await page.goto('/');
+    await expect(page.locator('.home-header h1')).toHaveText('Week 1');
+    const note = page.locator('#no-plan-note');
+    await expect(note).toBeVisible();
+    await expect(note).toHaveText('No plan written for Round 3 yet — showing the last plan.');
+    // not the repeat line: this is not "same moves as Week N", it is a missing plan
+    await expect(page.locator('.week-sub-repeat')).toHaveCount(0);
+    // the workout she is offered is the last written one (Round 2 Week 6: a light ride), not Starter
+    await page.locator('button[data-workout="A"]').click();
+    await expect(page.locator('.prelog-meta')).toContainText('no plan written yet');
+  });
+
+  test('a round that has rows shows no such line', async ({ page }) => {
+    await mockDate(page, '2026-10-13T10:00:00.000Z');
+    await page.goto('/');
+    await expect(page.locator('#no-plan-note')).toHaveCount(0);
   });
 });

@@ -104,8 +104,10 @@ import {
   getProgramWeekCount,
   diffWorkout,
   planForWeekKey,
+  noPlanLine,
   injectMarkerProgramWeek,
   replaceCalendarMarks,
+  appendRounds,
   weekPlanTitle,
   programWeekPlan,
   programFutureWeekPlans,
@@ -4583,6 +4585,7 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     __wtSeedCalendarMarks?: typeof replaceCalendarMarks;
     __wtCalendarMarksSeed?: CalendarMarks;
   };
+    __wtRoundsSeed?: { num: number; start: string }[];
   w.__wtMergeRemoteSessions = mergeRemoteSessions;
   w.__wtIsValidLogEntry = isValidLogEntry;
   w.__wtComputeWeekTotals = computeWeekTotals;
@@ -4627,6 +4630,8 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   w.__wtSeedCalendarMarks = replaceCalendarMarks;
   if (w.__wtCalendarMarksSeed) replaceCalendarMarks(w.__wtCalendarMarksSeed);
 }
+  // v62.1: same idea for ROUNDS (a hypothetical Round 3 with no plan rows yet).
+  if (w.__wtRoundsSeed) appendRounds(w.__wtRoundsSeed);
 
 async function pullFromSupabase(): Promise<void> {
   if (syncDisabled()) return;
@@ -6967,9 +6972,12 @@ function renderHome(): string {
     } else {
       subLineHtml =
         `<div class="week-sub-line" id="week-sub">${escapeHtml(weekSubLabel(shown))}</div>` +
-        (planInfo.repeatsWeek !== null
-          ? `<div class="week-sub-line week-sub-repeat">Same moves as Week ${planInfo.repeatsWeek}</div>`
-          : '');
+        (planInfo.noPlanForRound !== null
+          ? // v62.1: a round with no plan rows yet - say so (fail loud), not "same moves"
+            `<div class="week-sub-line week-sub-noplan" id="no-plan-note">${escapeHtml(noPlanLine(planInfo.noPlanForRound))}</div>`
+          : planInfo.repeatsWeek !== null
+            ? `<div class="week-sub-line week-sub-repeat">Same moves as Week ${planInfo.repeatsWeek}</div>`
+            : '');
       weekCardHeadText = escapeHtml(`Week ${shown.key.week}`);
       // v61 fix pass 2 (Oct 2 2026, CHECK-v61.md round 2 must #1, repro 1):
       // mid-gap, with nothing of A/B/C logged yet, `shown.span` is null — no
@@ -7454,6 +7462,7 @@ function preLogWeekLabel(): string {
   }
   const planInfo = planForWeekKey(shown.key);
   return planInfo.repeatsWeek === null
+  if (planInfo.noPlanForRound !== null) return `Week ${shown.key.week} · no plan written yet`;
     ? `Week ${shown.key.week}`
     : `Week ${shown.key.week} · same moves as Week ${planInfo.repeatsWeek}`;
 }

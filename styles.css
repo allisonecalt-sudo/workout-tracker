@@ -5588,6 +5588,12 @@ textarea:focus {
   margin-top: 0;
 }
 
+/* v62.1: "No plan written for Round N yet" - a gap she must notice, so full ink. */
+.week-sub-line.week-sub-noplan {
+  margin-top: 0;
+  color: var(--ink);
+}
+
 /* "‹ Week 4" / "Week 5 ›" — a plain, visible peek at the last closed week
  * (§8c amendment). Quiet, like the swing-note above it, but a real 44px tap
  * target since it's a button, not a caption. */

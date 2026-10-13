@@ -76,6 +76,21 @@ export async function seedCalendarMarks(
   }, marks);
 }
 
+/** v62.1: add ROUNDS entries (e.g. a Round 3) before the first render, the same
+ *  way seedCalendarMarks seeds the calendar: the init script leaves them on
+ *  window.__wtRoundsSeed and app.ts's automation-only block appends them to ROUNDS.
+ *  Used to prove what Home says for a round whose plan rows are not written yet. */
+export async function seedRounds(
+  page: Page,
+  rounds: { num: number; start: string }[],
+  reason: string
+): Promise<void> {
+  if (reason.trim().length < 10) throw new Error('seedRounds needs a real reason');
+  await page.context().addInitScript((seed: { num: number; start: string }[]) => {
+    (window as unknown as { __wtRoundsSeed?: typeof seed }).__wtRoundsSeed = seed;
+  }, rounds);
+}
+
 /** The plain model: no Sick weeks at all (a thin name kept for the 21 Week 5 -> 6
  *  hand-over tests; = seedCalendarMarks(page, { sick: [] }, reason)). */
 export async function ignoreSickWeeks(page: Page, reason: string): Promise<void> {

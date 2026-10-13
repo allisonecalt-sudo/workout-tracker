@@ -2610,6 +2610,14 @@ export const ROUNDS: { num: number; start: string }[] = [
   { num: 2, start: '2026-08-29' },
 ];
 
+/** TEST-ONLY seed (v62.1; app.ts calls it only under automation, from its __wt
+ * hook block): appends hypothetical rounds (e.g. a Round 3) to ROUNDS, skipping
+ * any number already there. Same idea as replaceCalendarMarks: ROUNDS is the one
+ * data source, so seeding it changes every reader together. */
+export function appendRounds(rounds: { num: number; start: string }[]): void {
+  for (const r of rounds) if (!ROUNDS.some((x) => x.num === r.num)) ROUNDS.push({ ...r });
+}
+
 export function getRoundFor(date: Date): { num: number; start: string } {
   let chosen = ROUNDS[0]!;
   for (const r of ROUNDS) {
@@ -2685,19 +2693,45 @@ export function injectMarkerProgramWeek(
   PROGRAM.push(clone);
 }
 
+/** The line Home shows when a round has no plan rows (see planForWeekKey). */
+export function noPlanLine(round: number): string {
+  return `No plan written for Round ${round} yet — showing the last plan.`;
+}
+
 /** The PROGRAM row for a completion-model week key: an exact round+weekNum
  * match if PROGRAM has one, else the highest weekNum below it in the SAME
- * round (§2.3 planFor's "repeats" fallback) — "Same moves as Week N" until
- * she writes the next row. Fails loud in the one case that should never
- * happen (an empty round) rather than silently defaulting to Week 1. */
-export function planForWeekKey(key: WeekKey): { plan: WeekPlan; repeatsWeek: number | null } {
+ * round (§2.3 planFor's "repeats" fallback) - "Same moves as Week N" until
+ * she writes the next row.
+ *
+ * v62.1 (Oct 14 2026): a round with NO rows at all (a Round 3 added to ROUNDS
+ * before its plan is written) used to fall to PROGRAM[0] - Round 1 Week 1
+ * "Starter" - silently. It now falls back to the highest row at or below the
+ * key in (round, weekNum) order, i.e. the previous round's last written row,
+ * and says so: `noPlanForRound` is that round's number (null whenever the
+ * round has rows). Home turns it into a visible line (her fail-loud rule).
+ * tests/program.test.ts also fails if a ROUNDS entry has no PROGRAM row, so
+ * this path is a safety net, not the plan. PROGRAM[0] remains only if the key
+ * sorts before every row (impossible while Round 1 exists), with a warn. */
+export function planForWeekKey(key: WeekKey): {
+  plan: WeekPlan;
+  repeatsWeek: number | null;
+  noPlanForRound: number | null;
+} {
   const sameRound = PROGRAM.filter((wp) => (wp.round ?? 1) === key.round);
   const exact = sameRound.find((wp) => wp.weekNum === key.week);
-  if (exact) return { plan: exact, repeatsWeek: null };
+  if (exact) return { plan: exact, repeatsWeek: null, noPlanForRound: null };
   const below = sameRound.filter((wp) => wp.weekNum < key.week);
   const highest = below[below.length - 1];
-  if (highest) return { plan: highest, repeatsWeek: highest.weekNum };
-  console.warn(`[week] no PROGRAM row at all for round ${key.round} — falling back to PROGRAM[0]`);
+  if (highest) return { plan: highest, repeatsWeek: highest.weekNum, noPlanForRound: null };
+  console.warn(
+    `[week] no PROGRAM row at all for round ${key.round} - falling back to the last row before it`
+  );
+  const before = PROGRAM.filter((wp) => (wp.round ?? 1) < key.round);
+  const lastWritten = before[before.length - 1];
+  if (lastWritten) {
+    return { plan: lastWritten, repeatsWeek: lastWritten.weekNum, noPlanForRound: key.round };
+  }
+  console.warn(`[week] nothing before round ${key.round} either - falling back to PROGRAM[0]`);
   const fallback = PROGRAM[0]!;
-  return { plan: fallback, repeatsWeek: fallback.weekNum };
+  return { plan: fallback, repeatsWeek: fallback.weekNum, noPlanForRound: key.round };
 }

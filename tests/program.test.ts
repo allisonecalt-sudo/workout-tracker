@@ -12,7 +12,16 @@
 // Saturday; (round, weekNum) is unique and ascending; 17 weeks.
 
 import { test, expect } from '@playwright/test';
-import { PROGRAM, SAFETY_LINE, type Exercise, type Phase, type WeekPlan } from '../program';
+import {
+  PROGRAM,
+  ROUNDS,
+  SAFETY_LINE,
+  SKIPPED_WEEKS,
+  planForWeekKey,
+  type Exercise,
+  type Phase,
+  type WeekPlan,
+} from '../program';
 import { EXERCISE_DETAIL } from '../exercise-detail';
 import { slugFor } from '../move-feel';
 import { allSourceFiles, appSourceFiles, bundledSourceFiles } from './helpers';
@@ -203,6 +212,46 @@ test.describe('appSourceFiles() — the source-scan tests can never go quiet aga
       const reached = bundledFiles.some((b) => new RegExp(`from '\\./${f}\\.js'`).test(b.src));
       expect(bundled.includes(`${f}.ts`), `${f}.ts`).toBe(reached);
       expect(reached, `${f}.ts is not imported by the bundle`).toBe(false);
+    }
+  });
+});
+// v62.1 (Oct 14 2026) — a round with NO program rows must not fall to PROGRAM[0]
+// ("Round 1 Week 1 Starter"), silently. It falls back to the last written row and
+// SAYS so (noPlanForRound), which Home turns into a visible line.
+test.describe('v62.1 — planForWeekKey for a round with no PROGRAM rows', () => {
+  const last = PROGRAM[PROGRAM.length - 1]!;
+
+  test('Round 3 Week 1 (no rows) gets the LAST written row, never PROGRAM[0]', () => {
+    const r = planForWeekKey({ round: 3, week: 1 });
+    expect(r.plan).toBe(last);
+    expect(r.plan).not.toBe(PROGRAM[0]);
+    expect(r.noPlanForRound).toBe(3);
+  });
+
+  test('Round 3 Week 4 (still no rows) gets the same last row', () => {
+    const r = planForWeekKey({ round: 3, week: 4 });
+    expect(r.plan).toBe(last);
+    expect(r.noPlanForRound).toBe(3);
+  });
+
+  test('a round that HAS rows never reports a missing plan (exact and repeat)', () => {
+    expect(planForWeekKey({ round: 2, week: 6 }).noPlanForRound).toBeNull();
+    expect(planForWeekKey({ round: 2, week: 9 }).noPlanForRound).toBeNull();
+    expect(planForWeekKey({ round: 2, week: 9 }).repeatsWeek).toBe(last.weekNum);
+    expect(planForWeekKey({ round: 1, week: 3 }).noPlanForRound).toBeNull();
+  });
+
+  test('the fallback is the highest row AT OR BELOW the key: Round 3 falls to the end of Round 2, not the end of the table by accident', () => {
+    // A synthetic Round 4 row appended after: Round 3 must still fall to Round 2's last row.
+    const r4 = JSON.parse(JSON.stringify(last)) as WeekPlan;
+    r4.round = 4;
+    r4.weekNum = 1;
+    PROGRAM.push(r4);
+    try {
+      expect(planForWeekKey({ round: 3, week: 1 }).plan).toBe(last);
+      expect(planForWeekKey({ round: 4, week: 1 }).plan).toBe(r4);
+    } finally {
+      PROGRAM.pop();
     }
   });
 });
