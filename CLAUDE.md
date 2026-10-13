@@ -50,6 +50,8 @@ ride=right@12min"`. `slug=feel@qty`, `;`-joined; slug is `move-feel.ts`'s
 - `scripts/build.mjs` — the ONE esbuild bundle (content-hashed `app.<hash>.js`) + manifest + build-info + index.html rewrite. Deterministic: re-running it with no source change reproduces the same hash (the buildDate literal is excluded from what gets hashed — see its own comment; that bit it once). `scripts/update-golden.mjs` — the ONLY way to regenerate `tests/golden/*.html`.
 - `tests/golden.spec.ts` + `tests/golden/*.html` — gate 1 (below). `tests/sw-upgrade.spec.ts` — proves the install-only-after-full-download mechanism with a real (not mocked-in-page) sibling service-worker script; part of gate 2.
 - `dist/` — generated, gitignored. Never edit anything in it or `index.html`'s bundle `<script src>` by hand; `npm run build` writes both.
+- Sick/break weeks = entries in `SKIPPED_WEEKS` in `program.ts` (the week clock, `getProgramWeek` and the weekly views all read that one table); the plan row for "now" is found by week key (`planForWeekKey`), never a synthetic date.
+- Tests seed calendar marks through the `__wt` hook (`seedCalendarMarks` in `tests/helpers.ts`; `ignoreSickWeeks` = no Sick weeks); there is no app branch for tests.
 
 ## The three gates (all green before hand-off, every step)
 
