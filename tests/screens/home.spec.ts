@@ -11,6 +11,7 @@ import {
   movableClock,
   ignoreSickWeeks,
   seedRounds,
+  nextRoundNum,
   PLAIN_WEEK5_HANDOVER,
 } from '../helpers';
 
@@ -1543,16 +1544,21 @@ test.describe('v48 P4 home', () => {
 // to fall to PROGRAM[0] ("Round 1 Week 1 Starter") with no word about it. Her
 // rule: fail loud. It now shows the last written plan AND says so.
 test.describe('v62.1 home - a round with no plan rows says so', () => {
-  test('Round 3 open, no PROGRAM rows: Home names the gap and shows the last plan, not Round 1 Starter', async ({
+  test('the next round open, no PROGRAM rows: Home names the gap and shows the last plan, not Round 1 Starter', async ({
     page,
   }) => {
     await mockDate(page, '2026-12-01T10:00:00.000Z');
-    await seedRounds(page, [{ num: 3, start: '2026-11-28' }], 'Round 3 has no PROGRAM rows yet');
+    const n = nextRoundNum(); // highest ROUNDS number + 1 (today 3), so a real Round 3 later does not break this
+    await seedRounds(
+      page,
+      [{ num: n, start: '2026-11-28' }],
+      'the next round has no PROGRAM rows yet'
+    );
     await page.goto('/');
     await expect(page.locator('.home-header h1')).toHaveText('Week 1');
     const note = page.locator('#no-plan-note');
     await expect(note).toBeVisible();
-    await expect(note).toHaveText('No plan written for Round 3 yet — showing the last plan.');
+    await expect(note).toHaveText(`No plan written for Round ${n} yet — showing the last plan.`);
     // not the repeat line: this is not "same moves as Week N", it is a missing plan
     await expect(page.locator('.week-sub-repeat')).toHaveCount(0);
     // the workout she is offered is the last written one (Round 2 Week 6: a light ride), not Starter

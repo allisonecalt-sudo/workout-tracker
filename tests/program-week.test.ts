@@ -42,6 +42,7 @@ import {
   type Workout,
 } from '../program';
 import type { LogEntry } from '../types';
+import { nextRoundNum } from './helpers';
 
 /** A minimal saved session; only the fields the week clock reads matter. */
 function log(id: string, date: string, workout: LogEntry['workout']): LogEntry {
@@ -387,19 +388,30 @@ test.describe('program-week — step 5c: the plan row is found by week key', () 
 // They are now local (Asia/Jerusalem, DST-aware) midnight, like every other
 // Saturday anchor in week.ts. The suite is pinned to TZ=Asia/Jerusalem.
 test.describe('program-week — v62.1: round starts are Jerusalem local midnight, not +03:00', () => {
-  /** Add a Round for the duration of one body, then take it off again. */
-  function withRound<T>(num: number, start: string, body: () => T): T {
+  /** Add the NEXT round (highest ROUNDS number + 1, today 3 - so a real Round 3 written
+   *  later does not break these) for the duration of one body, then take it off again.
+   *  The body gets that round's number. */
+  function withNextRound<T>(start: string, body: (n: number) => T): T {
+    const num = nextRoundNum();
+    const lastStart = ROUNDS[ROUNDS.length - 1]!.start;
+    if (start <= lastStart) {
+      // These tests are pinned to a calendar date (a DST edge), so the date cannot follow
+      // the round number. Fail with the fix instead of a confusing round-order error.
+      throw new Error(
+        `a real round now starts ${lastStart}, on/after this test's date ${start}: move the test's date past it`
+      );
+    }
     ROUNDS.push({ num, start });
     try {
-      return body();
+      return body(num);
     } finally {
       ROUNDS.pop();
     }
   }
 
   test('a winter (UTC+2) round start is local midnight: Dec 5 opens Sat Dec 5 00:00 +02:00', () => {
-    withRound(3, '2026-12-05', () => {
-      const r3 = roundStartsForWeekModel().find((r) => r.round === 3)!;
+    withNextRound('2026-12-05', (n) => {
+      const r3 = roundStartsForWeekModel().find((r) => r.round === n)!;
       expect(new Date(r3.at).getTime()).toBe(new Date(2026, 11, 5, 0, 0, 0).getTime());
       expect(r3.at).toBe('2026-12-05T00:00:00+02:00');
     });
@@ -412,27 +424,27 @@ test.describe('program-week — v62.1: round starts are Jerusalem local midnight
 
   test('a round start in the week the clocks go back keeps the right offset on both sides', () => {
     // Clocks go back Sun Oct 25 2026 (02:00 -> 01:00): Sat Oct 24 is +03:00, Sat Oct 31 is +02:00.
-    withRound(3, '2026-10-31', () => {
-      expect(roundStartsForWeekModel().find((r) => r.round === 3)!.at).toBe(
+    withNextRound('2026-10-31', (n) => {
+      expect(roundStartsForWeekModel().find((r) => r.round === n)!.at).toBe(
         '2026-10-31T00:00:00+02:00'
       );
     });
-    withRound(3, '2026-10-24', () => {
-      expect(roundStartsForWeekModel().find((r) => r.round === 3)!.at).toBe(
+    withNextRound('2026-10-24', (n) => {
+      expect(roundStartsForWeekModel().find((r) => r.round === n)!.at).toBe(
         '2026-10-24T00:00:00+03:00'
       );
     });
   });
 
-  test('a session Fri Dec 4 23:30 stays in the previous round; one Sat Dec 5 00:30 is Round 3 Week 1', () => {
-    withRound(3, '2026-12-05', () => {
+  test('a session Fri Dec 4 23:30 stays in the previous round; one Sat Dec 5 00:30 is the next round, Week 1', () => {
+    withNextRound('2026-12-05', (n) => {
       const logs: LogEntry[] = [
         log('fri', '2026-12-04T23:30:00+02:00', 'A'),
         log('sat', '2026-12-05T00:30:00+02:00', 'B'),
       ];
       const model = weekModel({ logs, moves: [], now: new Date('2026-12-05T12:00:00+02:00') });
-      expect(model.weekOf.get('fri')!.round).toBe(2);
-      expect(model.weekOf.get('sat')).toEqual({ round: 3, week: 1 });
+      expect(model.weekOf.get('fri')!.round).toBe(n - 1);
+      expect(model.weekOf.get('sat')).toEqual({ round: n, week: 1 });
     });
   });
 });
@@ -440,15 +452,16 @@ test.describe('program-week — v62.1: round starts are Jerusalem local midnight
 // v62.1 (Oct 14 2026) — a round with no PROGRAM rows through the week clock's own
 // plan lookup: the last written row, never PROGRAM[0] "Starter".
 test.describe('program-week — v62.1: a round with no plan rows shows the last written plan', () => {
-  test('Round 3 open, no rows: currentWeekPlan is the last PROGRAM row, not Round 1 Week 1', () => {
-    ROUNDS.push({ num: 3, start: '2026-10-17' });
+  test('the next round open, no rows: currentWeekPlan is the last PROGRAM row, not Round 1 Week 1', () => {
+    const n = nextRoundNum();
+    ROUNDS.push({ num: n, start: '2026-10-17' });
     try {
       const i = input({ now: new Date('2026-10-18T12:00:00+03:00') });
-      expect(shownWeek(i).key).toEqual({ round: 3, week: 1 });
+      expect(shownWeek(i).key).toEqual({ round: n, week: 1 });
       const plan = currentWeekPlan(i);
       expect(plan).toBe(PROGRAM[PROGRAM.length - 1]);
       expect(plan).not.toBe(PROGRAM[0]);
-      expect(planForWeekKey(shownWeek(i).key).noPlanForRound).toBe(3);
+      expect(planForWeekKey(shownWeek(i).key).noPlanForRound).toBe(n);
     } finally {
       ROUNDS.pop();
     }

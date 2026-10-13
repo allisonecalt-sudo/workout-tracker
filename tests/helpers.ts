@@ -3,6 +3,7 @@
 // Oct 13 2026): every top-level const/function of the old file, exported, plus
 // setupPage (the old top-level beforeEach). Registers no test.* hook.
 import { expect, type BrowserContext, type Page } from '@playwright/test';
+import { ROUNDS } from '../program';
 
 // The old specs resolved repo files with __dirname + ".." (tests/ -> repo root).
 // Specs now live one folder deeper, so they import this under that name.
@@ -74,6 +75,13 @@ export async function seedCalendarMarks(
     (window as unknown as { __wtCalendarMarksSeed?: CalendarMarksSeed }).__wtCalendarMarksSeed =
       seed;
   }, marks);
+}
+
+/** The number of the round AFTER the highest one in ROUNDS (today 3). Tests that
+ *  need "a round with no PROGRAM rows" use this instead of a literal 3, so writing
+ *  the real Round 3 later does not break them (code-shape step 7-0). */
+export function nextRoundNum(): number {
+  return Math.max(...ROUNDS.map((r) => r.num)) + 1;
 }
 
 /** v62.1: add ROUNDS entries (e.g. a Round 3) before the first render, the same

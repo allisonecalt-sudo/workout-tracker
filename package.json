@@ -15,6 +15,7 @@
     "test:ci": "playwright test",
     "titles:check": "node scripts/check-titles.mjs",
     "titles:update": "node scripts/check-titles.mjs --update",
+    "verify:commits": "node scripts/verify-commits.mjs",
     "golden:update": "node scripts/update-golden.mjs",
     "serve": "serve -l 3000 .",
     "prepare": "husky"

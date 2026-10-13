@@ -58,8 +58,10 @@ export type ReplayInput = {
    *  start date takes effect on its date, not at once (week.ts applies a
    *  RoundStart only when its instant <= now), so an earlier `addedAt` is safe
    *  and tests/replay.test.ts proves it. The golden fixture keeps the default.
+   *  `num` omitted = the round after the highest real one (highest ROUNDS number + 1,
+   *  today 3), so writing the real Round 3 later does not break the replay tests.
    *  Synthetic fixtures only; absent = the real ROUNDS. */
-  rounds?: { num: number; start: string; addedAt?: string }[];
+  rounds?: { num?: number; start: string; addedAt?: string }[];
 };
 
 export const REPLAY_FROM = '2026-09-26'; // the completion launch day
@@ -231,7 +233,9 @@ export function computeReplay(input: ReplayInput, from: string, to: string): Rep
   const grid = replayGrid(from, to);
   const snapshots = grid.map((now) => {
     const t = now.getTime();
+    const nextNum = Math.max(...ROUNDS.map((x) => x.num)) + 1;
     const added = (input.rounds ?? [])
+      .map((r) => ({ num: r.num ?? nextNum, start: r.start, addedAt: r.addedAt }))
       .filter((r) => new Date(r.addedAt ?? `${r.start}T00:00:00`).getTime() <= t)
       .filter((r) => !ROUNDS.some((x) => x.num === r.num))
       .map((r) => ({ num: r.num, start: r.start }));

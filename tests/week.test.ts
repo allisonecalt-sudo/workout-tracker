@@ -1178,6 +1178,30 @@ test.describe('#16 — sick pause hardening (step 5f)', () => {
     });
   });
 
+  test('an Invalid `now` keeps the plain walk for ROUNDS too: a future round start still applies (code-shape step 7-0)', () => {
+    // week.ts drops a round start dated after `now` - but an Invalid `now` is not a real
+    // clock, so the plain "apply every start" walk stays. Deleting the NaN branch would
+    // drop Round 3 here and leave the walk in Round 2.
+    const R3: RoundStart[] = [{ round: 3, at: '2026-11-28T00:00:00+02:00' }];
+    withWarnSpy(() => {
+      const bad = walkWeeks(WEEK5, [], R3, COMPLETION_WEEKS_FROM, [], new Date('not a date'));
+      const afterIt = walkWeeks(
+        WEEK5,
+        [],
+        R3,
+        COMPLETION_WEEKS_FROM,
+        [],
+        new Date('2026-12-01T12:00:00+02:00')
+      );
+      expect(bad.open?.key).toEqual({ round: 3, week: 1 });
+      expect(bad.spans).toEqual(afterIt.spans);
+      expect(bad.open).toEqual(afterIt.open);
+      // and a real `now` BEFORE the start still ignores it (the branch is the only difference)
+      const before = walkWeeks(WEEK5, [], R3, COMPLETION_WEEKS_FROM, [], NOW);
+      expect(before.open?.key.round).toBe(2);
+    });
+  });
+
   test('EDGE TIE (start): a C dated exactly 2026-10-03T00:00:00+03:00 counts back to Week 5, which closed "sick" at that instant', () => {
     const edgeC: SessionLite = { id: 'c-edge', date: '2026-10-03T00:00:00+03:00', workout: 'C' };
     const { spans, open, weekOf } = walkWeeks(

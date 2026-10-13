@@ -37,7 +37,7 @@ function otherShippedFiles(): { file: string; src: string }[] {
     'index.html',
     ...fs
       .readdirSync(path.join(root, 'scripts'))
-      .filter((f) => f.endsWith('.mjs'))
+      .filter((f) => /.(mjs|cjs)$/.test(f))
       .sort()
       .map((f) => 'scripts/' + f),
   ];
@@ -55,7 +55,11 @@ function code(p: string): string {
 
 // The patterns, built from parts so this file never matches itself.
 const OLD_SWITCH = '__wt' + 'IgnoreSickWeeks';
-const SEED_HOOK_NAMES = ['__wt' + 'SeedCalendarMarks', '__wt' + 'CalendarMarksSeed'];
+const SEED_HOOK_NAMES = [
+  '__wt' + 'SeedCalendarMarks',
+  '__wt' + 'CalendarMarksSeed',
+  '__wt' + 'RoundsSeed', // the rounds seed (v62.1); like the marks seed, only helpers.ts + app.ts name it
+];
 // The helper names a test may seed marks through (helpers.ts exports both).
 const SEED_HELPERS = ['ignoreSickWeeks', 'seedCalendarMarks'];
 const ZERO_ARG_NEW_DATE = new RegExp('new ' + String.raw`Date\(\s*\)`, 'g');
@@ -153,6 +157,13 @@ test.describe('clock guard — no test reads the real clock (step 1b-3)', () => 
       .filter((f) => f.endsWith('.mjs'))
       .map((f) => 'scripts/' + f);
     for (const f of onDisk) expect(files).toContain(f);
+    // step 7-0: scripts/*.cjs (titles-compare.cjs) are scanned too
+    expect(files).toContain('scripts/titles-compare.cjs');
+    const cjsOnDisk = fs
+      .readdirSync(path.join(TESTS, '..', 'scripts'))
+      .filter((f) => f.endsWith('.cjs'));
+    expect(cjsOnDisk.length).toBeGreaterThan(0);
+    for (const f of cjsOnDisk) expect(files).toContain('scripts/' + f);
   });
 
   test('the Sick-week switch is named only in helpers.ts, and only the listed tests ask for the plain model', () => {

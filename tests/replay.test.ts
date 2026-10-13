@@ -15,12 +15,18 @@
 // outputs" as the whole contract. This is the CI half of that proof; the other
 // half is scripts/replay-week-clock.mjs on her real rows (local only).
 //
+// The hypothetical round is the one AFTER the highest real round (num omitted in the
+// fixture), so the golden's R3 labels are today's. Writing a real Round 3 changes
+// the real rounds under the replay: regenerate then (synthetic fixture only), with
+// that as the stated reason.
+//
 // If a diff here is on purpose (a real behaviour change), regenerate with
 //   node scripts/replay-week-clock.mjs --fixture tests/fixtures/replay-shape.json \
 //        --today 2026-10-13 --out tests/fixtures/replay-expected.json
 // and say why in the commit. A refactor never regenerates it.
 
 import { test, expect } from '@playwright/test';
+import { nextRoundNum } from './helpers';
 import {
   addDays,
   compareReplays,
@@ -104,7 +110,7 @@ test.describe('week-clock replay — synthetic golden (step 5a)', () => {
     // a hypothetical Round 3 (starts Nov 28) closes Week 10 'round_ended' and
     // opens R3W1; it can be moved on once it has been open 8+ days with 1 done
     expect(at('2026-11-27T21:00')['week'].shown).toBe('R2W10');
-    expect(at('2026-11-28T21:00')['week'].shown).toBe('R3W1');
+    expect(at('2026-11-28T21:00')['week'].shown).toBe(`R${nextRoundNum()}W1`);
     expect(at('2026-11-28T21:00')['week'].spans.at(-1).how).toBe('round_ended');
     expect(at('2026-12-07T21:00')['week'].canMoveOn).toBe(true);
     expect(at('2026-12-02T09:00')['week'].canMoveOn).toBe(false);
@@ -119,7 +125,7 @@ test.describe('week-clock replay — a future round takes effect on its date (v6
   const to = addDays(TODAY, 60);
   const none = computeReplay({ ...input, rounds: [] }, from, to);
   const early = computeReplay(
-    { ...input, rounds: [{ num: 3, start: '2026-11-28', addedAt: '2026-10-01T00:00:00' }] },
+    { ...input, rounds: [{ start: '2026-11-28', addedAt: '2026-10-01T00:00:00' }] },
     from,
     to
   );
@@ -133,12 +139,12 @@ test.describe('week-clock replay — a future round takes effect on its date (v6
     expect(compareReplays(a, b).diffs.slice(0, 10)).toEqual([]);
   });
 
-  test('from its own date it is Round 3 Week 1, whenever it was added', () => {
+  test('from its own date it is the next round, Week 1, whenever it was added', () => {
     const at = (r: typeof none, t: string): Record<string, any> =>
       // eslint-disable-line @typescript-eslint/no-explicit-any
       r.snapshots.find((s) => s['t'] === t) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
     expect(at(early, '2026-11-27T21:00')['week'].shown).toBe('R2W10');
-    expect(at(early, '2026-11-28T09:00')['week'].shown).toBe('R3W1');
+    expect(at(early, '2026-11-28T09:00')['week'].shown).toBe(`R${nextRoundNum()}W1`);
   });
 });
 

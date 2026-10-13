@@ -33,6 +33,7 @@
 #16 — sick pause hardening (step 5f) › a clock at exactly the first sick instant is already paused (Week 6 pending, not Week 5 open)
 #16 — sick pause hardening (step 5f) › a clock at exactly the reopening instant has Week 6 open (pending gone)
 #16 — sick pause hardening (step 5f) › an Invalid `now` is handled on purpose: warn, plain walk (no sick pause), never a throw
+#16 — sick pause hardening (step 5f) › an Invalid `now` keeps the plain walk for ROUNDS too: a future round start still applies (code-shape step 7-0)
 #16 — sick pause hardening (step 5f) › mergedSickSpans drops a key that is not a real YYYY-MM-DD date (warns), and the weeks around it still merge
 #16 — sick pause hardening (step 5f) › walkWeeks with a bad sick-week key among good ones walks exactly as with the good ones alone
 #2 — closes on the 3rd letter, then a weekday gap counts backward, then Sat opens the next week › Sun/Mon/Wed closes Week 5; Thu+Fri repeats count back; Sat opens Week 6
@@ -411,9 +412,9 @@ program-week — the Sick week and the clock it pauses › two CONTIGUOUS Sick w
 program-week — the Sick week and the clock it pauses › with no Sick marks seeded (the plain calendar) Week 5 stays open and no Sick weeks are listed
 program-week — the swing Saturday (calendar model) › Saturday with last week at 2 of 3: home shows last week, and today's pick is the missing letter
 program-week — the swing Saturday (calendar model) › no sessions at all: today's pick is A
-program-week — v62.1: a round with no plan rows shows the last written plan › Round 3 open, no rows: currentWeekPlan is the last PROGRAM row, not Round 1 Week 1
+program-week — v62.1: a round with no plan rows shows the last written plan › the next round open, no rows: currentWeekPlan is the last PROGRAM row, not Round 1 Week 1
 program-week — v62.1: round starts are Jerusalem local midnight, not +03:00 › a round start in the week the clocks go back keeps the right offset on both sides
-program-week — v62.1: round starts are Jerusalem local midnight, not +03:00 › a session Fri Dec 4 23:30 stays in the previous round; one Sat Dec 5 00:30 is Round 3 Week 1
+program-week — v62.1: round starts are Jerusalem local midnight, not +03:00 › a session Fri Dec 4 23:30 stays in the previous round; one Sat Dec 5 00:30 is the next round, Week 1
 program-week — v62.1: round starts are Jerusalem local midnight, not +03:00 › a summer (UTC+3) round start is still +03:00 (her real Round 2 is unchanged)
 program-week — v62.1: round starts are Jerusalem local midnight, not +03:00 › a winter (UTC+2) round start is local midnight: Dec 5 opens Sat Dec 5 00:00 +02:00
 program-week — which plan a saved session used › Workout D never has a week key: planForLog hands back the fixed D workout
@@ -746,8 +747,8 @@ v55 · fix r1: rowcurl.r4/r5 (the 2 kg rungs) are no longer kind LISA
 v57 fix pass: legacy Week 4 (Sep 28 2026) › rides logged before the completion launch (her real Week 4) show as a legacy row, not dropped
 v60: wall lean multi-set hold — Set 1 ✓, Start set 2, both sets done turns Next sage, Redo keeps the max
 v61.1 fix 3: "This week" and "Week by week" agree on the same D › r2: C closes Week 5 on Friday, D lands Saturday before the A that opens Week 6 — "This week" and "Week 6 · so far" read the same ride count
-v62.1 home - a round with no plan rows says so › Round 3 open, no PROGRAM rows: Home names the gap and shows the last plan, not Round 1 Starter
 v62.1 home - a round with no plan rows says so › a round that has rows shows no such line
+v62.1 home - a round with no plan rows says so › the next round open, no PROGRAM rows: Home names the gap and shows the last plan, not Round 1 Starter
 v62.1 — ROUNDS and SKIPPED_WEEKS are real Saturdays, and every round has a plan › ROUNDS numbers are 1..N in order, starts strictly ascending
 v62.1 — ROUNDS and SKIPPED_WEEKS are real Saturdays, and every round has a plan › every ROUNDS entry has at least one PROGRAM row (adding Round 3 forces writing its plan)
 v62.1 — ROUNDS and SKIPPED_WEEKS are real Saturdays, and every round has a plan › every ROUNDS start is a valid date AND a Saturday
@@ -757,10 +758,10 @@ v62.1 — a future round start takes effect on its date, not at once › a sessi
 v62.1 — a future round start takes effect on its date, not at once › before its date: the walk is exactly as if the round did not exist
 v62.1 — a future round start takes effect on its date, not at once › on its date (the instant itself): Round 3 Week 1 opens and Round 2 closes as round_ended
 v62.1 — a future round start takes effect on its date, not at once › one minute before its instant it is still not applied
-v62.1 — planForWeekKey for a round with no PROGRAM rows › Round 3 Week 1 (no rows) gets the LAST written row, never PROGRAM[0]
-v62.1 — planForWeekKey for a round with no PROGRAM rows › Round 3 Week 4 (still no rows) gets the same last row
 v62.1 — planForWeekKey for a round with no PROGRAM rows › a round that HAS rows never reports a missing plan (exact and repeat)
-v62.1 — planForWeekKey for a round with no PROGRAM rows › the fallback is the highest row AT OR BELOW the key: Round 3 falls to the end of Round 2, not the end of the table by accident
+v62.1 — planForWeekKey for a round with no PROGRAM rows › the fallback is the highest row AT OR BELOW the key: the next round falls to the end of the last written round, not the end of the table by accident
+v62.1 — planForWeekKey for a round with no PROGRAM rows › the next round, Week 1 (no rows), gets the LAST written row, never PROGRAM[0]
+v62.1 — planForWeekKey for a round with no PROGRAM rows › the next round, Week 4 (still no rows), gets the same last row
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"
@@ -781,7 +782,7 @@ week by week (v57) › v58: ridesVsDelta — "0" not "+0" on a real tie, at each
 week by week (v57) › v58: tapping a per-week bar shows that week's own one-line readout
 week by week (v57) › v58: the Km Δ keeps its own 2-decimal precision (Week 6 1 km vs Week 5 3.28 km)
 week-clock replay — a future round takes effect on its date (v62.1) › every instant before the round start is identical to a run without the round
-week-clock replay — a future round takes effect on its date (v62.1) › from its own date it is Round 3 Week 1, whenever it was added
+week-clock replay — a future round takes effect on its date (v62.1) › from its own date it is the next round, Week 1, whenever it was added
 week-clock replay — synthetic golden (step 5a) › every instant and field equals the golden
 week-clock replay — synthetic golden (step 5a) › the comparison itself notices a change (one field flipped)
 week-clock replay — synthetic golden (step 5a) › the fixture covers the shapes it claims to

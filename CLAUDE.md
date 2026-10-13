@@ -88,6 +88,11 @@ Keep every test's title identical and identically sorted (`npx playwright test -
 
 Check `git status` / `git stash list` for another window's uncommitted `app.ts` changes before a step that touches it — two builders splitting the same monolith at once is the exact collision this worktree exists to avoid.
 
+## Every commit passes on its own (step 7-0, Oct 14 2026)
+
+Husky gates the WORKING TREE, not a commit's contents, so a split can leave an intermediate commit red. A builder runs `npm run verify:commits` (default range `origin/main..HEAD`; temp worktree per commit, the five pre-commit steps against that commit alone) before hand-off.
+A failing intermediate commit is fixed by re-splitting the commits, never by `--no-verify`.
+
 ## Never in a code-shape commit
 
 Feature changes, Supabase writes, a golden hand-edit, `--no-verify`, touching `../workout-tracker`'s or `../wt-hotfix`'s working tree.
