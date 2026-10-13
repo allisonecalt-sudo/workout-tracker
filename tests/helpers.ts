@@ -55,7 +55,7 @@ export async function installTestClock(context: BrowserContext): Promise<void> {
 // many tests may call this and bans the raw switch name outside this file.
 // Context-level, so a reopened page (context.newPage()) gets it too.
 export const PLAIN_WEEK5_HANDOVER =
-  'this test IS the Week 5 -> 6 hand-over on Oct 3-6, which the Oct 3-9 Sick week now pauses (plain model only)';
+  'this test IS a Week 5 -> 6 hand-over scenario (Oct 3-6, plus one test at Oct 16) that the Oct 3-9 Sick week now pauses or shifts (plain model only)';
 
 export async function ignoreSickWeeks(page: Page, reason: string): Promise<void> {
   if (reason.trim().length < 10) throw new Error('ignoreSickWeeks needs a real reason');
@@ -350,17 +350,23 @@ export const appSourceFiles = allSourceFiles;
  *  included: erased, but still app source). For checks about what the app can
  *  show (voice-load's "accepted kg" sweep), which ladders.ts polluted. */
 export function bundledSourceFiles(): AppSourceFile[] {
-  const byFile = new Map(allSourceFiles().map((f) => [f.file, f]));
-  const seen = new Set<string>();
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const root = path.join(__dirname, '..');
+  const seen = new Map<string, AppSourceFile>();
   const queue = ['app.ts'];
   while (queue.length) {
     const file = queue.pop()!;
     if (seen.has(file)) continue;
-    const entry = byFile.get(file);
-    if (!entry) throw new Error(`bundledSourceFiles: ${file} is imported but is not a root module`);
-    seen.add(file);
-    for (const m of entry.src.matchAll(/(?:from|import)\s+'\.\/([\w-]+)\.js'/g))
-      queue.push(`${m[1]}.ts`);
+    const full = path.join(root, file);
+    if (!fs.existsSync(full))
+      throw new Error(`bundledSourceFiles: ${file} is imported but does not exist`);
+    const src = fs.readFileSync(full, 'utf8');
+    seen.set(file, { file, src });
+    // Follow every relative import ('./x.js', './dir/x.js', '../x.js'),
+    // resolved against the importing file's own folder (root-relative keys).
+    for (const m of src.matchAll(/(?:from|import)\s+'(\.{1,2}\/[\w./-]+)\.js'/g))
+      queue.push(path.posix.normalize(path.posix.join(path.posix.dirname(file), `${m[1]}.ts`)));
   }
-  return [...seen].sort().map((file) => byFile.get(file)!);
+  return [...seen.keys()].sort().map((file) => seen.get(file)!);
 }

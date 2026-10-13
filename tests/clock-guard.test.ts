@@ -50,8 +50,8 @@ const IN_PAGE_ALLOW: Record<string, { count: number; why: string }> = {
     why: 'page.evaluate: back-dates the stamped walk start 4 min off the in-page TEST_NOW clock',
   },
   'screens/timing.spec.ts': {
-    count: 7,
-    why: 'the default-clock proof tests read the IN-PAGE clock on purpose (6 evaluate calls + 1 in a describe title)',
+    count: 8,
+    why: 'the default-clock proof tests read the IN-PAGE clock on purpose (7 evaluate calls + 1 in a describe title)',
   },
   'screens/redesign-ships.spec.ts': {
     count: 2,
@@ -67,7 +67,7 @@ const NO_DEFAULT_CLOCK = new Set([
 ]);
 
 // Tests allowed to ask for the plain (no Sick weeks) week model, per file.
-// Each is a Week 5 -> 6 hand-over on Oct 3-6 that the Sick week now pauses;
+// Each is a Week 5 -> 6 hand-over (mostly Oct 3-6, one Oct 16) that the Sick week now pauses or shifts;
 // the number may only go DOWN (re-date a scenario, then lower it here).
 const PLAIN_MODEL_ALLOW: Record<string, number> = {
   'screens/home.spec.ts': 11,
@@ -104,14 +104,43 @@ test.describe('clock guard — no test reads the real clock (step 1b-3)', () => 
   test('the Sick-week switch is named only in helpers.ts, and only the listed tests ask for the plain model', () => {
     const rawSwitch: string[] = [];
     const asks: Record<string, number> = {};
+    const inHooks: string[] = [];
     for (const f of testFiles()) {
       const r = rel(f);
       if (r === 'helpers.ts' || r === 'clock-guard.test.ts') continue;
       const src = code(f);
       if (src.includes('__wtIgnoreSickWeeks')) rawSwitch.push(r);
-      const n = src.match(/\bawait ignoreSickWeeks\(/g)?.length ?? 0;
+      // Every local name the helper goes by: its own, any `ignoreSickWeeks as X`
+      // import alias, and a namespace member (`h.ignoreSickWeeks(`). Deliberate
+      // obfuscation (string concatenation, computed property access) is NOT
+      // caught on purpose: this guards against drift, not a hostile author.
+      const names = new Set(['ignoreSickWeeks']);
+      for (const m of src.matchAll(/\bignoreSickWeeks\s+as\s+(\w+)/g)) names.add(m[1]);
+      const call = new RegExp(
+        String.raw`(?<![\w.])(?:\w+\.)?(?:${[...names].join('|')})\s*\(`,
+        'g'
+      );
+      let n = 0;
+      for (const m of src.matchAll(call)) {
+        n++;
+        // The simple honest rule: a call inside a beforeEach/beforeAll hook
+        // would silently cover a whole describe, so it is banned outright.
+        // The nearest test/hook opener before the call is the block it sits in.
+        const before = src.slice(0, m.index);
+        const openers = [
+          ...before.matchAll(
+            /\b(?:test|it)(?:\.(?:only|skip|fixme|describe|beforeEach|beforeAll|afterEach|afterAll))?\s*\(/g
+          ),
+        ];
+        const last = openers[openers.length - 1]?.[0] ?? '';
+        if (/before(?:Each|All)/.test(last))
+          inHooks.push(
+            `${r}: ignoreSickWeeks inside ${last.trim()} (banned: call it in the test body)`
+          );
+      }
       if (n > 0) asks[r] = n;
     }
+    expect(inHooks).toEqual([]);
     expect(rawSwitch).toEqual([]);
     expect(asks).toEqual(PLAIN_MODEL_ALLOW);
   });
