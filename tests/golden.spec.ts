@@ -27,15 +27,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { NEXT } from './helpers';
 
 const GOLDEN_DIR = path.join(__dirname, 'golden');
 const UPDATE = process.env.UPDATE_GOLDEN === '1';
-
-// Same "Done · " / skip button every other spec in this repo uses to move
-// forward one step (tests/app.spec.ts's own NEXT, duplicated here on purpose —
-// R2 moves shared test helpers into tests/helpers.ts; golden.spec.ts adopts
-// that import once R2 lands, not before).
-const NEXT = '#next, #ww-skip';
 
 type Row = Record<string, unknown>;
 
@@ -182,13 +177,13 @@ async function walkWorkoutA(page: Page, stopSelectors: string[]): Promise<void> 
 //   Settings) would otherwise fail every re-build. Only the DATE/TIME half
 //   is stubbed here. Step 0 (Oct 13 2026): the version that precedes the date
 //   is stubbed too (GOLDEN-STUB-VERSION), so a version bump changes no golden;
-//   the real version stays checked by app.spec.ts's version test.
+//   the real version stays checked by the version test (tests/screens/program-weeks.spec.ts).
 function normalize(html: string): string {
   return html
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'GOLDEN-STUB-UUID')
     .replace(/local-\d+-[a-z0-9]{8}/gi, 'GOLDEN-STUB-LOCAL-ID')
     .replace(/[A-Z][a-z]{2} \d{1,2}(?:,\s*\d{4})? · \d{2}:\d{2}/g, 'GOLDEN-STUB-BUILD-DATE')
-    .replace(/v\d+(?:\.\d+)*(?= · GOLDEN-STUB-BUILD-DATE)/g, 'GOLDEN-STUB-VERSION')
+    .replace(/(?<![\w.])v\d+(?:\.\d+)*(?= · GOLDEN-STUB-BUILD-DATE)/g, 'GOLDEN-STUB-VERSION')
     .replace(/>\s+</g, '><')
     .replace(/[ \t\r\n]+/g, ' ')
     .trim();
