@@ -2634,6 +2634,29 @@ export const SKIPPED_WEEKS: Record<string, string> = {
   '2026-08-22': 'Break',
 };
 
+/** Which calendar marks to put in SKIPPED_WEEKS: Saturdays (YYYY-MM-DD) per
+ * kind. A kind that is left out is untouched; `sick: []` means "no Sick weeks". */
+export type CalendarMarks = { sick?: string[]; break?: string[] };
+
+/** TEST-ONLY seed (v62, step 5d; app.ts calls it only under automation, from
+ * its __wt hook block): REPLACES the SKIPPED_WEEKS entries of each kind given.
+ * SKIPPED_WEEKS is the ONE data source the week clock, getProgramWeek and every
+ * weekly view read, so seeding it changes them all together - there is no
+ * separate "test mode" branch in the app. */
+export function replaceCalendarMarks(marks: CalendarMarks): void {
+  const kinds: [keyof CalendarMarks, string][] = [
+    ['sick', 'Sick'],
+    ['break', 'Break'],
+  ];
+  for (const [field, label] of kinds) {
+    const saturdays = marks[field];
+    if (!saturdays) continue;
+    for (const k of Object.keys(SKIPPED_WEEKS))
+      if (SKIPPED_WEEKS[k] === label) delete SKIPPED_WEEKS[k];
+    for (const sat of saturdays) SKIPPED_WEEKS[sat] = label;
+  }
+}
+
 // WK2 fix r2 (Sep 27 2026, checker's should #2/#3 test coverage): a real
 // Round-2 Week-6 PROGRAM row doesn't exist yet (§2.6), so a test proving "the
 // live-recomputed plan differs from the pinned one" needs SOME way to make

@@ -105,6 +105,7 @@ import {
   diffWorkout,
   planForWeekKey,
   injectMarkerProgramWeek,
+  replaceCalendarMarks,
   weekPlanTitle,
   programWeekPlan,
   programFutureWeekPlans,
@@ -117,6 +118,7 @@ import {
   type Workout,
   type Phase,
   type WeekPlan,
+  type CalendarMarks,
 } from './program.js';
 import type { LogEntry, StoredWeekMove } from './types.js';
 import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
@@ -4578,6 +4580,8 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     // v58: the live session's own stepped-moves list, asserted directly
     // (which moves ask tonight) instead of only through the rendered chip.
     __wtCurrentSteppedMoves?: typeof currentSteppedMoves;
+    __wtSeedCalendarMarks?: typeof replaceCalendarMarks;
+    __wtCalendarMarksSeed?: CalendarMarks;
   };
   w.__wtMergeRemoteSessions = mergeRemoteSessions;
   w.__wtIsValidLogEntry = isValidLogEntry;
@@ -4615,6 +4619,13 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   w.__wtCurrentHowToWeekKey = currentHowToWeekKey;
   w.__wtRidesVsDelta = ridesVsDelta;
   w.__wtCurrentSteppedMoves = currentSteppedMoves;
+  // v62 (step 5d): tests that need a different calendar (e.g. no Sick weeks)
+  // SEED the data the app reads instead of flipping an app switch. A test's init
+  // script leaves its marks on window.__wtCalendarMarksSeed before this file
+  // loads; they replace SKIPPED_WEEKS here, once, before the first render.
+  // __wtSeedCalendarMarks is the same replace, callable later (then re-render).
+  w.__wtSeedCalendarMarks = replaceCalendarMarks;
+  if (w.__wtCalendarMarksSeed) replaceCalendarMarks(w.__wtCalendarMarksSeed);
 }
 
 async function pullFromSupabase(): Promise<void> {
@@ -5014,26 +5025,16 @@ function formatTimerDisplay(sec: number): string {
 // ---------------------------------------------------------------------------
 // THE WEEK CLOCK — thin wrappers (code-shape step 4, Oct 13 2026).
 // The logic lives in program-week.ts and is PURE: it takes the logs, the
-// stored week moves, the clock ("now") and the test-only sick-week switch as
-// parameters. These wrappers keep every call site in this file unchanged by
-// supplying today's values — the storage reads (loadLogs, loadWeekMoves), the
-// browser-global switch and `new Date()` all stay HERE, in app.ts.
+// stored week moves and the clock ("now") as parameters. These wrappers keep
+// every call site in this file unchanged by supplying today's values — the
+// storage reads (loadLogs, loadWeekMoves) and `new Date()` all stay HERE, in
+// app.ts. (Sick/break weeks are entries in SKIPPED_WEEKS, program.ts; there is
+// no app branch for tests.)
 // ---------------------------------------------------------------------------
-
-/** Test-only switch (automation only, like the __wt hooks): the older
- * week-model tests drive Week 5 -> 6 transitions on the real Oct 3-4 dates,
- * which are now the Sick week. They set this to see the plain model. */
-function ignoreSickWeeksSwitch(): boolean {
-  return (
-    typeof navigator !== 'undefined' &&
-    navigator.webdriver === true &&
-    (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks === true
-  );
-}
 
 /** Everything the week clock reads, gathered from today's storage + clock. */
 function weekClockInput(logs: LogEntry[] = loadLogs(), now: Date = new Date()): WeekClockInput {
-  return { logs, moves: loadWeekMoves(), ignoreSick: ignoreSickWeeksSwitch(), now };
+  return { logs, moves: loadWeekMoves(), now };
 }
 
 function getProgramWeek(date: Date = new Date()): ReturnType<typeof pw.getProgramWeek> {

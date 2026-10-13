@@ -166,6 +166,7 @@ capacity before (v39): the history row shows an em dash, never "0"
 cardio either/or: finishing after the apartment option saves the lane + its minutes, and never POSTs
 cardio either/or: the walk step offers an apartment option that swaps in a same-length timer
 clock guard — no test reads the real clock (step 1b-3) › every browser spec runs on the default test clock (setupPage / installTestClock) unless listed
+clock guard — no test reads the real clock (step 1b-3) › no app branch for tests (v62 step 5d): the old Sick-week switch is named nowhere - no test file, no app source
 clock guard — no test reads the real clock (step 1b-3) › no spec or test reads the wall clock outside helpers.ts, except the listed in-page reads
 clock guard — no test reads the real clock (step 1b-3) › the Sick-week switch is named only in helpers.ts, and only the listed tests ask for the plain model
 clock guard — no test reads the real clock (step 1b-3) › the guard itself: the scanner counts a direct call, an import alias, a one-step alias, a TWO-step alias and a namespace member, and flags a call inside a hook
@@ -404,6 +405,7 @@ program-week — step 5c: the plan row is found by week key › the synthetic-da
 program-week — the Sick week and the clock it pauses › completionClosingSessionIds: nothing closed by a session yet (Week 5 closed as sick); a third letter closes it
 program-week — the Sick week and the clock it pauses › ignoreSick = true is the plain model: Week 5 stays open, no Sick weeks listed
 program-week — the Sick week and the clock it pauses › inside the Sick week Week 6 is pending, and a session started now counts BACK into Week 5
+program-week — the Sick week and the clock it pauses › replaceCalendarMarks replaces only the kinds it is given, and the clock reads the seeded data
 program-week — the Sick week and the clock it pauses › the Oct 3 Sick week closes Week 5 (sick) and opens Week 6 on Sat Oct 10
 program-week — the Sick week and the clock it pauses › two CONTIGUOUS Sick weeks (Oct 3 + Oct 10) open Week 6 on Oct 17
 program-week — the swing Saturday (calendar model) › Saturday with last week at 2 of 3: home shows last week, and today's pick is the missing letter

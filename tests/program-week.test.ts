@@ -31,7 +31,13 @@ import {
   weekModel,
   weekSubLabel,
 } from '../program-week';
-import { SKIPPED_WEEKS, planForWeekKey, programWeekPlan, type Workout } from '../program';
+import {
+  SKIPPED_WEEKS,
+  planForWeekKey,
+  programWeekPlan,
+  replaceCalendarMarks,
+  type Workout,
+} from '../program';
 import type { LogEntry } from '../types';
 
 /** A minimal saved session; only the fields the week clock reads matter. */
@@ -57,7 +63,7 @@ const WEEK5: LogEntry[] = [
 ];
 
 function input(over: Partial<WeekClockInput> & { now: Date }): WeekClockInput {
-  return { logs: WEEK5, moves: [], ignoreSick: false, ...over };
+  return { logs: WEEK5, moves: [], ...over };
 }
 
 const OCT_13 = new Date('2026-10-13T12:00:00+03:00');
@@ -106,13 +112,39 @@ test.describe('program-week — the Sick week and the clock it pauses', () => {
   });
 
   test('ignoreSick = true is the plain model: Week 5 stays open, no Sick weeks listed', () => {
-    const plain = input({ now: OCT_13, ignoreSick: true });
-    expect(sickWeeksForWeekModel(true)).toEqual([]);
-    expect(sickWeeksForWeekModel(false)).toContain('2026-10-03');
-    const { spans, open } = weekModel(plain);
-    expect(spans).toEqual([]);
-    expect(open!.key).toEqual({ round: 2, week: 5 });
-    expect(open!.missing).toEqual(['C']);
+    // (step 5d: there is no ignoreSick input any more - the plain model is the
+    // data with no Sick marks, seeded the way the browser tests seed it)
+    const saved = { ...SKIPPED_WEEKS };
+    try {
+      replaceCalendarMarks({ sick: [] });
+      const plain = input({ now: OCT_13 });
+      expect(sickWeeksForWeekModel()).toEqual([]);
+      const { spans, open } = weekModel(plain);
+      expect(spans).toEqual([]);
+      expect(open!.key).toEqual({ round: 2, week: 5 });
+      expect(open!.missing).toEqual(['C']);
+    } finally {
+      for (const k of Object.keys(SKIPPED_WEEKS)) delete SKIPPED_WEEKS[k];
+      Object.assign(SKIPPED_WEEKS, saved);
+    }
+    expect(sickWeeksForWeekModel()).toContain('2026-10-03');
+  });
+
+  test('replaceCalendarMarks replaces only the kinds it is given, and the clock reads the seeded data', () => {
+    const saved = { ...SKIPPED_WEEKS };
+    try {
+      replaceCalendarMarks({ sick: ['2026-10-17'] });
+      expect(sickWeeksForWeekModel()).toEqual(['2026-10-17']); // Oct 3 and Jul 11 are gone
+      expect(SKIPPED_WEEKS['2026-08-01']).toBe('Break'); // breaks untouched
+      replaceCalendarMarks({ break: [] });
+      expect(Object.values(SKIPPED_WEEKS)).not.toContain('Break');
+      expect(SKIPPED_WEEKS['2026-10-17']).toBe('Sick'); // sick untouched by a break-only seed
+      replaceCalendarMarks({}); // nothing given, nothing changes
+      expect(Object.keys(SKIPPED_WEEKS)).toEqual(['2026-10-17']);
+    } finally {
+      for (const k of Object.keys(SKIPPED_WEEKS)) delete SKIPPED_WEEKS[k];
+      Object.assign(SKIPPED_WEEKS, saved);
+    }
   });
 
   test('completionClosingSessionIds: nothing closed by a session yet (Week 5 closed as sick); a third letter closes it', () => {

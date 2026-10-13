@@ -50,18 +50,36 @@ export async function installTestClock(context: BrowserContext): Promise<void> {
 }
 
 // code-shape step 1b-3 (Oct 13 2026): the ONE way a test may ask for the plain
-// (no Sick weeks) week model. The app's test-only switch is set HERE and
-// nowhere else; a reason is mandatory, and tests/clock-guard.test.ts caps how
-// many tests may call this and bans the raw switch name outside this file.
-// Context-level, so a reopened page (context.newPage()) gets it too.
+// (no Sick weeks) week model; v62 (step 5d) turned it from an app switch into
+// SEEDED DATA. The app has no test branch any more: it reads the calendar marks
+// in SKIPPED_WEEKS (program.ts) and nothing else. A test that needs a different
+// calendar seeds those marks through seedCalendarMarks - the page's init script
+// leaves them on window.__wtCalendarMarksSeed and app.ts's automation-only __wt
+// block replaces SKIPPED_WEEKS with them before the first render. A reason is
+// mandatory, and tests/clock-guard.test.ts caps how many tests may call this and
+// bans the raw hook names outside this file. Context-level, so a reopened page
+// (context.newPage()) gets it too.
 export const PLAIN_WEEK5_HANDOVER =
   'this test IS a Week 5 -> 6 hand-over scenario (Oct 3-6, plus one test at Oct 16) that the Oct 3-9 Sick week now pauses or shifts (plain model only)';
 
+export type CalendarMarksSeed = { sick?: string[]; break?: string[] };
+
+export async function seedCalendarMarks(
+  page: Page,
+  marks: CalendarMarksSeed,
+  reason: string
+): Promise<void> {
+  if (reason.trim().length < 10) throw new Error('seedCalendarMarks needs a real reason');
+  await page.context().addInitScript((seed: CalendarMarksSeed) => {
+    (window as unknown as { __wtCalendarMarksSeed?: CalendarMarksSeed }).__wtCalendarMarksSeed =
+      seed;
+  }, marks);
+}
+
+/** The plain model: no Sick weeks at all (a thin name kept for the 21 Week 5 -> 6
+ *  hand-over tests; = seedCalendarMarks(page, { sick: [] }, reason)). */
 export async function ignoreSickWeeks(page: Page, reason: string): Promise<void> {
-  if (reason.trim().length < 10) throw new Error('ignoreSickWeeks needs a real reason');
-  await page.context().addInitScript(() => {
-    (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = true;
-  });
+  await seedCalendarMarks(page, { sick: [] }, reason);
 }
 
 // The old top-level test.beforeEach of tests/app.spec.ts, as a plain function.

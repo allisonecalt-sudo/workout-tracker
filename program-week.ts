@@ -8,8 +8,8 @@
 // functions scattered across the file.
 // WHY: pure + Node-testable. NO DOM, browser-global or storage access in this
 // file, and it never imports app.ts. Storage reads (loadLogs, loadWeekMoves,
-// the test-only sick-week switch) and the clock stay in app.ts: every function
-// here takes what it needs as PARAMETERS (logs, moves, now, ignoreSick), and
+// and the clock stay in app.ts: every function here takes what it needs as
+// PARAMETERS (logs, moves, now), and
 // app.ts keeps same-named thin wrappers that supply today's values, so no
 // call site changed.
 // DECIDED: viewedWeekOffset / viewingLastClosedWeek (UI state) stay in app.ts;
@@ -51,8 +51,6 @@ export type WeekClockInput = {
   logs: LogEntry[];
   /** The synced "Move on without it" rows (app.ts: loadWeekMoves()). */
   moves: StoredWeekMove[];
-  /** The test-only "plain week model" switch (app.ts reads the browser global). */
-  ignoreSick: boolean;
   /** The instant "now" means (app.ts: new Date(), or the test's mocked clock). */
   now: Date;
 };
@@ -291,7 +289,7 @@ export function planKeyForLog(entry: LogEntry, input: WeekClockInput): WeekKey |
     movesForWeekModel(input.moves),
     roundStartsForWeekModel(),
     COMPLETION_WEEKS_FROM,
-    sickWeeksForWeekModel(input.ignoreSick),
+    sickWeeksForWeekModel(),
     input.now
   );
   const matched = sessionsForWeekModel(all).find(same);
@@ -362,14 +360,9 @@ export function roundStartsForWeekModel(): WeekRoundStart[] {
 /** v61.2 (Oct 13 2026): SKIPPED_WEEKS' 'Sick' Saturdays -> week.ts's sick
  * pause (the completion clock stops for them). Only 'Sick' pauses the
  * completion model; 'Break' rows predate it (Round 1 -> 2). */
-export function sickWeeksForWeekModel(ignoreSick: boolean): string[] {
-  // Test-only switch (automation only, like the __wt hooks): the older
-  // week-model tests drive Week 5 -> 6 transitions on the real Oct 3-4
-  // dates, which are now the Sick week. They set this to see the plain model.
-  // (app.ts reads the browser global and passes the boolean down.)
-  if (ignoreSick) {
-    return [];
-  }
+export function sickWeeksForWeekModel(): string[] {
+  // SKIPPED_WEEKS is the one data source. (Tests that want a different calendar
+  // seed it through program.ts's replaceCalendarMarks - no switch lives here.)
   return Object.keys(SKIPPED_WEEKS).filter((k) => SKIPPED_WEEKS[k] === 'Sick');
 }
 
@@ -405,7 +398,7 @@ export function weekModel(input: WeekClockInput): ReturnType<typeof walkWeeks> {
     movesForWeekModel(input.moves),
     roundStartsForWeekModel(),
     COMPLETION_WEEKS_FROM,
-    sickWeeksForWeekModel(input.ignoreSick),
+    sickWeeksForWeekModel(),
     input.now
   );
 }
@@ -431,7 +424,7 @@ export function completionClosingSessionIds(input: WeekClockInput): Set<string> 
     movesForWeekModel(input.moves),
     roundStartsForWeekModel(),
     COMPLETION_WEEKS_FROM,
-    sickWeeksForWeekModel(input.ignoreSick),
+    sickWeeksForWeekModel(),
     input.now
   );
   const ids = new Set<string>();

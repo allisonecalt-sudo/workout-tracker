@@ -129,7 +129,7 @@ function snapshotAt(now: Date, input: ReplayInput): ReplaySnapshot {
   const moves = input.moves
     .filter((m) => new Date(m.at).getTime() <= t)
     .map((m) => ({ round: m.round, week: m.week, at: m.at, missing: '' }));
-  const wc: WeekClockInput = { logs, moves, ignoreSick: false, now };
+  const wc: WeekClockInput = { logs, moves, now };
 
   const warns: string[] = [];
   const realWarn = console.warn;

@@ -9,6 +9,7 @@
 // Pure Node, no `page` — reads the test sources as text, like pain-rule.test.ts.
 
 import { test, expect } from '@playwright/test';
+import { allSourceFiles } from './helpers';
 
 const fs = require('fs') as typeof import('fs');
 const path = require('path') as typeof import('path');
@@ -38,6 +39,10 @@ function code(p: string): string {
 }
 
 // The patterns, built from parts so this file never matches itself.
+const OLD_SWITCH = '__wt' + 'IgnoreSickWeeks';
+const SEED_HOOK_NAMES = ['__wt' + 'SeedCalendarMarks', '__wt' + 'CalendarMarksSeed'];
+// The helper names a test may seed marks through (helpers.ts exports both).
+const SEED_HELPERS = ['ignoreSickWeeks', 'seedCalendarMarks'];
 const ZERO_ARG_NEW_DATE = new RegExp('new ' + String.raw`Date\(\s*\)`, 'g');
 const DATE_NOW = new RegExp('Date' + String.raw`\.now\(\)`, 'g');
 
@@ -66,9 +71,10 @@ const NO_DEFAULT_CLOCK = new Set([
   'sw-upgrade.spec.ts', // service-worker install/cache mechanics, no dates in play
 ]);
 
-// Tests allowed to ask for the plain (no Sick weeks) week model, per file.
-// Each is a Week 5 -> 6 hand-over (mostly Oct 3-6, one Oct 16) that the Sick week now pauses or shifts;
-// the number may only go DOWN (re-date a scenario, then lower it here).
+// Tests allowed to seed the calendar marks (ignoreSickWeeks = no Sick weeks;
+// seedCalendarMarks = any marks), per file. Each is a Week 5 -> 6 hand-over
+// (mostly Oct 3-6, one Oct 16) that the Sick week now pauses or shifts; the
+// number may only go DOWN (re-date a scenario, then lower it here).
 const PLAIN_MODEL_ALLOW: Record<string, number> = {
   'screens/home.spec.ts': 11,
   'screens/review-progress-howto.spec.ts': 2,
@@ -101,21 +107,38 @@ test.describe('clock guard — no test reads the real clock (step 1b-3)', () => 
     expect(offenders).toEqual([]);
   });
 
+  test('no app branch for tests (v62 step 5d): the old Sick-week switch is named nowhere - no test file, no app source', () => {
+    // Banned EVERYWHERE: every test file (helpers.ts included) and every app
+    // source file (step 5d deleted it from app.ts).
+    const oldSwitch: string[] = [];
+    for (const f of testFiles()) {
+      if (rel(f) === 'clock-guard.test.ts') continue;
+      if (code(f).includes(OLD_SWITCH)) oldSwitch.push(`tests/${rel(f)}`);
+    }
+    for (const { file, src } of allSourceFiles()) {
+      if (src.includes(OLD_SWITCH)) oldSwitch.push(file);
+    }
+    expect(oldSwitch).toEqual([]);
+  });
+
   test('the Sick-week switch is named only in helpers.ts, and only the listed tests ask for the plain model', () => {
-    const rawSwitch: string[] = [];
+    // (title kept from before step 5d - the ratchet never lets a title go. Now:
+    // the seed-hook names live only in helpers.ts and app.ts, and only the
+    // listed tests seed calendar marks, never from a beforeEach/beforeAll.)
+    const rawHook: string[] = [];
     const asks: Record<string, number> = {};
     const inHooks: string[] = [];
     for (const f of testFiles()) {
       const r = rel(f);
       if (r === 'helpers.ts' || r === 'clock-guard.test.ts') continue;
       const src = code(f);
-      if (src.includes('__wtIgnoreSickWeeks')) rawSwitch.push(r);
+      if (SEED_HOOK_NAMES.some((n) => src.includes(n))) rawHook.push(r);
       const scan = scanPlainModelAsks(src);
       for (const h of scan.hookCalls) inHooks.push(`${r}: ${h}`);
       if (scan.calls > 0) asks[r] = scan.calls;
     }
     expect(inHooks).toEqual([]);
-    expect(rawSwitch).toEqual([]);
+    expect(rawHook).toEqual([]);
     expect(asks).toEqual(PLAIN_MODEL_ALLOW);
   });
 
@@ -143,6 +166,14 @@ test.describe('clock guard — no test reads the real clock (step 1b-3)', () => 
     // a comparison is not an alias, and a bare mention is not a call
     expect(scanPlainModelAsks('if (x === ignoreSickWeeks) { x(1); }').calls).toBe(0);
     expect(scanPlainModelAsks('const names = [ignoreSickWeeks];').calls).toBe(0);
+    // the general seeder is counted too, under its own name and any alias
+    expect(
+      scanPlainModelAsks("await seedCalendarMarks(page, { sick: [] }, 'long enough');").calls
+    ).toBe(1);
+    expect(
+      scanPlainModelAsks("let s;\ns = h.seedCalendarMarks;\nawait s(page, {}, 'long enough');")
+        .calls
+    ).toBe(1);
     const hook = scanPlainModelAsks(
       "test.beforeEach(async ({ page }) => { await ignoreSickWeeks(page, 'a long enough reason'); });"
     );
@@ -155,23 +186,29 @@ test.describe('clock guard — no test reads the real clock (step 1b-3)', () => 
   });
 });
 
-/** Scan one test source (comments already blanked) for calls to the plain-model
- *  helper `ignoreSickWeeks`, under every local name it can go by: its own, an
- *  `ignoreSickWeeks as X` import alias, a namespace member (`h.ignoreSickWeeks(`),
- *  a one-step alias (`const x = ignoreSickWeeks`), a TWO-step alias
- *  (`let z; z = ignoreSickWeeks`), and a destructure rename
- *  (`{ ignoreSickWeeks: x }`). Deliberate obfuscation (string concatenation,
+/** Scan one test source (comments already blanked) for calls to the calendar-
+ *  seeding helpers (`ignoreSickWeeks`, `seedCalendarMarks`), under every local
+ *  name each can go by: its own, an `X as Y` import alias, a namespace member
+ *  (`h.ignoreSickWeeks(`), a one-step alias (`const y = ignoreSickWeeks`), a
+ *  TWO-step alias (`let z; z = ignoreSickWeeks`), and a destructure rename
+ *  (`{ ignoreSickWeeks: y }`). Deliberate obfuscation (string concatenation,
  *  computed property access) is NOT caught on purpose: this guards against
  *  drift, not a hostile author. `hookCalls` lists calls sitting inside a
  *  beforeEach/beforeAll hook (banned: it would silently cover a whole describe). */
 function scanPlainModelAsks(src: string): { calls: number; hookCalls: string[] } {
-  const names = new Set(['ignoreSickWeeks']);
-  for (const m of src.matchAll(/\bignoreSickWeeks\s+as\s+(\w+)/g)) names.add(m[1]!);
-  // A plain assignment of the helper (not a call, not a comparison): covers
-  // `const x = ignoreSickWeeks`, `let z; z = ignoreSickWeeks`, `x = h.ignoreSickWeeks`.
-  for (const m of src.matchAll(/\b(\w+)\s*=(?![=>])\s*(?:\w+\.)?ignoreSickWeeks\b(?!\s*\()/g))
-    names.add(m[1]!);
-  for (const m of src.matchAll(/\bignoreSickWeeks\s*:\s*(\w+)/g)) names.add(m[1]!);
+  const names = new Set<string>(SEED_HELPERS);
+  for (const helper of SEED_HELPERS) {
+    for (const m of src.matchAll(new RegExp(String.raw`\b${helper}\s+as\s+(\w+)`, 'g')))
+      names.add(m[1]!);
+    // A plain assignment of the helper (not a call, not a comparison): covers
+    // `const y = helper`, `let z; z = helper`, `y = h.helper`.
+    for (const m of src.matchAll(
+      new RegExp(String.raw`\b(\w+)\s*=(?![=>])\s*(?:\w+\.)?${helper}\b(?!\s*\()`, 'g')
+    ))
+      names.add(m[1]!);
+    for (const m of src.matchAll(new RegExp(String.raw`\b${helper}\s*:\s*(\w+)`, 'g')))
+      names.add(m[1]!);
+  }
   const call = new RegExp(String.raw`(?<![\w.])(?:\w+\.)?(?:${[...names].join('|')})\s*\(`, 'g');
   let calls = 0;
   const hookCalls: string[] = [];
@@ -186,7 +223,7 @@ function scanPlainModelAsks(src: string): { calls: number; hookCalls: string[] }
     ];
     const last = openers[openers.length - 1]?.[0] ?? '';
     if (/before(?:Each|All)/.test(last))
-      hookCalls.push(`ignoreSickWeeks inside ${last.trim()} (banned: call it in the test body)`);
+      hookCalls.push(`a calendar seed inside ${last.trim()} (banned: call it in the test body)`);
   }
   return { calls, hookCalls };
 }
