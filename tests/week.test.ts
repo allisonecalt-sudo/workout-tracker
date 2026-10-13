@@ -642,3 +642,127 @@ test.describe('#14 — pending: the gap is visible to callers even with 0 sessio
     expect(pending).toBeNull();
   });
 });
+
+// v61.2 (Oct 13 2026) — a Sick week pauses the completion clock. Real-shaped:
+// Week 5 had B (Sep 26), A (Sep 28), a B-labeled hike (Oct 1); C never came.
+// (D never reaches walkWeeks — app.ts drops it first.)
+test.describe('#13 — a Sick week pauses the clock (v61.2)', () => {
+  const NOW = new Date('2026-10-13T12:00:00+03:00');
+  const WEEK5: SessionLite[] = [
+    { id: 'b1', date: '2026-09-26T22:45:00+03:00', workout: 'B' },
+    { id: 'a1', date: '2026-09-28T18:00:00+03:00', workout: 'A' },
+    { id: 'b2', date: '2026-10-01T10:00:00+03:00', workout: 'B' },
+  ];
+
+  test('Week 5 closes as "sick" at the start of the sick week, C stays missing', () => {
+    const { spans } = walkWeeks(WEEK5, [], [], COMPLETION_WEEKS_FROM, ['2026-10-03'], NOW);
+    expect(spans).toHaveLength(1);
+    expect(spans[0]!.key).toEqual({ round: 2, week: 5 });
+    expect(spans[0]!.how).toBe('sick');
+    expect(spans[0]!.closedAt!.startsWith('2026-10-03T00:00:00')).toBe(true);
+    expect(spans[0]!.done).toEqual(['A', 'B']);
+    expect(spans[0]!.missing).toEqual(['C']);
+  });
+
+  test('Week 6 opens immediately on Sat Oct 10 with no session and no Move on', () => {
+    const { open, pending } = walkWeeks(WEEK5, [], [], COMPLETION_WEEKS_FROM, ['2026-10-03'], NOW);
+    expect(open).not.toBeNull();
+    expect(open!.key).toEqual({ round: 2, week: 6 });
+    expect(open!.openedAt.startsWith('2026-10-10T00:00:00')).toBe(true);
+    expect(open!.sessions).toEqual([]);
+    expect(pending).toBeNull();
+    expect(dayOfWeek(open!, new Date('2026-10-13T12:00:00+03:00'))).toBe(4);
+  });
+
+  test('a session in Week 6 counts to Week 6, not back to Week 5', () => {
+    const wk6 = { id: 'x1', date: '2026-10-12T09:00:00+03:00', workout: 'A' as const };
+    const { spans, open, weekOf } = walkWeeks(
+      [...WEEK5, wk6],
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      ['2026-10-03'],
+      NOW
+    );
+    expect(weekOf.get('x1')).toEqual({ round: 2, week: 6 });
+    expect(spans[0]!.sessions.map((s) => s.id)).toEqual(['b1', 'a1', 'b2']);
+    expect(open!.done).toEqual(['A']);
+  });
+
+  test('a session INSIDE the sick week counts back to the week that closed', () => {
+    const sickDay = { id: 's1', date: '2026-10-05T09:00:00+03:00', workout: 'C' as const };
+    const { spans, weekOf } = walkWeeks(
+      [...WEEK5, sickDay],
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      ['2026-10-03'],
+      NOW
+    );
+    expect(weekOf.get('s1')).toEqual({ round: 2, week: 5 });
+    expect(spans[0]!.done).toEqual(['A', 'B', 'C']);
+  });
+
+  test('CONTROL: with no sick week, the same sessions leave Week 5 open (unchanged)', () => {
+    const { spans, open } = walkWeeks(WEEK5, [], []);
+    expect(spans).toEqual([]);
+    expect(open!.key).toEqual({ round: 2, week: 5 });
+    expect(open!.missing).toEqual(['C']);
+    // and an explicit empty list is byte-identical to omitting it
+    expect(walkWeeks(WEEK5, [], [], COMPLETION_WEEKS_FROM, [])).toEqual(walkWeeks(WEEK5, [], []));
+  });
+
+  test('general, not Oct-only: a later sick week pauses the same way; the July one (pre-launch) is ignored', () => {
+    const { spans, open } = walkWeeks(
+      WEEK5,
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      ['2026-07-11', '2026-11-07'],
+      new Date('2026-12-01T12:00:00+02:00')
+    );
+    // Nov 7 is after every session: Week 5 closes 'sick' there, Week 6 opens Nov 14.
+    expect(spans[0]!.how).toBe('sick');
+    expect(spans[0]!.closedAt!.startsWith('2026-11-07')).toBe(true);
+    expect(open!.key).toEqual({ round: 2, week: 6 });
+    expect(open!.openedAt.startsWith('2026-11-14')).toBe(true);
+  });
+
+  test('a sick week after a Mon-Fri close delays the next week to the end of the sick span', () => {
+    const three: SessionLite[] = [
+      { id: 'c1', date: '2026-09-27T10:00:00+03:00', workout: 'A' },
+      { id: 'c2', date: '2026-09-28T10:00:00+03:00', workout: 'B' },
+      { id: 'c3', date: '2026-09-29T10:00:00+03:00', workout: 'C' }, // Tue — gap until Sat
+    ];
+    const { spans, open } = walkWeeks(three, [], [], COMPLETION_WEEKS_FROM, ['2026-10-03'], NOW);
+    expect(spans).toHaveLength(1);
+    expect(spans[0]!.how).toBe('three');
+    expect(open!.key).toEqual({ round: 2, week: 6 });
+    expect(open!.openedAt.startsWith('2026-10-10')).toBe(true);
+  });
+
+  test('time-aware: before the sick week the clock is untouched; inside it, Week 6 is pending', () => {
+    const before = walkWeeks(
+      WEEK5,
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      ['2026-10-03'],
+      new Date('2026-10-02T12:00:00+03:00')
+    );
+    expect(before.spans).toEqual([]);
+    expect(before.open!.key).toEqual({ round: 2, week: 5 });
+    const during = walkWeeks(
+      WEEK5,
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      ['2026-10-03'],
+      new Date('2026-10-06T12:00:00+03:00')
+    );
+    expect(during.spans[0]!.how).toBe('sick');
+    expect(during.open).toBeNull();
+    expect(during.pending!.key).toEqual({ round: 2, week: 6 });
+    expect(during.pending!.opensAt.startsWith('2026-10-10')).toBe(true);
+  });
+});

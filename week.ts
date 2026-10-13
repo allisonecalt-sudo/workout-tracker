@@ -110,11 +110,16 @@ export type MoveOn = { round: number; week: number; at: string };
 
 export type RoundStart = { round: number; at: string };
 
+/** A paused (Sick) calendar week, keyed by the Saturday it starts on
+ * (YYYY-MM-DD, the same key app.ts's SKIPPED_WEEKS uses). v61.2 (Oct 13
+ * 2026): see walkWeeks — the program clock stops for it. */
+export type SickWeek = string;
+
 export type WeekSpan = {
   key: WeekKey;
   openedAt: string;
   closedAt: string | null; // null = the open week
-  how: 'three' | 'moved_on' | 'round_ended' | null;
+  how: 'three' | 'moved_on' | 'round_ended' | 'sick' | null;
   sessions: SessionLite[]; // chronological
   done: Letter[]; // distinct, A→B→C order
   missing: Letter[];
@@ -229,6 +234,8 @@ function freshSpan(key: WeekKey, openedAt: string): WeekSpan {
 }
 
 type TimelineEvent =
+  | { at: string; kind: 'sick_start' }
+  | { at: string; kind: 'sick_end' }
   | { at: string; kind: 'session'; session: SessionLite }
   | { at: string; kind: 'move'; move: MoveOn }
   | { at: string; kind: 'round'; round: RoundStart };
@@ -236,9 +243,25 @@ type TimelineEvent =
 // Merge the three inputs into one chronological walk. Ties: a session sorts
 // before a move or a round start dated the same instant (§2.1: "ties:
 // session first") — tests/week.test.ts #7.
-function timeline(sessions: SessionLite[], moves: MoveOn[], rounds: RoundStart[]): TimelineEvent[] {
-  const kindOrder: Record<TimelineEvent['kind'], number> = { session: 0, round: 1, move: 2 };
+function timeline(
+  sessions: SessionLite[],
+  moves: MoveOn[],
+  rounds: RoundStart[],
+  sickEvents: TimelineEvent[] = []
+): TimelineEvent[] {
+  // The sick kinds sort FIRST on a tie (they sit at local midnight), so a
+  // session at exactly that instant already sees the paused/reopened state.
+  // The three original kinds keep their relative order: nothing changes for
+  // a walk with no sick weeks.
+  const kindOrder: Record<TimelineEvent['kind'], number> = {
+    sick_start: -2,
+    sick_end: -1,
+    session: 0,
+    round: 1,
+    move: 2,
+  };
   const events: TimelineEvent[] = [
+    ...sickEvents,
     ...sessions.map((session): TimelineEvent => ({ at: session.date, kind: 'session', session })),
     ...moves.map((move): TimelineEvent => ({ at: move.at, kind: 'move', move })),
     ...rounds.map((round): TimelineEvent => ({ at: round.at, kind: 'round', round })),
@@ -280,7 +303,9 @@ export function walkWeeks(
   sessionsIn: SessionLite[],
   movesIn: MoveOn[],
   roundsIn: RoundStart[],
-  launch: { round: number; week: number; at: string } = COMPLETION_WEEKS_FROM
+  launch: { round: number; week: number; at: string } = COMPLETION_WEEKS_FROM,
+  sickWeeksIn: SickWeek[] = [],
+  now: Date = new Date()
 ): {
   spans: WeekSpan[];
   open: WeekSpan | null;
@@ -290,7 +315,30 @@ export function walkWeeks(
   const sessions = sessionsIn.filter((s) => afterLaunch(s.date, launch.at));
   const moves = movesIn.filter((m) => afterLaunch(m.at, launch.at));
   const rounds = roundsIn.filter((r) => afterLaunch(r.at, launch.at));
-  const events = timeline(sessions, moves, rounds);
+  // v61.2 (Oct 13 2026) — a Sick week PAUSES the completion clock. Each sick
+  // Saturday S becomes two events: at S the open week (if any) CLOSES with
+  // how 'sick' (its missing letters stay honestly missing); at S+7 the next
+  // week OPENS right away — no "Move on" tap, no wait for a Saturday. A
+  // session landing inside the sick week itself counts back to the week that
+  // closed. Sick weeks before the launch are ignored (Round 1 predates this
+  // model). With no sick weeks this adds no events at all.
+  const sickEvents: TimelineEvent[] = [];
+  for (const sat of sickWeeksIn) {
+    const [y, m, d] = sat.split('-').map(Number) as [number, number, number];
+    const start = new Date(y, m - 1, d);
+    const end = new Date(y, m - 1, d + 7);
+    if (!afterLaunch(formatLocalIso(start), launch.at)) continue;
+    // Time-aware: a sick week only pauses the clock once `now` has reached
+    // it (so a clock mocked to before it, or any earlier moment, is
+    // unchanged), and the next week opens only once `now` has passed its
+    // end — inside the sick week itself the next week shows as `pending`.
+    if (start.getTime() > now.getTime()) continue;
+    sickEvents.push({ at: formatLocalIso(start), kind: 'sick_start' });
+    if (end.getTime() <= now.getTime()) {
+      sickEvents.push({ at: formatLocalIso(end), kind: 'sick_end' });
+    }
+  }
+  const events = timeline(sessions, moves, rounds, sickEvents);
 
   const spans: WeekSpan[] = [];
   const weekOf = new Map<string, WeekKey>();
@@ -318,7 +366,7 @@ export function walkWeeks(
   // eventual openedAt.
   let nextBoundary: Date | null = null;
 
-  function closeOpen(at: string, how: 'three' | 'moved_on' | 'round_ended'): void {
+  function closeOpen(at: string, how: 'three' | 'moved_on' | 'round_ended' | 'sick'): void {
     if (!open) return;
     const { done, missing } = doneAndMissing(openDone);
     open.closedAt = at;
@@ -336,7 +384,11 @@ export function walkWeeks(
     // itself already landed on one, in which case there's nothing to wait
     // for (same reasoning as the launch instant always opening straight
     // away).
-    if (how !== 'round_ended') {
+    if (how === 'sick') {
+      // The sick_start handler owns what happens next (it holds the clock
+      // until the sick week ends).
+      weekNow += 1;
+    } else if (how !== 'round_ended') {
       weekNow += 1;
       if (isWeekendAnchorDay(at)) {
         open = freshSpan({ round: roundNow, week: weekNow }, at);
@@ -348,7 +400,33 @@ export function walkWeeks(
     }
   }
 
+  // Set while a sick week holds the clock; the instant the next week opens.
+  let sickReopenAt: Date | null = null;
+
   for (const ev of events) {
+    if (ev.kind === 'sick_start') {
+      const end = new Date(ev.at);
+      end.setDate(end.getDate() + 7);
+      sickReopenAt = end;
+      if (open) {
+        closeOpen(ev.at, 'sick');
+      }
+      // Already in a gap (a week closed earlier): push its opening out to
+      // the end of the sick week. Either way, hold the clock until then.
+      nextBoundary = end;
+      continue;
+    }
+
+    if (ev.kind === 'sick_end') {
+      if (sickReopenAt !== null && !open) {
+        open = freshSpan({ round: roundNow, week: weekNow }, ev.at);
+        openDone = new Set();
+        nextBoundary = null;
+      }
+      sickReopenAt = null;
+      continue;
+    }
+
     if (ev.kind === 'round') {
       // Her own call, "starts at its own moment" (rule 7) — closes whatever
       // was open (even mid-week, even at 0 done) and opens Round N Week 1

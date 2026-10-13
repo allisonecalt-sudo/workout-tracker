@@ -1,6 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, context }) => {
+  // v61.2 (Oct 13 2026): the Oct 3-9 Sick week now pauses the completion
+  // clock (week.ts), and several older tests drive Week 5 -> 6 hand-overs on
+  // those very dates, or run on the real clock (which has reached Oct 13).
+  // They see the plain model by default; the v61.2 tests opt back in. Set on
+  // the CONTEXT so a reopened page gets it too.
+  await context.addInitScript(() => {
+    (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = true;
+  });
   await page.addInitScript(() => {
     window.localStorage.clear();
   });
@@ -2971,7 +2979,7 @@ test('Settings About: post-launch shows the completion model’s own Round/Week,
   ).toHaveCount(0);
 });
 
-test('multi-week: Settings About shows Program weeks count (16) — pre-launch, unchanged', async ({
+test('multi-week: Settings About shows Program weeks count (17) — pre-launch, unchanged', async ({
   page,
 }) => {
   await mockDate(page, '2026-09-22T10:00:00.000Z'); // Tue Sep 22 2026 — before the launch, Week 4
@@ -2979,10 +2987,11 @@ test('multi-week: Settings About shows Program weeks count (16) — pre-launch, 
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
   // About section has a "Program weeks: 16" row
-  // (11 round-1 weeks + R2 W1 + R2 W2 + R2 W3 + R2 W4 + R2 W5 (v52.2, Sep 26 2026)).
+  // (11 round-1 weeks + R2 W1 + R2 W2 + R2 W3 + R2 W4 + R2 W5 (v52.2, Sep 26 2026)
+  // + R2 W6 (v61.2, Oct 13 2026 — the light restart after being sick)).
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 16');
+  ).toContainText('Program weeks: 17');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {
@@ -7428,23 +7437,29 @@ test.describe('v48 P4 home', () => {
     test("v58 fix pass (Sep 28 2026, checker's must): a REPEAT week (no new PROGRAM row yet) never says a move stepped", async ({
       page,
     }) => {
-      // Repro exactly: Week 5 (starts Sat Sep 26, "a 12-minute ride in A and
-      // B" — the ride stepped 10 -> 12) logs A/B/C, the C landing ON an
-      // anchor day (Sat Oct 3) so Week 6 opens THAT SAME DAY ("starts now",
-      // not a gap). Round 2 has no Week 6 PROGRAM row yet, so Week 6 repeats
-      // Week 5's own moves (planForWeekKey's repeatsWeek fallback). Before
-      // this fix, steppedMovesForWorkoutId ignored the repeat and diffed
-      // Week 5 against Week 4 anyway — the ride still read as "stepped" on a
-      // week that changed NOTHING.
-      await mockDate(page, '2026-10-04T10:00:00.000Z'); // Sun Oct 4 — inside the open Week 6
+      // Repro exactly, moved up one week at v61.2 (Oct 13 2026) when the real
+      // R2 Week 6 row (the light restart after being sick) landed: Week 6
+      // (starts Sat Oct 10 — the Oct 3 week is a SKIPPED 'Sick' week) logs
+      // A/B/C, the C landing ON an anchor day (Sat Oct 17) so Week 7 opens
+      // THAT SAME DAY ("starts now", not a gap). Round 2 has no Week 7
+      // PROGRAM row yet, so Week 7 repeats Week 6's own moves
+      // (planForWeekKey's repeatsWeek fallback). Before the original fix,
+      // steppedMovesForWorkoutId ignored the repeat and diffed Week 6
+      // against Week 5 anyway — the ride still read as "stepped" on a week
+      // that changed NOTHING.
+      await mockDate(page, '2026-10-18T10:00:00.000Z'); // Sun Oct 18 — inside the open Week 7
+      await page.addInitScript(() => {
+        // Week 7 only exists once the Oct 3 Sick week is honoured (see the v61.2 test below).
+        (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = false;
+      });
       await seedLogs(page, [
-        swingLog('wk5-a', '2026-09-27T15:00:00.000Z', 'A'),
-        swingLog('wk5-b', '2026-09-28T15:00:00.000Z', 'B'),
-        swingLog('wk5-c', '2026-10-03T15:00:00.000Z', 'C'), // Sat — closes Week 5, opens Week 6 same day
+        swingLog('wk6-a', '2026-10-11T15:00:00.000Z', 'A'),
+        swingLog('wk6-b', '2026-10-12T15:00:00.000Z', 'B'),
+        swingLog('wk6-c', '2026-10-17T15:00:00.000Z', 'C'), // Sat — closes Week 6, opens Week 7 same day
       ]);
       await page.goto('/');
       await page.locator('button[data-workout="A"]').click(); // pins state.pinnedWeekKey (startWorkout)
-      await expect(page.locator('.prelog-meta')).toContainText('Week 6 · same moves as Week 5');
+      await expect(page.locator('.prelog-meta')).toContainText('Week 7 · same moves as Week 6');
       await expect(page.locator('.prelog-stepped')).toHaveCount(0);
       const stepped = await page.evaluate(() =>
         (
@@ -7452,6 +7467,69 @@ test.describe('v48 P4 home', () => {
         ).__wtCurrentSteppedMoves()
       );
       expect(stepped).toEqual([]);
+    });
+
+    // v61.2 (Oct 13 2026) — the light restart after being sick. The Oct 3
+    // week is a SKIPPED 'Sick' week, so Oct 10 is R2 Week 6 (not 7); Week 6's
+    // A/B/C are one tiny session: a 10-min easy ride, no strength moves.
+    test('v61.2: the Oct 3 week is a Sick skip and Oct 10-16 is R2 Week 6 — light, one 10-min ride, no strength', async ({
+      page,
+    }) => {
+      await mockDate(page, '2026-10-13T10:00:00.000Z'); // Tue Oct 13 — inside Week 6
+      // The suite's default hides the Sick weeks (older tests use Oct 3-4 as
+      // an ordinary Week 5 -> 6 hand-over); this test is the one that wants them.
+      await page.addInitScript(() => {
+        (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = false;
+      });
+      // Real-shaped Week 5 (C never came): B Sep 26 (after the launch), A
+      // Sep 28, a B-labeled hike Oct 1. The Sick week (Oct 3-9) pauses the
+      // completion clock, so Week 6 is open with no Move on and no wait.
+      await seedLogs(page, [
+        swingLog('wk5-b1', '2026-09-26T19:45:00.000Z', 'B'),
+        swingLog('wk5-a', '2026-09-28T15:00:00.000Z', 'A'),
+        swingLog('wk5-b2', '2026-10-01T07:00:00.000Z', 'B'),
+      ]);
+      await page.goto('/');
+      // Banner: the skipped week doesn't advance the count — Week 6, not 7.
+      await expect(page.locator('.home-header h1')).toContainText('Week 6');
+      await expect(page.locator('.home-hero')).toContainText('~20 min');
+      await expect(page.locator('.home-hero')).toContainText('Cardio: 10 min');
+      // The weekly grid keeps a labeled blank row for the Oct 3 week.
+      await openWeekByWeek(page);
+      const sickRow = page.locator('.weekly-row').filter({ hasText: 'Sick' });
+      // Two Sick rows now: the July one (Round 1, unchanged) and Oct 3.
+      await expect(sickRow).toHaveCount(2);
+      await expect(sickRow.last().locator('.weekly-slot-empty')).toHaveCount(3);
+      await page.goto('/');
+      // A, B and C are the same light session: 1 round, the 10-min ride in
+      // the warmup, only Belly breathing + Pelvic tilts in the main, no
+      // strength moves.
+      for (const id of ['A', 'B', 'C'] as const) {
+        await page.goto('/');
+        await page.locator(`button[data-workout="${id}"]`).click();
+        await expect(page.locator('.prelog-meta')).toContainText('Week 6');
+        await page.locator('.prelog-overview-summary').click();
+        const phases = page.locator('.overview-phase');
+        // The ride is the warmup's only step (the overview shows it as "Cardio").
+        await expect(phases.nth(0).locator('.overview-phase-items')).toHaveText('Cardio');
+        await expect(page.locator('.prelog-meta')).toContainText('~20 min');
+        const main = await phases.nth(1).locator('.overview-phase-items').innerText();
+        expect(main).toContain('Belly breathing');
+        expect(main).toContain('Pelvic tilts');
+        for (const strength of [
+          'squat',
+          'Glute bridge',
+          'Bird dog',
+          'plank',
+          'Wall sit',
+          'curl',
+          'row',
+        ]) {
+          expect(main.toLowerCase(), `${id} main has ${strength}`).not.toContain(
+            strength.toLowerCase()
+          );
+        }
+      }
     });
 
     // v59 (Sep 28 2026), CHECK-v58 round 2 must #R2-S2: the repeat-week test
@@ -9853,7 +9931,7 @@ test.describe('v48 P8 sweep', () => {
     });
   });
 
-  test('(d) the version: home "v61.1 · <date, no year>", Settings "Build v61.1 · <full date>"', async ({
+  test('(d) the version: home "v61.2 · <date, no year>", Settings "Build v61.2 · <full date>"', async ({
     page,
   }) => {
     // code-shape R1b (Sep 27 2026): APP_VERSION/BUILD_DATE are no longer
@@ -9881,7 +9959,8 @@ test.describe('v48 P8 sweep', () => {
     // v61.1 (Oct 2 2026, CHECK-v61.md round 3 fix): a same-day dotted bump —
     // D on the closing Sat/Sun stays in its own week, one window for both
     // the count and the dots.
-    expect(version).toBe('v61.1');
+    // v61.2 (Oct 13 2026): R2 Week 6 — the light restart after being sick.
+    expect(version).toBe('v61.2');
     expect(built).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4} · \d{2}:\d{2}$/);
     await expect(page.locator('.app-version')).toHaveText(
       `${version} · ${built.replace(/,\s*\d{4}/, '')}`

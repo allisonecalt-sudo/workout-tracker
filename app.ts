@@ -2918,6 +2918,59 @@ PROGRAM.push({
   },
 });
 
+// v61.2 (Oct 13 2026) — R2 Week 6: a LIGHT RESTART after being sick.
+// WHAT: A, B and C are all the same tiny session: a 10-min easy ride + two
+// gentle breath/pelvic moves + her own stretches, ~20 min. No strength moves.
+// WHY: she got sick (likely COVID) ~Sep 29; last real workout Mon Sep 28, no
+// sessions Oct 3-12. Her words (Oct 13): "need to start slow" · "rlly extreme on
+// light" · "put in 3 light workouts for this week" · "then we can assess next
+// week". The Oct 3 week is SKIPPED_WEEKS 'Sick' so this row is Week 6, not 7.
+// getWeekPlan falls back to the latest plan, so this light week intentionally
+// carries into Oct 17+ until the next plan is written after her assessment.
+const R2W5_PLAN = PROGRAM[PROGRAM.length - 1]!;
+if (R2W5_PLAN.round !== 2 || R2W5_PLAN.weekNum !== 5) {
+  throw new Error('R2W6: expected the last PROGRAM row to be Round 2 Week 5');
+}
+// Same ride step the other weeks use (name stays EXACTLY 'Outdoor walk' — the
+// cardio lanes / elliptical picker key off it), softer notes, nothing else in
+// the warmup.
+const LIGHT_RIDE_WARMUP: Exercise[] = [
+  {
+    name: 'Outdoor walk',
+    reps: '10 min',
+    notes:
+      'Lowest level, slow. You should be able to talk the whole time. Stop early if you need to — that still counts.',
+  },
+];
+// Reuse WALK_WARMUP_AB's own two gentle objects so name-keyed lookups match.
+const LIGHT_MAIN: Exercise[] = WALK_WARMUP_AB.filter(
+  (ex) => ex.name === 'Belly breathing' || ex.name === 'Pelvic tilts'
+);
+if (LIGHT_MAIN.length !== 2) {
+  throw new Error('R2W6: expected Belly breathing + Pelvic tilts in WALK_WARMUP_AB');
+}
+const lightRestart = (id: WorkoutId): Workout => ({
+  id,
+  name: R2W5_PLAN.workouts[id].name,
+  description: 'Light restart after being sick · 10 min easy ride + stretches · ~20 min',
+  rounds: 1,
+  warmup: LIGHT_RIDE_WARMUP,
+  main: LIGHT_MAIN,
+  cooldown: STRETCH_COOLDOWN,
+});
+
+PROGRAM.push({
+  round: 2,
+  weekNum: 6,
+  startsOn: '2026-10-10',
+  label: 'Round 2 — Week 6 · light restart after being sick',
+  workouts: {
+    A: lightRestart('A'),
+    B: lightRestart('B'),
+    C: lightRestart('C'),
+  },
+});
+
 // --- Resolvers -----------------------------------------------------------
 //
 // All "what's the workout today?" logic flows through these two functions.
@@ -7666,6 +7719,7 @@ function getRoundFor(date: Date): { num: number; start: string } {
 // Saturday the week starts on (YYYY-MM-DD) → short label shown on that row.
 const SKIPPED_WEEKS: Record<string, string> = {
   '2026-07-11': 'Sick', // Jul 11-17 2026 — sick week, left blank, no level-up
+  '2026-10-03': 'Sick', // Oct 3-9 2026 — sick week (likely COVID, Sep 29 onset), left blank, no level-up
   // Jul 25 – Aug 28 2026 — the summer break between Round 1 and Round 2
   // (trip prep + vacation). Labeled rows, no level-up, honest gaps.
   '2026-07-25': 'Break',
@@ -7960,7 +8014,9 @@ function planKeyForLog(entry: LogEntry): WeekKey | null {
   const { weekOf } = walkWeeks(
     sessionsForWeekModel(all),
     movesForWeekModel(),
-    roundStartsForWeekModel()
+    roundStartsForWeekModel(),
+    COMPLETION_WEEKS_FROM,
+    sickWeeksForWeekModel()
   );
   const matched = sessionsForWeekModel(all).find(same);
   return matched ? (weekOf.get(matched.id) ?? null) : null;
@@ -8105,6 +8161,23 @@ function sessionsForWeekModel(logs: LogEntry[]): WeekSessionLite[] {
  * wiring here. */
 function roundStartsForWeekModel(): WeekRoundStart[] {
   return ROUNDS.map((r) => ({ round: r.num, at: `${r.start}T00:00:00+03:00` }));
+}
+
+/** v61.2 (Oct 13 2026): SKIPPED_WEEKS' 'Sick' Saturdays -> week.ts's sick
+ * pause (the completion clock stops for them). Only 'Sick' pauses the
+ * completion model; 'Break' rows predate it (Round 1 -> 2). */
+function sickWeeksForWeekModel(): string[] {
+  // Test-only switch (automation only, like the __wt hooks): the older
+  // week-model tests drive Week 5 -> 6 transitions on the real Oct 3-4
+  // dates, which are now the Sick week. They set this to see the plain model.
+  if (
+    typeof navigator !== 'undefined' &&
+    navigator.webdriver === true &&
+    (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks === true
+  ) {
+    return [];
+  }
+  return Object.keys(SKIPPED_WEEKS).filter((k) => SKIPPED_WEEKS[k] === 'Sick');
 }
 
 // ---------- WK3 · week_moves sync (Sep 27 2026) ----------
@@ -8383,7 +8456,9 @@ function weekModel(): ReturnType<typeof walkWeeks> {
   return walkWeeks(
     sessionsForWeekModel(loadLogs()),
     movesForWeekModel(),
-    roundStartsForWeekModel()
+    roundStartsForWeekModel(),
+    COMPLETION_WEEKS_FROM,
+    sickWeeksForWeekModel()
   );
 }
 
@@ -8406,7 +8481,9 @@ function completionClosingSessionIds(logs: LogEntry[]): Set<string> {
   const { spans } = walkWeeks(
     sessionsForWeekModel(logs),
     movesForWeekModel(),
-    roundStartsForWeekModel()
+    roundStartsForWeekModel(),
+    COMPLETION_WEEKS_FROM,
+    sickWeeksForWeekModel()
   );
   const ids = new Set<string>();
   for (const span of spans) {
@@ -8640,6 +8717,15 @@ function completionWeekSyntheticDate(key: WeekKey): Date {
   const round = ROUNDS.find((r) => r.num === key.round) ?? ROUNDS[ROUNDS.length - 1]!;
   const d = new Date(round.start + 'T00:00:00');
   d.setDate(d.getDate() + (key.week - 1) * 7);
+  // v61.2 (Oct 13 2026): a Sick week pauses the completion clock, so week N's
+  // PROGRAM row (found by startsOn) sits one calendar week later for every
+  // Sick week at or before the date reached so far. Skips only count inside
+  // this round, same as getProgramWeek. Ascending, so skips cascade.
+  const roundStart = new Date(round.start + 'T00:00:00').getTime();
+  for (const sat of sickWeeksForWeekModel().sort()) {
+    const t = new Date(sat + 'T00:00:00').getTime();
+    if (t >= roundStart && t <= d.getTime()) d.setDate(d.getDate() + 7);
+  }
   return d;
 }
 
