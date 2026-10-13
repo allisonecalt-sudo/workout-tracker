@@ -476,9 +476,10 @@ export function shownWeek(input: WeekClockInput): {
  * counts back into the week that just closed instead, and the screens must
  * say so rather than promise a week number the save won't use. */
 // WK2 fix r2 (Sep 27 2026, checker's should #2): the FULL key, not just the
-// week number — planDateNow() needs the round too, to resolve the right
-// PROGRAM row during a gap (see its own comment). gapCountsBackToWeekNum
-// keeps its old (number-only) signature for its existing callers.
+// week number - planForWeekKey needs the round too, to resolve the right
+// PROGRAM row during a gap (a gap session counts back into the week that just
+// closed). gapCountsBackToWeekNum keeps its old (number-only) signature for its
+// existing callers.
 export function gapCountsBackToWeekKey(input: WeekClockInput): WeekKey | null {
   const shown = shownWeek(input);
   if (!shown.pending) return null;

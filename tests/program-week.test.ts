@@ -114,7 +114,7 @@ test.describe('program-week — the Sick week and the clock it pauses', () => {
     }
   });
 
-  test('ignoreSick = true is the plain model: Week 5 stays open, no Sick weeks listed', () => {
+  test('with no Sick marks seeded (the plain calendar) Week 5 stays open and no Sick weeks are listed', () => {
     // (step 5d: there is no ignoreSick input any more - the plain model is the
     // data with no Sick marks, seeded the way the browser tests seed it)
     const saved = { ...SKIPPED_WEEKS };

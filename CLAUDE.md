@@ -96,5 +96,5 @@ Feature changes, Supabase writes, a golden hand-edit, `--no-verify`, touching `.
 
 - `npm run test:fast` = all `tests/*.test.ts` + `golden.spec.ts` (~375 tests, ~12 s on this laptop); it is the pre-commit gate. `npm run test:full` = the whole suite on a free port with a fresh server (~776 tests, ~1.4 min); `test:ci` = plain `playwright test` for CI.
 - `scripts/pw-run.mjs` picks a FREE port itself when `PW_PORT` is unset (and then never reuses an existing server), so the hook never needs port 3100. `titles:check` also runs in the pre-commit hook (after `test:fast`) and in CI before the tests.
-- `npm run titles:check` compares `describe › title` strings (no file/line) with `tests/titles.txt`; a title may never disappear, additions need `npm run titles:update`.
+- `npm run titles:check` compares `describe › title` strings (no file/line) with `tests/titles.txt`; a title may never disappear, additions need `npm run titles:update`. The only way a title may change is a reviewed rename: one `old title => new title` line in `tests/titles-renamed.txt` (honoured only if the old title is gone and the new one exists; `titles:update` refuses to drop a title without one).
 - The version string is stubbed in goldens (`GOLDEN-STUB-VERSION`): a version bump changes no golden and no test.

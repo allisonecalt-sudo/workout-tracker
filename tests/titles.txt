@@ -10,12 +10,12 @@
 #13 — a Sick week pauses the clock (v61.2) › CONTROL: with no sick week, the same sessions leave Week 5 open (unchanged)
 #13 — a Sick week pauses the clock (v61.2) › Week 5 closes as "sick" at the start of the sick week, C stays missing
 #13 — a Sick week pauses the clock (v61.2) › Week 6 opens immediately on Sat Oct 10 with no session and no Move on
+#13 — a Sick week pauses the clock (v61.2) › Week 6 opens where the sick marks say: one sick week -> Oct 10, two -> Oct 17, none -> Week 5 stays open
 #13 — a Sick week pauses the clock (v61.2) › a session INSIDE the sick week counts back to the week that closed
 #13 — a Sick week pauses the clock (v61.2) › a session in Week 6 counts to Week 6, not back to Week 5
 #13 — a Sick week pauses the clock (v61.2) › a sick week after a Mon-Fri close delays the next week to the end of the sick span
 #13 — a Sick week pauses the clock (v61.2) › general, not Oct-only: a later sick week pauses the same way; the July one (pre-launch) is ignored
 #13 — a Sick week pauses the clock (v61.2) › mergedSickSpans joins contiguous and overlapping weeks only
-#13 — a Sick week pauses the clock (v61.2) › shiftPastSickWeeks (the plan-date lookup) agrees: one sick week -> Oct 10, two -> Oct 17, none -> unchanged
 #13 — a Sick week pauses the clock (v61.2) › time-aware: before the sick week the clock is untouched; inside it, Week 6 is pending
 #13 — a Sick week pauses the clock (v61.2) › two CONTIGUOUS sick weeks are one held span: Week 6 opens Oct 17, not inside the second
 #13 — a Sick week pauses the clock (v61.2) › two NON-contiguous sick weeks each hold separately (Oct 3 and Oct 24)
@@ -170,6 +170,7 @@ clock guard — no test reads the real clock (step 1b-3) › no app branch for t
 clock guard — no test reads the real clock (step 1b-3) › no spec or test reads the wall clock outside helpers.ts, except the listed in-page reads
 clock guard — no test reads the real clock (step 1b-3) › the Sick-week switch is named only in helpers.ts, and only the listed tests ask for the plain model
 clock guard — no test reads the real clock (step 1b-3) › the guard itself: the scanner counts a direct call, an import alias, a one-step alias, a TWO-step alias and a namespace member, and flags a call inside a hook
+clock guard — no test reads the real clock (step 1b-3) › the switch ban also covers scripts/*.mjs, sw.js and index.html (v62.1)
 completedCount / reachedCount › completedCount only counts steps actually marked done
 completedCount / reachedCount › reachedCount = completed steps + the current one if it is not done
 completedCount / reachedCount › reachedCount does NOT add a bonus for viewing an already-done step
@@ -403,13 +404,18 @@ program-week — step 5c: the plan row is found by week key › the gap case: We
 program-week — step 5c: the plan row is found by week key › the repeat case: Week 7 has no PROGRAM row, so it repeats the Week 6 row
 program-week — step 5c: the plan row is found by week key › the synthetic-date round trip is gone: no completionWeekSyntheticDate, no planDateNow, no shiftPastSickWeeks
 program-week — the Sick week and the clock it pauses › completionClosingSessionIds: nothing closed by a session yet (Week 5 closed as sick); a third letter closes it
-program-week — the Sick week and the clock it pauses › ignoreSick = true is the plain model: Week 5 stays open, no Sick weeks listed
 program-week — the Sick week and the clock it pauses › inside the Sick week Week 6 is pending, and a session started now counts BACK into Week 5
 program-week — the Sick week and the clock it pauses › replaceCalendarMarks replaces only the kinds it is given, and the clock reads the seeded data
 program-week — the Sick week and the clock it pauses › the Oct 3 Sick week closes Week 5 (sick) and opens Week 6 on Sat Oct 10
 program-week — the Sick week and the clock it pauses › two CONTIGUOUS Sick weeks (Oct 3 + Oct 10) open Week 6 on Oct 17
+program-week — the Sick week and the clock it pauses › with no Sick marks seeded (the plain calendar) Week 5 stays open and no Sick weeks are listed
 program-week — the swing Saturday (calendar model) › Saturday with last week at 2 of 3: home shows last week, and today's pick is the missing letter
 program-week — the swing Saturday (calendar model) › no sessions at all: today's pick is A
+program-week — v62.1: a round with no plan rows shows the last written plan › Round 3 open, no rows: currentWeekPlan is the last PROGRAM row, not Round 1 Week 1
+program-week — v62.1: round starts are Jerusalem local midnight, not +03:00 › a round start in the week the clocks go back keeps the right offset on both sides
+program-week — v62.1: round starts are Jerusalem local midnight, not +03:00 › a session Fri Dec 4 23:30 stays in the previous round; one Sat Dec 5 00:30 is Round 3 Week 1
+program-week — v62.1: round starts are Jerusalem local midnight, not +03:00 › a summer (UTC+3) round start is still +03:00 (her real Round 2 is unchanged)
+program-week — v62.1: round starts are Jerusalem local midnight, not +03:00 › a winter (UTC+2) round start is local midnight: Dec 5 opens Sat Dec 5 00:00 +02:00
 program-week — which plan a saved session used › Workout D never has a week key: planForLog hands back the fixed D workout
 program-week — which plan a saved session used › a Week 5 session (Sep 28) still resolves to 2/5, not the week after the Sick pause
 program-week — which plan a saved session used › a session in Week 6 (Oct 11) resolves to key 2/6 and to that week's own A
@@ -527,6 +533,14 @@ the resume snapshot survives a reload
 the round-1 floor still shows even with an earlier step skipped
 the summary sentence under Card C (spec §2.3) › all 4 phases ready and tight: the "about the same" line
 the summary sentence under Card C (spec §2.3) › the pre-period question line, when it applies
+title ratchet - reviewed renames (v62.1) › NOT allowed onto a title the baseline already has (a deletion dressed as a rename)
+title ratchet - reviewed renames (v62.1) › NOT allowed when the new title does not exist: the old one is still missing
+title ratchet - reviewed renames (v62.1) › NOT allowed when the old title is still in the suite (that would hide a duplicate)
+title ratchet - reviewed renames (v62.1) › a disappearance with no rename still fails; a pure addition still needs an update
+title ratchet - reviewed renames (v62.1) › a rename is allowed when the old title is gone AND the new one exists
+title ratchet - reviewed renames (v62.1) › one rename line never excuses two missing titles
+title ratchet - reviewed renames (v62.1) › parseRenames reads "old => new" lines, ignores blanks and malformed lines
+title ratchet - reviewed renames (v62.1) › the committed tests/titles-renamed.txt parses cleanly, every line is old => new
 today's pick highlights A when no history exists
 todayCycleStatus — the card header › null before her first logged period (nothing to place today in)
 todayCycleStatus — the card header › on her period: plain phase + cycleDay, not overdue
@@ -732,6 +746,21 @@ v55 · fix r1: rowcurl.r4/r5 (the 2 kg rungs) are no longer kind LISA
 v57 fix pass: legacy Week 4 (Sep 28 2026) › rides logged before the completion launch (her real Week 4) show as a legacy row, not dropped
 v60: wall lean multi-set hold — Set 1 ✓, Start set 2, both sets done turns Next sage, Redo keeps the max
 v61.1 fix 3: "This week" and "Week by week" agree on the same D › r2: C closes Week 5 on Friday, D lands Saturday before the A that opens Week 6 — "This week" and "Week 6 · so far" read the same ride count
+v62.1 home - a round with no plan rows says so › Round 3 open, no PROGRAM rows: Home names the gap and shows the last plan, not Round 1 Starter
+v62.1 home - a round with no plan rows says so › a round that has rows shows no such line
+v62.1 — ROUNDS and SKIPPED_WEEKS are real Saturdays, and every round has a plan › ROUNDS numbers are 1..N in order, starts strictly ascending
+v62.1 — ROUNDS and SKIPPED_WEEKS are real Saturdays, and every round has a plan › every ROUNDS entry has at least one PROGRAM row (adding Round 3 forces writing its plan)
+v62.1 — ROUNDS and SKIPPED_WEEKS are real Saturdays, and every round has a plan › every ROUNDS start is a valid date AND a Saturday
+v62.1 — ROUNDS and SKIPPED_WEEKS are real Saturdays, and every round has a plan › every SKIPPED_WEEKS key is a valid date AND a Saturday
+v62.1 — ROUNDS and SKIPPED_WEEKS are real Saturdays, and every round has a plan › the Saturday check itself notices a Friday, a Sunday, a rolled-over date and junk
+v62.1 — a future round start takes effect on its date, not at once › a session logged before the round date still counts in Round 2 once the date has passed
+v62.1 — a future round start takes effect on its date, not at once › before its date: the walk is exactly as if the round did not exist
+v62.1 — a future round start takes effect on its date, not at once › on its date (the instant itself): Round 3 Week 1 opens and Round 2 closes as round_ended
+v62.1 — a future round start takes effect on its date, not at once › one minute before its instant it is still not applied
+v62.1 — planForWeekKey for a round with no PROGRAM rows › Round 3 Week 1 (no rows) gets the LAST written row, never PROGRAM[0]
+v62.1 — planForWeekKey for a round with no PROGRAM rows › Round 3 Week 4 (still no rows) gets the same last row
+v62.1 — planForWeekKey for a round with no PROGRAM rows › a round that HAS rows never reports a missing plan (exact and repeat)
+v62.1 — planForWeekKey for a round with no PROGRAM rows › the fallback is the highest row AT OR BELOW the key: Round 3 falls to the end of Round 2, not the end of the table by accident
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"
@@ -751,6 +780,8 @@ week by week (v57) › the table: last weeks newest first, real numbers, the ope
 week by week (v57) › v58: ridesVsDelta — "0" not "+0" on a real tie, at each metric's own precision
 week by week (v57) › v58: tapping a per-week bar shows that week's own one-line readout
 week by week (v57) › v58: the Km Δ keeps its own 2-decimal precision (Week 6 1 km vs Week 5 3.28 km)
+week-clock replay — a future round takes effect on its date (v62.1) › every instant before the round start is identical to a run without the round
+week-clock replay — a future round takes effect on its date (v62.1) › from its own date it is Round 3 Week 1, whenever it was added
 week-clock replay — synthetic golden (step 5a) › every instant and field equals the golden
 week-clock replay — synthetic golden (step 5a) › the comparison itself notices a change (one field flipped)
 week-clock replay — synthetic golden (step 5a) › the fixture covers the shapes it claims to

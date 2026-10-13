@@ -406,8 +406,8 @@ test.describe('v48 P4 home', () => {
 
   // THE SWING FIX (v52.2, Sep 26 2026): R2W5 starts the same Saturday a swing
   // session can still count toward Week 4. The plan must follow the week the
-  // session COUNTS toward, not the calendar — see planDateNow()/planDateForLog()
-  // next to homeWeekOffset() in app.ts.
+  // session COUNTS toward, not the calendar - see planDateForLog() in
+  // program-week.ts (the pre-launch lookup this test runs under).
   // WEEK5-PROPOSAL-2026-09-26.md §e.
   test("(swing-plan a) Sat Sep 26 evening, Thu A + Fri C logged: B still trains on Week 4's plan (10-min ride) — the swing", async ({
     page,
@@ -437,7 +437,7 @@ test.describe('v48 P4 home', () => {
     // the completion model's OWN "Week 5, nothing done yet but B" state. The
     // ride-minutes behavior this test was really guarding (a session started
     // now trains WEEK 5's plan, not Week 4's) still holds, under the new
-    // model's own plan lookup (planForWeekKey/completionWeekSyntheticDate) —
+    // model's own plan lookup (planForWeekKey, by week key) -
     // only the header/meta TEXT changed ("Round 2 ·"/"R2 ·" left Home and
     // pre-log, §2.4).
     await mockDate(page, '2026-09-27T09:00:00.000Z');
@@ -847,7 +847,7 @@ test.describe('v48 P4 home', () => {
     }) => {
       // WK2 fix r2 (Sep 27 2026, checker's should #2): the test above proves
       // pre-log/post-log's TEXT already says the truth — this proves the
-      // CONTENT does too (planDateNow, and getCurrentWorkout's unpinned
+      // CONTENT does too (the plan lookup, and getCurrentWorkout's unpinned
       // fallback, both used to read the PENDING week's key during a gap). A
       // real Round-2 Week-6 PROGRAM row doesn't exist yet, so before this fix
       // Week 6 silently repeated Week 5's own moves either way — invisible

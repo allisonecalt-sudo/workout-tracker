@@ -9,7 +9,9 @@
 // What's decided: this module is a leaf. It imports only erased types from
 // week.ts and never app.ts / state — so the resolvers here take `date` as a
 // REQUIRED parameter (named program*); app.ts keeps same-named thin wrappers
-// that supply the `planDateNow()` default, so every call site is untouched.
+// (getWeekPlan and friends) that, given no date, ask program-week.ts for the
+// plan row of the week the clock is in (by week key), so every call site is
+// untouched.
 // What's next: step 3 turns the rows into literal data (program/program-data.json).
 // Links: second-brain/projects/workout-tracker/app-audit-2026-09-24/next-level-2026-09-26/
 // fable-review-restructure-2026-10-13-2000.md §4 "Step 2" + plan-amendments-2026-10-13-2030.md.
@@ -2349,14 +2351,12 @@ PROGRAM.push({
 
 // --- Resolvers -----------------------------------------------------------
 //
-// All "what's the workout today?" logic flows through these two functions.
-// `date` defaults to `planDateNow()` (Sep 26 2026, the swing fix — see that
-// function, next to `homeWeekOffset()` below) so tests can mock the system
-// clock and still get deterministic answers.
-//
-// Note (step 2, Oct 13 2026): the paragraph above is the original wording. In
-// THIS file `date` is a required parameter (program.ts never imports app.ts);
-// the `planDateNow()` default now lives in app.ts's same-named thin wrappers.
+// These two resolvers are the CALENDAR lookup: a date in, the plan row whose
+// startsOn covers it out. `date` is a required parameter (program.ts never
+// imports app.ts). Since v62 (step 5c) the plan row for "now" after the
+// completion launch is NOT found this way: program-week.ts finds it by week key
+// (planForWeekKey), so no date is faked for it. These resolvers still serve
+// pre-launch dates, history and every caller that holds a real date.
 
 export function programWeekPlan(date: Date): WeekPlan {
   // Pick the highest-weekNum plan whose startsOn is on or before `date`. If

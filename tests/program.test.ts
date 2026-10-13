@@ -215,6 +215,53 @@ test.describe('appSourceFiles() — the source-scan tests can never go quiet aga
     }
   });
 });
+
+// v62.1 (Oct 14 2026) — guards on the two hand-typed calendar tables. A typo in
+// either today only logs a console.warn her phone never shows, so it fails here.
+test.describe('v62.1 — ROUNDS and SKIPPED_WEEKS are real Saturdays, and every round has a plan', () => {
+  const isRealSaturday = (iso: string): boolean => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if (!m) return false;
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const dt = new Date(y, mo - 1, d);
+    return (
+      dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d && dt.getDay() === 6
+    );
+  };
+
+  test('every SKIPPED_WEEKS key is a valid date AND a Saturday', () => {
+    const bad = Object.keys(SKIPPED_WEEKS).filter((k) => !isRealSaturday(k));
+    expect(bad).toEqual([]);
+  });
+
+  test('every ROUNDS start is a valid date AND a Saturday', () => {
+    const bad = ROUNDS.filter((r) => !isRealSaturday(r.start)).map((r) => `R${r.num} ${r.start}`);
+    expect(bad).toEqual([]);
+  });
+
+  test('the Saturday check itself notices a Friday, a Sunday, a rolled-over date and junk', () => {
+    expect(isRealSaturday('2026-10-10')).toBe(true);
+    expect(isRealSaturday('2026-10-09')).toBe(false);
+    expect(isRealSaturday('2026-10-11')).toBe(false);
+    expect(isRealSaturday('2026-02-30')).toBe(false);
+    expect(isRealSaturday('Oct 10')).toBe(false);
+  });
+
+  test('every ROUNDS entry has at least one PROGRAM row (adding Round 3 forces writing its plan)', () => {
+    const noPlan = ROUNDS.filter((r) => !PROGRAM.some((wp) => (wp.round ?? 1) === r.num)).map(
+      (r) => `Round ${r.num}`
+    );
+    expect(noPlan).toEqual([]);
+  });
+
+  test('ROUNDS numbers are 1..N in order, starts strictly ascending', () => {
+    ROUNDS.forEach((r, i) => {
+      expect(r.num).toBe(i + 1);
+      if (i > 0) expect(r.start > ROUNDS[i - 1]!.start).toBe(true);
+    });
+  });
+});
+
 // v62.1 (Oct 14 2026) — a round with NO program rows must not fall to PROGRAM[0]
 // ("Round 1 Week 1 Starter"), silently. It falls back to the last written row and
 // SAYS so (noPlanForRound), which Home turns into a visible line.

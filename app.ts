@@ -614,7 +614,8 @@ function getWorkoutD(): Workout {
 // item 1).
 //
 // v58 fix pass (Sep 28 2026, checker's must): this used to call
-// `getWeekPlan()` — the synthetic-date round trip — and diff it against
+// `getWeekPlan()` (which then went through a made-up calendar date; since v62
+// it finds the row by week key) — and diff it against
 // `PROGRAM[idx-1]` unconditionally. On a REPEAT week (planForWeekKey's own
 // `repeatsWeek` fallback — "same moves as Week N", no new PROGRAM row yet)
 // that lands on the SAME row as the week it repeats, so the diff compared
@@ -2012,9 +2013,9 @@ const V53_TIMING_SESSION_COLUMNS = [
 function sessionPayload(entry: LogEntry): Record<string, unknown> {
   // WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.6 "Saved-session plan": before the
   // launch, unchanged (the swing fix, Sep 26 2026 — the plan follows the week
-  // it COUNTS toward, via planDateForLog next to homeWeekOffset() below). At/
-  // after it, planForLog resolves through the completion model's own weekOf
-  // map instead (see planForLog's own comment, next to planDateForLog).
+  // it COUNTS toward, via planDateForLog in program-week.ts). At/ after it,
+  // planForLog resolves through the completion model's own weekOf map instead
+  // (see planForLog's own comment, next to planDateForLog there).
   const hasWallSit = workoutHasWallSit(planForLog(entry));
   return {
     id: entry.id,
@@ -4584,8 +4585,8 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     __wtCurrentSteppedMoves?: typeof currentSteppedMoves;
     __wtSeedCalendarMarks?: typeof replaceCalendarMarks;
     __wtCalendarMarksSeed?: CalendarMarks;
-  };
     __wtRoundsSeed?: { num: number; start: string }[];
+  };
   w.__wtMergeRemoteSessions = mergeRemoteSessions;
   w.__wtIsValidLogEntry = isValidLogEntry;
   w.__wtComputeWeekTotals = computeWeekTotals;
@@ -4629,9 +4630,9 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   // __wtSeedCalendarMarks is the same replace, callable later (then re-render).
   w.__wtSeedCalendarMarks = replaceCalendarMarks;
   if (w.__wtCalendarMarksSeed) replaceCalendarMarks(w.__wtCalendarMarksSeed);
-}
   // v62.1: same idea for ROUNDS (a hypothetical Round 3 with no plan rows yet).
   if (w.__wtRoundsSeed) appendRounds(w.__wtRoundsSeed);
+}
 
 async function pullFromSupabase(): Promise<void> {
   if (syncDisabled()) return;
@@ -7461,8 +7462,8 @@ function preLogWeekLabel(): string {
     return `Week ${backWeek} · an extra rep, Week ${shown.key.week} opens ${formatWeekdayDate(shown.pending!.opensAt)}`;
   }
   const planInfo = planForWeekKey(shown.key);
-  return planInfo.repeatsWeek === null
   if (planInfo.noPlanForRound !== null) return `Week ${shown.key.week} · no plan written yet`;
+  return planInfo.repeatsWeek === null
     ? `Week ${shown.key.week}`
     : `Week ${shown.key.week} · same moves as Week ${planInfo.repeatsWeek}`;
 }
@@ -9568,7 +9569,7 @@ function renderHistoryDetail(): string {
     // Lite = one round less than the plan that week had. Swing fix (Sep 26
     // 2026): the plan follows the week the session counted toward. WK4 (Sep 27
     // 2026): planForLog resolves through the completion model post-launch —
-    // see its own comment next to planDateForLog.
+    // see its own comment in program-week.ts, next to planDateForLog.
     const rounds = Math.max(1, planForLog(log).rounds - 1);
     rows.push(detailRow('Lite', `${rounds} round${rounds === 1 ? '' : 's'}`));
   }

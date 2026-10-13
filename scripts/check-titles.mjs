@@ -6,15 +6,22 @@
 //   check   (default): fails if any baseline title is missing; additions are
 //                      reported and fail too until `--update` (so the baseline
 //                      always reflects the suite).
-//   --update          : rewrites the baseline (the only way to add titles).
+//   --update          : rewrites the baseline (the only way to add titles). It refuses
+//                      if a baseline title would disappear, unless tests/titles-renamed.txt
+//                      has a reviewed `old => new` line for it (v62.1).
+// A rename is allowed only if the old title is gone AND the new one exists (see
+// scripts/titles-compare.cjs); a deletion is never allowed.
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const { compareTitles, parseRenames } = createRequire(import.meta.url)('./titles-compare.cjs');
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const baselinePath = join(root, 'tests', 'titles.txt');
+const renamesPath = join(root, 'tests', 'titles-renamed.txt');
 const cli = createRequire(import.meta.url).resolve('@playwright/test/cli');
 
 const r = spawnSync(process.execPath, [cli, 'test', '--list'], {
@@ -38,6 +45,20 @@ if (titles.length === 0) {
 }
 
 if (process.argv.includes('--update')) {
+  // Updating accepts ADDITIONS only. A baseline title that is gone must be covered
+  // by a reviewed rename (tests/titles-renamed.txt), or the update refuses.
+  if (existsSync(baselinePath)) {
+    const oldBase = readFileSync(baselinePath, 'utf8').split(/\r?\n/).filter(Boolean);
+    const rn = existsSync(renamesPath) ? parseRenames(readFileSync(renamesPath, 'utf8')) : [];
+    const gone = compareTitles(titles, oldBase, rn).missing;
+    if (gone.length) {
+      console.error(
+        `titles:update REFUSED - ${gone.length} baseline title(s) would disappear (add an old => new line to tests/titles-renamed.txt if it is a rename):`
+      );
+      for (const t of gone) console.error(`  - ${t}`);
+      process.exit(1);
+    }
+  }
   writeFileSync(baselinePath, titles.join('\n') + '\n');
   console.log(`titles baseline written: ${titles.length} titles`);
   process.exit(0);
@@ -48,13 +69,9 @@ if (!existsSync(baselinePath)) {
   process.exit(1);
 }
 const base = readFileSync(baselinePath, 'utf8').split(/\r?\n/).filter(Boolean);
-const count = (arr) => arr.reduce((m, t) => m.set(t, (m.get(t) ?? 0) + 1), new Map());
-const have = count(titles);
-const want = count(base);
-const missing = [];
-const added = [];
-for (const [t, n] of want) if ((have.get(t) ?? 0) < n) missing.push(t);
-for (const [t, n] of have) if ((want.get(t) ?? 0) < n) added.push(t);
+const renames = existsSync(renamesPath) ? parseRenames(readFileSync(renamesPath, 'utf8')) : [];
+const { missing, added, applied } = compareTitles(titles, base, renames);
+for (const r of applied) console.log(`titles:check - rename accepted: "${r.from}" => "${r.to}"`);
 if (missing.length) {
   console.error(`titles:check FAILED - ${missing.length} baseline title(s) missing:`);
   for (const t of missing) console.error(`  - ${t}`);

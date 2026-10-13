@@ -29,6 +29,21 @@ function testFiles(dir: string = TESTS): string[] {
 
 const rel = (p: string): string => path.relative(TESTS, p).split(path.sep).join('/');
 
+/** v62.1: the shipped/running files that are not .ts - scripts/*.mjs, sw.js, index.html. */
+function otherShippedFiles(): { file: string; src: string }[] {
+  const root = path.join(TESTS, '..');
+  const names = [
+    'sw.js',
+    'index.html',
+    ...fs
+      .readdirSync(path.join(root, 'scripts'))
+      .filter((f) => f.endsWith('.mjs'))
+      .sort()
+      .map((f) => 'scripts/' + f),
+  ];
+  return names.map((file) => ({ file, src: fs.readFileSync(path.join(root, file), 'utf8') }));
+}
+
 /** Source with // line comments and block comments blanked, so prose that
  *  mentions the patterns never trips the scan. */
 function code(p: string): string {
@@ -118,7 +133,26 @@ test.describe('clock guard — no test reads the real clock (step 1b-3)', () => 
     for (const { file, src } of allSourceFiles()) {
       if (src.includes(OLD_SWITCH)) oldSwitch.push(file);
     }
+    // v62.1: the rest of what ships or runs - every scripts/*.mjs, the service
+    // worker and the shell page - is scanned too (the ban was only .ts files).
+    for (const { file, src } of otherShippedFiles()) {
+      if (src.includes(OLD_SWITCH)) oldSwitch.push(file);
+    }
     expect(oldSwitch).toEqual([]);
+  });
+
+  test('the switch ban also covers scripts/*.mjs, sw.js and index.html (v62.1)', () => {
+    const files = otherShippedFiles().map((f) => f.file);
+    expect(files).toEqual(expect.arrayContaining(['sw.js', 'index.html']));
+    expect(
+      files.filter((f) => f.startsWith('scripts/') && f.endsWith('.mjs')).length
+    ).toBeGreaterThan(3);
+    // every scripts/*.mjs on disk is in the list (none skipped)
+    const onDisk = fs
+      .readdirSync(path.join(TESTS, '..', 'scripts'))
+      .filter((f) => f.endsWith('.mjs'))
+      .map((f) => 'scripts/' + f);
+    for (const f of onDisk) expect(files).toContain(f);
   });
 
   test('the Sick-week switch is named only in helpers.ts, and only the listed tests ask for the plain model', () => {

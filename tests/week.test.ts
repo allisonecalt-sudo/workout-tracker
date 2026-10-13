@@ -821,7 +821,7 @@ test.describe('#13 — a Sick week pauses the clock (v61.2)', () => {
     expect(m[1]!.start.getDate()).toBe(24);
   });
 
-  test('shiftPastSickWeeks (the plan-date lookup) agrees: one sick week -> Oct 10, two -> Oct 17, none -> unchanged', () => {
+  test('Week 6 opens where the sick marks say: one sick week -> Oct 10, two -> Oct 17, none -> Week 5 stays open', () => {
     // Step 5c deleted shiftPastSickWeeks: the plan row is found by week KEY now,
     // so nothing needs a "shifted date". What this test pinned was where Week 6
     // starts after N sick weeks; that is the clock's answer, asserted directly.
