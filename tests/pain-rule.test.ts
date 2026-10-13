@@ -23,7 +23,7 @@
 // Code comments are never scanned: exercise-detail.ts/exercise-howto.ts are
 // real imports (a `//` comment is never a string value), and app.ts/
 // ladders.ts go through the same `notes:`-string-literal extraction the
-// Tips-audit test (tests/app.spec.ts) already uses — a comment can't match
+// Tips-audit test (tests/screens/program-weeks.spec.ts) already uses — a comment can't match
 // that shape either.
 
 import { test, expect } from '@playwright/test';
@@ -82,7 +82,7 @@ test('pain rule: no shown or spoken exercise string uses the old alarm-toned "st
 
   // app.ts + ladders.ts can't be imported directly (app.ts's bottom
   // document.addEventListener(...) needs a real DOM) — extract every
-  // `notes:` string literal from source text, same regex tests/app.spec.ts's
+  // `notes:` string literal from source text, same regex tests/screens/program-weeks.spec.ts's
   // "Tips audit" test already proved out.
   const noteRe = /notes:\s*\n?\s*(['"])((?:\\.|(?!\1).)*)\1/g;
   for (const file of ['app.ts', 'ladders.ts']) {

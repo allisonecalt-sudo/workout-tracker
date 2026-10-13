@@ -21,7 +21,7 @@
 // commit message (which golden(s), why the change is intentional).
 //
 // Seed data is Allison's real shape (LogEntry fields as tests/rides-page.spec.ts
-// and tests/app.spec.ts already seed them) — not a synthetic minimal object —
+// and tests/screens/*.spec.ts already seed them) — not a synthetic minimal object —
 // so the captured markup exercises the same branches her real data does.
 
 import { test, expect, type Page } from '@playwright/test';
@@ -78,10 +78,10 @@ const SEED_LOGS: Row[] = [
   }),
 ];
 
-// Same movable-clock technique as tests/app.spec.ts's own movableClock/
+// Same movable-clock technique as tests/helpers.ts's own movableClock/
 // mockDate: overrides window.Date so app code reads a fixed instant, with an
 // offset advanceClock can move forward for the ride timer fixtures. Always
-// skips the 3-2-1 "Get ready" pre-countdown (tests/app.spec.ts's own
+// skips the 3-2-1 "Get ready" pre-countdown (tests/helpers.ts's own
 // skipPreCountdown option, zeroing workout-tracker:setting-pre-count) — a
 // big instant advanceClock jump while that SEPARATE short timer is still
 // live crashed the renderer mid-step (found running this fixture: `.timer-
@@ -126,7 +126,7 @@ async function seed(page: Page, rows: Row[]): Promise<void> {
 
 // R1 · fix r1 (should, Sep 27 2026 — CHECK-code-shape-R1's fixture-gap item):
 // shared by the sub-view fixtures added below. "Done"/"#start-round-2"/
-// "#ww-skip" is the same forward control tests/app.spec.ts's own walk uses
+// "#ww-skip" is the same forward control the walk in tests/screens/r2-weeks-and-swing.spec.ts uses
 // and the pre-existing 'workout — a strength step' fixture already relies on
 // — one selector covers every screen that has a single forward action.
 const FORWARD = '#next, #start-round-2, #ww-skip';
@@ -177,7 +177,7 @@ async function walkWorkoutA(page: Page, stopSelectors: string[]): Promise<void> 
 //   Settings) would otherwise fail every re-build. Only the DATE/TIME half
 //   is stubbed here. Step 0 (Oct 13 2026): the version that precedes the date
 //   is stubbed too (GOLDEN-STUB-VERSION), so a version bump changes no golden;
-//   the real version stays checked by the version test (tests/screens/program-weeks.spec.ts).
+//   the real version stays checked by the version test (tests/screens/sweep-and-wall-lean.spec.ts "(d) the version"; single-sourcing: tests/screens/program-weeks.spec.ts).
 function normalize(html: string): string {
   return html
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'GOLDEN-STUB-UUID')
@@ -276,8 +276,8 @@ test.describe('golden HTML — gate 1 (structure-only refactor oracle)', () => {
     await page.goto('/');
     await page.locator('button[data-workout="A"]').click();
     await page.locator('button:has-text("Start")').click();
-    // Same forward controls + hold-to-skip-rest handling as tests/app.spec.ts's
-    // own "every phase that renders an Exercise" walk (line ~1810) — proven
+    // Same forward controls + hold-to-skip-rest handling as tests/screens/r2-weeks-and-swing.spec.ts's
+    // own "every phase that renders an Exercise" walk — proven
     // against this exact program. Program content still shifts week to week,
     // so this stops at the first PLAIN (non-cardio) exercise name rather than
     // hardcoding which one or how many taps.

@@ -6,7 +6,7 @@
 // Covers PLAN-2026-09-26.md §7 T1's own test list: "trainingMinutes
 // boundaries (Node)" + formatWorkoutTime's rounding/blank rule. The confirm-
 // tap / breaks-chip / finish-before-start UI behavior lives in
-// tests/app.spec.ts (it needs the DOM), not here.
+// tests/screens/timing.spec.ts (it needs the DOM), not here.
 
 import { test, expect } from '@playwright/test';
 import { trainingMinutes, formatWorkoutTime, type TimingEntry } from '../timing';

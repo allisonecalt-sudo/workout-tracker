@@ -12208,7 +12208,7 @@ function renderPostLog(): string {
   // Wrist" is ONE control). Fine now writes both back=0 and wrist=0 in one
   // tap; Back/Wrist each open their own 1-10 row (2 taps), same as before.
   // #back-fine/#back-some/#wrist-some keep their ids so the already-shipped
-  // tests (tests/app.spec.ts) still hold.
+  // tests (tests/screens/*.spec.ts) still hold.
   // v51 (Sep 25 2026): markup now comes from the shared renderBackWristControl
   // (same component the pre-log reading uses) — ids/groups passed in exactly
   // as before, so the rendered HTML is unchanged.

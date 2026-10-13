@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 // Round 2 · Week 4 (startsOn Sep 19 2026) — the same fixed week
-// tests/app.spec.ts's "(b) one count for the whole workout" and the Back
+// tests/screens/workout-step-shell.spec.ts's "(b) one count for the whole workout" and the Back
 // (v47) test already pin: Workout A has 2 main rounds and an upper-back
 // block there, so the round-1 floor and both Main groups are exercised.
 const TUE_WEEK4 = '2026-09-22T14:00:00.000Z';
@@ -197,7 +197,7 @@ test('the resume snapshot survives a reload', async ({ page, context }) => {
   await page.locator(`[data-jump-key="${rows[3]!.key}"]`).click();
   await page.locator('#next, #ww-skip').first().click(); // marks row 3 done
 
-  // A fresh page in the same context, the way tests/app.spec.ts's resume test
+  // A fresh page in the same context, the way tests/screens/left-open-and-sync.spec.ts's resume test
   // does it — `page.reload()` would re-fire this file's beforeEach init
   // script and clear localStorage, which a real app reopen never does.
   const reopened = await context.newPage();

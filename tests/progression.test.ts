@@ -12,7 +12,7 @@
 // picking order (her-ask, novelty, stalest, empty-lane fallthrough), the nudge
 // constraints, the hard limits, and an 8-week simulation smoke test. NOT
 // covered: the Saturday-swing attribution (that's app.ts's
-// attributeSessionsToWeeks, already exercised in tests/app.spec.ts) and DB
+// attributeSessionsToWeeks, already exercised in tests/screens/r2-weeks-and-swing.spec.ts) and DB
 // idempotency (a Postgres unique-index property, not something a pure
 // function test can prove — covered by the migration's
 // `progression_steps_once` index instead).

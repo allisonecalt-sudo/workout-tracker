@@ -314,7 +314,7 @@ test.describe('moveFeelString / parseMoveFeelString — tap saves the right slug
 
 // v59 (Sep 28 2026), CHECK-v58 round 2 must #R2-S1: the pre-log "Stepped
 // this week" line's own one-line budget — tested here (pure) since
-// tests/app.spec.ts's own phone-size test proves the actual RESULT of the
+// tests/screens/logs.spec.ts's own phone-size test proves the actual RESULT of the
 // real fit (the Lite chip clears the action bar) — the live DOM measurement
 // itself (app.ts's fitSteppedLine) has no browser-free unit test on purpose,
 // same as this module's own "stays DOM-free" discipline. What's pure and

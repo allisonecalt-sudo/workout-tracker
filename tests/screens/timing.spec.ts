@@ -13,7 +13,7 @@ test.beforeEach(async ({ page, context }) => setupPage(page, context));
 test.describe('T1 · Timing: her start/finish "Right?" + breaks', () => {
   type Row = Record<string, unknown>;
 
-  // Same shape as 'v48 P1 data's own finishToPostLog (line ~4116) — that one
+  // Same shape as 'v48 P1 data's own finishToPostLog (tests/screens/timer-pip-and-data.spec.ts) — that one
   // is scoped to its own describe block, so this is its own copy. Reaches
   // "Quick log" via "Skip cardio today" (no lane memory on a fresh session),
   // straight through main + round 2 + upper back + the cool-down list.

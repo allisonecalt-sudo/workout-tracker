@@ -4,7 +4,7 @@
 // round 2's should #7 ("move weekHasD + weekCountLine into a pure module with
 // unit tests incl. '4 of 4 ✓', 'complete · 3 of 4', and the D-window
 // attribution cases") and covers the SAME three repros that round's own must
-// #1 names (the e2e versions live in tests/app.spec.ts, WK2 describe block).
+// #1 names (the e2e versions live in tests/screens/home.spec.ts, WK2 describe block).
 //
 // playwright.config.ts pins process.env.TZ = 'Asia/Jerusalem' for every test
 // in this run, Node ones included — the anchor-weekend math below (and
@@ -22,7 +22,7 @@ import {
 } from '../week-d';
 
 // Her real Week 5 close — A Sun Sep 27, B Mon Sep 28, C Tue Sep 29 (18:00
-// local) — the exact rows tests/app.spec.ts's WK2 "closing save mid-week"
+// local) — the exact rows tests/screens/home.spec.ts's WK2 "closing save mid-week"
 // test seeds, reused here so the unit and e2e tests agree on one timeline.
 // Launch defaults to COMPLETION_WEEKS_FROM (Round 2, Week 5), so Week 5 is
 // already open the instant this list starts.
