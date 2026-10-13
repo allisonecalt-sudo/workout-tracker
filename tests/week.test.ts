@@ -1079,3 +1079,146 @@ test.describe('#15 — sick pause as intervals: property tests (step 5b)', () =>
     }
   });
 });
+
+// Step 5f (Oct 13 2026) — hardening after the 5b double check. Both independent
+// checkers asked for: a bad sick-week key must not break the merge of the weeks
+// around it, an Invalid `now` must be handled on purpose, and the two exact
+// sick EDGES (a session at 00:00 on the first Saturday, and at 00:00 on the
+// reopening Saturday) pinned as plain examples, so flipping the `<=` that
+// applies an edge to `<` fails a named test instead of passing silently.
+test.describe('#16 — sick pause hardening (step 5f)', () => {
+  const NOW = new Date('2026-10-13T12:00:00+03:00');
+  const WEEK5: SessionLite[] = [
+    { id: 'b1', date: '2026-09-26T22:45:00+03:00', workout: 'B' },
+    { id: 'a1', date: '2026-09-28T18:00:00+03:00', workout: 'A' },
+    { id: 'b2', date: '2026-10-01T10:00:00+03:00', workout: 'B' },
+  ];
+
+  test('mergedSickSpans drops a key that is not a real YYYY-MM-DD date (warns), and the weeks around it still merge', () => {
+    withWarnSpy((warnings) => {
+      // '2026-10-1x' sorts BETWEEN 10-10 and 10-17: unguarded it became an
+      // Invalid Date span and stopped 10-10 and 10-17 from joining.
+      const m = mergedSickSpans(['2026-10-03', '2026-10-10', '2026-10-1x', '2026-10-17']);
+      expect(m).toHaveLength(1);
+      expect([m[0]!.start.getMonth(), m[0]!.start.getDate()]).toEqual([9, 3]);
+      expect([m[0]!.end.getMonth(), m[0]!.end.getDate()]).toEqual([9, 24]);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('2026-10-1x');
+    });
+    withWarnSpy((warnings) => {
+      const bad = ['', 'Oct 3', '2026-10-3', '2026-13-01', '2026-02-30', '2026-10-03T00:00', 'x'];
+      expect(mergedSickSpans(bad)).toEqual([]);
+      expect(warnings).toHaveLength(bad.length);
+      // no Invalid Date ever comes out
+      const m = mergedSickSpans(['2026-10-03', ...bad]);
+      expect(m).toHaveLength(1);
+      expect(Number.isNaN(m[0]!.start.getTime())).toBe(false);
+      expect(Number.isNaN(m[0]!.end.getTime())).toBe(false);
+    });
+  });
+
+  test('walkWeeks with a bad sick-week key among good ones walks exactly as with the good ones alone', () => {
+    withWarnSpy(() => {
+      const good = walkWeeks(WEEK5, [], [], COMPLETION_WEEKS_FROM, ['2026-10-03'], NOW);
+      const mixed = walkWeeks(
+        WEEK5,
+        [],
+        [],
+        COMPLETION_WEEKS_FROM,
+        ['2026-10-03', 'garbage', '2026-02-30'],
+        NOW
+      );
+      expect(mixed).toEqual(good);
+    });
+  });
+
+  test('an Invalid `now` is handled on purpose: warn, plain walk (no sick pause), never a throw', () => {
+    withWarnSpy((warnings) => {
+      const bad = walkWeeks(
+        WEEK5,
+        [],
+        [],
+        COMPLETION_WEEKS_FROM,
+        ['2026-10-03'],
+        new Date('not a date')
+      );
+      const plain = walkWeeks(WEEK5, [], [], COMPLETION_WEEKS_FROM, [], NOW);
+      expect(bad.spans).toEqual(plain.spans);
+      expect(bad.open).toEqual(plain.open);
+      expect(bad.pending).toEqual(plain.pending);
+      expect(warnings.some((w) => w.includes('Invalid `now`'))).toBe(true);
+    });
+    // no sick weeks listed -> nothing to ignore, nothing to warn about
+    withWarnSpy((warnings) => {
+      walkWeeks(WEEK5, [], [], COMPLETION_WEEKS_FROM, [], new Date('not a date'));
+      expect(warnings).toEqual([]);
+    });
+  });
+
+  test('EDGE TIE (start): a C dated exactly 2026-10-03T00:00:00+03:00 counts back to Week 5, which closed "sick" at that instant', () => {
+    const edgeC: SessionLite = { id: 'c-edge', date: '2026-10-03T00:00:00+03:00', workout: 'C' };
+    const { spans, open, weekOf } = walkWeeks(
+      [...WEEK5, edgeC],
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      ['2026-10-03'],
+      NOW
+    );
+    expect(weekOf.get('c-edge')).toEqual({ round: 2, week: 5 });
+    // The pause is applied BEFORE the session at its own instant, so Week 5 did
+    // not reach 'three' by this C: it closed 'sick' and the C counted back.
+    expect(spans[0]!.how).toBe('sick');
+    expect(spans[0]!.closedAt).toBe('2026-10-03T00:00:00+03:00');
+    expect(spans[0]!.sessions.map((s) => s.id)).toEqual(['b1', 'a1', 'b2', 'c-edge']);
+    expect(open!.key).toEqual({ round: 2, week: 6 });
+  });
+
+  test('EDGE TIE (end): a session dated exactly 2026-10-10T00:00:00+03:00 opens Week 6 at that very edge', () => {
+    const edgeA: SessionLite = { id: 'a-edge', date: '2026-10-10T00:00:00+03:00', workout: 'A' };
+    const { spans, open, weekOf } = walkWeeks(
+      [...WEEK5, edgeA],
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      ['2026-10-03'],
+      NOW
+    );
+    expect(weekOf.get('a-edge')).toEqual({ round: 2, week: 6 });
+    expect(spans).toHaveLength(1);
+    expect(spans[0]!.sessions.map((s) => s.id)).toEqual(['b1', 'a1', 'b2']); // not back in Week 5
+    expect(open!.key).toEqual({ round: 2, week: 6 });
+    expect(open!.openedAt).toBe('2026-10-10T00:00:00+03:00');
+    expect(open!.sessions.map((s) => s.id)).toEqual(['a-edge']);
+  });
+
+  test('a clock at exactly the first sick instant is already paused (Week 6 pending, not Week 5 open)', () => {
+    const atEdge = new Date('2026-10-03T00:00:00+03:00');
+    const { spans, open, pending } = walkWeeks(
+      WEEK5,
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      ['2026-10-03'],
+      atEdge
+    );
+    expect(spans[0]!.how).toBe('sick');
+    expect(open).toBeNull();
+    expect(pending!.key).toEqual({ round: 2, week: 6 });
+    expect(pending!.opensAt).toBe('2026-10-10T00:00:00+03:00');
+  });
+
+  test('a clock at exactly the reopening instant has Week 6 open (pending gone)', () => {
+    const atEnd = new Date('2026-10-10T00:00:00+03:00');
+    const { open, pending } = walkWeeks(
+      WEEK5,
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      ['2026-10-03'],
+      atEnd
+    );
+    expect(open!.key).toEqual({ round: 2, week: 6 });
+    expect(pending).toBeNull();
+  });
+});

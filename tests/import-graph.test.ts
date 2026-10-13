@@ -84,11 +84,29 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
       "const f = await import('./f.js');",
       'import { g } from "./g";',
       "import { h } from 'node:path';",
+      'const k = await import(`./k.js`);',
+      "const l = require('./l');",
+      "const m = require('../m.js');",
+      // an interpolated template cannot be resolved statically: not read
+      'const n = await import(`./n-${x}.js`);',
+      // a package require is not a relative import
+      "const o = require('node:fs');",
       "// import { i } from './i.js';",
       "/* import { j } from './j.js'; */",
     ].join('\n');
     expect(relativeImports(src)).toEqual(
-      ['./a.ts', './b.ts', './c.ts', './d.ts', '../e.ts', './f.ts', './g.ts'].sort()
+      [
+        './a.ts',
+        './b.ts',
+        './c.ts',
+        './d.ts',
+        '../e.ts',
+        './f.ts',
+        './g.ts',
+        './k.ts',
+        './l.ts',
+        '../m.ts',
+      ].sort()
     );
   });
 

@@ -110,45 +110,83 @@ test.describe('clock guard — no test reads the real clock (step 1b-3)', () => 
       if (r === 'helpers.ts' || r === 'clock-guard.test.ts') continue;
       const src = code(f);
       if (src.includes('__wtIgnoreSickWeeks')) rawSwitch.push(r);
-      // Every local name the helper goes by: its own, any `ignoreSickWeeks as X`
-      // import alias, and a namespace member (`h.ignoreSickWeeks(`). Deliberate
-      // obfuscation (string concatenation, computed property access) is NOT
-      // caught on purpose: this guards against drift, not a hostile author.
-      const names = new Set(['ignoreSickWeeks']);
-      for (const m of src.matchAll(/\bignoreSickWeeks\s+as\s+(\w+)/g)) names.add(m[1]);
-      // Also a plain alias (`const x = ignoreSickWeeks`, `const x = h.ignoreSickWeeks`)
-      // or a destructure rename (`{ ignoreSickWeeks: x }`).
-      for (const m of src.matchAll(
-        /\b(?:const|let|var)\s+(\w+)\s*=\s*(?:\w+\.)?ignoreSickWeeks\b(?!\s*\()/g
-      ))
-        names.add(m[1]);
-      for (const m of src.matchAll(/\bignoreSickWeeks\s*:\s*(\w+)/g)) names.add(m[1]);
-      const call = new RegExp(
-        String.raw`(?<![\w.])(?:\w+\.)?(?:${[...names].join('|')})\s*\(`,
-        'g'
-      );
-      let n = 0;
-      for (const m of src.matchAll(call)) {
-        n++;
-        // The simple honest rule: a call inside a beforeEach/beforeAll hook
-        // would silently cover a whole describe, so it is banned outright.
-        // The nearest test/hook opener before the call is the block it sits in.
-        const before = src.slice(0, m.index);
-        const openers = [
-          ...before.matchAll(
-            /\b(?:test|it)(?:\.(?:only|skip|fixme|describe|beforeEach|beforeAll|afterEach|afterAll))?\s*\(/g
-          ),
-        ];
-        const last = openers[openers.length - 1]?.[0] ?? '';
-        if (/before(?:Each|All)/.test(last))
-          inHooks.push(
-            `${r}: ignoreSickWeeks inside ${last.trim()} (banned: call it in the test body)`
-          );
-      }
-      if (n > 0) asks[r] = n;
+      const scan = scanPlainModelAsks(src);
+      for (const h of scan.hookCalls) inHooks.push(`${r}: ${h}`);
+      if (scan.calls > 0) asks[r] = scan.calls;
     }
     expect(inHooks).toEqual([]);
     expect(rawSwitch).toEqual([]);
     expect(asks).toEqual(PLAIN_MODEL_ALLOW);
   });
+
+  test('the guard itself: the scanner counts a direct call, an import alias, a one-step alias, a TWO-step alias and a namespace member, and flags a call inside a hook', () => {
+    const direct = scanPlainModelAsks("await ignoreSickWeeks(page, 'a long enough reason');");
+    expect(direct.calls).toBe(1);
+    const importAlias = scanPlainModelAsks(
+      "import { ignoreSickWeeks as plain } from './helpers';\nawait plain(page, 'a long enough reason');"
+    );
+    expect(importAlias.calls).toBe(1);
+    const oneStep = scanPlainModelAsks(
+      "const y = ignoreSickWeeks;\nawait y(page, 'a long enough reason');"
+    );
+    expect(oneStep.calls).toBe(1);
+    const twoStep = scanPlainModelAsks(
+      "let z;\nz = ignoreSickWeeks;\nawait z(page, 'a long enough reason');"
+    );
+    expect(twoStep.calls).toBe(1);
+    const twoStepMember = scanPlainModelAsks(
+      "let z;\nz = h.ignoreSickWeeks;\nawait z(page, 'a long enough reason');"
+    );
+    expect(twoStepMember.calls).toBe(1);
+    const namespace = scanPlainModelAsks("await h.ignoreSickWeeks(page, 'a long enough reason');");
+    expect(namespace.calls).toBe(1);
+    // a comparison is not an alias, and a bare mention is not a call
+    expect(scanPlainModelAsks('if (x === ignoreSickWeeks) { x(1); }').calls).toBe(0);
+    expect(scanPlainModelAsks('const names = [ignoreSickWeeks];').calls).toBe(0);
+    const hook = scanPlainModelAsks(
+      "test.beforeEach(async ({ page }) => { await ignoreSickWeeks(page, 'a long enough reason'); });"
+    );
+    expect(hook.calls).toBe(1);
+    expect(hook.hookCalls.length).toBe(1);
+    const inBody = scanPlainModelAsks(
+      "test('t', async ({ page }) => { await ignoreSickWeeks(page, 'a long enough reason'); });"
+    );
+    expect(inBody.hookCalls).toEqual([]);
+  });
 });
+
+/** Scan one test source (comments already blanked) for calls to the plain-model
+ *  helper `ignoreSickWeeks`, under every local name it can go by: its own, an
+ *  `ignoreSickWeeks as X` import alias, a namespace member (`h.ignoreSickWeeks(`),
+ *  a one-step alias (`const x = ignoreSickWeeks`), a TWO-step alias
+ *  (`let z; z = ignoreSickWeeks`), and a destructure rename
+ *  (`{ ignoreSickWeeks: x }`). Deliberate obfuscation (string concatenation,
+ *  computed property access) is NOT caught on purpose: this guards against
+ *  drift, not a hostile author. `hookCalls` lists calls sitting inside a
+ *  beforeEach/beforeAll hook (banned: it would silently cover a whole describe). */
+function scanPlainModelAsks(src: string): { calls: number; hookCalls: string[] } {
+  const names = new Set(['ignoreSickWeeks']);
+  for (const m of src.matchAll(/\bignoreSickWeeks\s+as\s+(\w+)/g)) names.add(m[1]!);
+  // A plain assignment of the helper (not a call, not a comparison): covers
+  // `const x = ignoreSickWeeks`, `let z; z = ignoreSickWeeks`, `x = h.ignoreSickWeeks`.
+  for (const m of src.matchAll(/\b(\w+)\s*=(?![=>])\s*(?:\w+\.)?ignoreSickWeeks\b(?!\s*\()/g))
+    names.add(m[1]!);
+  for (const m of src.matchAll(/\bignoreSickWeeks\s*:\s*(\w+)/g)) names.add(m[1]!);
+  const call = new RegExp(String.raw`(?<![\w.])(?:\w+\.)?(?:${[...names].join('|')})\s*\(`, 'g');
+  let calls = 0;
+  const hookCalls: string[] = [];
+  for (const m of src.matchAll(call)) {
+    calls++;
+    // The nearest test/hook opener before the call is the block it sits in.
+    const before = src.slice(0, m.index);
+    const openers = [
+      ...before.matchAll(
+        /\b(?:test|it)(?:\.(?:only|skip|fixme|describe|beforeEach|beforeAll|afterEach|afterAll))?\s*\(/g
+      ),
+    ];
+    const last = openers[openers.length - 1]?.[0] ?? '';
+    if (/before(?:Each|All)/.test(last))
+      hookCalls.push(`ignoreSickWeeks inside ${last.trim()} (banned: call it in the test body)`);
+  }
+  return { calls, hookCalls };
+}

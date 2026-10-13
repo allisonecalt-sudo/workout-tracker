@@ -16,7 +16,8 @@
 // recorded for context; the week clock does not use it) from the budget-2026
 // Supabase project with the key in ~/.supabase-budget-key. The key is never
 // printed or written. The output holds her real session ids/dates: it is
-// refused inside the repo — write it to a scratch folder.
+// refused inside ANY git checkout (a `.git` dir or file in any parent of the
+// --out path) — write it to a scratch folder.
 //
 // Usage:
 //   node scripts/replay-week-clock.mjs --out <file.json> [--today YYYY-MM-DD]
@@ -27,9 +28,9 @@
 process.env.TZ = 'Asia/Jerusalem';
 
 import { build } from 'esbuild';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
-import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -73,6 +74,19 @@ async function get(path) {
   return rows;
 }
 
+/** The nearest ancestor folder of `target` that is a git checkout (has a `.git`
+ * directory OR file - a worktree/submodule has a file), or null. Walks up from
+ * the target path itself, whether or not it exists yet. */
+function gitCheckoutAbove(target) {
+  let dir = dirname(resolve(target));
+  for (;;) {
+    if (existsSync(join(dir, '.git'))) return dir;
+    const up = dirname(dir);
+    if (up === dir) return null;
+    dir = up;
+  }
+}
+
 function todayJerusalem() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
@@ -107,9 +121,13 @@ if (fixture) {
   input = JSON.parse(readFileSync(resolve(fixture), 'utf8'));
   source = { kind: 'fixture', sessions: input.sessions.length, moves: input.moves.length };
 } else {
-  const rel = relative(root, resolve(out));
-  if (!rel.startsWith('..') && !isAbsolute(rel)) {
-    console.error('refusing to write her real data inside the repo; pick a scratch path');
+  // Her real session ids/dates must never land in ANY git checkout (this repo,
+  // second-brain, a worktree...), not only this one.
+  const repo = gitCheckoutAbove(out);
+  if (repo) {
+    console.error(
+      `refusing to write her real data inside a git checkout (${repo}); pick a scratch path outside any repo`
+    );
     process.exit(2);
   }
   const sessions = await get('workout_sessions?select=id,date,workout_type&order=date.asc&limit=1000');

@@ -73,3 +73,39 @@ test.describe('week-clock replay — synthetic golden (step 5a)', () => {
     expect(at('2026-10-02T09:00')['week'].open.done).toBe('AB');
   });
 });
+
+// Step 5f (Oct 13 2026): the real-data replay writes her actual session ids and
+// dates, so it must refuse to put them inside ANY git checkout - not only this
+// repo. The refusal happens before any network read, so this needs no secrets.
+test.describe('week-clock replay — the real-data tool refuses git checkouts (step 5f)', () => {
+  const { spawnSync } = require('child_process') as typeof import('child_process');
+  const os = require('os') as typeof import('os');
+  const script = path.join(__dirname, '..', 'scripts', 'replay-week-clock.mjs');
+
+  function runOut(out: string): { status: number | null; stderr: string } {
+    const r = spawnSync(process.execPath, [script, '--out', out], { encoding: 'utf8' });
+    return { status: r.status, stderr: r.stderr };
+  }
+
+  test('--out inside this repo (a .git directory above it) is refused, nothing written', () => {
+    const out = path.join(__dirname, '..', 'nested-does-not-exist', 'real.json');
+    const r = runOut(out);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('refusing to write her real data inside a git checkout');
+    expect(fs.existsSync(out)).toBe(false);
+  });
+
+  test('--out inside ANOTHER checkout (a .git FILE, as in a worktree) is refused too', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-replay-refuse-'));
+    try {
+      fs.writeFileSync(path.join(dir, '.git'), 'gitdir: /somewhere/else\n');
+      const out = path.join(dir, 'a', 'b', 'real.json');
+      const r = runOut(out);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain(dir);
+      expect(fs.existsSync(out)).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

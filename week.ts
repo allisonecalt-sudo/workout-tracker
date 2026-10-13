@@ -115,14 +115,37 @@ export type RoundStart = { round: number; at: string };
  * 2026): see walkWeeks — the program clock stops for it. */
 export type SickWeek = string;
 
+/** One sick-week key -> its local-midnight [start, end), or null when the key
+ * is not a real calendar date ('YYYY-MM-DD', month/day in range, no rollover:
+ * '2026-02-30' is NOT Mar 2). Pure. */
+function sickWeekSpan(sat: string): { start: Date; end: Date } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(sat);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const start = new Date(y, mo - 1, d);
+  if (start.getFullYear() !== y || start.getMonth() !== mo - 1 || start.getDate() !== d)
+    return null;
+  return { start, end: new Date(y, mo - 1, d + 7) };
+}
+
 /** Sick-week Saturdays -> merged held spans [start, end), local midnight:
  * sorted, de-duplicated, and contiguous or overlapping weeks joined into one
- * span. The input order and duplicates never matter. Pure. */
+ * span. The input order and duplicates never matter. A key that is not a real
+ * 'YYYY-MM-DD' date is DROPPED with a console.warn (step 5f): the keys are
+ * hand-typed program data, and an unparseable one must neither throw (this runs
+ * on the render path, a throw would blank the app) nor become an Invalid Date
+ * span that silently breaks the adjacency merge of the weeks around it. Pure
+ * apart from the warn. */
 export function mergedSickSpans(sickWeeks: SickWeek[]): { start: Date; end: Date }[] {
-  const weeks = [...new Set(sickWeeks)].sort().map((sat) => {
-    const [y, m, d] = sat.split('-').map(Number) as [number, number, number];
-    return { start: new Date(y, m - 1, d), end: new Date(y, m - 1, d + 7) };
-  });
+  const weeks: { start: Date; end: Date }[] = [];
+  for (const sat of [...new Set(sickWeeks)].sort()) {
+    const span = sickWeekSpan(sat);
+    if (span) weeks.push(span);
+    else
+      console.warn(
+        `[week] ignoring an unparseable sick-week key ${JSON.stringify(sat)} (want YYYY-MM-DD)`
+      );
+  }
   const out: { start: Date; end: Date }[] = [];
   for (const w of weeks) {
     const last = out[out.length - 1];
@@ -141,6 +164,15 @@ type PauseInterval = { start: Date; end: Date };
 /** The sick intervals the walk honours: merged, begun by `now`, and not
  * before the launch (Round 1 predates the completion model). */
 function sickIntervals(sickWeeks: SickWeek[], launchAt: string, now: Date): PauseInterval[] {
+  // An Invalid `now` (a mocked clock gone wrong; never a real `new Date()`)
+  // would make every "begun by now" comparison false, i.e. silently ignore the
+  // Sick weeks. Say so, and use the plain walk on purpose: the render path must
+  // not throw, and a loud warn is the fail-loud signal this module uses.
+  if (Number.isNaN(now.getTime())) {
+    if (sickWeeks.length > 0)
+      console.warn('[week] walkWeeks got an Invalid `now` - ignoring all sick weeks (plain walk)');
+    return [];
+  }
   return mergedSickSpans(sickWeeks).filter(
     (iv) => afterLaunch(formatLocalIso(iv.start), launchAt) && iv.start.getTime() <= now.getTime()
   );

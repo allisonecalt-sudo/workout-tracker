@@ -347,13 +347,19 @@ export const appSourceFiles = allSourceFiles;
 
 /** Every relative import in a source text, as a '<path>.ts' specifier relative
  *  to the importing file: `from './x.js'`, `from './x.ts'`, extensionless
- *  `from './x'`, side-effect `import './x.js'`, dynamic `import('./x.js')`,
- *  `export ... from`, either quote style. Comments are blanked first. */
+ *  `from './x'`, side-effect `import './x.js'`, dynamic `import('./x.js')`, the
+ *  template-literal form import(`./x.js`), CommonJS `require('./x')`,
+ *  `export ... from`, any quote style. Comments are blanked first. A template
+ *  literal with a `${}` interpolation cannot be resolved statically, so it is
+ *  not read (it never matches). */
 export function relativeImports(src: string): string[] {
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
   const out: string[] = [];
-  for (const m of code.matchAll(/\b(?:from|import)\s*\(?\s*['"](\.{1,2}\/[^'"\s]+)['"]/g))
-    out.push(`${m[1]!.replace(/\.(?:js|ts)$/, '')}.ts`);
+  // The closing quote must be the same character as the opening one (\1).
+  for (const m of code.matchAll(
+    /\b(?:from|import|require)\s*\(?\s*(['"`])(\.{1,2}\/[^'"`\s$]+)\1/g
+  ))
+    out.push(`${m[2]!.replace(/\.(?:js|ts)$/, '')}.ts`);
   return [...new Set(out)].sort();
 }
 
