@@ -273,7 +273,7 @@ function resolveGapSession(
 // WE computed (Saturday 00:00) rather than a session's own already-ISO
 // date string - same shape as every other openedAt in WeekSpan so callers
 // never have to special-case it.
-function formatLocalIso(d: Date): string {
+export function formatLocalIso(d: Date): string {
   const offsetMin = -d.getTimezoneOffset();
   const sign = offsetMin >= 0 ? '+' : '-';
   const abs = Math.abs(offsetMin);

@@ -26,15 +26,16 @@ import {
   isNowAfterCompletionLaunch,
   planForLog,
   planKeyForLog,
+  roundStartsForWeekModel,
   shownWeek,
   sickWeeksForWeekModel,
   weekModel,
   weekSubLabel,
 } from '../program-week';
 import {
-  SKIPPED_WEEKS,
   PROGRAM,
   ROUNDS,
+  SKIPPED_WEEKS,
   planForWeekKey,
   programWeekPlan,
   replaceCalendarMarks,
@@ -380,6 +381,62 @@ test.describe('program-week — step 5c: the plan row is found by week key', () 
     expect(wk['shiftPastSickWeeks']).toBeUndefined();
   });
 });
+
+// v62.1 (Oct 14 2026) — round starts were `${start}T00:00:00+03:00`: right in
+// summer, a day early in winter (a Dec 5 start read as Fri Dec 4 23:00 local).
+// They are now local (Asia/Jerusalem, DST-aware) midnight, like every other
+// Saturday anchor in week.ts. The suite is pinned to TZ=Asia/Jerusalem.
+test.describe('program-week — v62.1: round starts are Jerusalem local midnight, not +03:00', () => {
+  /** Add a Round for the duration of one body, then take it off again. */
+  function withRound<T>(num: number, start: string, body: () => T): T {
+    ROUNDS.push({ num, start });
+    try {
+      return body();
+    } finally {
+      ROUNDS.pop();
+    }
+  }
+
+  test('a winter (UTC+2) round start is local midnight: Dec 5 opens Sat Dec 5 00:00 +02:00', () => {
+    withRound(3, '2026-12-05', () => {
+      const r3 = roundStartsForWeekModel().find((r) => r.round === 3)!;
+      expect(new Date(r3.at).getTime()).toBe(new Date(2026, 11, 5, 0, 0, 0).getTime());
+      expect(r3.at).toBe('2026-12-05T00:00:00+02:00');
+    });
+  });
+
+  test('a summer (UTC+3) round start is still +03:00 (her real Round 2 is unchanged)', () => {
+    const r2 = roundStartsForWeekModel().find((r) => r.round === 2)!;
+    expect(r2.at).toBe('2026-08-29T00:00:00+03:00');
+  });
+
+  test('a round start in the week the clocks go back keeps the right offset on both sides', () => {
+    // Clocks go back Sun Oct 25 2026 (02:00 -> 01:00): Sat Oct 24 is +03:00, Sat Oct 31 is +02:00.
+    withRound(3, '2026-10-31', () => {
+      expect(roundStartsForWeekModel().find((r) => r.round === 3)!.at).toBe(
+        '2026-10-31T00:00:00+02:00'
+      );
+    });
+    withRound(3, '2026-10-24', () => {
+      expect(roundStartsForWeekModel().find((r) => r.round === 3)!.at).toBe(
+        '2026-10-24T00:00:00+03:00'
+      );
+    });
+  });
+
+  test('a session Fri Dec 4 23:30 stays in the previous round; one Sat Dec 5 00:30 is Round 3 Week 1', () => {
+    withRound(3, '2026-12-05', () => {
+      const logs: LogEntry[] = [
+        log('fri', '2026-12-04T23:30:00+02:00', 'A'),
+        log('sat', '2026-12-05T00:30:00+02:00', 'B'),
+      ];
+      const model = weekModel({ logs, moves: [], now: new Date('2026-12-05T12:00:00+02:00') });
+      expect(model.weekOf.get('fri')!.round).toBe(2);
+      expect(model.weekOf.get('sat')).toEqual({ round: 3, week: 1 });
+    });
+  });
+});
+
 // v62.1 (Oct 14 2026) — a round with no PROGRAM rows through the week clock's own
 // plan lookup: the last written row, never PROGRAM[0] "Starter".
 test.describe('program-week — v62.1: a round with no plan rows shows the last written plan', () => {

@@ -24,6 +24,7 @@ import {
   walkWeeks,
   dayOfWeek as weekDayOfWeek,
   COMPLETION_WEEKS_FROM,
+  formatLocalIso,
   type SessionLite as WeekSessionLite,
   type MoveOn as WeekMoveOn,
   type RoundStart as WeekRoundStart,
@@ -349,12 +350,19 @@ export function sessionsForWeekModel(logs: LogEntry[]): WeekSessionLite[] {
     .map((l) => ({ id: l.id, date: l.date, workout: l.workout }));
 }
 
-/** ROUNDS -> week.ts's RoundStart events. walkWeeks filters out anything
- * before its launch itself, so passing every round (not just future ones) is
- * harmless — and means a future Round 3 entry in ROUNDS needs no separate
- * wiring here. */
+/** ROUNDS -> week.ts's RoundStart events. walkWeeks itself ignores a start
+ * before the launch and one that is still in the future (v62.1: it takes
+ * effect on its own date), so passing every round is harmless - and a Round 3
+ * entry in ROUNDS needs no separate wiring here. */
 export function roundStartsForWeekModel(): WeekRoundStart[] {
-  return ROUNDS.map((r) => ({ round: r.num, at: `${r.start}T00:00:00+03:00` }));
+  // v62.1: local (Asia/Jerusalem, DST-aware) midnight of the start date - not a
+  // hard-coded +03:00, which read a winter (UTC+2) start a day early. Built the
+  // way every other Saturday anchor is (a local Date, then week.ts's
+  // formatLocalIso), so it carries the offset that is true on that date.
+  return ROUNDS.map((r) => {
+    const [y, m, d] = r.start.split('-').map(Number) as [number, number, number];
+    return { round: r.num, at: formatLocalIso(new Date(y, m - 1, d)) };
+  });
 }
 
 /** v61.2 (Oct 13 2026): SKIPPED_WEEKS' 'Sick' Saturdays -> week.ts's sick
