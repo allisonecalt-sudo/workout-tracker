@@ -10,10 +10,12 @@
 // page never causes sideways scroll at phone width.
 
 import { test, expect, type Page } from '@playwright/test';
+import { installTestClock } from './helpers';
 
 type Row = Record<string, unknown>;
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, context }) => {
+  await installTestClock(context);
   await page.addInitScript(() => {
     window.localStorage.clear();
   });

@@ -8,8 +8,10 @@
 // a reload, and the post-log/saved row both carry the skipped count.
 
 import { test, expect, type Page } from '@playwright/test';
+import { installTestClock } from './helpers';
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, context }) => {
+  await installTestClock(context);
   await page.addInitScript(() => {
     window.localStorage.clear();
   });

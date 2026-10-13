@@ -458,6 +458,9 @@ the 4-exposure backstop: a V rung with 4 clean-but-never-"fine" exposures is sti
 the chart + tap readout › each bar carries its level ("L5"/"L3") under the date, from ChartBar.sublabel
 the chart + tap readout › fewer than 2 rides with numbers: an honest gap line, no chart
 the chart + tap readout › renders one bar per ride with numbers, latest highlighted, and a tap opens a one-line readout
+the default test clock vs hold-to-skip (measures Date.now() - holdStart) › a 700 ms hold on the rest card skips it on the default running clock
+the default test clock: a fixed start that keeps RUNNING › a reload and a fresh context page continue the SAME clock; mockDate still overrides it
+the default test clock: a fixed start that keeps RUNNING › starts at TEST_NOW, advances in real time, and is not frozen (hold-to-skip needs that)
 the door on Progress › an honest empty state when she has never ridden
 the door on Progress › opens Your rides, and back returns to Progress
 the hero + its 3-chip toggle › a ride with no numbers says so honestly instead of a hero built from a guess

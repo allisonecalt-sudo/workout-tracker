@@ -1,7 +1,7 @@
 // Split out of tests/app.spec.ts by scripts/split-spec.mjs (code-shape step 1, Oct 13 2026);
 // the test bodies below are copied line for line.
 import { test, expect } from '@playwright/test';
-import { setupPage, movableClock, advanceClock } from '../helpers';
+import { setupPage, movableClock, advanceClock, mockDate, TEST_NOW_MS } from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -146,5 +146,60 @@ test.describe('T1 · Timing: her start/finish "Right?" + breaks', () => {
     const log = await saveAndReadLog(page); // never blocked
     expect(log['herStartConfirmed']).toBe(false);
     expect(log['herEndConfirmed']).toBe(false);
+  });
+});
+
+// code-shape step 1b-2 (Oct 13 2026): the default clock every test runs on.
+test.describe('the default test clock: a fixed start that keeps RUNNING', () => {
+  test('starts at TEST_NOW, advances in real time, and is not frozen (hold-to-skip needs that)', async ({
+    page,
+  }) => {
+    const a = await page.evaluate(() => Date.now());
+    expect(Math.abs(a - TEST_NOW_MS)).toBeLessThan(60_000); // page load + setup, not the real Oct 13
+    await page.waitForTimeout(300);
+    const b = await page.evaluate(() => Date.now());
+    expect(b - a).toBeGreaterThanOrEqual(250);
+    expect(await page.evaluate(() => new Date().toISOString().slice(0, 10))).toBe('2026-09-29');
+  });
+
+  test('a reload and a fresh context page continue the SAME clock; mockDate still overrides it', async ({
+    page,
+    context,
+  }) => {
+    const before = await page.evaluate(() => Date.now());
+    await page.waitForTimeout(200);
+    const second = await context.newPage();
+    await second.goto('/');
+    const onSecond = await second.evaluate(() => Date.now());
+    expect(onSecond).toBeGreaterThan(before); // continued, not restarted at TEST_NOW
+    await second.close();
+    const frozen = await context.newPage();
+    await mockDate(frozen, '2026-10-01T12:00:00.000Z');
+    await frozen.goto('/');
+    expect(await frozen.evaluate(() => new Date().toISOString())).toBe('2026-10-01T12:00:00.000Z');
+    await frozen.close();
+  });
+});
+
+test.describe('the default test clock vs hold-to-skip (measures Date.now() - holdStart)', () => {
+  test('a 700 ms hold on the rest card skips it on the default running clock', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem('workout-tracker:setting-rest-sec', '30');
+    });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    for (let i = 0; i < 30; i++) {
+      if (await page.locator('#skip-rest').isVisible()) break;
+      await page.locator('#next, #start-round-2, #ww-skip').first().click();
+    }
+    const skipRest = page.locator('#skip-rest');
+    await expect(skipRest).toBeVisible();
+    const box = (await skipRest.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(700);
+    await page.mouse.up();
+    await expect(skipRest).toBeHidden();
   });
 });

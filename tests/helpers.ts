@@ -8,12 +8,54 @@ import { expect, type BrowserContext, type Page } from '@playwright/test';
 // Specs now live one folder deeper, so they import this under that name.
 export const TESTS_DIR = __dirname;
 
+// code-shape step 1b-2 (Oct 13 2026): NO TEST READS THE REAL CLOCK. A test on
+// the wall clock silently changes meaning as the calendar moves (Oct 13 sits
+// after the Oct 3-9 Sick week the app now knows about). Every context gets a
+// SHIFTED-BUT-RUNNING clock: Date starts at TEST_NOW_ISO and then flows at
+// real speed, so the app's timers, rAF loop and the hold-to-skip's
+// `Date.now() - holdStart` (700 ms) behave exactly as in production. The
+// offset (TEST_NOW minus Node's real now) is fixed once per context, so a
+// reopened page / context.newPage() continues the same clock instead of
+// restarting at TEST_NOW. mockDate (frozen) and movableClock (steered) are
+// page-level init scripts that wrap whatever Date is there, so they still
+// override this default per test, exactly as before.
+//
+// TEST_NOW is Tue Sep 29 2026 09:00 Jerusalem: inside Round 2 Week 5 (the
+// Sat Sep 26 launch week), BEFORE the Oct 3-9 Sick week, in the same week as
+// the goldens' NOW_ISO. The real-clock tests were written Sep 27-Oct 2 against
+// exactly this stretch of the calendar.
+export const TEST_NOW_ISO = '2026-09-29T06:00:00.000Z';
+export const TEST_NOW_MS = new Date(TEST_NOW_ISO).getTime();
+
+export async function installTestClock(context: BrowserContext): Promise<void> {
+  const offsetMs = TEST_NOW_MS - Date.now();
+  await context.addInitScript((offset: number) => {
+    const RealDate = Date;
+    const nowMs = (): number => RealDate.now() + offset;
+    class ShiftedDate extends RealDate {
+      constructor(...args: ConstructorParameters<typeof Date>) {
+        if (args.length === 0) {
+          super(nowMs());
+        } else {
+          super(...args);
+        }
+      }
+      static override now(): number {
+        return nowMs();
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).Date = ShiftedDate;
+  }, offsetMs);
+}
+
 // The old top-level test.beforeEach of tests/app.spec.ts, as a plain function.
 // Every tests/screens/*.spec.ts registers it as its first hook:
 //   test.beforeEach(async ({ page, context }) => setupPage(page, context));
 // helpers.ts itself registers NO test hook, so golden.spec.ts can import from it
 // without inheriting the sick-week switch or the goto.
 export async function setupPage(page: Page, context: BrowserContext): Promise<void> {
+  await installTestClock(context);
   // v61.2 (Oct 13 2026): the Oct 3-9 Sick week now pauses the completion
   // clock (week.ts), and several older tests drive Week 5 -> 6 hand-overs on
   // those very dates, or run on the real clock (which has reached Oct 13).
@@ -81,7 +123,7 @@ export function leftOpenSnapshot(ageMs: number, workout: 'A' | 'B' | 'C' = 'A') 
     currentRound: 1,
     currentPhase: 'warmup',
     currentExerciseIndex: 0,
-    startedAt: new Date(Date.now() - ageMs).toISOString(),
+    startedAt: new Date(TEST_NOW_MS - ageMs).toISOString(),
     pausedAt: null,
     pausedMs: 0,
     liteDay: false,

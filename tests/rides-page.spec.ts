@@ -10,10 +10,12 @@
 // sideways scroll at phone width. Same seeding shape as tests/cycle-ui.spec.ts.
 
 import { test, expect, type Page } from '@playwright/test';
+import { installTestClock } from './helpers';
 
 type Row = Record<string, unknown>;
 
 test.beforeEach(async ({ page, context }) => {
+  await installTestClock(context);
   // v61.2 (Oct 13 2026): the Oct 3-9 Sick week now pauses the completion
   // clock (week.ts), and several older tests drive Week 5 -> 6 hand-overs on
   // those very dates, or run on the real clock (which has reached Oct 13).
