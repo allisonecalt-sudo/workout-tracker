@@ -22,6 +22,12 @@
 #13 — invariant: a span never opens on a weekday, except the launch instant or a Round start › every non-launch, non-round-start openedAt falls on Saturday or Sunday
 #14 — pending: the gap is visible to callers even with 0 sessions › Fri close, then a query on Sat with no session yet: Week 6 pending, opening that Saturday
 #14 — pending: the gap is visible to callers even with 0 sessions › pending is null once a week is actually open (no gap)
+#15 — sick pause as intervals: property tests (step 5b) › a session inside a sick interval lands in the week that closed
+#15 — sick pause as intervals: property tests (step 5b) › a week closed Mon-Fri just before a sick interval: nothing opens until the interval ends; sessions inside count back
+#15 — sick pause as intervals: property tests (step 5b) › any set of sick Saturdays, in any order, with duplicates, gives the same walk as its sorted de-duplicated set
+#15 — sick pause as intervals: property tests (step 5b) › no sick weeks (none, all before the launch, or all after now) = byte-identical to the no-sick walk
+#15 — sick pause as intervals: property tests (step 5b) › non-contiguous sick weeks (a clear week between) hold separately
+#15 — sick pause as intervals: property tests (step 5b) › two consecutive sick weeks reopen ONCE, at the end of the second
 #2 — closes on the 3rd letter, then a weekday gap counts backward, then Sat opens the next week › Sun/Mon/Wed closes Week 5; Thu+Fri repeats count back; Sat opens Week 6
 #2b — a weekday session AFTER the boundary has passed still opens the next week › Mon A / Thu B / Fri C after a Wed close = Week 6 at 3 of 3, opened on the anchor Saturday
 #2c — replaying her real Round 2 rows, shifted after launch, keeps 4 weeks as 4 weeks › 4 real 3/3 weeks, shifted +28 days, are still 4 closed weeks at 3/3 (not 2)

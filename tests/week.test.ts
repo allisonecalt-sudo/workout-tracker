@@ -829,3 +829,253 @@ test.describe('#13 — a Sick week pauses the clock (v61.2)', () => {
     expect(shiftPastSickWeeks(week6, roundStart, ['2026-07-11']).getDate()).toBe(3);
   });
 });
+
+// Step 5b (Oct 13 2026) — the sick pause is merged into closed [start, end)
+// intervals BEFORE the walk. These are property-style tests: a deterministic
+// generator (mulberry32, fixed seed), 200 cases per property, so a failure
+// reproduces exactly. The example tests above stay the readable spec; these
+// pin what must hold for ANY set of sick Saturdays.
+test.describe('#15 — sick pause as intervals: property tests (step 5b)', () => {
+  const SEED = 20261013;
+  const CASES = 200;
+
+  function rng(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const pick = <T>(r: () => number, xs: readonly T[]): T => xs[Math.floor(r() * xs.length)]!;
+  const int = (r: () => number, lo: number, hi: number): number =>
+    lo + Math.floor(r() * (hi - lo + 1));
+  const pad2 = (n: number): string => String(n).padStart(2, '0');
+  const ymd = (d: Date): string =>
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  /** The i-th Saturday on/after Sat Oct 3 2026 (local), as 'YYYY-MM-DD'. */
+  const satStr = (i: number): string => ymd(new Date(2026, 9, 3 + 7 * i));
+  const localDate = (ymdStr: string, plusDays = 0): Date => {
+    const [y, m, d] = ymdStr.split('-').map(Number) as [number, number, number];
+    return new Date(y, m - 1, d + plusDays);
+  };
+  const shuffle = <T>(r: () => number, xs: T[]): T[] => {
+    const a = [...xs];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = int(r, 0, i);
+      [a[i], a[j]] = [a[j]!, a[i]!];
+    }
+    return a;
+  };
+  /** Sessions between the launch and `before` (exclusive) using only two
+   *  distinct letters, so the week open at `before` never closes by itself. */
+  function shortWeekSessions(r: () => number, before: Date): SessionLite[] {
+    const letters = pick(r, [
+      ['A', 'B'],
+      ['A', 'C'],
+      ['B', 'C'],
+    ] as const);
+    const first = new Date(2026, 8, 27, 9);
+    const hours = Math.max(1, Math.floor((before.getTime() - first.getTime()) / 3_600_000) - 1);
+    return Array.from({ length: int(r, 1, 4) }, (_, i) => ({
+      id: `p${i}`,
+      date: new Date(first.getTime() + int(r, 0, hours) * 3_600_000).toISOString(),
+      workout: pick(r, letters),
+    }));
+  }
+  const NOW_FAR = new Date(2027, 1, 15, 12);
+
+  test('any set of sick Saturdays, in any order, with duplicates, gives the same walk as its sorted de-duplicated set', () => {
+    const r = rng(SEED);
+    const allSats = [
+      '2026-08-29',
+      '2026-09-12',
+      '2026-09-19', // before the launch: ignored
+      ...Array.from({ length: 12 }, (_, i) => satStr(i)),
+    ];
+    for (let c = 0; c < CASES; c++) {
+      const sessions: SessionLite[] = Array.from({ length: int(r, 0, 10) }, (_, i) => ({
+        id: `q${i}`,
+        date: new Date(2026, 8, 27 + int(r, 0, 80), int(r, 0, 23), int(r, 0, 59)).toISOString(),
+        workout: pick(r, ['A', 'B', 'C'] as const),
+      }));
+      const chosen = Array.from({ length: int(r, 0, 5) }, () => pick(r, allSats));
+      const messy = shuffle(r, [...chosen, ...chosen.slice(0, int(r, 0, chosen.length))]);
+      const clean = [...new Set(chosen)].sort();
+      const now = new Date(2026, 8, 27 + int(r, 0, 100), int(r, 0, 23));
+      const a = walkWeeks(sessions, [], [], COMPLETION_WEEKS_FROM, messy, now);
+      const b = walkWeeks(sessions, [], [], COMPLETION_WEEKS_FROM, clean, now);
+      expect(a, `case ${c}: ${JSON.stringify(messy)} vs ${JSON.stringify(clean)}`).toEqual(b);
+    }
+  });
+
+  test('two consecutive sick weeks reopen ONCE, at the end of the second', () => {
+    const r = rng(SEED + 1);
+    for (let c = 0; c < CASES; c++) {
+      const i = int(r, 0, 8);
+      const s1 = satStr(i);
+      const s2 = satStr(i + 1);
+      const sessions = shortWeekSessions(r, localDate(s1));
+      const sick = r() < 0.5 ? [s1, s2] : [s2, s1, s2];
+      const { spans, open, pending } = walkWeeks(
+        sessions,
+        [],
+        [],
+        COMPLETION_WEEKS_FROM,
+        sick,
+        NOW_FAR
+      );
+      const sickSpans = spans.filter((sp) => sp.how === 'sick');
+      expect(sickSpans, `case ${c} at ${s1}`).toHaveLength(1);
+      expect(new Date(sickSpans[0]!.closedAt!).getTime()).toBe(localDate(s1).getTime());
+      expect(spans).toHaveLength(1);
+      // the next week opens once, empty, the day the second sick week ends
+      expect(open!.key).toEqual({ round: 2, week: 6 });
+      expect(new Date(open!.openedAt).getTime()).toBe(localDate(s2, 7).getTime());
+      expect(open!.sessions).toEqual([]);
+      expect(pending).toBeNull();
+    }
+  });
+
+  test('non-contiguous sick weeks (a clear week between) hold separately', () => {
+    const r = rng(SEED + 2);
+    for (let c = 0; c < CASES; c++) {
+      const i = int(r, 0, 4);
+      const j = i + int(r, 2, 5); // at least one free week between the two
+      const [s1, s2] = [satStr(i), satStr(j)];
+      const sessions = shortWeekSessions(r, localDate(s1));
+      const { spans, open } = walkWeeks(
+        sessions,
+        [],
+        [],
+        COMPLETION_WEEKS_FROM,
+        shuffle(r, [s2, s1]),
+        NOW_FAR
+      );
+      expect(
+        spans.map((sp) => [sp.key.week, sp.how]),
+        `case ${c}: ${s1} ${s2}`
+      ).toEqual([
+        [5, 'sick'],
+        [6, 'sick'],
+      ]);
+      expect(new Date(spans[0]!.closedAt!).getTime()).toBe(localDate(s1).getTime());
+      expect(new Date(spans[1]!.closedAt!).getTime()).toBe(localDate(s2).getTime());
+      expect(new Date(spans[1]!.openedAt).getTime()).toBe(localDate(s1, 7).getTime());
+      expect(open!.key).toEqual({ round: 2, week: 7 });
+      expect(new Date(open!.openedAt).getTime()).toBe(localDate(s2, 7).getTime());
+    }
+  });
+
+  test('a session inside a sick interval lands in the week that closed', () => {
+    const r = rng(SEED + 3);
+    for (let c = 0; c < CASES; c++) {
+      const i = int(r, 0, 6);
+      const weeks = int(r, 1, 3); // 1-3 back-to-back sick weeks = one interval
+      const sick = Array.from({ length: weeks }, (_, k) => satStr(i + k));
+      const sessions = shortWeekSessions(r, localDate(sick[0]!));
+      const insideAt = new Date(
+        localDate(sick[0]!).getTime() + int(r, 0, weeks * 7 * 24 - 1) * 3_600_000
+      );
+      const inside: SessionLite = {
+        id: 'inside',
+        date: insideAt.toISOString(),
+        workout: pick(r, ['A', 'B', 'C'] as const),
+      };
+      const { spans, weekOf } = walkWeeks(
+        [...sessions, inside],
+        [],
+        [],
+        COMPLETION_WEEKS_FROM,
+        sick,
+        NOW_FAR
+      );
+      expect(
+        weekOf.get('inside'),
+        `case ${c}: ${insideAt.toISOString()} in ${sick.join(',')}`
+      ).toEqual({ round: 2, week: 5 });
+      expect(spans[0]!.how).toBe('sick');
+      expect(spans[0]!.sessions.map((s) => s.id)).toContain('inside');
+    }
+  });
+
+  test('a week closed Mon-Fri just before a sick interval: nothing opens until the interval ends; sessions inside count back', () => {
+    const r = rng(SEED + 5);
+    for (let c = 0; c < CASES; c++) {
+      const i = int(r, 0, 6);
+      const weeks = int(r, 1, 3);
+      const sick = Array.from({ length: weeks }, (_, k) => satStr(i + k));
+      const prevSat = localDate(sick[0]!, -7);
+      // three distinct letters on three weekdays (Mon-Fri) of the week before: it closes by itself
+      const days = [...new Set([int(r, 2, 6), int(r, 2, 6), int(r, 2, 6)])].sort();
+      while (days.length < 3) days.push(Math.min(6, days[days.length - 1]! + 1));
+      const letters = shuffle(r, ['A', 'B', 'C'] as const);
+      const closing: SessionLite[] = days.map((d, k) => ({
+        id: `c${k}`,
+        date: new Date(
+          prevSat.getFullYear(),
+          prevSat.getMonth(),
+          prevSat.getDate() + d,
+          18
+        ).toISOString(),
+        workout: letters[k]!,
+      }));
+      if (new Date(closing[0]!.date).getTime() < new Date(COMPLETION_WEEKS_FROM.at).getTime())
+        continue;
+      const insideAt = new Date(
+        localDate(sick[0]!).getTime() + int(r, 0, weeks * 7 * 24 - 1) * 3_600_000
+      );
+      const inside: SessionLite = { id: 'inside', date: insideAt.toISOString(), workout: 'A' };
+      const { spans, open } = walkWeeks(
+        [...closing, inside],
+        [],
+        [],
+        COMPLETION_WEEKS_FROM,
+        sick,
+        NOW_FAR
+      );
+      expect(spans, `case ${c}`).toHaveLength(1);
+      expect(spans[0]!.how).toBe('three');
+      expect(
+        spans[0]!.sessions.map((x) => x.id),
+        `case ${c}`
+      ).toContain('inside');
+      expect(open!.key).toEqual({ round: 2, week: 6 });
+      expect(new Date(open!.openedAt).getTime()).toBe(localDate(sick[weeks - 1]!, 7).getTime());
+    }
+  });
+
+  test('no sick weeks (none, all before the launch, or all after now) = byte-identical to the no-sick walk', () => {
+    const r = rng(SEED + 4);
+    for (let c = 0; c < CASES; c++) {
+      const sessions: SessionLite[] = Array.from({ length: int(r, 0, 12) }, (_, i) => ({
+        id: `n${i}`,
+        date: new Date(2026, 8, 27 + int(r, 0, 70), int(r, 0, 23), int(r, 0, 59)).toISOString(),
+        workout: pick(r, ['A', 'B', 'C'] as const),
+      }));
+      const now = new Date(2026, 9, 1 + int(r, 0, 60), 12);
+      const plain = walkWeeks(sessions, [], [], COMPLETION_WEEKS_FROM, [], now);
+      const preLaunch = walkWeeks(
+        sessions,
+        [],
+        [],
+        COMPLETION_WEEKS_FROM,
+        ['2026-08-29', '2026-09-19'],
+        now
+      );
+      const afterNow = walkWeeks(
+        sessions,
+        [],
+        [],
+        COMPLETION_WEEKS_FROM,
+        [ymd(new Date(now.getTime() + 8 * 86_400_000))],
+        now
+      );
+      expect(JSON.stringify(preLaunch), `case ${c} (pre-launch)`).toBe(JSON.stringify(plain));
+      expect(JSON.stringify(afterNow), `case ${c} (after now)`).toBe(JSON.stringify(plain));
+      expect(plain.spans.every((sp) => sp.how !== 'sick')).toBe(true);
+    }
+  });
+});

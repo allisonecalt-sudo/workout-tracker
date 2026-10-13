@@ -92,7 +92,7 @@ Feature changes, Supabase writes, a golden hand-edit, `--no-verify`, touching `.
 
 ## Test commands (code-shape step 0, Oct 13 2026)
 
-- `npm run test:fast` = all `tests/*.test.ts` + `golden.spec.ts` (~365 tests, ~10 s on this laptop); it is the pre-commit gate. `npm run test:full` = the whole suite on a free port with a fresh server (~765 tests, ~1.2 min); `test:ci` = plain `playwright test` for CI.
+- `npm run test:fast` = all `tests/*.test.ts` + `golden.spec.ts` (~375 tests, ~12 s on this laptop); it is the pre-commit gate. `npm run test:full` = the whole suite on a free port with a fresh server (~776 tests, ~1.4 min); `test:ci` = plain `playwright test` for CI.
 - `scripts/pw-run.mjs` picks a FREE port itself when `PW_PORT` is unset (and then never reuses an existing server), so the hook never needs port 3100. `titles:check` also runs in the pre-commit hook (after `test:fast`) and in CI before the tests.
 - `npm run titles:check` compares `describe › title` strings (no file/line) with `tests/titles.txt`; a title may never disappear, additions need `npm run titles:update`.
 - The version string is stubbed in goldens (`GOLDEN-STUB-VERSION`): a version bump changes no golden and no test.

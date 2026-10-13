@@ -115,10 +115,11 @@ export type RoundStart = { round: number; at: string };
  * 2026): see walkWeeks — the program clock stops for it. */
 export type SickWeek = string;
 
-/** Sick-week Saturdays -> merged held spans [start, end), local midnight.
- * Contiguous or overlapping weeks join into one span. Pure. */
+/** Sick-week Saturdays -> merged held spans [start, end), local midnight:
+ * sorted, de-duplicated, and contiguous or overlapping weeks joined into one
+ * span. The input order and duplicates never matter. Pure. */
 export function mergedSickSpans(sickWeeks: SickWeek[]): { start: Date; end: Date }[] {
-  const weeks = [...sickWeeks].sort().map((sat) => {
+  const weeks = [...new Set(sickWeeks)].sort().map((sat) => {
     const [y, m, d] = sat.split('-').map(Number) as [number, number, number];
     return { start: new Date(y, m - 1, d), end: new Date(y, m - 1, d + 7) };
   });
@@ -132,6 +133,17 @@ export function mergedSickSpans(sickWeeks: SickWeek[]): { start: Date; end: Date
     }
   }
   return out;
+}
+
+/** A stretch of time the completion clock is held: [start, end), local midnights. */
+type PauseInterval = { start: Date; end: Date };
+
+/** The sick intervals the walk honours: merged, begun by `now`, and not
+ * before the launch (Round 1 predates the completion model). */
+function sickIntervals(sickWeeks: SickWeek[], launchAt: string, now: Date): PauseInterval[] {
+  return mergedSickSpans(sickWeeks).filter(
+    (iv) => afterLaunch(formatLocalIso(iv.start), launchAt) && iv.start.getTime() <= now.getTime()
+  );
 }
 
 /** The calendar date whose PROGRAM row is program week N of a round: the
@@ -268,8 +280,6 @@ function freshSpan(key: WeekKey, openedAt: string): WeekSpan {
 }
 
 type TimelineEvent =
-  | { at: string; kind: 'sick_start'; until: string }
-  | { at: string; kind: 'sick_end' }
   | { at: string; kind: 'session'; session: SessionLite }
   | { at: string; kind: 'move'; move: MoveOn }
   | { at: string; kind: 'round'; round: RoundStart };
@@ -277,25 +287,13 @@ type TimelineEvent =
 // Merge the three inputs into one chronological walk. Ties: a session sorts
 // before a move or a round start dated the same instant (§2.1: "ties:
 // session first") — tests/week.test.ts #7.
-function timeline(
-  sessions: SessionLite[],
-  moves: MoveOn[],
-  rounds: RoundStart[],
-  sickEvents: TimelineEvent[] = []
-): TimelineEvent[] {
-  // The sick kinds sort FIRST on a tie (they sit at local midnight), so a
-  // session at exactly that instant already sees the paused/reopened state.
-  // The three original kinds keep their relative order: nothing changes for
-  // a walk with no sick weeks.
+function timeline(sessions: SessionLite[], moves: MoveOn[], rounds: RoundStart[]): TimelineEvent[] {
   const kindOrder: Record<TimelineEvent['kind'], number> = {
-    sick_start: -2,
-    sick_end: -1,
     session: 0,
     round: 1,
     move: 2,
   };
   const events: TimelineEvent[] = [
-    ...sickEvents,
     ...sessions.map((session): TimelineEvent => ({ at: session.date, kind: 'session', session })),
     ...moves.map((move): TimelineEvent => ({ at: move.at, kind: 'move', move })),
     ...rounds.map((round): TimelineEvent => ({ at: round.at, kind: 'round', round })),
@@ -349,34 +347,23 @@ export function walkWeeks(
   const sessions = sessionsIn.filter((s) => afterLaunch(s.date, launch.at));
   const moves = movesIn.filter((m) => afterLaunch(m.at, launch.at));
   const rounds = roundsIn.filter((r) => afterLaunch(r.at, launch.at));
-  // v61.2 (Oct 13 2026) — a Sick week PAUSES the completion clock. Each sick
-  // Saturday S becomes two events: at S the open week (if any) CLOSES with
-  // how 'sick' (its missing letters stay honestly missing); at S+7 the next
-  // week OPENS right away — no "Move on" tap, no wait for a Saturday. A
-  // session landing inside the sick week itself counts back to the week that
-  // closed. Sick weeks before the launch are ignored (Round 1 predates this
-  // model). With no sick weeks this adds no events at all.
-  const sickEvents: TimelineEvent[] = [];
-  // Back-to-back (or overlapping) sick weeks are ONE held span that ends at
-  // the last one's end — otherwise the second week's start would re-arm the
-  // hold while the first week's end already opened the next week inside it.
-  for (const span of mergedSickSpans(sickWeeksIn)) {
-    if (!afterLaunch(formatLocalIso(span.start), launch.at)) continue;
-    // Time-aware: a sick span only pauses the clock once `now` has reached
-    // it (so a clock mocked to before it, or any earlier moment, is
-    // unchanged), and the next week opens only once `now` has passed its
-    // end — inside the sick span itself the next week shows as `pending`.
-    if (span.start.getTime() > now.getTime()) continue;
-    sickEvents.push({
-      at: formatLocalIso(span.start),
-      kind: 'sick_start',
-      until: formatLocalIso(span.end),
-    });
-    if (span.end.getTime() <= now.getTime()) {
-      sickEvents.push({ at: formatLocalIso(span.end), kind: 'sick_end' });
-    }
-  }
-  const events = timeline(sessions, moves, rounds, sickEvents);
+  // v61.2 (Oct 13 2026) — a Sick week PAUSES the completion clock. Step 5b
+  // (Oct 13 2026): the sick Saturdays are merged BEFORE the walk into closed
+  // [start, end) intervals (sorted, de-duplicated, back-to-back weeks joined),
+  // and the walk just applies each interval's two edges in time order, before
+  // any event at or after them (no tie-break). At an interval's start the open
+  // week (if any) CLOSES with how 'sick' (its missing letters stay honestly
+  // missing); at its end the next week OPENS right away — no "Move on" tap,
+  // no wait for a Saturday. A session landing inside the interval counts back
+  // to the week that closed.
+  // Time-aware: an interval only pauses the clock once `now` has reached it
+  // (so a clock mocked to before it is unchanged), and the next week opens
+  // only once `now` has passed its end — inside the interval itself the next
+  // week shows as `pending`. Intervals before the launch are ignored (Round 1
+  // predates this model). With no sick weeks there are no intervals and the
+  // walk is untouched.
+  const paused = sickIntervals(sickWeeksIn, launch.at, now);
+  const events = timeline(sessions, moves, rounds);
 
   const spans: WeekSpan[] = [];
   const weekOf = new Map<string, WeekKey>();
@@ -423,8 +410,8 @@ export function walkWeeks(
     // for (same reasoning as the launch instant always opening straight
     // away).
     if (how === 'sick') {
-      // The sick_start handler owns what happens next (it holds the clock
-      // until the sick week ends).
+      // The pause owns what happens next (it holds the clock until the
+      // interval ends - see applyPauseEdgesUpTo).
       weekNow += 1;
     } else if (how !== 'round_ended') {
       weekNow += 1;
@@ -438,31 +425,34 @@ export function walkWeeks(
     }
   }
 
-  // Set while a sick week holds the clock; the instant the next week opens.
-  let sickReopenAt: Date | null = null;
-
-  for (const ev of events) {
-    if (ev.kind === 'sick_start') {
-      const end = new Date(ev.until);
-      sickReopenAt = end;
-      if (open) {
-        closeOpen(ev.at, 'sick');
-      }
-      // Already in a gap (a week closed earlier): push its opening out to
-      // the end of the sick week. Either way, hold the clock until then.
-      nextBoundary = end;
-      continue;
-    }
-
-    if (ev.kind === 'sick_end') {
-      if (sickReopenAt !== null && !open) {
-        open = freshSpan({ round: roundNow, week: weekNow }, ev.at);
+  // The instants the paused clock stops and restarts, in order, derived from
+  // the intervals: each interval's start, and its end once `now` has reached
+  // it. Everything at or before an event's instant is applied BEFORE that
+  // event, so a session at exactly a boundary already sees the paused or
+  // reopened state.
+  const edges: { at: Date; stops: boolean; until: Date }[] = paused.flatMap((iv) => [
+    { at: iv.start, stops: true, until: iv.end },
+    ...(iv.end.getTime() <= now.getTime() ? [{ at: iv.end, stops: false, until: iv.end }] : []),
+  ]);
+  let edgeIdx = 0;
+  function applyPauseEdgesUpTo(ms: number): void {
+    while (edgeIdx < edges.length && edges[edgeIdx]!.at.getTime() <= ms) {
+      const edge = edges[edgeIdx++]!;
+      if (edge.stops) {
+        if (open) closeOpen(formatLocalIso(edge.at), 'sick');
+        // Whether a week closed just now or one closed earlier (already in a
+        // gap): nothing may open before the interval ends.
+        nextBoundary = edge.until;
+      } else if (!open) {
+        open = freshSpan({ round: roundNow, week: weekNow }, formatLocalIso(edge.at));
         openDone = new Set();
         nextBoundary = null;
       }
-      sickReopenAt = null;
-      continue;
     }
+  }
+
+  for (const ev of events) {
+    applyPauseEdgesUpTo(new Date(ev.at).getTime());
 
     if (ev.kind === 'round') {
       // Her own call, "starts at its own moment" (rule 7) — closes whatever
@@ -570,6 +560,8 @@ export function walkWeeks(
       );
     }
   }
+
+  applyPauseEdgesUpTo(Infinity);
 
   // The still-open span's done/missing are live, not frozen — a closed span
   // already has them frozen by closeOpen, but `open` only ever tracked them
