@@ -13,6 +13,8 @@
 import { test, expect } from '@playwright/test';
 import {
   walkWeeks,
+  shiftPastSickWeeks,
+  mergedSickSpans,
   dayOfWeek,
   canMoveOn,
   COMPLETION_WEEKS_FROM,
@@ -764,5 +766,66 @@ test.describe('#13 — a Sick week pauses the clock (v61.2)', () => {
     expect(during.open).toBeNull();
     expect(during.pending!.key).toEqual({ round: 2, week: 6 });
     expect(during.pending!.opensAt.startsWith('2026-10-10')).toBe(true);
+  });
+
+  test('two CONTIGUOUS sick weeks are one held span: Week 6 opens Oct 17, not inside the second', () => {
+    const now = new Date('2026-10-20T12:00:00+03:00');
+    const sick = ['2026-10-03', '2026-10-10'];
+    const { spans, open } = walkWeeks(WEEK5, [], [], COMPLETION_WEEKS_FROM, sick, now);
+    expect(spans).toHaveLength(1);
+    expect(spans[0]!.how).toBe('sick');
+    expect(spans[0]!.closedAt!.startsWith('2026-10-03')).toBe(true);
+    expect(open!.key).toEqual({ round: 2, week: 6 });
+    expect(open!.openedAt.startsWith('2026-10-17')).toBe(true);
+    // order of the list doesn't matter
+    expect(walkWeeks(WEEK5, [], [], COMPLETION_WEEKS_FROM, [...sick].reverse(), now)).toEqual(
+      walkWeeks(WEEK5, [], [], COMPLETION_WEEKS_FROM, sick, now)
+    );
+    // inside the second sick week, Week 6 is pending until Oct 17
+    const during = walkWeeks(
+      WEEK5,
+      [],
+      [],
+      COMPLETION_WEEKS_FROM,
+      sick,
+      new Date('2026-10-12T12:00:00+03:00')
+    );
+    expect(during.open).toBeNull();
+    expect(during.pending!.opensAt.startsWith('2026-10-17')).toBe(true);
+  });
+
+  test('two NON-contiguous sick weeks each hold separately (Oct 3 and Oct 24)', () => {
+    const sick = ['2026-10-03', '2026-10-24'];
+    const wk6 = { id: 'y1', date: '2026-10-11T10:00:00+03:00', workout: 'A' as const };
+    const now = new Date('2026-11-05T12:00:00+02:00');
+    const { spans, open } = walkWeeks([...WEEK5, wk6], [], [], COMPLETION_WEEKS_FROM, sick, now);
+    expect(spans.map((sp) => [sp.key.week, sp.how])).toEqual([
+      [5, 'sick'],
+      [6, 'sick'],
+    ]);
+    expect(spans[1]!.closedAt!.startsWith('2026-10-24')).toBe(true);
+    expect(spans[1]!.done).toEqual(['A']);
+    expect(open!.key).toEqual({ round: 2, week: 7 });
+    expect(open!.openedAt.startsWith('2026-10-31')).toBe(true);
+  });
+
+  test('mergedSickSpans joins contiguous and overlapping weeks only', () => {
+    const m = mergedSickSpans(['2026-10-10', '2026-10-03', '2026-10-24']);
+    expect(m).toHaveLength(2);
+    expect(m[0]!.start.getDate()).toBe(3);
+    expect(m[0]!.end.getDate()).toBe(17);
+    expect(m[1]!.start.getDate()).toBe(24);
+  });
+
+  test('shiftPastSickWeeks (the plan-date lookup) agrees: one sick week -> Oct 10, two -> Oct 17, none -> unchanged', () => {
+    const roundStart = new Date(2026, 7, 29);
+    const week6 = new Date(2026, 9, 3); // Aug 29 + 5 weeks
+    expect(shiftPastSickWeeks(week6, roundStart, []).getDate()).toBe(3);
+    const one = shiftPastSickWeeks(week6, roundStart, ['2026-10-03']);
+    expect([one.getMonth(), one.getDate()]).toEqual([9, 10]);
+    const two = shiftPastSickWeeks(week6, roundStart, ['2026-10-10', '2026-10-03']);
+    expect([two.getMonth(), two.getDate()]).toEqual([9, 17]);
+    // a sick week before the round start (July, Round 1) never counts
+    expect(shiftPastSickWeeks(week6, roundStart, ['2026-07-11']).getDate()).toBe(3);
   });
 });

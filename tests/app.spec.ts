@@ -10638,6 +10638,28 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
     await expect(page.locator('#week-move-on')).toHaveText('Move on to Week 6 without C');
   });
 
+  test('v61.2: a week that reopened after a Sick week can be moved on from — Week 6 on day 9, "Move on to Week 7 without C"', async ({
+    page,
+  }) => {
+    // The Oct 3-9 Sick week closed Week 5 and opened Week 6 on Sat Oct 10 (no
+    // tap). Week 6 opened at Oct 10 00:00, so Sun Oct 18 is day 9: A + B done,
+    // C missing -> the quiet button shows, and tapping it opens Week 7.
+    await page.addInitScript(() => {
+      (window as unknown as { __wtIgnoreSickWeeks?: boolean }).__wtIgnoreSickWeeks = false;
+    });
+    await seedLogs(page, [
+      log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
+      log('wk6-a', '2026-10-11T10:00:00+03:00', 'A'),
+      log('wk6-b', '2026-10-13T10:00:00+03:00', 'B'),
+    ]);
+    await mockDate(page, '2026-10-18T12:00:00+03:00');
+    await page.goto('/');
+    await expect(page.locator('.home-header h1')).toContainText('Week 6');
+    await expect(page.locator('#week-move-on')).toHaveText('Move on to Week 7 without C');
+    await page.locator('#week-move-on').click();
+    await expect(page.locator('.home-header h1')).toContainText('Week 7');
+  });
+
   test('never shown at 0 done, even well past day 8', async ({ page }) => {
     // No logs seeded at all — Week 5 sits at 0 of 3.
     await mockDate(page, '2026-10-16T12:00:00+03:00');

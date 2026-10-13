@@ -62,6 +62,7 @@ import {
 } from './step-list.js';
 import {
   walkWeeks,
+  shiftPastSickWeeks,
   dayOfWeek as weekDayOfWeek,
   // WK3 (Sep 27 2026): "Move on without it" — wired into movesForWeekModel /
   // renderHome below. Schema-gated (§2.2's week_moves table needs her yes
@@ -8721,12 +8722,7 @@ function completionWeekSyntheticDate(key: WeekKey): Date {
   // PROGRAM row (found by startsOn) sits one calendar week later for every
   // Sick week at or before the date reached so far. Skips only count inside
   // this round, same as getProgramWeek. Ascending, so skips cascade.
-  const roundStart = new Date(round.start + 'T00:00:00').getTime();
-  for (const sat of sickWeeksForWeekModel().sort()) {
-    const t = new Date(sat + 'T00:00:00').getTime();
-    if (t >= roundStart && t <= d.getTime()) d.setDate(d.getDate() + 7);
-  }
-  return d;
+  return shiftPastSickWeeks(d, new Date(round.start + 'T00:00:00'), sickWeeksForWeekModel());
 }
 
 type CompletionWeekDot =

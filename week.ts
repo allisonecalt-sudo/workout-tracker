@@ -115,6 +115,40 @@ export type RoundStart = { round: number; at: string };
  * 2026): see walkWeeks — the program clock stops for it. */
 export type SickWeek = string;
 
+/** Sick-week Saturdays -> merged held spans [start, end), local midnight.
+ * Contiguous or overlapping weeks join into one span. Pure. */
+export function mergedSickSpans(sickWeeks: SickWeek[]): { start: Date; end: Date }[] {
+  const weeks = [...sickWeeks].sort().map((sat) => {
+    const [y, m, d] = sat.split('-').map(Number) as [number, number, number];
+    return { start: new Date(y, m - 1, d), end: new Date(y, m - 1, d + 7) };
+  });
+  const out: { start: Date; end: Date }[] = [];
+  for (const w of weeks) {
+    const last = out[out.length - 1];
+    if (last && w.start.getTime() <= last.end.getTime()) {
+      if (w.end.getTime() > last.end.getTime()) last.end = w.end;
+    } else {
+      out.push({ ...w });
+    }
+  }
+  return out;
+}
+
+/** The calendar date whose PROGRAM row is program week N of a round: the
+ * round's plain "N-1 weeks after its start" date (`plain`), pushed one
+ * calendar week later for every sick week at or before the date reached so
+ * far (ascending, so they cascade). Sick weeks before the round start don't
+ * count. Pure; agrees with walkWeeks, which holds the clock the same way. */
+export function shiftPastSickWeeks(plain: Date, roundStart: Date, sickWeeks: SickWeek[]): Date {
+  const d = new Date(plain);
+  for (const sat of [...sickWeeks].sort()) {
+    const [y, m, day] = sat.split('-').map(Number) as [number, number, number];
+    const t = new Date(y, m - 1, day).getTime();
+    if (t >= roundStart.getTime() && t <= d.getTime()) d.setDate(d.getDate() + 7);
+  }
+  return d;
+}
+
 export type WeekSpan = {
   key: WeekKey;
   openedAt: string;
@@ -234,7 +268,7 @@ function freshSpan(key: WeekKey, openedAt: string): WeekSpan {
 }
 
 type TimelineEvent =
-  | { at: string; kind: 'sick_start' }
+  | { at: string; kind: 'sick_start'; until: string }
   | { at: string; kind: 'sick_end' }
   | { at: string; kind: 'session'; session: SessionLite }
   | { at: string; kind: 'move'; move: MoveOn }
@@ -323,19 +357,23 @@ export function walkWeeks(
   // closed. Sick weeks before the launch are ignored (Round 1 predates this
   // model). With no sick weeks this adds no events at all.
   const sickEvents: TimelineEvent[] = [];
-  for (const sat of sickWeeksIn) {
-    const [y, m, d] = sat.split('-').map(Number) as [number, number, number];
-    const start = new Date(y, m - 1, d);
-    const end = new Date(y, m - 1, d + 7);
-    if (!afterLaunch(formatLocalIso(start), launch.at)) continue;
-    // Time-aware: a sick week only pauses the clock once `now` has reached
+  // Back-to-back (or overlapping) sick weeks are ONE held span that ends at
+  // the last one's end — otherwise the second week's start would re-arm the
+  // hold while the first week's end already opened the next week inside it.
+  for (const span of mergedSickSpans(sickWeeksIn)) {
+    if (!afterLaunch(formatLocalIso(span.start), launch.at)) continue;
+    // Time-aware: a sick span only pauses the clock once `now` has reached
     // it (so a clock mocked to before it, or any earlier moment, is
     // unchanged), and the next week opens only once `now` has passed its
-    // end — inside the sick week itself the next week shows as `pending`.
-    if (start.getTime() > now.getTime()) continue;
-    sickEvents.push({ at: formatLocalIso(start), kind: 'sick_start' });
-    if (end.getTime() <= now.getTime()) {
-      sickEvents.push({ at: formatLocalIso(end), kind: 'sick_end' });
+    // end — inside the sick span itself the next week shows as `pending`.
+    if (span.start.getTime() > now.getTime()) continue;
+    sickEvents.push({
+      at: formatLocalIso(span.start),
+      kind: 'sick_start',
+      until: formatLocalIso(span.end),
+    });
+    if (span.end.getTime() <= now.getTime()) {
+      sickEvents.push({ at: formatLocalIso(span.end), kind: 'sick_end' });
     }
   }
   const events = timeline(sessions, moves, rounds, sickEvents);
@@ -405,8 +443,7 @@ export function walkWeeks(
 
   for (const ev of events) {
     if (ev.kind === 'sick_start') {
-      const end = new Date(ev.at);
-      end.setDate(end.getDate() + 7);
+      const end = new Date(ev.until);
       sickReopenAt = end;
       if (open) {
         closeOpen(ev.at, 'sick');
