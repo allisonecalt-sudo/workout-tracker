@@ -29,6 +29,16 @@ function importGraph(files: { file: string; src: string }[]): Map<string, string
   return graph;
 }
 
+/** The relative imports in a source that are NOT `import type` / `export type ... from`
+ *  (code-shape step 8-0): the value imports, the ones that become runtime edges. */
+function valueImports(src: string): string[] {
+  const noTypeOnly = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1')
+    .replace(/\b(?:import|export)\s+type\b[^;]*?\bfrom\s*(['"])[^'"]+\1\s*;?/g, '');
+  return relativeImports(noTypeOnly);
+}
+
 /** Every import cycle in the graph, each as "a.ts -> b.ts -> a.ts". */
 function findCycles(graph: Map<string, string[]>): string[] {
   const cycles: string[] = [];
@@ -136,6 +146,29 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
     expect(graph.get('bus.ts')).toEqual([]);
     const allowed = ['move-feel.ts', 'program.ts', 'types.ts', 'week.ts'];
     expect((graph.get('state.ts') ?? []).filter((d) => !allowed.includes(d))).toEqual([]);
+  });
+
+  test('the guard itself: valueImports skips import type / export type and flags value, braces-type, side-effect and dynamic imports', () => {
+    const typeOnly = [
+      "import type { A } from './a.js';",
+      'import type {',
+      '  B,',
+      "} from './b.js';",
+      "export type { C } from './c.js';",
+    ].join('\n');
+    expect(valueImports(typeOnly)).toEqual([]);
+    expect(valueImports("import { type A } from './a.js';")).toEqual(['./a.ts']);
+    expect(valueImports("import { a } from './a.js';")).toEqual(['./a.ts']);
+    expect(valueImports("import './s.js';")).toEqual(['./s.ts']);
+    expect(valueImports("const x = await import('./d.js');")).toEqual(['./d.ts']);
+    expect(valueImports(typeOnly + "\nimport { v } from './v.js';")).toEqual(['./v.ts']);
+  });
+
+  test('state.ts imports are TYPE-ONLY (import type): it is the bottom of the graph and must not gain a runtime edge (step 8-0)', () => {
+    const src = files.find((f) => f.file === 'state.ts')!.src;
+    expect(valueImports(src)).toEqual([]);
+    // the reader did see its type imports, so [] is not "found nothing at all"
+    expect(relativeImports(src).length).toBeGreaterThan(0);
   });
 
   test('program-week.ts is pure and imports only week, week-d, program, types and dates', () => {

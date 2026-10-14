@@ -285,10 +285,18 @@ test.describe('v62.1 — planForWeekKey for a round with no PROGRAM rows', () =>
   });
 
   test('a round that HAS rows never reports a missing plan (exact and repeat)', () => {
-    expect(planForWeekKey({ round: 2, week: 6 }).noPlanForRound).toBeNull();
-    expect(planForWeekKey({ round: 2, week: 9 }).noPlanForRound).toBeNull();
-    expect(planForWeekKey({ round: 2, week: 9 }).repeatsWeek).toBe(last.weekNum);
-    expect(planForWeekKey({ round: 1, week: 3 }).noPlanForRound).toBeNull();
+    // Round-agnostic (step 8-0): rounds and weeks come from PROGRAM itself, so
+    // writing Round 3 later does not leave a hard-coded Round 2 as "the last row".
+    const lastRound = last.round ?? 1;
+    const first = PROGRAM[0]!;
+    expect(planForWeekKey({ round: lastRound, week: last.weekNum }).noPlanForRound).toBeNull();
+    expect(planForWeekKey({ round: lastRound, week: last.weekNum + 3 }).noPlanForRound).toBeNull();
+    expect(planForWeekKey({ round: lastRound, week: last.weekNum + 3 }).repeatsWeek).toBe(
+      last.weekNum
+    );
+    expect(
+      planForWeekKey({ round: first.round ?? 1, week: first.weekNum }).noPlanForRound
+    ).toBeNull();
   });
 
   test('the fallback is the highest row AT OR BELOW the key: the next round falls to the end of the last written round, not the end of the table by accident', () => {

@@ -15,13 +15,15 @@
 // commit is fixed by re-splitting the commits, never by --no-verify.
 import { spawnSync } from 'node:child_process';
 import {
-  existsSync,
+  lstatSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   rmdirSync,
   symlinkSync,
   unlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -57,17 +59,94 @@ function run(cmd, args, cwd) {
   });
 }
 
-function removeLink(p) {
-  if (!existsSync(p)) return;
+/** True when p exists at all (a dangling link counts) - lstat never follows a link. */
+function lexists(p) {
   try {
-    unlinkSync(p);
+    lstatSync(p);
+    return true;
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return false;
+    throw e;
+  }
+}
+
+/** Step 8-0 (Oct 14 2026). A node_modules JUNCTION points at the real node_modules.
+ *  `git worktree remove --force` and `rmSync(dir, {recursive})` have been seen to FOLLOW
+ *  a junction on this machine and empty its target, so nothing here ever recurses into a
+ *  path while a link may sit inside it. Remove the LINK itself (non-recursive), then
+ *  PROVE it is gone with lstat. If it is not gone: throw LinkStuck, and the caller stops
+ *  without deleting anything else. */
+class LinkStuck extends Error {}
+function removeLinkSafely(link) {
+  if (!lexists(link)) return;
+  if (!lstatSync(link).isSymbolicLink()) return; // a real directory (npm ci): not a link
+  try {
+    unlinkSync(link); // a symlink / file-style link
   } catch {
     try {
-      rmdirSync(p); // a Windows junction is removed like an empty directory
+      rmdirSync(link); // a Windows junction is removed like an EMPTY directory: never its target
     } catch {
-      /* leave it; the worktree removal below reports it */
+      /* checked below */
     }
   }
+  if (lexists(link)) throw new LinkStuck(`could not remove the node_modules link: ${link}`);
+}
+
+/** Delete one temp worktree directory safely: link first (verified gone), then the dir,
+ *  then `git worktree prune`. Never `git worktree remove`. */
+function removeWorktreeSafely(wt) {
+  removeLinkSafely(join(wt, 'node_modules'));
+  rmSync(wt, { recursive: true, force: true });
+  try {
+    git(['worktree', 'prune']);
+  } catch {
+    /* best effort: a stale registration is harmless, a deleted target is not */
+  }
+}
+
+/** On startup: sweep `wt-verify-*` dirs a killed run left behind (skip one whose owner
+ *  pid is still alive: a parallel run). Same safe order; a stuck link stops everything. */
+function sweepStale() {
+  for (const name of readdirSync(tmpdir())) {
+    if (!name.startsWith('wt-verify-')) continue;
+    const dir = join(tmpdir(), name);
+    try {
+      const pid = Number(readFileSync(join(dir, '.pid'), 'utf8'));
+      if (pid > 0 && pid !== process.pid) {
+        try {
+          process.kill(pid, 0);
+          continue; // alive: leave it
+        } catch {
+          /* dead: stale */
+        }
+      }
+    } catch {
+      /* no pid file: stale */
+    }
+    console.log(`[verify-commits] sweeping stale ${dir}`);
+    for (const sub of readdirSync(dir)) {
+      if (sub.startsWith('.')) continue;
+      removeLinkSafely(join(dir, sub, 'node_modules'));
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+  try {
+    git(['worktree', 'prune']);
+  } catch {
+    /* best effort */
+  }
+}
+
+function stopLoud(e) {
+  console.error(
+    [
+      '',
+      `[verify-commits] STOPPED, NOTHING MORE DELETED: ${e.message}`,
+      '  A node_modules link could not be confirmed removed. Deleting the folder now could',
+      '  empty the REAL node_modules it points at. Remove the link by hand (rmdir, no /s) and re-run.',
+    ].join('\n')
+  );
+  process.exit(2);
 }
 
 const commits = git(['rev-list', '--reverse', range]).split('\n').filter(Boolean);
@@ -79,7 +158,18 @@ if (commits.length === 0) {
 // EOL-normalised: a Windows checkout may hold the lock file as CRLF while git has LF.
 const eol = (t) => t.replace(/\r\n/g, '\n');
 const myLock = eol(readFileSync(join(root, 'package-lock.json'), 'utf8'));
+// TEST HOOKS (step 8-0 proof only, never set in real use): point the share at a DUMMY
+// directory, and die right after the link exists (what a kill mid-run leaves behind).
+const nmSource = process.env.VERIFY_COMMITS_NODE_MODULES ?? join(root, 'node_modules');
+const dieAfterLink = process.env.VERIFY_COMMITS_DIE_AFTER_LINK === '1';
+try {
+  sweepStale();
+} catch (e) {
+  if (e instanceof LinkStuck) stopLoud(e);
+  throw e;
+}
 const base = mkdtempSync(join(tmpdir(), 'wt-verify-'));
+writeFileSync(join(base, '.pid'), String(process.pid));
 const results = [];
 
 try {
@@ -90,13 +180,12 @@ try {
     const started = Date.now();
     console.log(`\n[verify-commits] ${short} ${subject}`);
     let failed = null;
-    let linked = false;
     try {
       git(['worktree', 'add', '--detach', wt, sha]);
       const lock = eol(readFileSync(join(wt, 'package-lock.json'), 'utf8'));
       if (lock === myLock) {
-        symlinkSync(join(root, 'node_modules'), join(wt, 'node_modules'), 'junction');
-        linked = true;
+        symlinkSync(nmSource, join(wt, 'node_modules'), 'junction');
+        if (dieAfterLink) process.exit(9); // simulated kill: no finally runs
       } else {
         console.log('  package-lock.json differs from this checkout: npm ci');
         const ci = run(npm, ['ci'], wt);
@@ -116,16 +205,11 @@ try {
     } catch (e) {
       failed = String(e);
     } finally {
-      if (linked) removeLink(join(wt, 'node_modules'));
       try {
-        git(['worktree', 'remove', '--force', wt]);
-      } catch {
-        rmSync(wt, { recursive: true, force: true });
-        try {
-          git(['worktree', 'prune']);
-        } catch {
-          /* best effort */
-        }
+        removeWorktreeSafely(wt);
+      } catch (e) {
+        if (e instanceof LinkStuck) stopLoud(e);
+        throw e;
       }
     }
     const secs = Math.round((Date.now() - started) / 1000);
@@ -133,7 +217,14 @@ try {
     if (failed) console.log(`  --- output of the failing step ---\n${failed}`);
   }
 } finally {
-  rmSync(base, { recursive: true, force: true });
+  // every worktree dir is already gone and verified link-free; only the empty base is left
+  // (non-recursive on purpose: if anything unexpected is left in it, it stays)
+  try {
+    unlinkSync(join(base, '.pid'));
+    rmdirSync(base);
+  } catch {
+    /* leave it; the next run's sweep handles it safely */
+  }
 }
 
 console.log('\n[verify-commits] summary');

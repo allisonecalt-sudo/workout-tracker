@@ -37,7 +37,7 @@ function otherShippedFiles(): { file: string; src: string }[] {
     'index.html',
     ...fs
       .readdirSync(path.join(root, 'scripts'))
-      .filter((f) => /.(mjs|cjs)$/.test(f))
+      .filter((f) => /\.(mjs|cjs)$/.test(f))
       .sort()
       .map((f) => 'scripts/' + f),
   ];

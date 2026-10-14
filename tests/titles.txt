@@ -282,9 +282,11 @@ import graph — no cycles, nothing imports the entry (step 4c) › no import cy
 import graph — no cycles, nothing imports the entry (step 4c) › no module other than the entry imports app.ts
 import graph — no cycles, nothing imports the entry (step 4c) › program-week.ts is pure and imports only week, week-d, program, types and dates
 import graph — no cycles, nothing imports the entry (step 4c) › state.ts and bus.ts are in the graph and import neither app.ts nor each other (step 7)
+import graph — no cycles, nothing imports the entry (step 4c) › state.ts imports are TYPE-ONLY (import type): it is the bottom of the graph and must not gain a runtime edge (step 8-0)
 import graph — no cycles, nothing imports the entry (step 4c) › the graph was actually read: app.ts reaches program-week.ts, types.ts and week.ts
 import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: it finds a 2-cycle, a 3-cycle through a type-only edge, and passes a clean graph
 import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: the import reader sees .js, .ts, extensionless, side-effect, export-from, dynamic and double-quoted imports, and skips comments and packages
+import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: valueImports skips import type / export type and flags value, braces-type, side-effect and dynamic imports
 in-workout walk: does NOT auto-start on the step — needs an explicit Start tap
 indoor strip: a 25-minute block cycles past segment five back to segment one
 indoor strip: choosing the apartment option shows the first segment, ready to go
