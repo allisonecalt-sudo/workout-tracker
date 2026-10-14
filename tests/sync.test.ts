@@ -628,7 +628,7 @@ test.describe('sync - step 9c: guards on her cycle and week-move data', () => {
 });
 
 // ---- v62.2: an empty pull never deletes local rows (the v33 sessions rule, now for all) ----
-test.describe('sync - v62.2: an empty remote never deletes local cycle periods or week moves', () => {
+test.describe('sync - v62.2: an empty remote never deletes local cycle periods; an empty week_moves pull clears synced moves (their normal empty state)', () => {
   test('cycle_periods: an EMPTY pull keeps synced local rows (and unsynced ones)', async () => {
     state.screen = 'cycle';
     setRenderer(() => undefined);
