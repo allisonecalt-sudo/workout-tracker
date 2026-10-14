@@ -9,6 +9,17 @@
   "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
   "rules": {
     "@typescript-eslint/no-explicit-any": "error",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "VariableDeclarator[id.type='ObjectPattern'][init.name='ui']",
+        "message": "Never destructure ui (const { x } = ui): the copy stops tracking. Read and write ui.x in place."
+      },
+      {
+        "selector": "AssignmentExpression[left.type='ObjectPattern'][right.name='ui']",
+        "message": "Never destructure ui ({ x } = ui): the copy stops tracking. Read and write ui.x in place."
+      }
+    ],
     "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
   },
   "overrides": [

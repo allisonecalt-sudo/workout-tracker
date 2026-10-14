@@ -169,3 +169,31 @@ export type WalkEntry = {
 };
 
 export type StoredCyclePeriod = CyclePeriod & { synced?: boolean };
+
+// ---- moved verbatim from app.ts (code-shape step 10a): the shapes `ui` holds ----
+
+export type TimerKind = 'pre-countdown' | 'rest' | 'timed-exercise';
+
+export type TimerHandle = {
+  kind: TimerKind;
+  endsAt: number;
+  onComplete: () => void;
+  lastSecRendered: number;
+};
+
+export type WorkoutWalkResult = {
+  minutes: number;
+  // The walk's clock window (epoch ms), so we can ask Google Fit how many steps
+  // fell inside it — the accurate count, even if the screen was off (v16, Jul 9).
+  startMs?: number;
+  endMs?: number;
+};
+
+export type HistoryEditDraft = {
+  timeStr: string;
+  kmStr: string;
+  kcalStr: string;
+  level: number | null;
+  pulseStr: string;
+  note: string;
+};

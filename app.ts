@@ -108,7 +108,15 @@ import {
   type WeekPlan,
   type CalendarMarks,
 } from './program.js';
-import type { LogEntry, StoredWeekMove, WalkEntry, StoredCyclePeriod } from './types.js';
+import type {
+  LogEntry,
+  StoredWeekMove,
+  WalkEntry,
+  StoredCyclePeriod,
+  TimerKind,
+  WorkoutWalkResult,
+} from './types.js';
+import { ui } from './ui.js';
 import {
   type AppScreen,
   type ArmFeel,
@@ -412,43 +420,18 @@ function currentSteppedMoves(): SteppedMove[] {
 
 // HAND_ROUTINES retired 2026-05-15 — see archive/hand-routine-2026-05-15/.
 
-// v50 · jump list (Sep 25 2026): whether the "List" sheet is open. Transient
-// UI, not session progress — deliberately NOT on AppState/the resume
-// snapshot, the same way the quit-confirm panel isn't: a reload should land
-// her back on the step she was on, sheet closed, not reopen a sheet she'd
-// already dismissed.
-let stepListOpen = false;
-
-// v53 (Sep 26 2026): whether the running-timer pip's Pause/Stop sheet is
-// open. Same reasoning as stepListOpen above — transient UI, not session
-// progress, so it's deliberately outside AppState/the resume snapshot; a
-// reload lands her back on the step with the sheet closed. stopTimer() (every
-// path that ends a running timer — Stop, Back, advancing, quitting) resets it,
-// so it can never outlive the timer it belongs to.
-let timerPipOpen = false;
-
-// v60 (Sep 28 2026): whether the timed hold about to run/running is a REDO of
-// the last completed SET, not a fresh next one — same transient-UI reasoning
-// as stepListOpen/timerPipOpen above (not session progress, not persisted).
-// Only read by recordHeldSet, and only matters for a multi-set hold
-// (hold-sets.ts setsPrescribed > 1); a single-set hold's Redo still goes
-// through the untouched recordHeld/heldSecFor path.
-let holdRedoInProgress = false;
-
 // ---------- audio ----------
-
-let audioCtx: AudioContext | null = null;
 
 function getAudioCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
-  if (!audioCtx) {
+  if (!ui.audioCtx) {
     const Ctx =
       window.AudioContext ||
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctx) return null;
-    audioCtx = new Ctx();
+    ui.audioCtx = new Ctx();
   }
-  return audioCtx;
+  return ui.audioCtx;
 }
 
 // Group 1C: must be called synchronously from a user-gesture handler. The Web
@@ -505,18 +488,6 @@ function playFinishBeep(): void {
 // wall-clock — endsAt is captured once, every frame computes
 // `endsAt - Date.now()`. Survives sleep/wake; pause is trivial.
 
-type TimerKind = 'pre-countdown' | 'rest' | 'timed-exercise';
-
-type TimerHandle = {
-  kind: TimerKind;
-  endsAt: number;
-  onComplete: () => void;
-  lastSecRendered: number;
-};
-
-let activeTimer: TimerHandle | null = null;
-let rafHandle: number | null = null;
-
 // v46: keep the screen awake through a long timed block (the 10-25 min
 // elliptical / apartment rides). Only walks held a wake lock; on a ride the
 // Pixel slept, the timer loop stopped with it, and no 3-2-1 or finish chime
@@ -524,33 +495,32 @@ let rafHandle: number | null = null;
 // "it should make the screen stay open"). Reuses the walk's lock; released when
 // the timer ends or stops — unless a walk still needs it.
 const TIMER_WAKE_LOCK_MIN_SEC = 60;
-let timerHoldsWakeLock = false;
 
 function releaseTimerWakeLock(): void {
-  if (!timerHoldsWakeLock) return;
-  timerHoldsWakeLock = false;
+  if (!ui.timerHoldsWakeLock) return;
+  ui.timerHoldsWakeLock = false;
   if (activeWalkStart() !== null || workoutWalkStart() !== null) return; // a walk still holds it
-  if (walkWakeLock) {
-    void walkWakeLock.release().catch(() => undefined);
-    walkWakeLock = null;
+  if (ui.walkWakeLock) {
+    void ui.walkWakeLock.release().catch(() => undefined);
+    ui.walkWakeLock = null;
   }
 }
 
 function stopTimer(): void {
-  if (rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
-    cancelAnimationFrame(rafHandle);
+  if (ui.rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
+    cancelAnimationFrame(ui.rafHandle);
   }
-  rafHandle = null;
-  activeTimer = null;
+  ui.rafHandle = null;
+  ui.activeTimer = null;
   state.timerSeconds = 0;
   state.preCountdown = 0;
   releaseTimerWakeLock();
-  timerPipOpen = false; // v53: the pip's sheet never outlives the timer it belongs to
+  ui.timerPipOpen = false; // v53: the pip's sheet never outlives the timer it belongs to
 }
 
 function startTimerCore(kind: TimerKind, seconds: number, onComplete: () => void): void {
   stopTimer();
-  activeTimer = {
+  ui.activeTimer = {
     kind,
     endsAt: Date.now() + seconds * 1000,
     onComplete,
@@ -562,7 +532,7 @@ function startTimerCore(kind: TimerKind, seconds: number, onComplete: () => void
     state.timerSeconds = seconds;
   }
   if (kind === 'timed-exercise' && seconds >= TIMER_WAKE_LOCK_MIN_SEC) {
-    timerHoldsWakeLock = true;
+    ui.timerHoldsWakeLock = true;
     void acquireWalkWakeLock(); // guarded inside: no-op without navigator.wakeLock
   }
   render();
@@ -570,17 +540,17 @@ function startTimerCore(kind: TimerKind, seconds: number, onComplete: () => void
 }
 
 function timerLoop(): void {
-  if (!activeTimer) return;
+  if (!ui.activeTimer) return;
   // Paused: freeze the countdown. `togglePause` shifts `endsAt` forward by the
   // paused span on resume and re-enters the loop, so no ticks are lost. This
   // guard also makes the visibilitychange re-entry safe while paused.
   if (state.pausedAt !== null) return;
-  const remainMs = activeTimer.endsAt - Date.now();
+  const remainMs = ui.activeTimer.endsAt - Date.now();
   const remainSec = Math.max(0, Math.ceil(remainMs / 1000));
 
-  if (remainSec !== activeTimer.lastSecRendered) {
-    activeTimer.lastSecRendered = remainSec;
-    if (activeTimer.kind === 'pre-countdown') {
+  if (remainSec !== ui.activeTimer.lastSecRendered) {
+    ui.activeTimer.lastSecRendered = remainSec;
+    if (ui.activeTimer.kind === 'pre-countdown') {
       state.preCountdown = remainSec;
     } else {
       state.timerSeconds = remainSec;
@@ -594,9 +564,9 @@ function timerLoop(): void {
   }
 
   if (remainMs <= 0) {
-    const t = activeTimer;
-    activeTimer = null;
-    rafHandle = null;
+    const t = ui.activeTimer;
+    ui.activeTimer = null;
+    ui.rafHandle = null;
     releaseTimerWakeLock();
     if (t.kind === 'pre-countdown') {
       playGoBeep();
@@ -608,10 +578,10 @@ function timerLoop(): void {
   }
 
   if (typeof requestAnimationFrame !== 'undefined') {
-    rafHandle = requestAnimationFrame(timerLoop);
+    ui.rafHandle = requestAnimationFrame(timerLoop);
   } else {
     // Fallback for environments without rAF (e.g. some test runners): poll @100ms.
-    rafHandle = window.setTimeout(timerLoop, 100) as unknown as number;
+    ui.rafHandle = window.setTimeout(timerLoop, 100) as unknown as number;
   }
 }
 
@@ -664,10 +634,10 @@ function togglePause(): void {
   if (state.pausedAt === null) {
     // → pause
     state.pausedAt = Date.now();
-    if (rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
-      cancelAnimationFrame(rafHandle);
+    if (ui.rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(ui.rafHandle);
     }
-    rafHandle = null;
+    ui.rafHandle = null;
     render();
     return;
   }
@@ -675,10 +645,10 @@ function togglePause(): void {
   const pausedFor = Date.now() - state.pausedAt;
   state.pausedMs += pausedFor;
   state.pausedAt = null;
-  if (activeTimer) activeTimer.endsAt += pausedFor; // don't burn the frozen countdown
+  if (ui.activeTimer) ui.activeTimer.endsAt += pausedFor; // don't burn the frozen countdown
   if (state.wallSitStartedAt !== null) state.wallSitStartedAt += pausedFor; // keep held-sec honest
   render();
-  if (activeTimer) timerLoop();
+  if (ui.activeTimer) timerLoop();
 }
 
 // Total paused milliseconds so far, including an in-progress pause. Used at save
@@ -691,13 +661,13 @@ function totalPausedMs(): number {
 // loop pauses and the timer would freeze. On return we fast-forward.
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && activeTimer) {
+    if (document.visibilityState === 'visible' && ui.activeTimer) {
       // v45: cancel the pending frame first, or every background/foreground
       // cycle added one more parallel loop until the timer ended.
-      if (rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
-        cancelAnimationFrame(rafHandle);
+      if (ui.rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
+        cancelAnimationFrame(ui.rafHandle);
       }
-      rafHandle = null;
+      ui.rafHandle = null;
       timerLoop();
     }
     // Wake lock auto-releases when the app is backgrounded; if a walk is
@@ -706,7 +676,7 @@ if (typeof document !== 'undefined') {
     // timed block still counting down.
     if (
       document.visibilityState === 'visible' &&
-      (activeWalkStart() || (activeTimer !== null && timerHoldsWakeLock))
+      (activeWalkStart() || (ui.activeTimer !== null && ui.timerHoldsWakeLock))
     ) {
       void acquireWalkWakeLock();
     }
@@ -737,13 +707,6 @@ function saveLog(entry: LogEntry): LogEntry {
 // (tandem rule); localStorage is the offline layer, same pattern as sessions.
 // v48 · P3 (Sep 24 2026): minutes only — the meters/steps counters are
 // archived (archive/walk-sensors-2026-09-24/). Fit is asked at Save instead.
-type WorkoutWalkResult = {
-  minutes: number;
-  // The walk's clock window (epoch ms), so we can ask Google Fit how many steps
-  // fell inside it — the accurate count, even if the screen was off (v16, Jul 9).
-  startMs?: number;
-  endMs?: number;
-};
 
 // Her Jul-4 idea: "click walking and you automatically start tracking until I
 // tell you I'm done." Start/stop timer — start timestamp lives in localStorage
@@ -772,15 +735,6 @@ function walkFeelReady(start: number | null): boolean {
   return start !== null && Date.now() - start >= WALK_FEEL_GATE_MS;
 }
 
-let walkWakeLock: { release: () => Promise<void> } | null = null;
-let walkTickId: number | null = null;
-
-// T1 (Sep 27 2026): the pre-log/post-log "is this the time?" minute ticks —
-// see beginPreLogClockTick/beginPostLogClockTick below, same shape as
-// walkTickId just above.
-let preLogTickId: number | null = null;
-let postLogTickId: number | null = null;
-
 function clearLegacyWalkCounters(): void {
   for (const k of LEGACY_WALK_COUNTER_KEYS) localStorage.removeItem(k);
 }
@@ -807,10 +761,10 @@ async function acquireWalkWakeLock(): Promise<void> {
       wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
     };
     if (nav.wakeLock && document.visibilityState === 'visible') {
-      walkWakeLock = await nav.wakeLock.request('screen');
+      ui.walkWakeLock = await nav.wakeLock.request('screen');
     }
   } catch {
-    walkWakeLock = null;
+    ui.walkWakeLock = null;
   }
 }
 
@@ -833,19 +787,19 @@ function updateWalkLiveLine(): void {
 // listener any more (archive/walk-sensors-2026-09-24/).
 function beginWalkTracking(): void {
   void acquireWalkWakeLock();
-  if (walkTickId === null) {
-    walkTickId = window.setInterval(updateWalkLiveLine, 30000);
+  if (ui.walkTickId === null) {
+    ui.walkTickId = window.setInterval(updateWalkLiveLine, 30000);
   }
 }
 
 function endWalkTracking(): void {
-  if (walkTickId !== null) {
-    window.clearInterval(walkTickId);
-    walkTickId = null;
+  if (ui.walkTickId !== null) {
+    window.clearInterval(ui.walkTickId);
+    ui.walkTickId = null;
   }
-  if (walkWakeLock) {
-    void walkWakeLock.release().catch(() => undefined);
-    walkWakeLock = null;
+  if (ui.walkWakeLock) {
+    void ui.walkWakeLock.release().catch(() => undefined);
+    ui.walkWakeLock = null;
   }
 }
 
@@ -863,15 +817,15 @@ function updatePreLogClockLine(): void {
 }
 
 function beginPreLogClockTick(): void {
-  if (preLogTickId === null) {
-    preLogTickId = window.setInterval(updatePreLogClockLine, 60_000);
+  if (ui.preLogTickId === null) {
+    ui.preLogTickId = window.setInterval(updatePreLogClockLine, 60_000);
   }
 }
 
 function endPreLogClockTick(): void {
-  if (preLogTickId !== null) {
-    window.clearInterval(preLogTickId);
-    preLogTickId = null;
+  if (ui.preLogTickId !== null) {
+    window.clearInterval(ui.preLogTickId);
+    ui.preLogTickId = null;
   }
 }
 
@@ -884,15 +838,15 @@ function updatePostLogClockLine(): void {
 }
 
 function beginPostLogClockTick(): void {
-  if (postLogTickId === null) {
-    postLogTickId = window.setInterval(updatePostLogClockLine, 60_000);
+  if (ui.postLogTickId === null) {
+    ui.postLogTickId = window.setInterval(updatePostLogClockLine, 60_000);
   }
 }
 
 function endPostLogClockTick(): void {
-  if (postLogTickId !== null) {
-    window.clearInterval(postLogTickId);
-    postLogTickId = null;
+  if (ui.postLogTickId !== null) {
+    window.clearInterval(ui.postLogTickId);
+    ui.postLogTickId = null;
   }
 }
 
@@ -945,13 +899,6 @@ function logWalk(
   return entry;
 }
 
-// In-workout walk tracking (v13 — her actual idea, Jul 4: "each time I go on a
-// walk WITHIN each workout it tracks information, saves it"). The 'Outdoor
-// walk' step that opens A/B (10 min) and C (25 min) times the walk (v48: minutes
-// only), and the minutes save WITH that session. render() drives
-// start/stop, so advancing, quitting, and resume-after-close all behave.
-let workoutWalk: WorkoutWalkResult | null = null;
-
 function workoutWalkStart(): number | null {
   const raw = localStorage.getItem(WW_START_KEY);
   if (!raw) return null;
@@ -968,10 +915,10 @@ function harvestWorkoutWalk(): void {
   if (!activeWalkStart()) endWalkTracking();
   localStorage.removeItem(WW_START_KEY);
   // Keep start/end so logCompleteAndHome can ask Google Fit for the real count.
-  workoutWalk = { minutes, startMs: start, endMs: end };
+  ui.workoutWalk = { minutes, startMs: start, endMs: end };
   // v45: persisted too — the walk is the FIRST step, so if the phone drops the
   // app during the strength rounds, the numbers must still be there at Save.
-  localStorage.setItem(WW_RESULT_KEY, JSON.stringify(workoutWalk));
+  localStorage.setItem(WW_RESULT_KEY, JSON.stringify(ui.workoutWalk));
 }
 
 function storedWorkoutWalk(): WorkoutWalkResult | null {
@@ -991,7 +938,7 @@ function storedWorkoutWalk(): WorkoutWalkResult | null {
 }
 
 function clearWorkoutWalk(): void {
-  workoutWalk = null;
+  ui.workoutWalk = null;
   localStorage.removeItem(WW_RESULT_KEY);
 }
 
@@ -1007,7 +954,7 @@ function syncWorkoutWalkTracking(): void {
   const started = workoutWalkStart() !== null;
   const standaloneActive = activeWalkStart() !== null;
   if (onWalkStep && started && !standaloneActive) {
-    if (walkTickId === null) {
+    if (ui.walkTickId === null) {
       // First tick after Start, or resumed after an app close — (re)start the
       // wake lock + minute tick; the start stamp is already in localStorage.
       beginWalkTracking();
@@ -1281,7 +1228,7 @@ function captureLaneMinutesIfLeaving(): void {
   // v48 · P3 (Sep 24 2026): a ride she STOPPED already holds its real minutes —
   // with the timer idle, the "0 left" arithmetic below would overwrite them
   // with the full block. Only a live timer (or nothing stored yet) is measured.
-  const t = activeTimer;
+  const t = ui.activeTimer;
   const running = t !== null && t.kind === 'timed-exercise';
   if (!running && laneDoneMinutes() !== null) return;
   // Live: read the clock itself, not the last rendered second (a tap can land
@@ -1460,18 +1407,12 @@ function reachedWallSit(w: Workout): boolean {
   return false;
 }
 
-// v48 · P4 (Sep 24 2026) — today's steps from Google Fit, zero taps (DECISIONS
-// §2 #8): one quiet "· 4,210 steps today" on home's walk row. Asked once after
-// boot; shown only when Fit answers — when it doesn't, nothing is invented
-// (fail-loud: a missing number stays missing, never a 0).
-let stepsToday: number | null = null;
-
 async function fetchStepsToday(): Promise<void> {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
   const n = await fetchFitSteps(midnight.getTime(), Date.now());
   if (n === null) return;
-  stepsToday = n;
+  ui.stepsToday = n;
   if (state.screen === 'home') render();
 }
 
@@ -1480,7 +1421,7 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   (window as unknown as { __wtSetStepsToday?: (n: number | null) => void }).__wtSetStepsToday = (
     n
   ) => {
-    stepsToday = n;
+    ui.stepsToday = n;
     if (state.screen === 'home') render();
   };
 }
@@ -1889,7 +1830,7 @@ function captureRunningProgressIfLeaving(): void {
     return;
   }
   if (!isHoldStep(ex)) return;
-  const t = activeTimer;
+  const t = ui.activeTimer;
   if (t && t.kind === 'timed-exercise' && ex.durationSec) {
     const remainSec = Math.max(0, (t.endsAt - Date.now()) / 1000);
     recordHeld(holdStepKey(), Math.max(0, Math.round(ex.durationSec - remainSec)));
@@ -2027,7 +1968,7 @@ function jumpToStep(key: string): void {
   state.currentPhase = parsed.phase;
   state.currentRound = parsed.round;
   state.currentExerciseIndex = parsed.index;
-  stepListOpen = false;
+  ui.stepListOpen = false;
   render();
 }
 
@@ -2241,7 +2182,7 @@ function recordHeld(key: string, sec: number): void {
 function recordHeldSet(key: string, sec: number): void {
   if (sec <= 0) return;
   const next = [...(state.heldSetsFor[key] ?? [])];
-  const idx = holdRedoInProgress ? next.length - 1 : next.length;
+  const idx = ui.holdRedoInProgress ? next.length - 1 : next.length;
   if (idx < 0) return; // a redo with no prior set — shouldn't happen; fail quiet
   next[idx] = Math.max(next[idx] ?? 0, sec);
   state.heldSetsFor[key] = next;
@@ -2253,7 +2194,7 @@ function recordHeldSet(key: string, sec: number): void {
 function stopTimedHold(): void {
   const ex = getCurrentExercise();
   if (!ex) return;
-  const t = activeTimer;
+  const t = ui.activeTimer;
   if (t && t.kind === 'timed-exercise' && ex.durationSec) {
     const remainSec = Math.max(0, (t.endsAt - Date.now()) / 1000);
     const heldSec = Math.max(0, Math.round(ex.durationSec - remainSec));
@@ -2261,7 +2202,7 @@ function stopTimedHold(): void {
     else recordHeld(holdStepKey(), heldSec);
   }
   if (ex.name === 'Wall sit') captureWallSitIfPending(); // the saved number
-  holdRedoInProgress = false;
+  ui.holdRedoInProgress = false;
   stopTimer();
   render();
 }
@@ -2272,7 +2213,7 @@ function stopTimedHold(): void {
 // "Set N of M" ready face never collides with the untouched single-set Ready
 // face above it in renderHoldTimerCard.
 function startNextHoldSet(): void {
-  holdRedoInProgress = false;
+  ui.holdRedoInProgress = false;
   startTimedExercise();
 }
 
@@ -2281,7 +2222,7 @@ function startNextHoldSet(): void {
 // real hold). #redo-timed (single-set) stays exactly as it was, calling
 // startTimedExercise() straight — unaffected by this flag.
 function redoLastHoldSet(): void {
-  holdRedoInProgress = true;
+  ui.holdRedoInProgress = true;
   startTimedExercise();
 }
 
@@ -2374,7 +2315,7 @@ function startTimedExercise(): void {
         if (setsPrescribed(ex.reps) > 1) recordHeldSet(stepKey, duration);
         else recordHeld(stepKey, duration); // v48 "✓ held 45 s"
       }
-      holdRedoInProgress = false;
+      ui.holdRedoInProgress = false;
       if (exerciseName === 'Wall sit') {
         // v48 (Sep 24 2026): a hold that ran to the end held exactly its
         // duration. Measuring the wall clock here logged 46+ when the frame
@@ -2642,17 +2583,13 @@ function heavierArmLoad(a: ArmLoad | undefined, b: ArmLoad | undefined): ArmLoad
   return a ?? b;
 }
 
-// v45: one save at a time. The walk lane awaits Google Fit (up to 5 s) before
-// saving, and a second tap on "Save & finish" in that window wrote a 2nd row.
-let savingLog = false;
-
 async function logCompleteAndHome(): Promise<void> {
-  if (!state.selectedWorkout || savingLog) return;
-  savingLog = true;
+  if (!state.selectedWorkout || ui.savingLog) return;
+  ui.savingLog = true;
   try {
     await saveCompletedSession();
   } finally {
-    savingLog = false;
+    ui.savingLog = false;
   }
 }
 
@@ -2661,14 +2598,14 @@ async function saveCompletedSession(): Promise<void> {
   // v50 · jump list: read before resetState() wipes completedSteps.
   const w = getCurrentWorkout();
   harvestWorkoutWalk(); // no-op unless a walk step is somehow still open
-  if (!workoutWalk) workoutWalk = storedWorkoutWalk(); // survived an app close (v45)
+  if (!ui.workoutWalk) ui.workoutWalk = storedWorkoutWalk(); // survived an app close (v45)
   // By now the walk (first exercise) ended long ago, so Google Fit has synced it.
   // v48 · P3 (Sep 24 2026): Fit's count is the ONLY step number — saved to
   // walk_steps when Fit answers, else null (the motion estimate is archived),
   // and never displayed. Brief await (Fit replies fast); never blocks the log.
   let walkFitSteps: number | null = null;
-  if (workoutWalk && workoutWalk.startMs && workoutWalk.endMs) {
-    const fit = await fetchFitSteps(workoutWalk.startMs, workoutWalk.endMs);
+  if (ui.workoutWalk && ui.workoutWalk.startMs && ui.workoutWalk.endMs) {
+    const fit = await fetchFitSteps(ui.workoutWalk.startMs, ui.workoutWalk.endMs);
     if (fit !== null && fit > 0) walkFitSteps = fit;
   }
   const completedAt = new Date().toISOString();
@@ -2718,7 +2655,7 @@ async function saveCompletedSession(): Promise<void> {
       ? 'elliptical'
       : prescribedApartment !== null
         ? 'apartment'
-        : workoutWalk
+        : ui.workoutWalk
           ? 'walk'
           : null;
   // v61 fix pass (Sep 28 2026, CHECK-v61 must #2): the elliptical lane used
@@ -2739,8 +2676,8 @@ async function saveCompletedSession(): Promise<void> {
         : null
       : cardioLane === 'apartment'
         ? (laneDone ?? prescribedApartment)
-        : cardioLane === 'walk' && workoutWalk
-          ? workoutWalk.minutes
+        : cardioLane === 'walk' && ui.workoutWalk
+          ? ui.workoutWalk.minutes
           : null;
   const onElliptical = cardioLane === 'elliptical';
   // Her free-text line from the post-log (v44): "a way to put in any
@@ -2791,7 +2728,7 @@ async function saveCompletedSession(): Promise<void> {
     herEndConfirmed: herEndConfirmedFinal,
     breakMinutes: state.breakMinutes,
     ...(leftOpen ? {} : { durationSec: rawDurationSec }),
-    walkMinutes: workoutWalk ? workoutWalk.minutes : null,
+    walkMinutes: ui.workoutWalk ? ui.workoutWalk.minutes : null,
     walkSteps: walkFitSteps,
     walkMeters: null, // v48 · P3: GPS distance archived — minutes only
     notes,
@@ -3147,7 +3084,7 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.stretchTicks = snap.stretchTicks;
   state.completedSteps = snap.completedSteps;
   state.rideNumbersOpen = snap.rideNumbersOpen; // v51: a close on the screen reopens on it
-  stepListOpen = false; // v50 · jump list: never reopen the sheet on resume
+  ui.stepListOpen = false; // v50 · jump list: never reopen the sheet on resume
   state.backSomethingOpen = false;
   state.wristSomethingOpen = false;
   state.backBeforeSomethingOpen = false;
@@ -3169,11 +3106,6 @@ function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   if (state.screen === 'post-log' && !state.herEndConfirmed) beginPostLogClockTick();
 }
 
-// A snapshot too old to resume silently (see STALE_SESSION_MS). Held here until
-// she answers the home card; the snapshot stays in localStorage meanwhile so a
-// reload asks again rather than losing it.
-let staleSnapshot: ActiveSessionSnapshot | null = null;
-
 // Rehydrate an in-progress session on load — unless it was left open long
 // enough that "resume" would be a lie, in which case home asks instead.
 function restoreActiveSession(): boolean {
@@ -3181,7 +3113,7 @@ function restoreActiveSession(): boolean {
   if (!snap) return false;
   const startedMs = snap.startedAt ? new Date(snap.startedAt).getTime() : NaN;
   if (Number.isFinite(startedMs) && Date.now() - startedMs > STALE_SESSION_MS) {
-    staleSnapshot = snap;
+    ui.staleSnapshot = snap;
     return false;
   }
   applyActiveSnapshot(snap);
@@ -3193,7 +3125,7 @@ function restoreActiveSession(): boolean {
 // are unknown — saved as null (shown "—"), with a note saying why. The one
 // number that was really entered, capacity-before, is kept.
 function logStaleSessionAsDone(): void {
-  const snap = staleSnapshot;
+  const snap = ui.staleSnapshot;
   if (!snap) return;
   const startedAt = snap.startedAt ?? new Date().toISOString();
   const stored = saveLog({
@@ -3221,7 +3153,7 @@ function logStaleSessionAsDone(): void {
     notes:
       'logged after the fact — Done was never tapped, so no end time, after-capacity or back pain',
   });
-  staleSnapshot = null;
+  ui.staleSnapshot = null;
   clearActiveSession();
   render();
   state.syncStatus = 'syncing';
@@ -3233,16 +3165,16 @@ function logStaleSessionAsDone(): void {
 }
 
 function discardStaleSession(): void {
-  staleSnapshot = null;
+  ui.staleSnapshot = null;
   clearActiveSession();
   render();
 }
 
 // "Keep going": resume it anyway. The Done safety net will blank the duration.
 function continueStaleSession(): void {
-  const snap = staleSnapshot;
+  const snap = ui.staleSnapshot;
   if (!snap) return;
-  staleSnapshot = null;
+  ui.staleSnapshot = null;
   applyActiveSnapshot(snap);
   render();
 }
@@ -3269,10 +3201,10 @@ function resetState(): void {
   clearActiveSession();
   state.screen = 'home';
   // Reset viewed week to current when returning to home from a session.
-  viewedWeekOffset = 0;
+  ui.viewedWeekOffset = 0;
   // WK2 (Sep 27 2026): a "‹ Week 4" peek never survives past the session she
   // takes next — Home always opens back on the true current week.
-  viewingLastClosedWeek = false;
+  ui.viewingLastClosedWeek = false;
   state.selectedWorkout = null;
   state.pinnedPlanDateIso = null;
   state.pinnedWeekKey = null;
@@ -3345,7 +3277,7 @@ function resetState(): void {
   state.stretchTicks = {}; // v48 · P7
   state.completedSteps = {}; // v50 · jump list
   state.rideNumbersOpen = false; // v51
-  stepListOpen = false; // v50 · jump list: a closed session closes the sheet too
+  ui.stepListOpen = false; // v50 · jump list: a closed session closes the sheet too
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
   clearElliptical();
@@ -3472,28 +3404,20 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
 // action gets an out). Optimistic local write first — offline-safe, same as
 // every other save in this app — then pushed if a network is allowed.
 const CYCLE_UNDO_MS = 10_000;
-let cycleUndoTimer: ReturnType<typeof setTimeout> | null = null;
-let cycleUndoStartDate: string | null = null;
-// v50 · fix (Sep 25 2026): Undo must only ever delete a row THIS tap created.
-// Before this flag, re-logging an already-logged date (a second tap on a day
-// she'd logged earlier, or re-logging today) then tapping Undo deleted the
-// ORIGINAL row — it's gone from localStorage and a DELETE reaches Supabase
-// too. false = "the date already existed; nothing for Undo to remove."
-let cycleUndoCreated = false;
 
 function logPeriodStart(dateISO: string): void {
   const periods = loadCyclePeriods();
   const existing = periods.find((p) => p.startDate === dateISO);
-  if (cycleUndoTimer) clearTimeout(cycleUndoTimer);
+  if (ui.cycleUndoTimer) clearTimeout(ui.cycleUndoTimer);
   if (existing) {
     // Already logged — leave the row exactly as it was (never overwrite an
     // earlier 'reproductive.md' source with 'app', never re-push and risk a
     // conflict). Show "Already logged" with no Undo, since there's nothing
     // this tap created.
-    cycleUndoStartDate = dateISO;
-    cycleUndoCreated = false;
-    cycleUndoTimer = setTimeout(() => {
-      cycleUndoStartDate = null;
+    ui.cycleUndoStartDate = dateISO;
+    ui.cycleUndoCreated = false;
+    ui.cycleUndoTimer = setTimeout(() => {
+      ui.cycleUndoStartDate = null;
       render();
     }, CYCLE_UNDO_MS);
     render();
@@ -3506,11 +3430,11 @@ function logPeriodStart(dateISO: string): void {
     synced: syncDisabled(), // automation: mark synced so no network is attempted
   };
   writeCyclePeriods([...periods, stored]);
-  cycleUndoStartDate = dateISO;
-  cycleUndoCreated = true;
-  cycleUndoTimer = setTimeout(() => {
-    cycleUndoStartDate = null;
-    cycleUndoCreated = false;
+  ui.cycleUndoStartDate = dateISO;
+  ui.cycleUndoCreated = true;
+  ui.cycleUndoTimer = setTimeout(() => {
+    ui.cycleUndoStartDate = null;
+    ui.cycleUndoCreated = false;
     render();
   }, CYCLE_UNDO_MS);
   void pushCyclePeriod(stored);
@@ -3518,26 +3442,16 @@ function logPeriodStart(dateISO: string): void {
 }
 
 function undoPeriodStart(): void {
-  if (!cycleUndoStartDate || !cycleUndoCreated) return; // nothing this tap created — no-op
-  const dateISO = cycleUndoStartDate;
-  if (cycleUndoTimer) clearTimeout(cycleUndoTimer);
-  cycleUndoTimer = null;
-  cycleUndoStartDate = null;
-  cycleUndoCreated = false;
+  if (!ui.cycleUndoStartDate || !ui.cycleUndoCreated) return; // nothing this tap created — no-op
+  const dateISO = ui.cycleUndoStartDate;
+  if (ui.cycleUndoTimer) clearTimeout(ui.cycleUndoTimer);
+  ui.cycleUndoTimer = null;
+  ui.cycleUndoStartDate = null;
+  ui.cycleUndoCreated = false;
   writeCyclePeriods(loadCyclePeriods().filter((p) => p.startDate !== dateISO));
   void deleteCyclePeriod(dateISO);
   render();
 }
-
-// v51 · cycle page (Sep 25 2026) — see renderCycle's own comment for why.
-// `cycleReturnTo` says which door she came in by (the Progress row, or the
-// Home "Period started?" row — see SPEC-cycle-page.md §2.1, §3), so the back
-// button and its scroll restore match. `cycleCompareMetric` is Card C's own
-// selected chip; it resets to 'body' every time the page is (re-)opened
-// (§2.1).
-let cycleReturnTo: 'progress' | 'home' = 'progress';
-let cycleCompareMetric: CycleMetric = 'body';
-let progressScrollForCycle = 0;
 
 // v53 (Sep 26 2026) — the history-edit screen's draft (renderHistoryEdit,
 // openHistoryEdit, saveHistoryEdit). Transient, module-level, like the cycle
@@ -3545,15 +3459,6 @@ let progressScrollForCycle = 0;
 // Session she's already looking at), not something an app close needs to
 // resume mid-edit. `state.historyDetailId` still says WHICH session; this is
 // only what she's typed so far.
-type HistoryEditDraft = {
-  timeStr: string;
-  kmStr: string;
-  kcalStr: string;
-  level: number | null;
-  pulseStr: string;
-  note: string;
-};
-let historyEditDraft: HistoryEditDraft | null = null;
 
 if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   const w = window as unknown as {
@@ -3711,10 +3616,6 @@ type WeekDotInfo = {
   date: Date;
   workout: AnyWorkoutId | null;
 };
-
-// Which week the user is currently looking at on the home screen. 0 = this
-// (current) Sat-Fri week. 1 = one week ago. Etc. Module-level — purely UI state.
-let viewedWeekOffset = 0;
 
 // (v48 · P6, Sep 24 2026: swungOutOfWeek() retired — its one reader, the
 // "Sat counted for last week" note on the Week-by-week summary, is gone; home's
@@ -3922,12 +3823,6 @@ function lastClosedWeekForPeek(): WeekPeek | null {
   }
   return legacyLastClosedWeekPeek();
 }
-
-// Module-level UI state: is Home showing the last CLOSED week instead of the
-// current open/pending one? Set by tapping "‹ Week 4"; cleared by "Week 5 ›"
-// (§8c: "the same link becomes 'Week 5 ›' to return"). Purely a view toggle —
-// never changes what week a new session counts toward or trains.
-let viewingLastClosedWeek = false;
 
 // v61 (Sep 28 2026), spec item d — her words 15:35, looking at her first
 // Workout D: "she did not say one of four." D never counts toward the week
@@ -4341,13 +4236,6 @@ function renderHowToFrame(frame: HowToFrame, idx: number, exerciseName: string):
   `;
 }
 
-// ---------- per-exercise voice note (Allison Jul 9 2026) ----------
-// One <audio> plays at a time. The button toggles play/pause; button visuals
-// reflect playback and are re-synced after a re-render (opening a dropdown
-// re-renders the card, but the detached Audio keeps playing).
-let voiceAudio: HTMLAudioElement | null = null;
-let voiceAudioSrc: string | null = null;
-
 function setVoiceBtnPlaying(btn: HTMLElement, playing: boolean): void {
   btn.classList.toggle('voice-note-playing', playing);
   const icon = btn.querySelector('.voice-note-icon');
@@ -4357,24 +4245,24 @@ function setVoiceBtnPlaying(btn: HTMLElement, playing: boolean): void {
 }
 
 function stopVoiceNote(): void {
-  if (voiceAudio) {
-    voiceAudio.pause();
-    voiceAudio = null;
+  if (ui.voiceAudio) {
+    ui.voiceAudio.pause();
+    ui.voiceAudio = null;
   }
-  voiceAudioSrc = null;
+  ui.voiceAudioSrc = null;
 }
 
 function toggleVoiceNote(btn: HTMLButtonElement, src: string): void {
   if (typeof Audio === 'undefined') return; // no audio in this environment
   // Same note already playing → stop it.
-  if (voiceAudio && voiceAudioSrc === src && !voiceAudio.paused) {
-    voiceAudio.pause();
+  if (ui.voiceAudio && ui.voiceAudioSrc === src && !ui.voiceAudio.paused) {
+    ui.voiceAudio.pause();
     return;
   }
   stopVoiceNote(); // stop any other note first
   const audio = new Audio(src);
-  voiceAudio = audio;
-  voiceAudioSrc = src;
+  ui.voiceAudio = audio;
+  ui.voiceAudioSrc = src;
   audio.addEventListener('play', () => setVoiceBtnPlaying(btn, true));
   // v48 (Sep 24 2026): count each play that actually STARTS (a stop is not a
   // play; an autoplay-blocked tap never fires this). Her words: "I can hear
@@ -5349,7 +5237,7 @@ function renderHome(): string {
     const model = weekModel();
     const shown = shownWeek();
     const planInfo = planForWeekKey(shown.key);
-    const peek = viewingLastClosedWeek ? lastClosedWeekForPeek() : null;
+    const peek = ui.viewingLastClosedWeek ? lastClosedWeekForPeek() : null;
 
     pick = shown.span ? (shown.span.missing[0] as WorkoutId) : 'A';
     // v61 (Sep 28 2026), spec item d/b: D logs, read once for both the week
@@ -5564,9 +5452,9 @@ function renderHome(): string {
 
     // §8c amendment: "‹ Week 4" / "Week 5 ›" — a plain, visible peek at the
     // last closed week, never touching what a session counts toward or trains.
-    const peekTarget = viewingLastClosedWeek ? peek : lastClosedWeekForPeek();
+    const peekTarget = ui.viewingLastClosedWeek ? peek : lastClosedWeekForPeek();
     weekNavLinkHtml = peekTarget
-      ? viewingLastClosedWeek
+      ? ui.viewingLastClosedWeek
         ? `<button class="week-nav-link" id="week-nav-forward" type="button">Week ${shown.key.week} ›</button>`
         : `<button class="week-nav-link" id="week-nav-back" type="button">‹ Week ${peekTarget.weekNum}</button>`
       : '';
@@ -5575,7 +5463,7 @@ function renderHome(): string {
   // The walk row (DECISIONS §4, slow walking): one row, no paragraph.
   const walkTrail = [
     weekWalks > 0 ? `${weekWalks} this week` : '',
-    stepsToday !== null ? `${stepsToday.toLocaleString('en-US')} steps today` : '',
+    ui.stepsToday !== null ? `${ui.stepsToday.toLocaleString('en-US')} steps today` : '',
   ]
     .filter((s) => s !== '')
     .join(' · ');
@@ -5605,7 +5493,7 @@ function renderHome(): string {
     ${subLineHtml}
     ${movedNoteHtml}
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
-    ${staleSnapshot ? renderStaleSessionCard(staleSnapshot) : ''}
+    ${ui.staleSnapshot ? renderStaleSessionCard(ui.staleSnapshot) : ''}
 
     ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : renderUpNextHero(pick)}
     ${chipsHtml}
@@ -6453,7 +6341,8 @@ function runningTimedExercise(): { ex: Exercise; kind: 'lane' | 'hold' } | null 
   if (state.pausedAt !== null || state.isResting || state.roundBreak || state.rideNumbersOpen) {
     return null;
   }
-  if (!activeTimer || activeTimer.kind !== 'timed-exercise' || state.timerSeconds <= 0) return null;
+  if (!ui.activeTimer || ui.activeTimer.kind !== 'timed-exercise' || state.timerSeconds <= 0)
+    return null;
   const ex = getCurrentExercise();
   if (!ex) return null;
   if (isIndoorLane(ex.name)) return { ex, kind: 'lane' };
@@ -6492,7 +6381,7 @@ function renderTimerPip(): string {
       </svg>
       <span class="timer-pip-time">${formatTimerDisplay(remaining)}</span>
     </button>`;
-  if (!timerPipOpen) return pip;
+  if (!ui.timerPipOpen) return pip;
   const stopId = kind === 'lane' ? 'stop-lane' : 'stop-timed';
   return `
     ${pip}
@@ -7852,7 +7741,7 @@ function renderHistoryDetail(): string {
 // (saveHistoryEdit) — never the date, the workout letter, or anything else on
 // the session.
 function openHistoryEdit(log: LogEntry): void {
-  historyEditDraft = {
+  ui.historyEditDraft = {
     timeStr: typeof log.ellipticalTimeSec === 'number' ? formatMmSs(log.ellipticalTimeSec) : '',
     kmStr: typeof log.ellipticalKm === 'number' ? String(log.ellipticalKm) : '',
     kcalStr: typeof log.ellipticalKcal === 'number' ? String(log.ellipticalKcal) : '',
@@ -7891,10 +7780,10 @@ function renderHistoryEdit(): string {
       <button class="quit-link" id="back-history-edit" type="button">× Back</button>
     </div>`;
   const log = loadLogs().find((l) => l.id === state.historyDetailId);
-  if (!log || !historyEditDraft) {
+  if (!log || !ui.historyEditDraft) {
     return `${header}<p class="empty">That session isn't here anymore.</p>`;
   }
-  const draft = historyEditDraft;
+  const draft = ui.historyEditDraft;
   const level = draft.level;
   return `
     ${header}
@@ -7944,7 +7833,7 @@ function renderHistoryEdit(): string {
 // the edited numbers already folded in, same as any other queued session.
 function saveHistoryEdit(): void {
   const id = state.historyDetailId;
-  const draft = historyEditDraft;
+  const draft = ui.historyEditDraft;
   if (!id || !draft) return;
   const logs = loadLogs();
   const idx = logs.findIndex((l) => l.id === id);
@@ -7965,7 +7854,7 @@ function saveHistoryEdit(): void {
   };
   logs[idx] = updated;
   writeLogs(logs);
-  historyEditDraft = null;
+  ui.historyEditDraft = null;
   state.screen = 'history-detail';
   render();
   state.syncStatus = 'syncing';
@@ -8367,7 +8256,7 @@ function reviewCanGoBack(offset: number): boolean {
 }
 
 function renderWeeklyReview(): string {
-  const offset = viewedWeekOffset;
+  const offset = ui.viewedWeekOffset;
   const view = reviewWeekViewAt(offset);
   const canGoBack = reviewCanGoBack(offset);
 
@@ -9272,7 +9161,7 @@ function renderCycleCardC(
   const showChips = comparableMetrics.length > 0;
   const chipMetrics: CycleMetric[] = ['body', ...comparableMetrics];
   const selectedMetric: CycleMetric =
-    showChips && chipMetrics.includes(cycleCompareMetric) ? cycleCompareMetric : 'body';
+    showChips && chipMetrics.includes(ui.cycleCompareMetric) ? ui.cycleCompareMetric : 'body';
 
   const chipsHtml = showChips
     ? `<div id="cycle-metric-chips" class="cycle-chips">${chipMetrics
@@ -9349,7 +9238,7 @@ function renderCycle(): string {
   const todayISO = localIsoDate(new Date());
   const status = todayCycleStatus(periods, todayISO);
 
-  const backLabel = cycleReturnTo === 'progress' ? '‹ Progress' : '‹ Home';
+  const backLabel = ui.cycleReturnTo === 'progress' ? '‹ Progress' : '‹ Home';
   const header = `
     <div class="screen-header">
       <h2>Your cycle</h2>
@@ -9402,20 +9291,20 @@ function renderCycle(): string {
 // "Period started today" tap — hers, one tap, undo-able for CYCLE_UNDO_MS.
 // Also lives as a quiet row in Settings (renderCycleSettingsRow below).
 function renderCycleLogRow(periods: CyclePeriod[], todayISO: string): string {
-  if (cycleUndoStartDate) {
+  if (ui.cycleUndoStartDate) {
     // v50 · fix (Sep 25 2026): a re-log of an already-logged date has no
     // Undo — there's no new row it created, so an Undo tap must not be able
     // to delete the original.
-    if (!cycleUndoCreated) {
+    if (!ui.cycleUndoCreated) {
       return `
         <div class="cc-log-undo">
-          <span>Already logged ${formatMonthDay(cycleUndoStartDate)}.</span>
+          <span>Already logged ${formatMonthDay(ui.cycleUndoStartDate)}.</span>
         </div>`;
     }
     // v51 · her spec: "Logged · Sep 29 ✓ Undo".
     return `
       <div class="cc-log-undo">
-        <span>Logged · ${formatMonthDay(cycleUndoStartDate)} ✓</span>
+        <span>Logged · ${formatMonthDay(ui.cycleUndoStartDate)} ✓</span>
         <button class="cc-log-undo-btn" id="cc-undo" type="button">Undo</button>
       </div>`;
   }
@@ -9440,19 +9329,19 @@ function renderCycleLogRow(periods: CyclePeriod[], todayISO: string): string {
 // Settings)") — same logPeriodStart/undoPeriodStart, its own ids so both
 // screens' handlers can coexist without clashing.
 function renderCycleSettingsRow(): string {
-  if (cycleUndoStartDate) {
-    if (!cycleUndoCreated) {
+  if (ui.cycleUndoStartDate) {
+    if (!ui.cycleUndoCreated) {
       return `
         <div class="settings-row">
           <div class="settings-row-text">
-            <div class="settings-row-title">Already logged ${formatMonthDay(cycleUndoStartDate)}</div>
+            <div class="settings-row-title">Already logged ${formatMonthDay(ui.cycleUndoStartDate)}</div>
           </div>
         </div>`;
     }
     return `
       <div class="settings-row">
         <div class="settings-row-text">
-          <div class="settings-row-title">Logged ${formatMonthDay(cycleUndoStartDate)}</div>
+          <div class="settings-row-title">Logged ${formatMonthDay(ui.cycleUndoStartDate)}</div>
         </div>
         <button class="settings-inline-btn" id="settings-cycle-undo" type="button">Undo</button>
       </div>`;
@@ -9552,10 +9441,6 @@ function renderProgramArchive(): string {
 // APP_VERSION is declared once near the top (single source of truth, shown in
 // the home-header tag); the About caption below reuses it.
 const GITHUB_REPO_URL = 'https://github.com/allisonecalt-sudo/workout-tracker';
-
-// v48 · P6: the Data fold stays open across its own re-render (an import or a
-// clear re-renders, then shows its status line inside the fold).
-let settingsDataOpen = false;
 
 function renderSettings(): string {
   const beepsOn = getBeepsEnabled();
@@ -9657,7 +9542,7 @@ function renderSettings(): string {
         renderGearCard()
       }
 
-      <details class="card settings-card settings-data"${settingsDataOpen ? ' open' : ''}>
+      <details class="card settings-card settings-data"${ui.settingsDataOpen ? ' open' : ''}>
         <summary class="settings-data-summary">
           <span>Data · export · import · clear</span>
           <span class="settings-data-chev" aria-hidden="true">▸</span>
@@ -9848,16 +9733,9 @@ function showQuitConfirmPanel(): void {
   });
 }
 
-// v46: WHERE she is, for the scroll reset in render(). Done·Next at the bottom
-// of one step used to open the next step at the same scroll depth — the
-// exercise name 69px off the top, another Done·Next under her thumb, 22 of 22
-// steps (UX audit Sep 24). Keyed on position, not on render: the timer
-// re-renders every second and must never move the page.
-let lastNavKey: string | null = null;
 // v48 · P6: the list's scroll when a Session was opened from it, per screen,
 // and the one value render() should restore on the next screen change.
 const detailOpenedAtScroll: Partial<Record<AppScreen, number>> = {};
-let pendingScrollRestore: number | null = null;
 
 function navigationKey(): string {
   if (state.screen === 'workout') {
@@ -9920,7 +9798,7 @@ function render(): void {
   // document.body the way the quit-confirm panel is) so its ✓ marks and
   // current-step marker are always live state, never a stale snapshot from
   // the moment it opened.
-  if (state.screen === 'workout' && state.pausedAt === null && stepListOpen) {
+  if (state.screen === 'workout' && state.pausedAt === null && ui.stepListOpen) {
     const w = getCurrentWorkout();
     if (w) html += renderStepListSheet(w);
   }
@@ -9928,7 +9806,7 @@ function render(): void {
   // face is showing (see renderTimerPip). Hidden while the List sheet is up
   // (it's a full overlay above it anyway) — the timer itself keeps running
   // underneath either way, so nothing is lost by not drawing the pip there.
-  if (state.screen === 'workout' && state.pausedAt === null && !stepListOpen) {
+  if (state.screen === 'workout' && state.pausedAt === null && !ui.stepListOpen) {
     html += renderTimerPip();
   }
   // Ship 6: screen transitions — apply enter-animation class except on
@@ -9959,10 +9837,10 @@ function render(): void {
   // opened it — she lands where she was, not at the top of 39 rows (DECISIONS
   // §5 Sessions: "Scroll position is restored on back").
   const navKey = navigationKey();
-  if (navKey !== lastNavKey) {
-    lastNavKey = navKey;
-    const restore = pendingScrollRestore;
-    pendingScrollRestore = null;
+  if (navKey !== ui.lastNavKey) {
+    ui.lastNavKey = navKey;
+    const restore = ui.pendingScrollRestore;
+    ui.pendingScrollRestore = null;
     window.scrollTo(0, restore ?? 0);
   }
   // Persist live position so reopening the app resumes the workout (cleared on
@@ -10059,17 +9937,17 @@ function attachHandlers(): void {
   // v48 · P6 (Sep 24 2026): the ‹ › week arrows, moved here from home (P4) —
   // stepping back through weeks lives on the screen made for looking back.
   bindClick('prev-week', () => {
-    viewedWeekOffset += 1;
+    ui.viewedWeekOffset += 1;
     render();
   });
   bindClick('next-week', () => {
-    if (viewedWeekOffset > 0) viewedWeekOffset -= 1;
+    if (ui.viewedWeekOffset > 0) ui.viewedWeekOffset -= 1;
     render();
   });
 
   // Ship 6: Settings entry from home header.
   bindClick('open-settings', () => {
-    settingsDataOpen = false; // v48 · P6: the Data fold opens closed
+    ui.settingsDataOpen = false; // v48 · P6: the Data fold opens closed
     state.screen = 'settings';
     render();
   });
@@ -10088,7 +9966,7 @@ function attachHandlers(): void {
   // separate "📊 Weekly review" row is gone). It's a div (the day dots inside
   // are buttons), so Enter/Space open it too.
   const openWeeklyReview = (): void => {
-    viewedWeekOffset = 0;
+    ui.viewedWeekOffset = 0;
     state.screen = 'weekly-review';
     render();
   };
@@ -10109,12 +9987,12 @@ function attachHandlers(): void {
   // stopPropagation a tap here would fire both.
   document.getElementById('week-nav-back')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    viewingLastClosedWeek = true;
+    ui.viewingLastClosedWeek = true;
     render();
   });
   document.getElementById('week-nav-forward')?.addEventListener('click', (e) => {
     e.stopPropagation();
-    viewingLastClosedWeek = false;
+    ui.viewingLastClosedWeek = false;
     render();
   });
 
@@ -10164,7 +10042,7 @@ function attachHandlers(): void {
   // from (Weekly review / Sessions / home), at the scroll she left it.
   bindClick('back-history', () => {
     const target = state.detailReturnTo ?? 'history';
-    pendingScrollRestore = detailOpenedAtScroll[target] ?? null;
+    ui.pendingScrollRestore = detailOpenedAtScroll[target] ?? null;
     state.screen = target;
     state.historyDetailId = null;
     state.detailReturnTo = null;
@@ -10181,7 +10059,7 @@ function attachHandlers(): void {
     openHistoryEdit(log);
   });
   bindClick('back-history-edit', () => {
-    historyEditDraft = null;
+    ui.historyEditDraft = null;
     state.screen = 'history-detail';
     render();
   });
@@ -10189,38 +10067,38 @@ function attachHandlers(): void {
     saveHistoryEdit();
   });
   bindClick('hist-level-down', () => {
-    if (!historyEditDraft) return;
-    const from = historyEditDraft.level ?? lastEllipticalLevel() ?? ELLIPTICAL_START_LEVEL;
-    historyEditDraft = { ...historyEditDraft, level: clampEllipticalLevel(from - 1) };
+    if (!ui.historyEditDraft) return;
+    const from = ui.historyEditDraft.level ?? lastEllipticalLevel() ?? ELLIPTICAL_START_LEVEL;
+    ui.historyEditDraft = { ...ui.historyEditDraft, level: clampEllipticalLevel(from - 1) };
     render();
   });
   bindClick('hist-level-up', () => {
-    if (!historyEditDraft) return;
-    const from = historyEditDraft.level ?? lastEllipticalLevel() ?? ELLIPTICAL_START_LEVEL;
-    historyEditDraft = { ...historyEditDraft, level: clampEllipticalLevel(from + 1) };
+    if (!ui.historyEditDraft) return;
+    const from = ui.historyEditDraft.level ?? lastEllipticalLevel() ?? ELLIPTICAL_START_LEVEL;
+    ui.historyEditDraft = { ...ui.historyEditDraft, level: clampEllipticalLevel(from + 1) };
     render();
   });
   // Per-keystroke, no re-render (keeps focus) — same pattern as the live
   // ride-numbers screen's ell-km/ell-pulse/ell-kcal/ell-time listeners.
   const histTime = document.getElementById('hist-time') as HTMLInputElement | null;
   histTime?.addEventListener('input', () => {
-    if (historyEditDraft) historyEditDraft.timeStr = histTime.value;
+    if (ui.historyEditDraft) ui.historyEditDraft.timeStr = histTime.value;
   });
   const histKm = document.getElementById('hist-km') as HTMLInputElement | null;
   histKm?.addEventListener('input', () => {
-    if (historyEditDraft) historyEditDraft.kmStr = histKm.value;
+    if (ui.historyEditDraft) ui.historyEditDraft.kmStr = histKm.value;
   });
   const histKcal = document.getElementById('hist-kcal') as HTMLInputElement | null;
   histKcal?.addEventListener('input', () => {
-    if (historyEditDraft) historyEditDraft.kcalStr = histKcal.value;
+    if (ui.historyEditDraft) ui.historyEditDraft.kcalStr = histKcal.value;
   });
   const histPulse = document.getElementById('hist-pulse') as HTMLInputElement | null;
   histPulse?.addEventListener('input', () => {
-    if (historyEditDraft) historyEditDraft.pulseStr = histPulse.value;
+    if (ui.historyEditDraft) ui.historyEditDraft.pulseStr = histPulse.value;
   });
   const histNote = document.getElementById('hist-note') as HTMLTextAreaElement | null;
   histNote?.addEventListener('input', () => {
-    if (historyEditDraft) historyEditDraft.note = histNote.value;
+    if (ui.historyEditDraft) ui.historyEditDraft.note = histNote.value;
   });
 
   // The Done card (home-done-card) is a div, same reason open-weekly-review
@@ -10286,17 +10164,17 @@ function attachHandlers(): void {
   // v50 · jump list (Sep 25 2026): open/close the sheet, tap outside to
   // dismiss (same convention as the quit-confirm panel), tap a row to jump.
   bindClick('step-list-open', () => {
-    stepListOpen = true;
+    ui.stepListOpen = true;
     render();
   });
   bindClick('step-list-close', () => {
-    stepListOpen = false;
+    ui.stepListOpen = false;
     render();
   });
   const stepListPanel = document.getElementById('step-list-panel');
   stepListPanel?.addEventListener('click', (e) => {
     if (e.target === stepListPanel) {
-      stepListOpen = false;
+      ui.stepListOpen = false;
       render();
     }
   });
@@ -10306,21 +10184,21 @@ function attachHandlers(): void {
   // header's Pause button gives — one pause mechanism, not two); Stop keeps
   // #stop-lane/#stop-timed exactly as before (bound below, unchanged).
   bindClick('timer-pip', () => {
-    timerPipOpen = true;
+    ui.timerPipOpen = true;
     render();
   });
   bindClick('timer-pip-close', () => {
-    timerPipOpen = false;
+    ui.timerPipOpen = false;
     render();
   });
   bindClick('timer-pip-pause', () => {
-    timerPipOpen = false;
+    ui.timerPipOpen = false;
     togglePause();
   });
   const timerPipSheet = document.getElementById('timer-pip-sheet');
   timerPipSheet?.addEventListener('click', (e) => {
     if (e.target === timerPipSheet) {
-      timerPipOpen = false;
+      ui.timerPipOpen = false;
       render();
     }
   });
@@ -10858,7 +10736,7 @@ function attachHandlers(): void {
     btn.addEventListener('click', () => {
       if (src) toggleVoiceNote(btn, src);
     });
-    if (voiceAudio && voiceAudioSrc === src && !voiceAudio.paused) {
+    if (ui.voiceAudio && ui.voiceAudioSrc === src && !ui.voiceAudio.paused) {
       setVoiceBtnPlaying(btn, true);
     }
   });
@@ -10961,7 +10839,7 @@ function attachSettingsHandlers(): void {
   // v48 · P6: keep the Data fold's open state across its own re-render.
   const dataFold = document.querySelector<HTMLDetailsElement>('details.settings-data');
   dataFold?.addEventListener('toggle', () => {
-    settingsDataOpen = dataFold.open;
+    ui.settingsDataOpen = dataFold.open;
   });
 
   // Data: Clear — hold-to-confirm via the same wireHoldToSkip helper.
@@ -11001,21 +10879,21 @@ function attachCycleHandlers(): void {
   // conditional row — spec §2.1, §3), its own back button (§2.2), and Card
   // C's metric chips (§2.3).
   bindClick('open-cycle', () => {
-    cycleReturnTo = 'progress';
-    progressScrollForCycle = window.scrollY;
-    cycleCompareMetric = 'body';
+    ui.cycleReturnTo = 'progress';
+    ui.progressScrollForCycle = window.scrollY;
+    ui.cycleCompareMetric = 'body';
     state.screen = 'cycle';
     render();
   });
   bindClick('home-open-cycle', () => {
-    cycleReturnTo = 'home';
-    cycleCompareMetric = 'body';
+    ui.cycleReturnTo = 'home';
+    ui.cycleCompareMetric = 'body';
     state.screen = 'cycle';
     render();
   });
   bindClick('back-from-cycle', () => {
-    if (cycleReturnTo === 'progress') {
-      pendingScrollRestore = progressScrollForCycle;
+    if (ui.cycleReturnTo === 'progress') {
+      ui.pendingScrollRestore = ui.progressScrollForCycle;
       state.screen = 'progress';
     } else {
       state.screen = 'home';
@@ -11026,7 +10904,7 @@ function attachCycleHandlers(): void {
     btn.addEventListener('click', () => {
       const m = btn.dataset['cycleMetric'] as CycleMetric | undefined;
       if (m) {
-        cycleCompareMetric = m;
+        ui.cycleCompareMetric = m;
         render();
       }
     });
@@ -11094,7 +10972,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setWorkoutDProvider(getWorkoutD); // week-clock.ts: planForLog needs the fixed D workout
   setRenderer(render); // bus.ts: screens that leave this file ask for a redraw through requestRender()
   setScrollRestoreSink((y) => {
-    pendingScrollRestore = y; // bus.ts: ...and for a scroll restore through requestScrollRestore()
+    ui.pendingScrollRestore = y; // bus.ts: ...and for a scroll restore through requestScrollRestore()
   });
   // Resume an in-progress workout if one was left open (Allison 2026-06-06).
   restoreActiveSession();
