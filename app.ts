@@ -165,7 +165,8 @@ import {
   writeWeekMoves,
 } from './state.js';
 import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
-import { setRenderer } from './bus.js';
+import { setRenderer, setScrollRestoreSink } from './bus.js';
+import { bindClick } from './dom.js';
 import * as pw from './program-week.js';
 import {
   SESSIONS_PER_WEEK_TARGET,
@@ -13045,13 +13046,11 @@ function attachRidesHandlers(): void {
   }
 }
 
-function bindClick(id: string, fn: () => void): void {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('click', fn);
-}
-
 document.addEventListener('DOMContentLoaded', () => {
   setRenderer(render); // bus.ts: screens that leave this file ask for a redraw through requestRender()
+  setScrollRestoreSink((y) => {
+    pendingScrollRestore = y; // bus.ts: ...and for a scroll restore through requestScrollRestore()
+  });
   // Resume an in-progress workout if one was left open (Allison 2026-06-06).
   restoreActiveSession();
   render();
