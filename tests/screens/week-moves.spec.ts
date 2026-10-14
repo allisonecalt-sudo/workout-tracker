@@ -237,6 +237,46 @@ test.describe('WK3 · "Move on without it" + week_moves', () => {
     await expect(reopened.locator('.week-line')).toContainText('2 of 4');
   });
 
+  test('v62.2: an EMPTY week_moves pull clears a synced move - deleting the Supabase row reopens the week (empty is the normal state of this table)', async ({
+    page,
+    context,
+  }) => {
+    // Week 6 (opened Oct 10 by the Sick week), A + B done, moved on from at 2 of 3 on Sun Oct 18.
+    await seedLogs(page, [
+      log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
+      log('wk6-a', '2026-10-11T10:00:00+03:00', 'A'),
+      log('wk6-b', '2026-10-13T10:00:00+03:00', 'B'),
+    ]);
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'workout-tracker:week-moves',
+        JSON.stringify([
+          { round: 2, week: 6, at: '2026-10-18T10:00:00+03:00', missing: 'C', synced: true },
+        ])
+      );
+    });
+    await mockDate(page, '2026-10-18T12:00:00+03:00');
+    await page.goto('/');
+    await expect(page.locator('.home-header h1')).toContainText('Week 7'); // the synced move holds
+    // The server row was deleted (the tandem path); the next pull is EMPTY. Run the real merge.
+    const merged = await page.evaluate(() => {
+      const w = window as unknown as {
+        __wtMergeWeekMoves: (local: unknown[], remote: unknown[]) => unknown[];
+      };
+      const local = JSON.parse(localStorage.getItem('workout-tracker:week-moves') ?? '[]');
+      return w.__wtMergeWeekMoves(local, []);
+    });
+    expect(merged).toEqual([]);
+    await page.evaluate((m) => {
+      localStorage.setItem('workout-tracker:week-moves', JSON.stringify(m));
+    }, merged);
+    const reopened = await context.newPage();
+    await mockDate(reopened, '2026-10-18T12:00:00+03:00');
+    await reopened.goto('/');
+    await expect(reopened.locator('.home-header h1')).toContainText('Week 6');
+    await expect(reopened.locator('.week-line')).toContainText('2 of 4');
+  });
+
   test('a stale move (a week that was never the open one) is ignored, not thrown', async ({
     page,
   }) => {

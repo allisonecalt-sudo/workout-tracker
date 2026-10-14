@@ -655,15 +655,41 @@ test.describe('sync - v62.2: an empty remote never deletes local cycle periods o
     expect(loadCyclePeriods().map((p) => p.startDate)).toEqual(['2026-09-01']);
   });
 
-  test('week_moves: an EMPTY pull keeps synced local moves', async () => {
-    const mine = [
+  test('week_moves differ ON PURPOSE: an EMPTY pull clears synced local moves (empty is their normal state); unsynced moves and Undo tombstones stay', async () => {
+    const unsynced = { round: 2, week: 6, at: '2026-10-12T10:00:00Z', missing: '', synced: false };
+    const tomb = {
+      round: 3,
+      week: 1,
+      at: '2026-10-13T10:00:00Z',
+      missing: 'B',
+      synced: false,
+      deleted: true,
+    };
+    writeWeekMoves([
       { round: 1, week: 2, at: '2026-10-01T10:00:00Z', missing: 'A', synced: true },
-      { round: 2, week: 6, at: '2026-10-12T10:00:00Z', missing: '', synced: false },
-    ];
-    writeWeekMoves(mine);
+      unsynced,
+      tomb,
+    ]);
     replies.push(reply(200, []));
     await pullWeekMovesFromSupabase();
-    expect(loadWeekMoves()).toEqual(mine);
+    expect(loadWeekMoves()).toEqual([unsynced, tomb]);
+  });
+
+  test('week_moves: a server row can never overwrite a pending Undo tombstone', async () => {
+    const tomb = {
+      round: 2,
+      week: 6,
+      at: '2026-10-12T10:00:00Z',
+      missing: 'C',
+      synced: false,
+      deleted: true,
+    };
+    writeWeekMoves([tomb]);
+    replies.push(
+      reply(200, [{ round: 2, week: 6, moved_at: '2026-10-12T10:00:00Z', missing: 'C' }])
+    );
+    await pullWeekMovesFromSupabase();
+    expect(loadWeekMoves()).toEqual([tomb]);
   });
 
   test('week_moves: a NON-empty pull that lacks one synced move still removes it', async () => {

@@ -108,6 +108,7 @@ WK3 · "Move on without it" + week_moves › shown on day 8 with 2 of 3 done —
 WK3 · "Move on without it" + week_moves › tap → Week 6 opens; the moved-note + Undo appear under the header
 WK3 · "Move on without it" + week_moves › the push payload + pure merge are exact (window hooks, no real network)
 WK3 · "Move on without it" + week_moves › v61.2: a week that reopened after a Sick week can be moved on from — Week 6 on day 9, "Move on to Week 7 without C"
+WK3 · "Move on without it" + week_moves › v62.2: an EMPTY week_moves pull clears a synced move - deleting the Supabase row reopens the week (empty is the normal state of this table)
 WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › Progress · Sessions per week: a closed completion week reads "wk 5 · 3 / 4", never a recomputed calendar count
 WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › Progress · Sessions per week: a moved-on week reads "moved on", the live week reads "open"
 WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › a D-only live week (no A/B/C yet) reads "None of A, B, C yet.", never the old blanket line that contradicted the D row below it
@@ -558,8 +559,9 @@ sync - the tiered session push (PGRST204 fallback) › sessionPayload: the id an
 sync - the tiered session push (PGRST204 fallback) › tier 1 works: one POST of the full row, and the log is marked synced
 sync - v62.2: an empty remote never deletes local cycle periods or week moves › cycle_periods: a NON-empty pull that lacks one synced row still removes it
 sync - v62.2: an empty remote never deletes local cycle periods or week moves › cycle_periods: an EMPTY pull keeps synced local rows (and unsynced ones)
+sync - v62.2: an empty remote never deletes local cycle periods or week moves › week_moves differ ON PURPOSE: an EMPTY pull clears synced local moves (empty is their normal state); unsynced moves and Undo tombstones stay
 sync - v62.2: an empty remote never deletes local cycle periods or week moves › week_moves: a NON-empty pull that lacks one synced move still removes it
-sync - v62.2: an empty remote never deletes local cycle periods or week moves › week_moves: an EMPTY pull keeps synced local moves
+sync - v62.2: an empty remote never deletes local cycle periods or week moves › week_moves: a server row can never overwrite a pending Undo tombstone
 the 4-exposure backstop: a V rung with 4 clean-but-never-"fine" exposures is still ready
 the chart + tap readout › each bar carries its level ("L5"/"L3") under the date, from ChartBar.sublabel
 the chart + tap readout › fewer than 2 rides with numbers: an honest gap line, no chart

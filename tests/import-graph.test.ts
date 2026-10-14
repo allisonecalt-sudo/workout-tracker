@@ -222,7 +222,7 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
 
   test('sync*.ts and week-clock.ts are shared-layer modules: they may never import a screen or app.ts (step 9c)', () => {
     const shared = [...graph.keys()].filter(
-      (f) => /^sync(-[a-z-]+)?.ts$/.test(f) || f === 'week-clock.ts'
+      (f) => /^sync(-[a-z0-9-]+)?\.ts$/.test(f) || f === 'week-clock.ts'
     );
     // the guard read the modules it names (not "found nothing, so nothing to break")
     expect(shared).toEqual(

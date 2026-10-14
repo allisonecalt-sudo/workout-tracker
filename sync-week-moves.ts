@@ -41,8 +41,12 @@ export function mergeWeekMoves(
   local: StoredWeekMove[],
   remote: RemoteWeekMove[]
 ): StoredWeekMove[] {
-  // v62.2: an EMPTY remote never deletes local rows (the v33 sessions rule) - see sync-cycle.ts.
-  if (remote.length === 0) return local;
+  // v62.2: week_moves deliberately has NO empty-remote guard (unlike sessions since v33 and
+  // cycle_periods). This table holds only EXCEPTIONS, so an empty answer is its NORMAL state,
+  // not a sign of a wiped table. After the day of the move Undo is gone, and deleting the
+  // Supabase row is the only way to take a move back - the next pull must then clear it. A
+  // guard here would keep the stale move on the phone for ever (checker, Oct 14). The remote
+  // is the truth for synced moves; unsynced local moves (incl. Undo tombstones) still win.
   const byKey = new Map<string, StoredWeekMove>();
   for (const l of local) if (l.synced === false) byKey.set(weekMoveKey(l.round, l.week), l);
   for (const r of remote) {

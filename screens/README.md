@@ -50,6 +50,8 @@ decides WHEN to save, and the local write around it, did not move. Still in `app
 - `logPeriodStart` / `undoPeriodStart` and their undo-timer `let`s (`cycleUndoTimer`,
   `cycleUndoStartDate`, `cycleUndoCreated`)
 - `moveOnWithoutIt` / `undoWeekMove` (the week-move write and its Undo tombstone)
+- `logWalk` (the walk's local write + push), `saveCompletedSession`, `logStaleSessionAsDone`
+  and `saveHistoryEdit` (the three other places a session is written or edited)
 
 **Rule:** a screen whose handlers need any of these WAITS until they move to a shared module
 (steps 10 / 11). It never imports `app.ts`, never copies them, never receives them as
