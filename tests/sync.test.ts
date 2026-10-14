@@ -23,7 +23,22 @@ import {
   syncDisabled,
   SUPABASE_URL,
 } from '../sync';
-import { PULL_LIMIT, STORAGE_KEY, state, loadLogs, writeLogs } from '../state';
+import {
+  PULL_LIMIT,
+  STORAGE_KEY,
+  state,
+  loadLogs,
+  writeLogs,
+  loadCyclePeriods,
+  writeCyclePeriods,
+  loadWeekMoves,
+  writeWeekMoves,
+  loadWalks,
+  writeWalks,
+} from '../state';
+import { pushCyclePeriod } from '../sync-cycle';
+import { mergeWeekMoves, deleteWeekMove, weekMovePayload } from '../sync-week-moves';
+import { pushWalk, fetchFitSteps } from '../sync-movement';
 import { setRenderer } from '../bus';
 import type { LogEntry } from '../types';
 
@@ -445,5 +460,85 @@ test.describe('sync - pullFromSupabase', () => {
     } finally {
       console.warn = warn;
     }
+  });
+});
+
+// ---- step 9b: the other tables (cycle_periods, week_moves, movement_log) -------------------
+test.describe('sync - cycle_periods, week_moves and walks (step 9b, characterisation)', () => {
+  test('pushCyclePeriod upserts on start_date and marks the local row synced on ok', async () => {
+    writeCyclePeriods([{ startDate: '2026-10-01', source: 'app', note: null, synced: false }]);
+    replies.push(reply(201, ''));
+    await pushCyclePeriod({ startDate: '2026-10-01', source: 'app', note: null, synced: false });
+    expect(calls[0]?.url).toBe(`${SUPABASE_URL}/rest/v1/cycle_periods?on_conflict=start_date`);
+    expect(calls[0]?.method).toBe('POST');
+    expect(calls[0]?.headers['Prefer']).toBe('resolution=merge-duplicates,return=minimal');
+    expect(calls[0]?.body).toEqual({ start_date: '2026-10-01', source: 'app', note: null });
+    expect(loadCyclePeriods()[0]?.synced).toBe(true);
+  });
+
+  test('a failed cycle push leaves the row unsynced (it is retried on the next flush)', async () => {
+    const warn = console.warn;
+    console.warn = () => undefined;
+    try {
+      writeCyclePeriods([{ startDate: '2026-10-01', source: 'app', note: null, synced: false }]);
+      replies.push(reply(500, 'no'));
+      await pushCyclePeriod({ startDate: '2026-10-01', source: 'app', note: null, synced: false });
+      expect(loadCyclePeriods()[0]?.synced).toBe(false);
+    } finally {
+      console.warn = warn;
+    }
+  });
+
+  test('week_moves: an unsynced local move wins the merge; Undo drops the tombstone only when the DELETE succeeds', async () => {
+    const mine = { round: 2, week: 6, at: '2026-10-12T10:00:00Z', missing: 'C', synced: false };
+    const merged = mergeWeekMoves(
+      [mine],
+      [{ round: 2, week: 6, moved_at: '2026-10-11T10:00:00Z', missing: 'B' }]
+    );
+    expect(merged).toEqual([mine]);
+    expect(weekMovePayload(mine)).toEqual({
+      round: 2,
+      week: 6,
+      moved_at: '2026-10-12T10:00:00Z',
+      missing: 'C',
+    });
+
+    const tomb = { ...mine, deleted: true };
+    const warn = console.warn;
+    console.warn = () => undefined;
+    try {
+      writeWeekMoves([tomb]);
+      replies.push(reply(500, 'no'));
+      await deleteWeekMove(2, 6);
+      expect(loadWeekMoves()).toHaveLength(1); // kept for the next retry
+      replies.push(reply(204, null));
+      await deleteWeekMove(2, 6);
+      expect(loadWeekMoves()).toHaveLength(0);
+      expect(calls[1]?.url).toBe(`${SUPABASE_URL}/rest/v1/week_moves?round=eq.2&week=eq.6`);
+      expect(calls[1]?.method).toBe('DELETE');
+    } finally {
+      console.warn = warn;
+    }
+  });
+
+  test('pushWalk POSTs minutes only to movement_log and marks the walk synced', async () => {
+    const walk = { id: 'w1', date: '2026-10-12T09:00:00.000Z', minutes: 12, synced: false };
+    writeWalks([walk]);
+    replies.push(reply(201, ''));
+    await pushWalk(walk);
+    expect(calls[0]?.url).toBe(`${SUPABASE_URL}/rest/v1/movement_log`);
+    expect(calls[0]?.body).toMatchObject({ kind: 'walk', minutes: 12, meters: null, steps: null });
+    expect(loadWalks()[0]?.synced).toBe(true);
+  });
+
+  test('fetchFitSteps: a number from the edge function, null on any failure or a bad window', async () => {
+    replies.push(reply(200, { steps: 4210 }));
+    expect(await fetchFitSteps(1000, 5000)).toBe(4210);
+    expect(calls[0]?.url).toBe(`${SUPABASE_URL}/functions/v1/fit-steps`);
+    expect(calls[0]?.body).toEqual({ startMillis: 1000, endMillis: 5000 });
+    replies.push(reply(500, ''));
+    expect(await fetchFitSteps(1000, 5000)).toBeNull();
+    expect(await fetchFitSteps(5000, 1000)).toBeNull(); // end before start: no request
+    expect(calls).toHaveLength(2);
   });
 });

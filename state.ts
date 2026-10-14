@@ -22,7 +22,7 @@
 import type { AnyWorkoutId, Phase } from './program.js';
 import type { WeekKey } from './week.js';
 import type { MoveFeelValue } from './move-feel.js';
-import type { LogEntry, StoredWeekMove } from './types.js';
+import type { LogEntry, StoredWeekMove, WalkEntry, StoredCyclePeriod } from './types.js';
 import type { WeekClockInput } from './program-week.js';
 
 // ---------- types ----------
@@ -693,4 +693,54 @@ export function weekClockInput(
   now: Date = new Date()
 ): WeekClockInput {
   return { logs, moves: loadWeekMoves(), now };
+}
+
+// ---- walks + cycle periods (code-shape step 9b, Oct 14 2026: moved from app.ts verbatim; the sync modules need them) ----
+
+export function loadWalks(): WalkEntry[] {
+  try {
+    const raw = localStorage.getItem(WALKS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as WalkEntry[];
+  } catch {
+    return [];
+  }
+}
+
+export function writeWalks(walks: WalkEntry[]): void {
+  const sorted = [...walks].sort((a, b) => {
+    const aUn = a.synced ? 1 : 0;
+    const bUn = b.synced ? 1 : 0;
+    if (aUn !== bUn) return aUn - bUn; // unsynced survive the cap first
+    return b.date.localeCompare(a.date);
+  });
+  localStorage.setItem(WALKS_KEY, JSON.stringify(sorted.slice(0, 100)));
+}
+
+export function loadCyclePeriods(): StoredCyclePeriod[] {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem(CYCLE_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p): p is StoredCyclePeriod =>
+        !!p && typeof p === 'object' && typeof (p as StoredCyclePeriod).startDate === 'string'
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function writeCyclePeriods(periods: StoredCyclePeriod[]): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const sorted = [...periods].sort((a, b) => b.startDate.localeCompare(a.startDate));
+    localStorage.setItem(CYCLE_STORAGE_KEY, JSON.stringify(sorted));
+  } catch {
+    // localStorage full/unavailable — non-fatal, same as writeLogs.
+  }
 }

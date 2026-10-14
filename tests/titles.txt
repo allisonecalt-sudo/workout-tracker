@@ -519,6 +519,11 @@ swing (v52, was v46): Saturday morning with last week at 2 says today will count
 swing: a SUNDAY session never swings, even when last week is short
 swing: a Saturday session completes a 2-session week — last week shows 3 of 3, this week 0
 swing: a Saturday session does NOT swing when last week already has 3 — it opens the new week
+sync - cycle_periods, week_moves and walks (step 9b, characterisation) › a failed cycle push leaves the row unsynced (it is retried on the next flush)
+sync - cycle_periods, week_moves and walks (step 9b, characterisation) › fetchFitSteps: a number from the edge function, null on any failure or a bad window
+sync - cycle_periods, week_moves and walks (step 9b, characterisation) › pushCyclePeriod upserts on start_date and marks the local row synced on ok
+sync - cycle_periods, week_moves and walks (step 9b, characterisation) › pushWalk POSTs minutes only to movement_log and marks the walk synced
+sync - cycle_periods, week_moves and walks (step 9b, characterisation) › week_moves: an unsynced local move wins the merge; Undo drops the tombstone only when the DELETE succeeds
 sync - mergeRemoteSessions: protected and unsynced rows › a synced local row is replaced by the remote copy, with the round-tripped columns
 sync - mergeRemoteSessions: protected and unsynced rows › a synced session that CLOSED a completion-model week survives the server dropping it, flagged
 sync - mergeRemoteSessions: protected and unsynced rows › an unsynced EDIT (pendingEdit) stays unsynced even though the server has the id

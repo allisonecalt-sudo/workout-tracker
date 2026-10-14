@@ -108,7 +108,7 @@ import {
   type WeekPlan,
   type CalendarMarks,
 } from './program.js';
-import type { LogEntry, StoredWeekMove } from './types.js';
+import type { LogEntry, StoredWeekMove, WalkEntry, StoredCyclePeriod } from './types.js';
 import {
   type AppScreen,
   type ArmFeel,
@@ -120,7 +120,6 @@ import {
   STORAGE_KEY,
   HOWTO_SEEN_KEY_PREFIX,
   ACTIVE_SESSION_KEY,
-  WALKS_KEY,
   WALK_ACTIVE_KEY,
   LEGACY_WALK_COUNTER_KEYS,
   WW_START_KEY,
@@ -135,7 +134,6 @@ import {
   WW_LANE_STARTED_KEY,
   WW_LANE_DONE_MIN_KEY,
   LAST_DONE_KEY,
-  CYCLE_STORAGE_KEY,
   PACE_RULE_SEEN_KEY,
   SETTING_KEYS,
   setSetting,
@@ -151,6 +149,10 @@ import {
   writeWeekMoves,
   getChronologicalLogs,
   weekClockInput,
+  loadWalks,
+  writeWalks,
+  loadCyclePeriods,
+  writeCyclePeriods,
 } from './state.js';
 import { escapeHtml, formatMmSs, formatMonthDay, SHORT_MONTHS } from './format.js';
 import {
@@ -163,9 +165,6 @@ import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
 import { bindClick } from './dom.js';
 import {
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY,
-  supabaseHeaders,
   syncDisabled,
   sessionPayload,
   legacySessionPayload,
@@ -179,6 +178,21 @@ import {
   mergeRemoteSessions,
   TIMING_LAUNCH_LABEL,
 } from './sync.js';
+import { pushWalk, flushPendingWalks, fetchFitSteps } from './sync-movement.js';
+import {
+  pullCyclePeriodsFromSupabase,
+  pushCyclePeriod,
+  deleteCyclePeriod,
+  cyclePeriodPayload,
+} from './sync-cycle.js';
+import {
+  weekMoveKey,
+  mergeWeekMoves,
+  pullWeekMovesFromSupabase,
+  weekMovePayload,
+  pushWeekMove,
+  deleteWeekMove,
+} from './sync-week-moves.js';
 import * as pw from './program-week.js';
 import {
   setWorkoutDProvider,
@@ -721,15 +735,6 @@ function saveLog(entry: LogEntry): LogEntry {
 // Walks are EXTRA CREDIT — they NEVER count toward the 3/week streak, so the
 // streak math stays honest. Supabase movement_log is the source of truth
 // (tandem rule); localStorage is the offline layer, same pattern as sessions.
-type WalkEntry = {
-  id: string; // local id only; the DB row generates its own uuid
-  date: string; // ISO datetime
-  minutes?: number | null; // from the start/stop timer (Jul 4); null = logged without timing
-  meters?: number | null; // GPS distance (outdoor, screen-on — her call Jul 4); null = no usable fix
-  steps?: number | null; // motion-sensor step estimate (works indoors, phone on her)
-  synced?: boolean;
-};
-
 // v48 · P3 (Sep 24 2026): minutes only — the meters/steps counters are
 // archived (archive/walk-sensors-2026-09-24/). Fit is asked at Save instead.
 type WorkoutWalkResult = {
@@ -918,76 +923,6 @@ function finishWalk(): WalkEntry | null {
 function cancelWalk(): void {
   endWalkTracking();
   localStorage.removeItem(WALK_ACTIVE_KEY);
-}
-
-function loadWalks(): WalkEntry[] {
-  try {
-    const raw = localStorage.getItem(WALKS_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed as WalkEntry[];
-  } catch {
-    return [];
-  }
-}
-
-function writeWalks(walks: WalkEntry[]): void {
-  const sorted = [...walks].sort((a, b) => {
-    const aUn = a.synced ? 1 : 0;
-    const bUn = b.synced ? 1 : 0;
-    if (aUn !== bUn) return aUn - bUn; // unsynced survive the cap first
-    return b.date.localeCompare(a.date);
-  });
-  localStorage.setItem(WALKS_KEY, JSON.stringify(sorted.slice(0, 100)));
-}
-
-function markWalkSynced(id: string): void {
-  const walks = loadWalks();
-  const idx = walks.findIndex((w) => w.id === id);
-  if (idx === -1) return;
-  const entry = walks[idx];
-  if (!entry) return;
-  walks[idx] = { ...entry, synced: true };
-  writeWalks(walks);
-}
-
-async function pushWalk(walk: WalkEntry): Promise<void> {
-  if (syncDisabled()) return;
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/movement_log`, {
-      method: 'POST',
-      headers: supabaseHeaders(),
-      body: JSON.stringify({
-        // v48 · P3 (Sep 24 2026): the LOCAL day. The UTC slice filed an evening
-        // walk in Jerusalem (after 21:00 in summer) under the next day.
-        date: localIsoDate(new Date(walk.date)),
-        kind: 'walk',
-        minutes: walk.minutes ?? null,
-        // v48 · P3: minutes only. A v47 walk still waiting to sync carries the
-        // archived sensors' numbers (3 steps in 29 min) — they don't travel.
-        meters: null,
-        steps: null,
-      }),
-    });
-    if (res.ok) {
-      markWalkSynced(walk.id);
-      return;
-    }
-    // v48 (Sep 24 2026): fail loud, same shape as the session push. movement_log
-    // has 0 rows EVER and a silent catch couldn't tell "unused" from "broken"
-    // (slow-walking audit). Still stays unsynced and is flushed on next load.
-    console.warn('[sync] walk push failed:', res.status, await res.text().catch(() => ''));
-  } catch (err) {
-    console.warn('[sync] walk push threw:', err);
-  }
-}
-
-async function flushPendingWalks(): Promise<void> {
-  if (syncDisabled()) return;
-  for (const w of loadWalks().filter((x) => !x.synced)) {
-    await pushWalk(w);
-  }
 }
 
 function logWalk(
@@ -1523,36 +1458,6 @@ function reachedWallSit(w: Workout): boolean {
     return state.currentExerciseIndex > i;
   }
   return false;
-}
-
-// Google Fit step count for a clock window, via the `fit-steps` Supabase edge
-// function (v16, Jul 9 2026 — her idea: "when I start walking it knows"). The
-// phone counts steps NATIVELY even with the screen off / another app open, so
-// asking Fit "how many steps between start and end?" gets the REAL walk count and
-// sidesteps the PWA background-sensor limit entirely. The Google token lives
-// server-side in the edge function (never in the app). Returns null on any
-// failure (offline, test mode, Fit not linked) so callers keep the motion-sensor
-// estimate as a graceful fallback — the walk still logs either way.
-async function fetchFitSteps(startMs: number, endMs: number): Promise<number | null> {
-  if (syncDisabled()) return null;
-  if (!startMs || !endMs || endMs <= startMs) return null;
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 5000);
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/fit-steps`, {
-      method: 'POST',
-      headers: supabaseHeaders(),
-      body: JSON.stringify({ startMillis: startMs, endMillis: endMs }),
-      signal: ctrl.signal,
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const data: unknown = await res.json();
-    const steps = (data as { steps?: unknown }).steps;
-    return typeof steps === 'number' && steps >= 0 ? steps : null;
-  } catch {
-    return null;
-  }
 }
 
 // v48 · P4 (Sep 24 2026) — today's steps from Google Fit, zero taps (DECISIONS
@@ -3562,138 +3467,6 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   if (w.__wtRoundsSeed) appendRounds(w.__wtRoundsSeed);
 }
 
-// ---------- v50 · cycle_periods sync (Sep 25 2026) ----------
-//
-// Tandem rule (CLAUDE.md "Core Role"): her cycle log used to live only in
-// self/health/reproductive.md, a file Claude could read but the app never
-// could. cycle_periods (migrations/2026-09-25-v50-cycle-periods.sql) is the
-// shared table both sides read/write now. The table is tiny (one row per
-// period start) so the sync here is simpler than workout_sessions' — no
-// pagination, no delete-detection window, just "pull replaces synced rows,
-// an unsynced local write always wins until it's confirmed."
-
-type StoredCyclePeriod = CyclePeriod & { synced?: boolean };
-
-function loadCyclePeriods(): StoredCyclePeriod[] {
-  try {
-    if (typeof localStorage === 'undefined') return [];
-    const raw = localStorage.getItem(CYCLE_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (p): p is StoredCyclePeriod =>
-        !!p && typeof p === 'object' && typeof (p as StoredCyclePeriod).startDate === 'string'
-    );
-  } catch {
-    return [];
-  }
-}
-
-function writeCyclePeriods(periods: StoredCyclePeriod[]): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    const sorted = [...periods].sort((a, b) => b.startDate.localeCompare(a.startDate));
-    localStorage.setItem(CYCLE_STORAGE_KEY, JSON.stringify(sorted));
-  } catch {
-    // localStorage full/unavailable — non-fatal, same as writeLogs.
-  }
-}
-
-type RemoteCyclePeriod = { start_date: string; source?: string | null; note?: string | null };
-
-function mergeCyclePeriods(
-  local: StoredCyclePeriod[],
-  remote: RemoteCyclePeriod[]
-): StoredCyclePeriod[] {
-  const byDate = new Map<string, StoredCyclePeriod>();
-  for (const l of local) if (l.synced === false) byDate.set(l.startDate, l);
-  for (const r of remote) {
-    const existing = byDate.get(r.start_date);
-    if (existing && existing.synced === false) continue; // local unsynced write wins on content
-    byDate.set(r.start_date, {
-      startDate: r.start_date,
-      source: r.source ?? null,
-      note: r.note ?? null,
-      synced: true,
-    });
-  }
-  return [...byDate.values()];
-}
-
-async function pullCyclePeriodsFromSupabase(): Promise<void> {
-  if (syncDisabled()) return;
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/cycle_periods?select=start_date,source,note&order=start_date.desc`,
-      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
-    );
-    if (res.ok && res.headers.get('X-SW-Cache') !== '1') {
-      const remote: RemoteCyclePeriod[] = await res.json();
-      writeCyclePeriods(mergeCyclePeriods(loadCyclePeriods(), remote));
-      if (
-        state.screen === 'progress' ||
-        state.screen === 'settings' ||
-        state.screen === 'cycle' ||
-        state.screen === 'home'
-      )
-        render();
-    } else if (!res.ok) {
-      console.warn('[sync] pull cycle_periods failed:', res.status);
-    }
-  } catch (err) {
-    console.warn('[sync] pull cycle_periods threw:', err);
-  }
-}
-
-// Pure — the exact body a push sends. Kept separate from the fetch call so
-// tests can assert it via the __wtCyclePeriodPayload hook the same way
-// __wtSessionPayload already covers workout_sessions.
-function cyclePeriodPayload(p: StoredCyclePeriod): RemoteCyclePeriod {
-  return { start_date: p.startDate, source: p.source ?? null, note: p.note ?? null };
-}
-
-async function pushCyclePeriod(p: StoredCyclePeriod): Promise<void> {
-  if (syncDisabled()) return;
-  try {
-    // v50 · fix (Sep 25 2026): merge-duplicates alone targets the PRIMARY KEY
-    // (id), not start_date — a same-date repeat POST would 409 on the
-    // start_date unique index instead of upserting. on_conflict says which
-    // column the "duplicate" actually is.
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/cycle_periods?on_conflict=start_date`, {
-      method: 'POST',
-      // start_date is UNIQUE — merge-duplicates makes a repeat tap on the same
-      // day an upsert, not a 409.
-      headers: { ...supabaseHeaders(), Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(cyclePeriodPayload(p)),
-    });
-    if (res.ok) {
-      const periods = loadCyclePeriods();
-      const idx = periods.findIndex((x) => x.startDate === p.startDate);
-      if (idx >= 0) {
-        periods[idx] = { ...periods[idx]!, synced: true };
-        writeCyclePeriods(periods);
-      }
-    } else {
-      console.warn('[sync] push cycle_periods failed:', res.status);
-    }
-  } catch (err) {
-    console.warn('[sync] push cycle_periods threw:', err);
-  }
-}
-
-async function deleteCyclePeriod(startDate: string): Promise<void> {
-  if (syncDisabled()) return;
-  try {
-    await fetch(`${SUPABASE_URL}/rest/v1/cycle_periods?start_date=eq.${startDate}`, {
-      method: 'DELETE',
-      headers: supabaseHeaders(),
-    });
-  } catch (err) {
-    console.warn('[sync] delete cycle_periods threw:', err);
-  }
-}
-
 // "Period started today" (or a picked day): her own logging, one tap, with a
 // 10s undo (app-building-guide §1-2: <=2 taps, and every destructive-feeling
 // action gets an out). Optimistic local write first — offline-safe, same as
@@ -4033,130 +3806,6 @@ function renderLegacyWeekDots(weekDots: WeekDotInfo[]): string {
 // instant (2026-09-26T22:30, already past), so Home/pre-log/post-log — which
 // only ever show the CURRENT moment — read the new model exclusively.
 // ---------------------------------------------------------------------------
-
-// ---------- WK3 · week_moves sync (Sep 27 2026) ----------
-//
-// PLAN-2026-09-26.md §2.2: "Move on without it" is a quiet, explicit event
-// (week.ts's MoveOn), never inferred — the table holds ONLY the exceptions (a
-// week she chose to close with 1-2 done); completed weeks are still derived
-// from workout_sessions, untouched. Same sync shape as cycle_periods
-// (v50, above): no pagination, no delete-detection window — "pull replaces
-// synced rows, an unsynced local write always wins until it's confirmed."
-// Undo (§2.4) is a plain DELETE by (round, week) — to a fresh walkWeeks()
-// recompute that's exactly "this move never happened", no special case
-// needed on the read side.
-//
-// SCHEMA: the table itself (migrations/2026-09-27-v53-week-moves.sql) is
-// NOT YET APPLIED — her yes comes first (CLAUDE.md's schema-change rule).
-// Until then every pull/push/delete below fails loud (console.warn) exactly
-// like any other network hiccup — no app-side change needed once it ships.
-
-type RemoteWeekMove = { round: number; week: number; moved_at: string; missing: string | null };
-
-function weekMoveKey(round: number, week: number): string {
-  return `${round}-${week}`;
-}
-
-function mergeWeekMoves(local: StoredWeekMove[], remote: RemoteWeekMove[]): StoredWeekMove[] {
-  const byKey = new Map<string, StoredWeekMove>();
-  for (const l of local) if (l.synced === false) byKey.set(weekMoveKey(l.round, l.week), l);
-  for (const r of remote) {
-    const key = weekMoveKey(r.round, r.week);
-    const existing = byKey.get(key);
-    if (existing && existing.synced === false) continue; // local unsynced write wins on content
-    byKey.set(key, {
-      round: r.round,
-      week: r.week,
-      at: r.moved_at,
-      missing: r.missing ?? '',
-      synced: true,
-    });
-  }
-  return [...byKey.values()];
-}
-
-async function pullWeekMovesFromSupabase(): Promise<void> {
-  if (syncDisabled()) return;
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/week_moves?select=round,week,moved_at,missing&order=moved_at.desc`,
-      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
-    );
-    if (res.ok && res.headers.get('X-SW-Cache') !== '1') {
-      const remote: RemoteWeekMove[] = await res.json();
-      writeWeekMoves(mergeWeekMoves(loadWeekMoves(), remote));
-      if (state.screen === 'home') render();
-    } else if (!res.ok) {
-      console.warn('[sync] pull week_moves failed:', res.status);
-    }
-  } catch (err) {
-    console.warn('[sync] pull week_moves threw:', err);
-  }
-}
-
-// Pure — kept separate from the fetch call so tests can assert it via a
-// window hook, the same way cyclePeriodPayload does for cycle_periods.
-function weekMovePayload(m: StoredWeekMove): RemoteWeekMove {
-  return { round: m.round, week: m.week, moved_at: m.at, missing: m.missing || null };
-}
-
-async function pushWeekMove(m: StoredWeekMove): Promise<void> {
-  if (syncDisabled()) return;
-  try {
-    // (round, week) is UNIQUE (§2.2) — merge-duplicates makes a repeat push
-    // (a retry, a second phone) an upsert, not a 409 — same on_conflict shape
-    // as cycle_periods' pushCyclePeriod above.
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/week_moves?on_conflict=round,week`, {
-      method: 'POST',
-      headers: { ...supabaseHeaders(), Prefer: 'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify(weekMovePayload(m)),
-    });
-    if (res.ok) {
-      const moves = loadWeekMoves();
-      const idx = moves.findIndex((x) => x.round === m.round && x.week === m.week);
-      // WK3 fix r1 (checker must #1): a push still in flight when she taps
-      // Undo must not resurrect the row. If what's now in local storage for
-      // this key is a delete tombstone, leave it exactly as pending-delete —
-      // flushPendingSyncs' retry loop (or the Undo tap's own deleteWeekMove
-      // call) picks it up and removes the row for real. Only mark synced
-      // when it's still the same live (non-deleted) move.
-      if (idx >= 0 && !moves[idx]!.deleted) {
-        moves[idx] = { ...moves[idx]!, synced: true };
-        writeWeekMoves(moves);
-      }
-    } else {
-      console.warn('[sync] push week_moves failed:', res.status);
-    }
-  } catch (err) {
-    console.warn('[sync] push week_moves threw:', err);
-  }
-}
-
-async function deleteWeekMove(round: number, week: number): Promise<void> {
-  if (syncDisabled()) return;
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/week_moves?round=eq.${round}&week=eq.${week}`,
-      {
-        method: 'DELETE',
-        headers: supabaseHeaders(),
-      }
-    );
-    // WK3 fix r1 (checker must #1): the result used to go unchecked — a
-    // failed DELETE left the remote row in place with nothing local to say
-    // so. Only drop the tombstone once Supabase actually confirms it's gone;
-    // otherwise leave it (still synced:false) for the next retry.
-    if (res.ok) {
-      writeWeekMoves(
-        loadWeekMoves().filter((m) => !(m.round === round && m.week === week && m.deleted === true))
-      );
-    } else {
-      console.warn('[sync] delete week_moves failed:', res.status);
-    }
-  } catch (err) {
-    console.warn('[sync] delete week_moves threw:', err);
-  }
-}
 
 /** §2.4's quiet week-card button: her explicit "Move on without it" tap.
  * Optimistic local write first (offline-safe, same as every other save in

@@ -5,8 +5,9 @@
 // (the automation gate: navigator.webdriver), the workout_sessions wire shapes (sessionPayload,
 // the legacy and timing-stripped tiers, the V*_SESSION_COLUMNS groups), push (POST, tiered
 // PGRST204 fallback), edit push (PATCH, 0 matched rows = not synced), pull, and the id-keyed
-// merge of remote sessions (the v33 deletion rule). The other tables (cycle_periods, week_moves,
-// movement_log, fit-steps) still sync from app.ts until step 9b.
+// merge of remote sessions (the v33 deletion rule). The other tables sync from sync-cycle.ts (cycle_periods),
+// sync-week-moves.ts (week_moves) and sync-movement.ts (movement_log, fit-steps), which import
+// the constants from here.
 //
 // Imports state.ts / week-clock.ts / bus.ts / pure modules only - NEVER app.ts or a screen.
 // The one change from the app.ts original: pullFromSupabase asks for a redraw with

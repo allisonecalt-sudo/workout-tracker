@@ -9,6 +9,7 @@
 // NEXT: later steps (state.ts, screens/*) import these from here too.
 
 import type { AnyWorkoutId } from './program.js';
+import type { CyclePeriod } from './cycle.js';
 
 export type LogEntry = {
   id?: string;
@@ -156,3 +157,15 @@ export type StoredWeekMove = {
   // Supabase confirms it — only then is the tombstone itself dropped.
   deleted?: boolean;
 };
+
+// code-shape step 9b (Oct 14 2026): the two stored shapes the sync modules and app.ts share, moved verbatim.
+export type WalkEntry = {
+  id: string; // local id only; the DB row generates its own uuid
+  date: string; // ISO datetime
+  minutes?: number | null; // from the start/stop timer (Jul 4); null = logged without timing
+  meters?: number | null; // GPS distance (outdoor, screen-on — her call Jul 4); null = no usable fix
+  steps?: number | null; // motion-sensor step estimate (works indoors, phone on her)
+  synced?: boolean;
+};
+
+export type StoredCyclePeriod = CyclePeriod & { synced?: boolean };
