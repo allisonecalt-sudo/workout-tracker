@@ -220,6 +220,28 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
     }
   });
 
+  test('sync*.ts and week-clock.ts are shared-layer modules: they may never import a screen or app.ts (step 9c)', () => {
+    const shared = [...graph.keys()].filter(
+      (f) => /^sync(-[a-z-]+)?.ts$/.test(f) || f === 'week-clock.ts'
+    );
+    // the guard read the modules it names (not "found nothing, so nothing to break")
+    expect(shared).toEqual(
+      expect.arrayContaining([
+        'sync.ts',
+        'sync-cycle.ts',
+        'sync-movement.ts',
+        'sync-week-moves.ts',
+        'week-clock.ts',
+      ])
+    );
+    for (const file of shared) {
+      expect(
+        (graph.get(file) ?? []).filter((d) => d === 'app.ts' || d.startsWith('screens/')),
+        file
+      ).toEqual([]);
+    }
+  });
+
   test('program-week.ts is pure and imports only week, week-d, program, types and dates', () => {
     const allowed = ['dates.ts', 'program.ts', 'types.ts', 'week-d.ts', 'week.ts'];
     const deps = graph.get('program-week.ts') ?? [];

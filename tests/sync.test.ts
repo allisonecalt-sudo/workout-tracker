@@ -36,8 +36,14 @@ import {
   loadWalks,
   writeWalks,
 } from '../state';
-import { pushCyclePeriod } from '../sync-cycle';
-import { mergeWeekMoves, deleteWeekMove, weekMovePayload } from '../sync-week-moves';
+import { pushCyclePeriod, pullCyclePeriodsFromSupabase, deleteCyclePeriod } from '../sync-cycle';
+import {
+  mergeWeekMoves,
+  deleteWeekMove,
+  weekMovePayload,
+  pushWeekMove,
+  pullWeekMovesFromSupabase,
+} from '../sync-week-moves';
 import { pushWalk, fetchFitSteps } from '../sync-movement';
 import { setRenderer } from '../bus';
 import type { LogEntry } from '../types';
@@ -540,5 +546,83 @@ test.describe('sync - cycle_periods, week_moves and walks (step 9b, characterisa
     expect(await fetchFitSteps(1000, 5000)).toBeNull();
     expect(await fetchFitSteps(5000, 1000)).toBeNull(); // end before start: no request
     expect(calls).toHaveLength(2);
+  });
+});
+
+// ---- step 9c: the four mutants the step-9 checker found alive ------------------------------
+test.describe('sync - step 9c: guards on her cycle and week-move data', () => {
+  test('cycle undo DELETEs exactly the period start date (eq., one row), nothing broader', async () => {
+    replies.push(reply(204, null));
+    await deleteCyclePeriod('2026-10-01');
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.method).toBe('DELETE');
+    expect(calls[0]?.url).toBe(`${SUPABASE_URL}/rest/v1/cycle_periods?start_date=eq.2026-10-01`);
+  });
+
+  test('mergeCyclePeriods (through the pull): unsynced local rows win, synced ones follow the remote', async () => {
+    state.screen = 'cycle';
+    setRenderer(() => undefined);
+    writeCyclePeriods([
+      { startDate: '2026-10-01', source: 'app', note: 'mine', synced: false }, // unsynced, also on remote
+      { startDate: '2026-09-01', source: 'app', note: null, synced: false }, // unsynced, not on remote
+      { startDate: '2026-08-01', source: 'app', note: 'old', synced: true }, // synced, on remote
+      { startDate: '2026-07-01', source: 'app', note: null, synced: true }, // synced, gone from remote
+      { startDate: '2026-06-01', source: 'app', note: null } as never, // legacy row, no flag: treated as synced
+    ]);
+    replies.push(
+      reply(200, [
+        { start_date: '2026-10-01', source: 'claude', note: 'theirs' },
+        { start_date: '2026-08-01', source: null, note: 'fresh' },
+        { start_date: '2026-05-01' }, // new on remote; absent source/note become null
+      ])
+    );
+    await pullCyclePeriodsFromSupabase();
+    expect(calls[0]?.url).toBe(
+      `${SUPABASE_URL}/rest/v1/cycle_periods?select=start_date,source,note&order=start_date.desc`
+    );
+    expect(loadCyclePeriods()).toEqual([
+      { startDate: '2026-10-01', source: 'app', note: 'mine', synced: false },
+      { startDate: '2026-09-01', source: 'app', note: null, synced: false },
+      { startDate: '2026-08-01', source: null, note: 'fresh', synced: true },
+      { startDate: '2026-05-01', source: null, note: null, synced: true },
+    ]);
+  });
+
+  test('a service-worker-cached cycle answer (X-SW-Cache: 1) is NOT merged', async () => {
+    state.screen = 'cycle';
+    setRenderer(() => undefined);
+    const mine = [{ startDate: '2026-10-01', source: 'app', note: null, synced: true }];
+    writeCyclePeriods(mine);
+    replies.push(
+      reply(200, [{ start_date: '2026-05-01', source: null, note: null }], { 'X-SW-Cache': '1' })
+    );
+    await pullCyclePeriodsFromSupabase();
+    expect(loadCyclePeriods()).toEqual(mine); // the stale row was not added
+  });
+
+  test('a service-worker-cached week_moves answer is NOT merged either', async () => {
+    const mine = [{ round: 1, week: 2, at: '2026-10-01T10:00:00Z', missing: '', synced: true }];
+    writeWeekMoves(mine);
+    replies.push(
+      reply(200, [{ round: 3, week: 4, moved_at: '2026-10-02T10:00:00Z', missing: null }], {
+        'X-SW-Cache': '1',
+      })
+    );
+    await pullWeekMovesFromSupabase();
+    expect(loadWeekMoves()).toEqual(mine);
+  });
+
+  test('week-move tombstone guard: a push that lands after Undo leaves the tombstone pending, not synced', async () => {
+    const move = { round: 2, week: 6, at: '2026-10-12T10:00:00Z', missing: 'C', synced: false };
+    // she tapped Undo while the push was in flight: local now holds the delete tombstone
+    writeWeekMoves([{ ...move, deleted: true }]);
+    replies.push(reply(201, ''));
+    await pushWeekMove(move);
+    expect(loadWeekMoves()).toEqual([{ ...move, deleted: true }]); // still pending-delete
+    // and the normal case still marks the live move synced
+    writeWeekMoves([move]);
+    replies.push(reply(201, ''));
+    await pushWeekMove(move);
+    expect(loadWeekMoves()).toEqual([{ ...move, synced: true }]);
   });
 });

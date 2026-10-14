@@ -285,6 +285,7 @@ import graph — no cycles, nothing imports the entry (step 4c) › program-week
 import graph — no cycles, nothing imports the entry (step 4c) › screens/** are in the graph (nested imports are followed) and in every source scan and the type gate (step 8)
 import graph — no cycles, nothing imports the entry (step 4c) › state.ts and bus.ts are in the graph and import neither app.ts nor each other (step 7)
 import graph — no cycles, nothing imports the entry (step 4c) › state.ts imports are TYPE-ONLY (import type): it is the bottom of the graph and must not gain a runtime edge (step 8-0)
+import graph — no cycles, nothing imports the entry (step 4c) › sync*.ts and week-clock.ts are shared-layer modules: they may never import a screen or app.ts (step 9c)
 import graph — no cycles, nothing imports the entry (step 4c) › the graph was actually read: app.ts reaches program-week.ts, types.ts and week.ts
 import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: it finds a 2-cycle, a 3-cycle through a type-only edge, and passes a clean graph
 import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: the import reader sees .js, .ts, extensionless, side-effect, export-from, dynamic and double-quoted imports, and skips comments and packages
@@ -536,6 +537,11 @@ sync - mergeRemoteSessions: the v33 deletion rule › an UNSYNCED local row miss
 sync - pullFromSupabase › a failed pull changes nothing
 sync - pullFromSupabase › a pull merges the remote into local storage and redraws Home through the bus
 sync - pullFromSupabase › a service-worker-cached answer (X-SW-Cache: 1) is NOT merged
+sync - step 9c: guards on her cycle and week-move data › a service-worker-cached cycle answer (X-SW-Cache: 1) is NOT merged
+sync - step 9c: guards on her cycle and week-move data › a service-worker-cached week_moves answer is NOT merged either
+sync - step 9c: guards on her cycle and week-move data › cycle undo DELETEs exactly the period start date (eq., one row), nothing broader
+sync - step 9c: guards on her cycle and week-move data › mergeCyclePeriods (through the pull): unsynced local rows win, synced ones follow the remote
+sync - step 9c: guards on her cycle and week-move data › week-move tombstone guard: a push that lands after Undo leaves the tombstone pending, not synced
 sync - the automation gate › syncDisabled() is false in plain Node (navigator.webdriver is not true)
 sync - the edit PATCH › a 200 with ZERO matched rows is NOT synced: the row stays queued (synced:false, pendingEdit)
 sync - the edit PATCH › a 200 with a matched row marks the edit synced and clears pendingEdit

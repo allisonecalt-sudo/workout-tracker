@@ -21,7 +21,9 @@ shape, one screen per run. Read `rides.ts` next to this file: it is the worked e
 
 `state.ts`, `bus.ts`, `dom.ts`, `format.ts`, and the pure modules (`ride.ts`,
 `ride-aim.ts`, `chart.ts`, `program-week.ts`, `week.ts`, `week-d.ts`, `dates.ts`,
-`cardio-notes.ts`, `types.ts` ...). Never `app.ts`, never another screen, no
+`cardio-notes.ts`, `types.ts`, `week-clock.ts`, `sync.ts`, `sync-cycle.ts`, `sync-week-moves.ts`,
+`sync-movement.ts` ...). `week-clock.ts` and `sync*.ts` are shared-layer modules in their own
+right: they may never import a screen or `app.ts` (enforced by `tests/import-graph.test.ts`). Never `app.ts`, never another screen, no
 `index.ts` barrels. Dependency direction: `app.ts` -> screens -> state/bus/domain.
 
 Enforced by `tests/import-graph.test.ts` ("a screen imports only the shared layer" has
@@ -37,6 +39,21 @@ passed in as arguments. Import from the shared module. The week-clock wrappers
 
 **A screen whose handlers save to Supabase needs `sync.ts` (step 9) first**: the push/pull
 code must already sit in a shared module, because a screen cannot import `app.ts`.
+
+### The SAVE side is still in `app.ts` (after step 9)
+
+Step 9 moved the network code (push / PATCH / pull / merge / delete) out. The code that
+decides WHEN to save, and the local write around it, did not move. Still in `app.ts`:
+
+- `flushPendingSyncs` (the retry loop over every unsynced row) and `updateSyncIndicator`
+- `saveLog` and `genId` (the local write of a finished session, and its id)
+- `logPeriodStart` / `undoPeriodStart` and their undo-timer `let`s (`cycleUndoTimer`,
+  `cycleUndoStartDate`, `cycleUndoCreated`)
+- `moveOnWithoutIt` / `undoWeekMove` (the week-move write and its Undo tombstone)
+
+**Rule:** a screen whose handlers need any of these WAITS until they move to a shared module
+(steps 10 / 11). It never imports `app.ts`, never copies them, never receives them as
+arguments. Re-list this section when 10 / 11 move one.
 
 An import also changes MODULE LOAD ORDER (ES modules run top to bottom, depth first). A
 new import in `app.ts` or a screen can run another module's top-level code earlier or later
@@ -60,7 +77,7 @@ Nothing registers itself. `app.ts` imports the exports and keeps the wiring:
 - `attachHandlers()` calls `attachXHandlers()` in the SAME position it had before the
   move. Order matters (a handler bound later can shadow an earlier one on the same id).
 
-### Pulling a screen's bindings out of `attachHandlers()` (866 lines, interleaved)
+### Pulling a screen's bindings out of `attachHandlers()` (863 lines, interleaved)
 
 A screen's bindings are often mixed in with other screens' bindings. The technique, which
 keeps today's binding ORDER:
