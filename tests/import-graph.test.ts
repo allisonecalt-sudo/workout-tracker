@@ -203,6 +203,7 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
       'ride.ts',
       'state.ts',
       'types.ts',
+      'week-clock.ts',
       'week-d.ts',
       'week.ts',
     ];

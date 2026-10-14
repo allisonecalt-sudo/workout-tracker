@@ -29,8 +29,21 @@ the allowed list: add a module there only when a screen genuinely needs it).
 
 If a screen needs something that lives in `app.ts` today, it moves to a shared module
 FIRST, in its own commit (8a: `dom.ts`, `bus.ts`; 8b: `format.ts`, `cardio-notes.ts`,
-and small moves into `state.ts` / `week.ts`), verbatim. Do not copy a helper into the
-screen and do not pass `app.ts` functions in as arguments.
+and small moves into `state.ts` / `week.ts`; 9-0: `week-clock.ts`), verbatim.
+**No helper copies**: a screen never carries its own copy of an app.ts helper (rides.ts
+once copied two week-clock wrappers; 9-0 deleted them), and `app.ts` functions are never
+passed in as arguments. Import from the shared module. The week-clock wrappers
+(`getProgramWeek`, `weekModel`, `shownWeek`, `planForLog` ...) live in `week-clock.ts`.
+
+**A screen whose handlers save to Supabase needs `sync.ts` (step 9) first**: the push/pull
+code must already sit in a shared module, because a screen cannot import `app.ts`.
+
+An import also changes MODULE LOAD ORDER (ES modules run top to bottom, depth first). A
+new import in `app.ts` or a screen can run another module's top-level code earlier or later
+than before. Before adding one, check the target's top-level initializers (consts built from
+`localStorage`, `new Date()`, other modules' exports, anything registered at import time).
+Modules with only function/type/constant-literal declarations are safe; anything else: keep
+the import at the position the old code ran in, and say so in the commit.
 
 ## How it redraws and navigates
 
@@ -47,12 +60,38 @@ Nothing registers itself. `app.ts` imports the exports and keeps the wiring:
 - `attachHandlers()` calls `attachXHandlers()` in the SAME position it had before the
   move. Order matters (a handler bound later can shadow an earlier one on the same id).
 
+### Pulling a screen's bindings out of `attachHandlers()` (866 lines, interleaved)
+
+A screen's bindings are often mixed in with other screens' bindings. The technique, which
+keeps today's binding ORDER:
+
+1. Record the order first: list every binding in `attachHandlers()` as
+   `line | selector or id | event | owner screen` (grep `bindClick(`, `addEventListener`,
+   `querySelectorAll` inside the function). This table is the proof sheet.
+2. Mark the screen's rows. If they form ONE contiguous run: cut the run, paste it as the body
+   of `attachXHandlers()`, and call it at that exact spot.
+3. If they are interleaved with other screens' rows: bindings on DIFFERENT elements (distinct
+   ids or selectors, neither inside the other's delegation target) commute, so the screen's rows
+   may be gathered into one function called at the position of its FIRST row. Anything else (same
+   element, a delegated listener on an ancestor, a `querySelectorAll` that overlaps) does NOT
+   commute: split into `attachXHandlers()` then `attachXHandlers2()` (exported, no arguments), each
+   called at its own original spot. When unsure, split; extra calls cost nothing.
+4. Locals the cut rows read (a `const` declared earlier in `attachHandlers()`) are re-declared at
+   the top of the new function from the same source; if the value is shared with rows that stay,
+   STOP: it moves to a shared module first.
+5. Prove order and set unchanged: log the (target, event) pair of every `addEventListener` call on
+   both builds (a wrapper installed with `addInitScript`) and diff the two lists. The sequence must
+   be identical, not just the set.
+
 ## Tests and goldens
 
 - A move changes no output: `tests/golden/*.html` stay BYTE-identical with no
   regeneration (rides: `rides-page.html`). A golden diff means stop and report.
-- `tsconfig.json` includes `screens/**/*.ts`; the import-graph guard, `allSourceFiles()`
-  (clock/pain scans) and `bundledSourceFiles()` all cover `screens/**`.
+- Screen modules are FLAT: `screens/<name>.ts`, no sub-folders. `allSourceFiles()`
+  (tests/helpers.ts) reads exactly `screens/*.ts`; `tsconfig.json` includes `screens/**/*.ts`.
+  If a screen ever needs a nested folder, make the helper walk it in the same commit (the
+  scans would go quiet otherwise). The import-graph guard, the clock/pain scans and
+  `bundledSourceFiles()` all cover `screens/*.ts`.
 - Behaviour tests stay in `tests/screens/*.spec.ts` (that folder is about test files,
   not these modules). A new screen needs no new test to move; if it grows pure logic,
   put that logic in a domain module with a Node test, not in the screen.

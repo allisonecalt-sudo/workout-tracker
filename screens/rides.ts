@@ -8,13 +8,13 @@
 // (Progress's one door row), attachRidesHandlers (attachHandlers(), same slot as
 // before) and ridesVsDelta (the __wt test hook).
 
-import { state, getChronologicalLogs, weekClockInput } from '../state.js';
+import { state, getChronologicalLogs } from '../state.js';
 import { requestRender, requestScrollRestore } from '../bus.js';
 import { bindClick } from '../dom.js';
 import { escapeHtml, formatMmSs, formatMonthDay } from '../format.js';
 import { ellipticalRideRecords } from '../cardio-notes.js';
 import { localIsoDate } from '../dates.js';
-import * as pw from '../program-week.js';
+import { getProgramWeek, weekModel } from '../week-clock.js';
 import { attributeSessionsToWeeks, sessionsAttributedTo } from '../program-week.js';
 import { COMPLETION_WEEKS_FROM, LEGACY_LAST_CLOSED_WEEK_INSTANT, type WeekKey } from '../week.js';
 import { weekWindowFor, type DWeekTarget } from '../week-d.js';
@@ -39,15 +39,6 @@ import {
   type WeeklyRideRow,
 } from '../ride.js';
 import type { LogEntry } from '../types.js';
-
-// The same two thin wrappers app.ts keeps over the pure week clock (program-week.ts), so the
-// moved code below reads exactly as it did. (Step 10/11 may share them from one module.)
-function getProgramWeek(date: Date = new Date()): ReturnType<typeof pw.getProgramWeek> {
-  return pw.getProgramWeek(date);
-}
-function weekModel(): ReturnType<typeof pw.weekModel> {
-  return pw.weekModel(weekClockInput());
-}
 
 // THE RIDES PAGE (Sep 27 2026) — same transient, module-level shape as the
 // cycle page's own fields just above. `ridesWindow` is the hero's 3-chip

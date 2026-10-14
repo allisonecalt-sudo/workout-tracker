@@ -48,7 +48,6 @@ import {
   type WorkoutSteps,
 } from './step-list.js';
 import {
-  walkWeeks,
   // WK3 (Sep 27 2026): "Move on without it" — wired into movesForWeekModel /
   // renderHome below. Schema-gated (§2.2's week_moves table needs her yes
   // before the migration is applied), but the pure check itself has no
@@ -165,6 +164,25 @@ import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
 import { bindClick } from './dom.js';
 import * as pw from './program-week.js';
+import {
+  setWorkoutDProvider,
+  getProgramWeek,
+  getTodaysPick,
+  saturdayForOffset,
+  homeWeekOffset,
+  preLaunchPlanDate,
+  planKeyForLog,
+  planForLog,
+  getViewedProgramWeek,
+  isNowAfterCompletionLaunch,
+  weekModel,
+  completionClosingSessionIds,
+  shownWeek,
+  gapCountsBackToWeekKey,
+  gapCountsBackToWeekNum,
+  weekSubLabel,
+  currentHowToWeekKey,
+} from './week-clock.js';
 import {
   SESSIONS_PER_WEEK_TARGET,
   calendarSaturdayMs,
@@ -4511,81 +4529,6 @@ function formatTimerDisplay(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-// ---------------------------------------------------------------------------
-// THE WEEK CLOCK — thin wrappers (code-shape step 4, Oct 13 2026).
-// The logic lives in program-week.ts and is PURE: it takes the logs, the
-// stored week moves and the clock ("now") as parameters. These wrappers keep
-// every call site in this file unchanged by supplying today's values — the
-// storage reads (loadLogs, loadWeekMoves) and `new Date()` are gathered by
-// weekClockInput() in state.ts (step 8b). (Sick/break weeks are entries in SKIPPED_WEEKS, program.ts; there is
-// no app branch for tests.)
-// ---------------------------------------------------------------------------
-
-function getProgramWeek(date: Date = new Date()): ReturnType<typeof pw.getProgramWeek> {
-  return pw.getProgramWeek(date);
-}
-
-function getTodaysPick(): WorkoutId {
-  return pw.getTodaysPick(loadLogs(), new Date());
-}
-
-function saturdayForOffset(offset: number): Date {
-  return pw.saturdayForOffset(offset, new Date());
-}
-
-function homeWeekOffset(): number {
-  return pw.homeWeekOffset(loadLogs(), new Date());
-}
-
-/** PRE-launch only: the date a new session pins (see startWorkout). */
-function preLaunchPlanDate(): Date {
-  return pw.preLaunchPlanDate(weekClockInput());
-}
-
-function planKeyForLog(entry: LogEntry): WeekKey | null {
-  return pw.planKeyForLog(entry, weekClockInput());
-}
-
-function planForLog(entry: LogEntry): Workout {
-  return pw.planForLog(entry, weekClockInput(), getWorkoutD);
-}
-
-function getViewedProgramWeek(offset = 0): ReturnType<typeof pw.getProgramWeek> {
-  return pw.getViewedProgramWeek(offset, new Date());
-}
-
-function isNowAfterCompletionLaunch(now: Date = new Date()): boolean {
-  return pw.isNowAfterCompletionLaunch(now);
-}
-
-function weekModel(): ReturnType<typeof walkWeeks> {
-  return pw.weekModel(weekClockInput());
-}
-
-function completionClosingSessionIds(logs: LogEntry[]): Set<string> {
-  return pw.completionClosingSessionIds(weekClockInput(logs));
-}
-
-function shownWeek(): ReturnType<typeof pw.shownWeek> {
-  return pw.shownWeek(weekClockInput());
-}
-
-function gapCountsBackToWeekKey(): WeekKey | null {
-  return pw.gapCountsBackToWeekKey(weekClockInput());
-}
-
-function gapCountsBackToWeekNum(): number | null {
-  return pw.gapCountsBackToWeekNum(weekClockInput());
-}
-
-function weekSubLabel(shown: { span: WeekSpan | null; pending: PendingWeek | null }): string {
-  return pw.weekSubLabel(shown, weekClockInput());
-}
-
-function currentHowToWeekKey(): { num: number; round: number } {
-  return pw.currentHowToWeekKey(weekClockInput());
 }
 
 function formatWeekRange(start: Date, end: Date): string {
@@ -12120,6 +12063,7 @@ function updateRideAimCompare(): void {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  setWorkoutDProvider(getWorkoutD); // week-clock.ts: planForLog needs the fixed D workout
   setRenderer(render); // bus.ts: screens that leave this file ask for a redraw through requestRender()
   setScrollRestoreSink((y) => {
     pendingScrollRestore = y; // bus.ts: ...and for a scroll restore through requestScrollRestore()

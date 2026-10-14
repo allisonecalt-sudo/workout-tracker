@@ -15,6 +15,7 @@
 // commit is fixed by re-splitting the commits, never by --no-verify.
 import { spawnSync } from 'node:child_process';
 import {
+  existsSync,
   lstatSync,
   mkdtempSync,
   readFileSync,
@@ -130,10 +131,33 @@ function sweepStale() {
     }
     rmSync(dir, { recursive: true, force: true });
   }
+  unlockStaleEntries();
   try {
     git(['worktree', 'prune']);
   } catch {
     /* best effort */
+  }
+}
+
+/** Step 9-0 (Oct 14 2026). `git worktree add` LOCKS its entry while it works; a kill during
+ *  it leaves a locked entry whose directory is gone (or half-made), and `git worktree prune`
+ *  skips locked entries, so it would linger for good. On startup: unlock THIS script's own
+ *  entries (a `wt-verify-*` path in the temp dir) whose directory no longer exists, then the
+ *  caller prunes. An entry whose directory still exists belongs to a live run or was swept
+ *  above: untouched. `repo` is a test hook (default: this checkout). */
+function unlockStaleEntries(repo = root) {
+  const norm = (p) => p.replace(/\\/g, '/').toLowerCase();
+  const prefix = norm(join(tmpdir(), 'wt-verify-'));
+  for (const line of git(['worktree', 'list', '--porcelain'], repo).split('\n')) {
+    if (!line.startsWith('worktree ')) continue;
+    const path = line.slice('worktree '.length).trim();
+    if (!norm(path).startsWith(prefix)) continue;
+    if (existsSync(path)) continue;
+    try {
+      git(['worktree', 'unlock', path], repo);
+    } catch {
+      /* not locked: nothing to do */
+    }
   }
 }
 
