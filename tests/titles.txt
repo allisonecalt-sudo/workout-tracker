@@ -291,6 +291,7 @@ import graph — no cycles, nothing imports the entry (step 4c) › sync*.ts and
 import graph — no cycles, nothing imports the entry (step 4c) › the domain modules (audio / timer / walk) import only the shared layer, never app.ts or a screen, and write no DOM (step 11)
 import graph — no cycles, nothing imports the entry (step 4c) › the graph was actually read: app.ts reaches program-week.ts, types.ts and week.ts
 import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: domTouches finds window.alert, textContent, classList, HTMLElement, navigator and honours a reasoned allow-list
+import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: domWrites flags DOM writes, location, style and createElement but passes reads and comparisons
 import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: it finds a 2-cycle, a 3-cycle through a type-only edge, and passes a clean graph
 import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: the import reader sees .js, .ts, extensionless, side-effect, export-from, dynamic and double-quoted imports, and skips comments and packages
 import graph — no cycles, nothing imports the entry (step 4c) › the guard itself: valueImports skips import type / export type and flags value, braces-type, side-effect and dynamic imports

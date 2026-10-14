@@ -53,6 +53,34 @@ function domTouches(src: string, allow: string[] = []): string[] {
   return hits.filter((h) => !(allow.includes(h) && mayAllow.includes(h)));
 }
 
+/** DOM WRITES a "reads-only" browser-object allow-list must still reject (code-shape step
+ *  12-0). domTouches() lets a module name `window` / `document` / `navigator` to READ a
+ *  browser API; that allowance must not become a back door for `document.title = ...`,
+ *  `window.location.reload()` or `document.createElement(...)`. Returns every write-shaped
+ *  hit, comments ignored. Method names are matched after a dot; property writes need a
+ *  single `=` (== / === / => are not writes). */
+function domWrites(src: string): string[] {
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+  const hits: string[] = [];
+  const methods =
+    /\.(appendChild|append|prepend|insertBefore|replaceChild|replaceWith|removeChild|remove|setAttribute|removeAttribute|toggleAttribute|insertAdjacent\w*|createElement\w*|createTextNode|createDocumentFragment|write|writeln|reload|pushState|replaceState|scrollTo|scrollBy|scrollIntoView|focus|blur|click|dispatchEvent|open|close|print)\s*\(/g;
+  for (const m of code.matchAll(methods)) hits.push(m[0].replace(/\s*\($/, '('));
+  const props =
+    /\.(style|title|className|dataset|hidden|href|src|id|innerText|innerHTML|outerHTML|textContent|cookie|hash|search|pathname|scrollTop|scrollLeft)\s*(?:\|\||&&|\?\?|[-+*/|&^])?=(?![=>])/g;
+  for (const m of code.matchAll(props)) hits.push(m[0].replace(/\s*=$/, ' ='));
+  // any `.style` / `.classList` / `.dataset` access, and the page-owning globals
+  for (const m of code.matchAll(/\.(style|classList|dataset)\b/g)) hits.push(m[0]);
+  // (localStorage is NOT here: it is the app's storage layer, not the page. `.value =` is not
+  // either: it is a WebAudio AudioParam in audio.ts, not an input.)
+  for (const m of code.matchAll(/(?<![\w'"-])(location|history)\s*[.=]/g))
+    hits.push(m[0].replace(/\s*[.=]$/, ''));
+  for (const m of code.matchAll(
+    /\bdocument\s*\.\s*(body|head|documentElement|title|cookie|forms|all|activeElement|scrollingElement)\b/g
+  ))
+    hits.push(m[0].replace(/\s+/g, ''));
+  return hits;
+}
+
 /** Every import cycle in the graph, each as "a.ts -> b.ts -> a.ts". */
 function findCycles(graph: Map<string, string[]>): string[] {
   const cycles: string[] = [];
@@ -278,6 +306,7 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
     // and added cardio-readings.ts)
     for (const f of ['actions.ts', 'cardio-readings.ts']) {
       expect(domTouches(files.find((x) => x.file === f)!.src), f).toEqual([]);
+      expect(domWrites(files.find((x) => x.file === f)!.src), f + ' DOM write').toEqual([]);
     }
   });
 
@@ -340,7 +369,32 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
         file + ': ' + rule.why
       ).toEqual([]);
       expect(domTouches(files.find((x) => x.file === file)!.src, rule.dom), file).toEqual([]);
+      // the allowed browser objects are READ-only: no DOM / location / storage writes (step 12-0)
+      expect(domWrites(files.find((x) => x.file === file)!.src), file + ' DOM write').toEqual([]);
     }
+  });
+
+  test('the guard itself: domWrites flags DOM writes, location, style and createElement but passes reads and comparisons', () => {
+    expect(domWrites("document.title = 'x';")).toEqual(['.title =', 'document.title']);
+    expect(domWrites('window.location.reload();')).toEqual(['.reload(', 'location']);
+    expect(domWrites("const e = document.createElement('div'); e.style.color = 'red';")).toEqual([
+      '.createElement(',
+      '.style',
+    ]);
+    expect(domWrites('document.body.appendChild(e);')).toEqual(['.appendChild(', 'document.body']);
+    expect(domWrites("e.setAttribute('a','b'); e.remove(); el.innerHTML += 'x';")).toEqual([
+      '.setAttribute(',
+      '.remove(',
+      '.innerHTML + =',
+    ]);
+    expect(domWrites('history.pushState(1,"","/");')).toEqual(['.pushState(', 'history']);
+    // reads and look-alikes pass
+    expect(domWrites("if (document.visibilityState === 'visible') x.value == 3;")).toEqual([]);
+    expect(domWrites("document.addEventListener('visibilitychange', () => {});")).toEqual([]);
+    expect(domWrites('window.setTimeout(f, 100); const v = a.value; // el.style.x = 1')).toEqual(
+      []
+    );
+    expect(domWrites('const cb = () => 1; ui.id = 3;')).toEqual(['.id =']);
   });
 
   test('program-week.ts is pure and imports only week, week-d, program, types and dates', () => {

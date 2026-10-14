@@ -32,6 +32,26 @@
         "message": "Never destructure ui as a parameter or typed binding ({ x }: typeof ui): the copy stops tracking."
       },
       {
+        "selector": "VariableDeclarator[id.type='ObjectPattern'] > :matches(TSAsExpression, TSNonNullExpression, TSSatisfiesExpression, TSTypeAssertion).init Identifier[name='ui']",
+        "message": "Never destructure ui through a cast chain (const { x } = ui as unknown as Ui, (ui as Ui)!): the copy stops tracking."
+      },
+      {
+        "selector": "AssignmentExpression[left.type='ObjectPattern'] > :matches(TSAsExpression, TSNonNullExpression, TSSatisfiesExpression, TSTypeAssertion).right Identifier[name='ui']",
+        "message": "Never destructure ui through a cast chain ({ x } = ui as unknown as Ui): the copy stops tracking."
+      },
+      {
+        "selector": "ObjectPattern[typeAnnotation.typeAnnotation.type='TSTypeReference'][typeAnnotation.typeAnnotation.typeName.name=/^(Readonly|Pick|Omit|Partial|Required)$/]:has(TSTypeReference > Identifier[name='Ui'])",
+        "message": "Never destructure a wrapper-typed Ui ({ x }: Readonly<Ui> / Pick<Ui, ...>): the copy stops tracking."
+      },
+      {
+        "selector": "ObjectPattern[typeAnnotation.typeAnnotation.type='TSTypeReference'][typeAnnotation.typeAnnotation.typeName.name=/^(Readonly|Pick|Omit|Partial|Required)$/]:has(TSTypeQuery > Identifier[name='ui'])",
+        "message": "Never destructure a wrapper-typed typeof ui ({ x }: Readonly<typeof ui>): the copy stops tracking."
+      },
+      {
+        "selector": "VariableDeclarator[id.type='Identifier'][init.name='ui'], VariableDeclarator[id.type='Identifier'][init.expression.name='ui'], AssignmentExpression[left.type='Identifier'][right.name='ui']",
+        "message": "Never alias ui (const u = ui): an alias hides a later destructure from this rule. Read and write ui.x in place."
+      },
+      {
         "selector": "ObjectPattern[typeAnnotation.typeAnnotation.type='TSTypeReference'][typeAnnotation.typeAnnotation.typeName.name='Ui']",
         "message": "Never destructure a Ui-typed value as a parameter or typed binding ({ x }: Ui): the copy stops tracking."
       }

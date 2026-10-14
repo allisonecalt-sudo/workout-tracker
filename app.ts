@@ -548,7 +548,7 @@ function syncWorkoutWalkTracking(): void {
 
 // ---------- Cardio either/or (Allison Sep 7 2026) ----------
 // WHAT: the cardio step that opens A/B (10 min) and C (25 min) is now a CHOICE —
-// walk outside (the tracked flow, entirely unchanged: GPS + steps + Fit) OR the
+// walk outside (the tracked flow, entirely unchanged: the walk minutes) OR the
 // apartment on a plain countdown for the SAME minutes (building stairs in
 // intervals, apartment laps, marching in place), with nothing tracked.
 // WHY: her ask, verbatim — "also i want cardio i can do in apt or walk like pick
