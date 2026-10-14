@@ -296,6 +296,35 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
     expect(domTouches('document.getElementById("x");', ['document'])).toEqual(['getElementById']);
   });
 
+  // code-shape step 11: the domain modules. Each may import the shared layer (and, where
+  // named, a sibling domain module) - never app.ts, never a screen - and writes no DOM.
+  // `dom` lists the browser objects a module legitimately READS (never a DOM write), each
+  // with its reason.
+  const domainModules: Record<string, { imports: string[]; dom: string[]; why: string }> = {
+    'audio.ts': {
+      imports: ['state.ts', 'ui.ts'],
+      dom: ['window'],
+      why: 'window.AudioContext / webkitAudioContext is the audio engine, not the page',
+    },
+  };
+
+  test('the domain modules (audio / timer / walk) import only the shared layer, never app.ts or a screen, and write no DOM (step 11)', () => {
+    for (const [file, rule] of Object.entries(domainModules)) {
+      expect([...graph.keys()], file).toContain(file);
+      expect(graph.get('app.ts'), file).toContain(file);
+      const deps = graph.get(file) ?? [];
+      expect(
+        deps.filter((d) => d === 'app.ts' || d.startsWith('screens/')),
+        file
+      ).toEqual([]);
+      expect(
+        deps.filter((d) => !rule.imports.includes(d)),
+        file + ': ' + rule.why
+      ).toEqual([]);
+      expect(domTouches(files.find((x) => x.file === file)!.src, rule.dom), file).toEqual([]);
+    }
+  });
+
   test('program-week.ts is pure and imports only week, week-d, program, types and dates', () => {
     const allowed = ['dates.ts', 'program.ts', 'types.ts', 'week-d.ts', 'week.ts'];
     const deps = graph.get('program-week.ts') ?? [];

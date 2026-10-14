@@ -179,6 +179,14 @@ import {
 } from './cardio-notes.js';
 import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
+import {
+  unlockAudio,
+  playCountBeep,
+  playGoBeep,
+  playFinishBeep,
+  stopVoiceNote,
+  toggleVoiceNote as toggleVoiceNoteAudio,
+} from './audio.js';
 import { bindClick } from './dom.js';
 import {
   sessionPayload,
@@ -402,64 +410,6 @@ function currentSteppedMoves(): SteppedMove[] {
 }
 
 // HAND_ROUTINES retired 2026-05-15 — see archive/hand-routine-2026-05-15/.
-
-// ---------- audio ----------
-
-function getAudioCtx(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-  if (!ui.audioCtx) {
-    const Ctx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return null;
-    ui.audioCtx = new Ctx();
-  }
-  return ui.audioCtx;
-}
-
-// Group 1C: must be called synchronously from a user-gesture handler. The Web
-// Audio autoplay policy will leave the context suspended until a real click
-// resumes it. Calling this from inside a setInterval/rAF callback is too late.
-function unlockAudio(): void {
-  const ctx = getAudioCtx();
-  if (!ctx) return;
-  if (ctx.state === 'suspended') {
-    void ctx.resume();
-  }
-}
-
-function playBeep(frequency: number, durationMs: number): void {
-  // Ship 6: beeps toggle. When off, skip silently — timer logic still runs.
-  if (!getBeepsEnabled()) return;
-  const ctx = getAudioCtx();
-  if (!ctx) return;
-  if (ctx.state !== 'running') return;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.frequency.value = frequency;
-  osc.type = 'sine';
-  const now = ctx.currentTime;
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.35, now + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + durationMs / 1000);
-  osc.start(now);
-  osc.stop(now + durationMs / 1000);
-}
-
-function playCountBeep(): void {
-  playBeep(520, 120);
-}
-
-function playGoBeep(): void {
-  playBeep(880, 200);
-}
-
-function playFinishBeep(): void {
-  playBeep(660, 180);
-  setTimeout(() => playBeep(880, 350), 180);
-}
 
 // ---------- timer (clock-anchored, group 1B) ----------
 //
@@ -3570,42 +3520,15 @@ function setVoiceBtnPlaying(btn: HTMLElement, playing: boolean): void {
   if (label) label.textContent = playing ? 'Playing… (tap to stop)' : 'Listen — how to do it';
 }
 
-function stopVoiceNote(): void {
-  if (ui.voiceAudio) {
-    ui.voiceAudio.pause();
-    ui.voiceAudio = null;
-  }
-  ui.voiceAudioSrc = null;
-}
-
+// The voice-note player lives in audio.ts (step 11b); these two are the page's side of
+// it: the button's look, and counting a play on the session.
 function toggleVoiceNote(btn: HTMLButtonElement, src: string): void {
-  if (typeof Audio === 'undefined') return; // no audio in this environment
-  // Same note already playing → stop it.
-  if (ui.voiceAudio && ui.voiceAudioSrc === src && !ui.voiceAudio.paused) {
-    ui.voiceAudio.pause();
-    return;
-  }
-  stopVoiceNote(); // stop any other note first
-  const audio = new Audio(src);
-  ui.voiceAudio = audio;
-  ui.voiceAudioSrc = src;
-  audio.addEventListener('play', () => setVoiceBtnPlaying(btn, true));
-  // v48 (Sep 24 2026): count each play that actually STARTS (a stop is not a
-  // play; an autoplay-blocked tap never fires this). Her words: "I can hear
-  // details in audio better"; Gemini said she never plays them — count instead
-  // of guessing. Each tap makes a fresh Audio, so `once` = one count per play.
-  audio.addEventListener(
-    'play',
-    () => {
+  toggleVoiceNoteAudio(src, {
+    setPlaying: (playing) => setVoiceBtnPlaying(btn, playing),
+    onFirstPlay: () => {
       state.voicePlays += 1;
       saveActiveSession();
     },
-    { once: true }
-  );
-  audio.addEventListener('pause', () => setVoiceBtnPlaying(btn, false));
-  audio.addEventListener('ended', () => setVoiceBtnPlaying(btn, false));
-  void audio.play().catch(() => {
-    /* gesture/autoplay policy — safe to ignore, she can tap again */
   });
 }
 
