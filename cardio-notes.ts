@@ -148,3 +148,19 @@ export function ellipticalRideRecords(logs: LogEntry[]): RideRecord[] {
   }
   return records;
 }
+
+// The v47 notes marker, rebuilt from a saved entry's columns. v48 (Sep 24
+// 2026): only the legacy push uses it now (a phone ahead of the schema — see
+// pushLogToSupabase). Its "cardio: elliptical N min · level L" head is what
+// lastEllipticalLevel() reads back; the readings ride after it when present.
+export function legacyCardioMarker(entry: LogEntry): string | null {
+  const minutes = entry.cardioMinutes;
+  if (entry.cardioLane === 'apartment' && minutes != null)
+    return `cardio: apartment ${minutes} min`;
+  if (entry.cardioLane !== 'elliptical' || minutes == null) return null;
+  const parts = [`cardio: elliptical ${minutes} min`];
+  if (entry.ellipticalLevel != null) parts.push(`level ${entry.ellipticalLevel}`);
+  if (entry.ellipticalKm != null) parts.push(`${entry.ellipticalKm} km`);
+  if (entry.ellipticalPulse != null) parts.push(`pulse ${entry.ellipticalPulse}`);
+  return parts.join(' · ');
+}

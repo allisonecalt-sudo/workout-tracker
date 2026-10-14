@@ -519,6 +519,32 @@ swing (v52, was v46): Saturday morning with last week at 2 says today will count
 swing: a SUNDAY session never swings, even when last week is short
 swing: a Saturday session completes a 2-session week — last week shows 3 of 3, this week 0
 swing: a Saturday session does NOT swing when last week already has 3 — it opens the new week
+sync - mergeRemoteSessions: protected and unsynced rows › a synced local row is replaced by the remote copy, with the round-tripped columns
+sync - mergeRemoteSessions: protected and unsynced rows › a synced session that CLOSED a completion-model week survives the server dropping it, flagged
+sync - mergeRemoteSessions: protected and unsynced rows › an unsynced EDIT (pendingEdit) stays unsynced even though the server has the id
+sync - mergeRemoteSessions: protected and unsynced rows › local-unsynced wins on content, and the server having its id marks it synced
+sync - mergeRemoteSessions: the v33 deletion rule › a row INSIDE a full window that the server no longer has is deleted
+sync - mergeRemoteSessions: the v33 deletion rule › a row OLDER than a full window is left alone (it may just be past the window)
+sync - mergeRemoteSessions: the v33 deletion rule › a synced local row missing from a short (whole-history) remote is deleted
+sync - mergeRemoteSessions: the v33 deletion rule › an EMPTY remote never deletes local rows
+sync - mergeRemoteSessions: the v33 deletion rule › an UNSYNCED local row missing from the remote is never deleted
+sync - pullFromSupabase › a failed pull changes nothing
+sync - pullFromSupabase › a pull merges the remote into local storage and redraws Home through the bus
+sync - pullFromSupabase › a service-worker-cached answer (X-SW-Cache: 1) is NOT merged
+sync - the automation gate › syncDisabled() is false in plain Node (navigator.webdriver is not true)
+sync - the edit PATCH › a 200 with ZERO matched rows is NOT synced: the row stays queued (synced:false, pendingEdit)
+sync - the edit PATCH › a 200 with a matched row marks the edit synced and clears pendingEdit
+sync - the edit PATCH › a PGRST204 400 retries the edit once with the legacy (notes-only) body
+sync - the edit PATCH › patchMatchedARow: only a non-empty array counts as matched
+sync - the edit PATCH › the PATCH body carries exactly the 6 allow-listed columns; the id is in the URL only
+sync - the edit PATCH › the legacy PATCH body is just `notes`
+sync - the tiered session push (PGRST204 fallback) › PGRST204 once: tier 2 drops ONLY the 5 timing columns, keeps mood and the ride numbers
+sync - the tiered session push (PGRST204 fallback) › PGRST204 twice: tier 3 is the full legacy row (no v48+ columns, ride marker folded into notes)
+sync - the tiered session push (PGRST204 fallback) › a 400 that is NOT PGRST204 fails at once: no retry, not marked synced
+sync - the tiered session push (PGRST204 fallback) › an entry with no id is never pushed
+sync - the tiered session push (PGRST204 fallback) › pushLogToSupabase POSTs a one-row array with ignore-duplicates to workout_sessions
+sync - the tiered session push (PGRST204 fallback) › sessionPayload: the id and the plain column mapping
+sync - the tiered session push (PGRST204 fallback) › tier 1 works: one POST of the full row, and the log is marked synced
 the 4-exposure backstop: a V rung with 4 clean-but-never-"fine" exposures is still ready
 the chart + tap readout › each bar carries its level ("L5"/"L3") under the date, from ChartBar.sublabel
 the chart + tap readout › fewer than 2 rides with numbers: an honest gap line, no chart

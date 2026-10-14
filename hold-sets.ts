@@ -23,6 +23,8 @@
 // that always follows in this app's own reps text shapes works for both.
 const SETS_RE = /(\d+)\s*(?:sets?|[×x])(?=\s|$)/i;
 
+import type { Workout } from './program.js';
+
 export function setsPrescribed(reps: string | undefined): number {
   const m = SETS_RE.exec((reps ?? '').trim());
   const n = m?.[1] ? Number(m[1]) : NaN;
@@ -56,4 +58,15 @@ export function holdSetsFace(setsTotal: number, sets: readonly number[]): HoldSe
     setsTotal,
     heldSec: sets[sets.length - 1] as number,
   };
+}
+
+// Group 1F: wrist columns dropped from POST payload — Lisa Cohen cleared the
+// wrist May 10. App was silently writing 0s for two columns the user no
+// longer fills. Schema still has the columns (no Supabase change) so existing
+// rows survive; new inserts just omit them and let the DB use NULL/default.
+// v48 (Sep 24 2026): does this workout have a timed wall sit anywhere in it?
+// B and C don't — and a 0 sent for them was "a hole wearing a number"
+// (data-integrity #3), so their payload says null instead.
+export function workoutHasWallSit(w: Workout): boolean {
+  return [...w.warmup, ...w.main, ...(w.upperBack ?? [])].some((ex) => ex.name === 'Wall sit');
 }
