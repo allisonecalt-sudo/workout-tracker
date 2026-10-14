@@ -25,6 +25,6 @@
     "noEmit": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"]
   },
-  "include": ["*.ts"],
+  "include": ["*.ts", "screens/**/*.ts"],
   "exclude": ["node_modules", "dist", "tests", "playwright.config.ts"]
 }

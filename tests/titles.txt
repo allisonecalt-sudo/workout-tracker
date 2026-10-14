@@ -278,9 +278,11 @@ honest readings — the pre-v48 untouched-5 exclusion › a pre-cutoff exact 5 i
 honest readings — the pre-v48 untouched-5 exclusion › a pre-cutoff non-5 reading is trusted (only the ambiguous default is dropped)
 honest readings — the pre-v48 untouched-5 exclusion › excludedUntouchedCount counts each ambiguous 5, before and after separately
 honest readings — the pre-v48 untouched-5 exclusion › null stays null either side of the cutoff
+import graph — no cycles, nothing imports the entry (step 4c) › a screen imports only the shared layer: never app.ts, never another screen (step 8)
 import graph — no cycles, nothing imports the entry (step 4c) › no import cycle among the app modules
 import graph — no cycles, nothing imports the entry (step 4c) › no module other than the entry imports app.ts
 import graph — no cycles, nothing imports the entry (step 4c) › program-week.ts is pure and imports only week, week-d, program, types and dates
+import graph — no cycles, nothing imports the entry (step 4c) › screens/** are in the graph (nested imports are followed) and in every source scan and the type gate (step 8)
 import graph — no cycles, nothing imports the entry (step 4c) › state.ts and bus.ts are in the graph and import neither app.ts nor each other (step 7)
 import graph — no cycles, nothing imports the entry (step 4c) › state.ts imports are TYPE-ONLY (import type): it is the bottom of the graph and must not gain a runtime edge (step 8-0)
 import graph — no cycles, nothing imports the entry (step 4c) › the graph was actually read: app.ts reaches program-week.ts, types.ts and week.ts

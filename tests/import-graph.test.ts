@@ -13,7 +13,7 @@
 // imports, nested folders included).
 
 import { test, expect } from '@playwright/test';
-import { bundledSourceFiles, relativeImports } from './helpers';
+import { allSourceFiles, bundledSourceFiles, relativeImports } from './helpers';
 
 const path = require('path') as typeof import('path');
 
@@ -169,6 +169,50 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
     expect(valueImports(src)).toEqual([]);
     // the reader did see its type imports, so [] is not "found nothing at all"
     expect(relativeImports(src).length).toBeGreaterThan(0);
+  });
+
+  test('screens/** are in the graph (nested imports are followed) and in every source scan and the type gate (step 8)', () => {
+    const names = files.map((f) => f.file);
+    expect(names).toContain('screens/rides.ts');
+    expect(graph.get('app.ts')).toContain('screens/rides.ts');
+    // a screen's own imports resolve against ITS folder: ../state.js -> state.ts
+    expect(graph.get('screens/rides.ts')).toEqual(
+      expect.arrayContaining(['state.ts', 'bus.ts', 'ride.ts'])
+    );
+    // every screen module is also in allSourceFiles(), so clock/pain scans cover it
+    const scanned = allSourceFiles().map((f) => f.file);
+    for (const f of names.filter((n) => n.startsWith('screens/'))) expect(scanned).toContain(f);
+    // and tsconfig type-checks them
+    const tsconfig = (require('fs') as typeof import('fs')).readFileSync(
+      path.join(__dirname, '..', 'tsconfig.json'),
+      'utf8'
+    );
+    expect(tsconfig).toMatch(/"include":\s*\[[^\]]*"screens\/\*\*\/\*\.ts"/);
+  });
+
+  test('a screen imports only the shared layer: never app.ts, never another screen (step 8)', () => {
+    const allowed = [
+      'bus.ts',
+      'cardio-notes.ts',
+      'chart.ts',
+      'dates.ts',
+      'dom.ts',
+      'format.ts',
+      'program-week.ts',
+      'ride-aim.ts',
+      'ride.ts',
+      'state.ts',
+      'types.ts',
+      'week-d.ts',
+      'week.ts',
+    ];
+    for (const [file, deps] of graph) {
+      if (!file.startsWith('screens/')) continue;
+      expect(
+        deps.filter((d) => !allowed.includes(d)),
+        file
+      ).toEqual([]);
+    }
   });
 
   test('program-week.ts is pure and imports only week, week-d, program, types and dates', () => {

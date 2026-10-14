@@ -364,7 +364,7 @@ export async function advanceToExercise(
 // once looped over ['app.ts','ladders.ts'] and, after step 2 moved the program
 // into program.ts, quietly went from 143 notes checked to 7 — green while
 // checking almost nothing. Derived, not listed: every root-level *.ts module
-// (the app's source lives flat at the repo root) except the Playwright config.
+// (the app's source lives flat at the repo root, plus screens/*.ts since step 8) except the Playwright config.
 // A new module is therefore scanned the day it is created.
 // Node-side only, registers no test hook.
 export type AppSourceFile = { file: string; src: string };
@@ -376,9 +376,15 @@ export function allSourceFiles(): AppSourceFile[] {
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
   const root = path.join(__dirname, '..');
-  return fs
-    .readdirSync(root)
-    .filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts') && f !== 'playwright.config.ts')
+  // Root modules, plus every screen module under screens/ (code-shape step 8: a screen
+  // that leaves app.ts must stay inside every source scan, or the scans go quiet).
+  const rel = (dir: string): string[] =>
+    fs
+      .readdirSync(path.join(root, dir))
+      .filter((f) => f.endsWith('.ts') && !f.endsWith('.d.ts') && f !== 'playwright.config.ts')
+      .map((f) => (dir ? `${dir}/${f}` : f));
+  const screensDir = fs.existsSync(path.join(root, 'screens')) ? rel('screens') : [];
+  return [...rel(''), ...screensDir]
     .sort()
     .map((file) => ({ file, src: fs.readFileSync(path.join(root, file), 'utf8') }));
 }
