@@ -19,8 +19,6 @@
 // setActionHooks(), same pattern as week-clock.ts's setWorkoutDProvider and bus.ts.
 // They are called at exactly the points the old inline calls ran, in the same order.
 
-// Same bar at Done: a computed duration longer than this is a session that sat
-// open, not a workout length. Blank it and say so in notes rather than log it.
 import type { Workout } from './program.js';
 import type { WeekKey } from './week.js';
 import type {
@@ -104,6 +102,8 @@ function hooks(): ActionHooks {
   return actionHooks;
 }
 
+// Same bar at Done: a computed duration longer than this is a session that sat
+// open, not a workout length. Blank it and say so in notes rather than log it.
 const MAX_PLAUSIBLE_DURATION_SEC = 3 * 60 * 60;
 
 export function genId(): string {

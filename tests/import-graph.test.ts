@@ -39,6 +39,20 @@ function valueImports(src: string): string[] {
   return relativeImports(noTypeOnly);
 }
 
+/** Browser/DOM names a domain module may not use (code-shape step 11-0). Comments are
+ *  ignored. `allow` = the few names a module legitimately needs, each with a reason at
+ *  the call site; the DOM-WRITE names (getElementById, textContent ...) are never
+ *  allowable. */
+function domTouches(src: string, allow: string[] = []): string[] {
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`\\])\/\/.*$/gm, '$1');
+  const hits =
+    code.match(
+      /\b(document|window|navigator|getElementById|querySelector\w*|innerHTML|outerHTML|textContent|insertAdjacentHTML|classList|HTMLElement|HTMLInputElement|alert|confirm)\b/g
+    ) ?? [];
+  const mayAllow = ['document', 'window', 'navigator'];
+  return hits.filter((h) => !(allow.includes(h) && mayAllow.includes(h)));
+}
+
 /** Every import cycle in the graph, each as "a.ts -> b.ts -> a.ts". */
 function findCycles(graph: Map<string, string[]>): string[] {
   const cycles: string[] = [];
@@ -259,14 +273,27 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
     // ui.ts is type imports only - a value import could pull it into a cycle
     const uiSrc = files.find((f) => f.file === 'ui.ts')!.src;
     expect(valueImports(uiSrc)).toEqual([]);
-    // actions.ts draws nothing itself: DOM-side effects come in through setActionHooks
-    const actionsSrc = files
-      .find((f) => f.file === 'actions.ts')!
-      .src.replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\/\/.*$/gm, '');
-    expect(
-      actionsSrc.match(/\b(document|getElementById|querySelector\w*|innerHTML)\b/g) ?? []
-    ).toEqual([]);
+    // actions.ts and cardio-readings.ts draw nothing and touch no browser object:
+    // DOM-side effects come in through setActionHooks (step 11-0 widened the word list
+    // and added cardio-readings.ts)
+    for (const f of ['actions.ts', 'cardio-readings.ts']) {
+      expect(domTouches(files.find((x) => x.file === f)!.src), f).toEqual([]);
+    }
+  });
+
+  test('the guard itself: domTouches finds window.alert, textContent, classList, HTMLElement, navigator and honours a reasoned allow-list', () => {
+    expect(domTouches('const a = 1; // window.alert("x")')).toEqual([]);
+    expect(domTouches('window.alert("x");')).toEqual(['window', 'alert']);
+    expect(domTouches('el.textContent = "x"; el.classList.add("y");')).toEqual([
+      'textContent',
+      'classList',
+    ]);
+    expect(domTouches('const e = x as HTMLElement; navigator.vibrate(1);')).toEqual([
+      'HTMLElement',
+      'navigator',
+    ]);
+    expect(domTouches('navigator.wakeLock.request("screen");', ['navigator'])).toEqual([]);
+    expect(domTouches('document.getElementById("x");', ['document'])).toEqual(['getElementById']);
   });
 
   test('program-week.ts is pure and imports only week, week-d, program, types and dates', () => {

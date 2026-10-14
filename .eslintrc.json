@@ -18,6 +18,22 @@
       {
         "selector": "AssignmentExpression[left.type='ObjectPattern'][right.name='ui']",
         "message": "Never destructure ui ({ x } = ui): the copy stops tracking. Read and write ui.x in place."
+      },
+      {
+        "selector": "VariableDeclarator[id.type='ObjectPattern'][init.expression.name='ui']",
+        "message": "Never destructure ui through a cast (const { x } = ui as typeof ui, ui!, ui satisfies ...): the copy stops tracking."
+      },
+      {
+        "selector": "AssignmentExpression[left.type='ObjectPattern'][right.expression.name='ui']",
+        "message": "Never destructure ui through a cast ({ x } = ui as typeof ui): the copy stops tracking."
+      },
+      {
+        "selector": "ObjectPattern[typeAnnotation.typeAnnotation.type='TSTypeQuery'][typeAnnotation.typeAnnotation.exprName.name='ui']",
+        "message": "Never destructure ui as a parameter or typed binding ({ x }: typeof ui): the copy stops tracking."
+      },
+      {
+        "selector": "ObjectPattern[typeAnnotation.typeAnnotation.type='TSTypeReference'][typeAnnotation.typeAnnotation.typeName.name='Ui']",
+        "message": "Never destructure a Ui-typed value as a parameter or typed binding ({ x }: Ui): the copy stops tracking."
       }
     ],
     "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
