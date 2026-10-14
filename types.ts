@@ -197,3 +197,10 @@ export type HistoryEditDraft = {
   pulseStr: string;
   note: string;
 };
+
+// ---- moved verbatim from app.ts (code-shape step 10b): the "done card" memory ----
+
+// v48 · fix r1 (Sep 24 2026): `back` = moves returning from an earlier week
+// (the 1 kg curl, the prone row) — kept apart from true firsts. Optional so a
+// card saved before this fix still loads.
+export type LastDone = { id: string; firsts: string[]; back?: string[] };

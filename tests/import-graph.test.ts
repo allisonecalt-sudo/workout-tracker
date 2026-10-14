@@ -192,8 +192,10 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
 
   test('a screen imports only the shared layer: never app.ts, never another screen (step 8)', () => {
     const allowed = [
+      'actions.ts',
       'bus.ts',
       'cardio-notes.ts',
+      'cardio-readings.ts',
       'chart.ts',
       'dates.ts',
       'dom.ts',
@@ -207,6 +209,7 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
       'sync-week-moves.ts',
       'sync.ts',
       'types.ts',
+      'ui.ts',
       'week-clock.ts',
       'week-d.ts',
       'week.ts',
@@ -240,6 +243,30 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
         file
       ).toEqual([]);
     }
+  });
+
+  test('actions.ts (the save side), cardio-readings.ts and ui.ts never import a screen or app.ts, and actions.ts writes no DOM (step 10)', () => {
+    const shared = ['actions.ts', 'cardio-readings.ts', 'ui.ts'];
+    // the guard read the modules it names (not "found nothing, so nothing to break")
+    for (const f of shared) expect([...graph.keys()]).toContain(f);
+    expect(graph.get('app.ts')).toEqual(expect.arrayContaining(shared));
+    for (const file of shared) {
+      expect(
+        (graph.get(file) ?? []).filter((d) => d === 'app.ts' || d.startsWith('screens/')),
+        file
+      ).toEqual([]);
+    }
+    // ui.ts is type imports only - a value import could pull it into a cycle
+    const uiSrc = files.find((f) => f.file === 'ui.ts')!.src;
+    expect(valueImports(uiSrc)).toEqual([]);
+    // actions.ts draws nothing itself: DOM-side effects come in through setActionHooks
+    const actionsSrc = files
+      .find((f) => f.file === 'actions.ts')!
+      .src.replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+    expect(
+      actionsSrc.match(/\b(document|getElementById|querySelector\w*|innerHTML)\b/g) ?? []
+    ).toEqual([]);
   });
 
   test('program-week.ts is pure and imports only week, week-d, program, types and dates', () => {

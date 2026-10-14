@@ -15,7 +15,7 @@ shape, one screen per run. Read `rides.ts` next to this file: it is the worked e
   `ridesSelectedWeekChartKey`, `progressScrollForRides`). They are module-local, not
   exported. Before moving a `let`, prove only this screen's code touches it: delete it
   from `app.ts` and let `tsc` list every other reader. Any hit = a shared `let`: STOP
-  and list it (step 10 gathers those into `ui`).
+  and list it (step 10a gathered those into `ui`: a screen's own `let`s stay module-local; one that another file touches is a `ui` property).
 
 ## What it may import
 
@@ -40,22 +40,29 @@ passed in as arguments. Import from the shared module. The week-clock wrappers
 **A screen whose handlers save to Supabase needs `sync.ts` (step 9) first**: the push/pull
 code must already sit in a shared module, because a screen cannot import `app.ts`.
 
-### The SAVE side is still in `app.ts` (after step 9)
+### The SAVE side now lives in `actions.ts` (step 10b)
 
-Step 9 moved the network code (push / PATCH / pull / merge / delete) out. The code that
-decides WHEN to save, and the local write around it, did not move. Still in `app.ts`:
+Step 9 moved the network code (push / PATCH / pull / merge / delete) out; step 10b moved the
+code that decides WHEN to save, and the local write around it, into `actions.ts`. A screen MAY
+import it (and `ui.ts`, and `cardio-readings.ts`). In `actions.ts`:
 
-- `flushPendingSyncs` (the retry loop over every unsynced row) and `updateSyncIndicator`
-- `saveLog` and `genId` (the local write of a finished session, and its id)
-- `logPeriodStart` / `undoPeriodStart` and their undo-timer `let`s (`cycleUndoTimer`,
-  `cycleUndoStartDate`, `cycleUndoCreated`)
+- `saveLog` / `genId` (the local write of a finished session, and its id), `logWalk`
+- `saveCompletedSession` (the post-log save), `logStaleSessionAsDone`, `saveHistoryEdit`
+- `logPeriodStart` / `undoPeriodStart` (their undo timer state is `ui.cycleUndo*`)
 - `moveOnWithoutIt` / `undoWeekMove` (the week-move write and its Undo tombstone)
-- `logWalk` (the walk's local write + push), `saveCompletedSession`, `logStaleSessionAsDone`
-  and `saveHistoryEdit` (the three other places a session is written or edited)
+- `flushPendingSyncs` (the retry loop over every unsynced row), `clearActiveSession`
 
-**Rule:** a screen whose handlers need any of these WAITS until they move to a shared module
-(steps 10 / 11). It never imports `app.ts`, never copies them, never receives them as
-arguments. Re-list this section when 10 / 11 move one.
+`actions.ts` never imports `app.ts` or a screen (enforced) and writes no DOM. The few
+UI-side effects a save triggers stay in `app.ts` and come in once, at boot, through
+`setActionHooks()`: `updateSyncIndicator` (the sync pill's DOM write), `getCurrentWorkout`,
+`harvestWorkoutWalk`, `endPostLogClockTick`, `sessionFirsts`, `currentSteppedMoves`,
+`skippedStepsCount`, `resetState`. A moved handler redraws with `bus.requestRender()`. A
+screen that needs another UI-side effect in a save adds a hook there; it never imports
+`app.ts` and never copies the function.
+
+`cardio-readings.ts` holds the ride lane's stored readings and the typed-box parsers
+(`ellipticalLevel`, `parseMmSs`, `laneDoneMinutes` ...) that both the save side and the ride
+screens read.
 
 An import also changes MODULE LOAD ORDER (ES modules run top to bottom, depth first). A
 new import in `app.ts` or a screen can run another module's top-level code earlier or later

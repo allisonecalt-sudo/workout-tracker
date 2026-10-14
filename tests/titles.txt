@@ -280,6 +280,7 @@ honest readings — the pre-v48 untouched-5 exclusion › a pre-cutoff non-5 rea
 honest readings — the pre-v48 untouched-5 exclusion › excludedUntouchedCount counts each ambiguous 5, before and after separately
 honest readings — the pre-v48 untouched-5 exclusion › null stays null either side of the cutoff
 import graph — no cycles, nothing imports the entry (step 4c) › a screen imports only the shared layer: never app.ts, never another screen (step 8)
+import graph — no cycles, nothing imports the entry (step 4c) › actions.ts (the save side), cardio-readings.ts and ui.ts never import a screen or app.ts, and actions.ts writes no DOM (step 10)
 import graph — no cycles, nothing imports the entry (step 4c) › no import cycle among the app modules
 import graph — no cycles, nothing imports the entry (step 4c) › no module other than the entry imports app.ts
 import graph — no cycles, nothing imports the entry (step 4c) › program-week.ts is pure and imports only week, week-d, program, types and dates

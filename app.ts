@@ -48,15 +48,10 @@ import {
   type WorkoutSteps,
 } from './step-list.js';
 import {
-  // WK3 (Sep 27 2026): "Move on without it" — wired into movesForWeekModel /
-  // renderHome below. Schema-gated (§2.2's week_moves table needs her yes
-  // before the migration is applied), but the pure check itself has no
-  // schema dependency, so it's safe to read now.
   canMoveOn as weekCanMoveOn,
   COMPLETION_WEEKS_FROM,
   LEGACY_LAST_CLOSED_WEEK_INSTANT,
   type WeekSpan,
-  type WeekKey,
   type PendingWeek,
 } from './week.js';
 import {
@@ -72,10 +67,8 @@ import {
   steppedMovesForWorkout,
   steppedLineText,
   steppedLineFor,
-  moveFeelString,
   isMoveFeelValue,
   canonicalMoveName,
-  withOverrideFeel,
   MOVE_FEEL_VALUES,
   type SteppedMove,
 } from './move-feel.js';
@@ -108,15 +101,33 @@ import {
   type WeekPlan,
   type CalendarMarks,
 } from './program.js';
-import type {
-  LogEntry,
-  StoredWeekMove,
-  WalkEntry,
-  StoredCyclePeriod,
-  TimerKind,
-  WorkoutWalkResult,
-} from './types.js';
+import type { LogEntry, StoredWeekMove, WalkEntry, TimerKind, LastDone } from './types.js';
 import { ui } from './ui.js';
+import {
+  genId,
+  logWalk,
+  saveCompletedSession,
+  clearActiveSession,
+  logStaleSessionAsDone,
+  logPeriodStart,
+  undoPeriodStart,
+  flushPendingSyncs,
+  moveOnWithoutIt,
+  undoWeekMove,
+  saveHistoryEdit,
+  setActionHooks,
+} from './actions.js';
+import {
+  laneDoneMinutes,
+  ellipticalMinutes,
+  apartmentCardioMinutes,
+  ellipticalLevel,
+  parseMmSs,
+  parseKmReading,
+  parseKcalReading,
+  clampEllipticalLevel,
+  ELLIPTICAL_MAX_LEVEL,
+} from './cardio-readings.js';
 import {
   type AppScreen,
   type ArmFeel,
@@ -154,13 +165,10 @@ import {
   loadLogs,
   writeLogs,
   loadWeekMoves,
-  writeWeekMoves,
   getChronologicalLogs,
   weekClockInput,
   loadWalks,
-  writeWalks,
   loadCyclePeriods,
-  writeCyclePeriods,
 } from './state.js';
 import { escapeHtml, formatMmSs, formatMonthDay, SHORT_MONTHS } from './format.js';
 import {
@@ -173,34 +181,19 @@ import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
 import { bindClick } from './dom.js';
 import {
-  syncDisabled,
   sessionPayload,
   legacySessionPayload,
   timingStrippedSessionPayload,
   pushSessionTiered,
-  pushLogToSupabase,
   patchSessionRequest,
   patchMatchedARow,
-  patchLogToSupabase,
   pullFromSupabase,
   mergeRemoteSessions,
   TIMING_LAUNCH_LABEL,
 } from './sync.js';
-import { pushWalk, flushPendingWalks, fetchFitSteps } from './sync-movement.js';
-import {
-  pullCyclePeriodsFromSupabase,
-  pushCyclePeriod,
-  deleteCyclePeriod,
-  cyclePeriodPayload,
-} from './sync-cycle.js';
-import {
-  weekMoveKey,
-  mergeWeekMoves,
-  pullWeekMovesFromSupabase,
-  weekMovePayload,
-  pushWeekMove,
-  deleteWeekMove,
-} from './sync-week-moves.js';
+import { flushPendingWalks, fetchFitSteps } from './sync-movement.js';
+import { pullCyclePeriodsFromSupabase, cyclePeriodPayload } from './sync-cycle.js';
+import { mergeWeekMoves, pullWeekMovesFromSupabase, weekMovePayload } from './sync-week-moves.js';
 import * as pw from './program-week.js';
 import {
   setWorkoutDProvider,
@@ -245,9 +238,6 @@ import {
 // 46-hour workout. Past this age the app ASKS on home (did it / throw it away /
 // keep going) instead of resuming silently.
 const STALE_SESSION_MS = 3 * 60 * 60 * 1000;
-// Same bar at Done: a computed duration longer than this is a session that sat
-// open, not a workout length. Blank it and say so in notes rather than log it.
-const MAX_PLAUSIBLE_DURATION_SEC = 3 * 60 * 60;
 // Ship 6: timing defaults — overridable via Settings screen. The constants
 // remain as "defaults" only; runtime values come from getSetting().
 // Allison 2026-05-15 18:07: "i do not need the brakes anymore there doesn't
@@ -300,13 +290,6 @@ declare const __APP_VERSION__: string;
 declare const __BUILD_DATE__: string;
 const APP_VERSION = __APP_VERSION__;
 const BUILD_DATE = __BUILD_DATE__;
-
-function genId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
 
 // Thin wrappers over program.ts's pure resolvers. With NO date they answer for
 // "now": program-week.ts's currentWeekPlan() - post-launch the completion
@@ -651,12 +634,6 @@ function togglePause(): void {
   if (ui.activeTimer) timerLoop();
 }
 
-// Total paused milliseconds so far, including an in-progress pause. Used at save
-// to subtract step-away time from the workout's wall-clock duration.
-function totalPausedMs(): number {
-  return state.pausedMs + (state.pausedAt !== null ? Date.now() - state.pausedAt : 0);
-}
-
 // Recompute on tab visibility — if the user backgrounded the app the rAF
 // loop pauses and the timer would freeze. On return we fast-forward.
 if (typeof document !== 'undefined') {
@@ -684,17 +661,6 @@ if (typeof document !== 'undefined') {
 }
 
 // ---------- persistence ----------
-
-function saveLog(entry: LogEntry): LogEntry {
-  const stored: LogEntry = { ...entry, id: entry.id ?? genId(), synced: false };
-  const logs = loadLogs();
-  logs.unshift(stored);
-  // Newest-first by DATE, not by save order — an after-the-fact log (v32) is
-  // dated the day it was started, which may be older than rows already here.
-  logs.sort((a, b) => b.date.localeCompare(a.date));
-  writeLogs(logs);
-  return stored;
-}
 
 // ---------- Walk credit (Jul 4 2026) ----------
 // Her Jun-18 ask: "I sometimes just walk around my apartment, the walk can be
@@ -879,26 +845,6 @@ function cancelWalk(): void {
   localStorage.removeItem(WALK_ACTIVE_KEY);
 }
 
-function logWalk(
-  minutes: number | null = null,
-  meters: number | null = null,
-  steps: number | null = null
-): WalkEntry {
-  const entry: WalkEntry = {
-    id: genId(),
-    date: new Date().toISOString(),
-    minutes,
-    meters,
-    steps,
-    synced: false,
-  };
-  const walks = loadWalks();
-  walks.unshift(entry);
-  writeWalks(walks);
-  void pushWalk(entry);
-  return entry;
-}
-
 function workoutWalkStart(): number | null {
   const raw = localStorage.getItem(WW_START_KEY);
   if (!raw) return null;
@@ -919,22 +865,6 @@ function harvestWorkoutWalk(): void {
   // v45: persisted too — the walk is the FIRST step, so if the phone drops the
   // app during the strength rounds, the numbers must still be there at Save.
   localStorage.setItem(WW_RESULT_KEY, JSON.stringify(ui.workoutWalk));
-}
-
-function storedWorkoutWalk(): WorkoutWalkResult | null {
-  try {
-    const raw = localStorage.getItem(WW_RESULT_KEY);
-    if (!raw) return null;
-    const r = JSON.parse(raw) as Partial<WorkoutWalkResult>;
-    if (typeof r.minutes !== 'number') return null;
-    return {
-      minutes: r.minutes,
-      ...(typeof r.startMs === 'number' ? { startMs: r.startMs } : {}),
-      ...(typeof r.endMs === 'number' ? { endMs: r.endMs } : {}),
-    };
-  } catch {
-    return null;
-  }
 }
 
 function clearWorkoutWalk(): void {
@@ -990,13 +920,6 @@ function startWorkoutWalk(): void {
 // into the existing notes column, so the two lanes stay tellable apart later.
 const APARTMENT_CARDIO_NAME = 'Apartment cardio';
 
-function apartmentCardioMinutes(): number | null {
-  const raw = localStorage.getItem(WW_APARTMENT_KEY);
-  if (!raw) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
-}
-
 // Minutes the walk step prescribes — read off its own reps text ("10 min").
 function walkStepMinutes(ex: Exercise): number {
   const m = /(\d+)\s*min/.exec(ex.reps ?? '');
@@ -1040,24 +963,11 @@ function apartmentCardioStep(minutes: number): Exercise {
 // → notes. The next session's starting level is read back off that marker in
 // the saved logs, not from a separate remembered number.
 const ELLIPTICAL_NAME = 'Elliptical';
-// York BX200: 24 computerized magnetic levels (Mega Sport spec page, Sep 24).
-const ELLIPTICAL_MAX_LEVEL = 24;
 // v48 · P3 (Sep 24 2026): the level every ride starts AND ends on — "Start on
 // level 3, easy". Also where the after-ride stepper starts when there's no last
 // level. (v47 guessed 5 before the ride while the steps said 3 — walk §2.)
 const ELLIPTICAL_START_LEVEL = 3;
 const ELLIPTICAL_MARKER_RE = /cardio: elliptical \d+ min · level (\d+)/;
-
-function ellipticalMinutes(): number | null {
-  const raw = localStorage.getItem(WW_ELLIPTICAL_KEY);
-  if (!raw) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
-}
-
-function clampEllipticalLevel(n: number): number {
-  return Math.max(1, Math.min(ELLIPTICAL_MAX_LEVEL, Math.round(n)));
-}
 
 // The level from her most recent elliptical session. v48 (Sep 24 2026): the
 // real `ellipticalLevel` column first; older rows (and a v47 ride saved tonight)
@@ -1077,15 +987,6 @@ function lastEllipticalLevel(): number | null {
     if (m?.[1]) return clampEllipticalLevel(Number(m[1]));
   }
   return null;
-}
-
-// v48 · P3 (Sep 24 2026): the level she RECORDED after this ride, or null.
-// Decision Q5: the level is logged after the ride ("the level you rode at is
-// only known after"), and a stepper she never touched is not a reading — null
-// saves elliptical_level null, the same rule as the untouched sliders (v46).
-function ellipticalLevel(): number | null {
-  const n = Number(localStorage.getItem(WW_ELLIPTICAL_LEVEL_KEY));
-  return Number.isFinite(n) && n > 0 ? clampEllipticalLevel(n) : null;
 }
 
 // One tap on + or −. The first tap starts from her last level (or 3 on a first
@@ -1115,95 +1016,6 @@ function chooseElliptical(minutes: number): void {
 // v49 (Sep 25 2026): "every time put in" — calories and time off the console,
 // alongside distance/level/pulse. Time is seconds (mm:ss typed, or prefilled
 // from the app's own timer); calories is the console's own estimate.
-
-function ellipticalKm(): number | null {
-  const n = Number(localStorage.getItem(WW_ELLIPTICAL_KM_KEY) ?? '');
-  return Number.isFinite(n) && n > 0 && n < 100 ? Math.round(n * 100) / 100 : null;
-}
-
-function ellipticalPulse(): number | null {
-  const n = Number(localStorage.getItem(WW_ELLIPTICAL_PULSE_KEY) ?? '');
-  return Number.isFinite(n) && n >= 30 && n <= 230 ? Math.round(n) : null;
-}
-
-// Typed wins; otherwise the app's own clock — by Save the elliptical step has
-// always been left once (captureLaneMinutesIfLeaving, on Done · Next), so
-// laneDoneMinutes() is the precise honest number, same one "✓ N min done"
-// already showed her. Never null just because she didn't retype what the app
-// already knows (her ask: "every time put in").
-function ellipticalTimeSec(): number | null {
-  const typed = parseMmSs(localStorage.getItem(WW_ELLIPTICAL_TIME_KEY) ?? '');
-  if (typed !== null) return typed;
-  const mins = laneDoneMinutes();
-  return mins !== null ? mins * 60 : null;
-}
-
-function ellipticalKcal(): number | null {
-  const n = Number(localStorage.getItem(WW_ELLIPTICAL_KCAL_KEY) ?? '');
-  // v51 (Sep 25 2026) fix: was `n >= 0`, so an untouched field (empty string →
-  // Number('') === 0) read back as a real zero instead of null — the one
-  // reading on this screen that broke "Skip — no numbers today" leaves every
-  // field null (same rule as km/pulse above, and the "Blank = not recorded,
-  // never a zero" contract already documented on this block).
-  return Number.isFinite(n) && n > 0 && n < 5000 ? Math.round(n * 10) / 10 : null;
-}
-
-// "10:02" → 602. Bare 1-2 digits are a plain second count ("45" → 45).
-// v49 · look fix (Sep 25 2026): the box opens a numeric phone pad with no ':'
-// key, so she types the console's digits with nothing between them — "1002"
-// for 10:02, "958" for 9:58. Bare 3-4 digits are read as mm:ss, last two
-// digits the seconds (ss ≥ 60 is invalid, not a reading). Anything else
-// (empty, garbled) is not a reading — null, same rule as every other field.
-function parseMmSs(raw: string): number | null {
-  const v = raw.trim();
-  if (v === '') return null;
-  const mmss = /^(\d{1,3}):([0-5]?\d)$/.exec(v);
-  if (mmss?.[1] && mmss[2]) {
-    const sec = Number(mmss[1]) * 60 + Number(mmss[2]);
-    return sec > 0 && sec < 18000 ? sec : null;
-  }
-  const bareDigits = /^\d{1,4}$/.exec(v);
-  if (bareDigits) {
-    if (v.length <= 2) {
-      const sec = Number(v);
-      return sec > 0 && sec < 18000 ? sec : null;
-    }
-    const ss = Number(v.slice(-2));
-    const mm = Number(v.slice(0, -2));
-    if (ss >= 60) return null;
-    const sec = mm * 60 + ss;
-    return sec > 0 && sec < 18000 ? sec : null;
-  }
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 && n < 18000 ? Math.round(n) : null;
-}
-
-// v53 (Sep 26 2026) — the same three console-reading validators as
-// ellipticalKm()/ellipticalPulse()/ellipticalKcal() above, but pure (a plain
-// string in, never localStorage): the history-edit screen (renderHistoryEdit)
-// edits a saved LogEntry's fields directly, not the live in-workout keys those
-// three read. Same rule as every reading in this app: blank or out-of-range
-// is not a value — null, never a guess or a zero.
-function parseKmReading(raw: string): number | null {
-  const v = raw.trim().replace(',', '.');
-  if (v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 && n < 100 ? Math.round(n * 100) / 100 : null;
-}
-
-function parsePulseReading(raw: string): number | null {
-  const v = raw.trim().replace(',', '.');
-  if (v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) && n >= 30 && n <= 230 ? Math.round(n) : null;
-}
-
-function parseKcalReading(raw: string): number | null {
-  const v = raw.trim().replace(',', '.');
-  if (v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 && n < 5000 ? Math.round(n * 10) / 10 : null;
-}
 
 // Saved on every keystroke so the value survives a re-render or an app close.
 function setEllipticalReading(key: string, raw: string): void {
@@ -1263,19 +1075,6 @@ function openRideNumbers(): void {
   stopTimer();
   state.rideNumbersOpen = true;
   render();
-}
-
-// v48 · P3 (Sep 24 2026) — decision Q7: the generic how-to card on the
-// elliptical said the same ride three times (~240 words). A live line,
-// derived from the countdown, used to run this ("easy for 2 min, raise the
-// level..."). v61 (Sep 28 2026), spec item e: the elliptical has no app
-// timer/countdown any more (her words — she uses the bike's own timer), so
-// there's no countdown left for a live cue to derive from; removed rather
-// than left dead (RidePhase/ridePhase/RIDE_LINE/cueRidePhase, and its one
-// call site in the tick loop below).
-function laneDoneMinutes(): number | null {
-  const n = Number(localStorage.getItem(WW_LANE_DONE_MIN_KEY) ?? '');
-  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
 }
 
 function clearLaneProgress(): void {
@@ -2342,11 +2141,6 @@ function startTimedExercise(): void {
 // only — the session row itself is the record; without this key the card still
 // reads "Done ✓ · Workout A · 1 of 3 this week".
 
-// v48 · fix r1 (Sep 24 2026): `back` = moves returning from an earlier week
-// (the 1 kg curl, the prone row) — kept apart from true firsts. Optional so a
-// card saved before this fix still loads.
-type LastDone = { id: string; firsts: string[]; back?: string[] };
-
 // Names that were "New tonight" in the session being saved, plus "first
 // elliptical ride" when no earlier session was on the elliptical. A session
 // stopped early names no move firsts (she may not have reached them); finish-
@@ -2375,14 +2169,6 @@ function sessionFirsts(onElliptical: boolean): { firsts: string[]; back: string[
     if (!rodeBefore) out.push('first elliptical ride');
   }
   return { firsts: out, back };
-}
-
-function saveLastDone(d: LastDone): void {
-  try {
-    localStorage.setItem(LAST_DONE_KEY, JSON.stringify(d));
-  } catch {
-    // storage full or blocked — the Done card still shows without firsts
-  }
 }
 
 function loadLastDone(): LastDone | null {
@@ -2502,50 +2288,6 @@ function sanitizeHeldSetsFor(v: unknown): Record<string, number[]> {
   return out;
 }
 
-// v55 fix r3 (Sep 28 2026): reverse of ARM_FEEL_STEPS (name -> step) — so
-// armFeelString can read state.setsDoneFor (keyed by exercise name) off a
-// step key without a third hand-copy of the same two literal strings.
-const ARM_STEP_EXERCISE_NAME: Record<keyof ArmFeelState, string> = {
-  curl: '1 kg biceps curl',
-  row: 'Prone row (bodyweight)',
-};
-
-// "curl=easy@2kg;row=right@1kg" — the LOCAL storage shape (workout-tracker:
-// logs, this device's loadLogs()); null when none. v55 (Sep 27 2026): the
-// "@1kg"/"@2kg" suffix is new (the LOAD CHIP) — appended only when a load is
-// known, so a pre-v55 row (no suffix) and the existing reader (the rowcurl
-// "easy" substring match in progression.ts) still parse it exactly as
-// before.
-// v55 fix r2 (Sep 27 2026): the live arm_feel CHECK didn't accept the
-// suffix, so this used to diverge from what sessionPayload actually sent
-// (stripArmFeelLoad stripped it). v55 fix r3 (Sep 28 2026): she said go —
-// migrations/2026-09-28-v55-arm-feel-load.sql widened the CHECK, the strip
-// is deleted, and this is now exactly the wire shape too.
-// v55 fix r3, should #1 (checker's Probe B): a feel tap used to be the ONLY
-// thing that wrote anything. She can pick 2 kg, do both sets, never tap
-// Easy/Right/Hard, and Save wiped the load to null. `engaged` below is the
-// same "she was really here" signal the CHIP-AFTER-THE-LAST-SET UI already
-// waits on (state.setsDoneFor, keyed by exercise name) — at least one set
-// marked done THIS session on that move. Without it, every session (arm
-// block or not — defaultArmLoad runs at the start of ALL of them) would
-// write a bogus "curl=@1kg;row=@1kg" off armLoad's mere default.
-function armFeelString(
-  f: ArmFeelState,
-  loads: ArmLoadState,
-  setsDone: Record<string, number>
-): string | null {
-  const part = (key: 'curl' | 'row', feel: ArmFeel | undefined): string => {
-    const load = loads[key];
-    const engaged = feel !== undefined || (setsDone[ARM_STEP_EXERCISE_NAME[key]] ?? 0) > 0;
-    if (!engaged) return '';
-    // feel-less load: 'curl=@2kg' — the widened CHECK allows the feel half
-    // to be empty (her pick still needs to be recorded).
-    return `${key}=${feel ?? ''}${load ? `@${load}` : ''}`;
-  };
-  const parts = [part('curl', f.curl), part('row', f.row)].filter((p) => p !== '');
-  return parts.length > 0 ? parts.join(';') : null;
-}
-
 // v55: the LOAD half of one saved "curl=easy@2kg" part, for one step key.
 // null when that key isn't in the string, or carries no "@load" at all
 // (every row saved before v55).
@@ -2591,201 +2333,6 @@ async function logCompleteAndHome(): Promise<void> {
   } finally {
     ui.savingLog = false;
   }
-}
-
-async function saveCompletedSession(): Promise<void> {
-  if (!state.selectedWorkout) return;
-  // v50 · jump list: read before resetState() wipes completedSteps.
-  const w = getCurrentWorkout();
-  harvestWorkoutWalk(); // no-op unless a walk step is somehow still open
-  if (!ui.workoutWalk) ui.workoutWalk = storedWorkoutWalk(); // survived an app close (v45)
-  // By now the walk (first exercise) ended long ago, so Google Fit has synced it.
-  // v48 · P3 (Sep 24 2026): Fit's count is the ONLY step number — saved to
-  // walk_steps when Fit answers, else null (the motion estimate is archived),
-  // and never displayed. Brief await (Fit replies fast); never blocks the log.
-  let walkFitSteps: number | null = null;
-  if (ui.workoutWalk && ui.workoutWalk.startMs && ui.workoutWalk.endMs) {
-    const fit = await fetchFitSteps(ui.workoutWalk.startMs, ui.workoutWalk.endMs);
-    if (fit !== null && fit > 0) walkFitSteps = fit;
-  }
-  const completedAt = new Date().toISOString();
-  const startedAt = state.startedAt ?? completedAt;
-  // T1 (Sep 27 2026), §3.2 "Untouched at Start"'s own twin at the other end:
-  // if she never tapped ✓/✎ on the finish question, this Save-tap instant
-  // becomes her_end_at — her_end_confirmed stays false either way. Read
-  // BEFORE endPostLogClockTick() below so the tick's own textContent write
-  // race (if it somehow still fires this same tick) can't win against this.
-  endPostLogClockTick();
-  const herEndAtFinal = state.herEndConfirmed ? state.herEndAt : new Date().toISOString();
-  // §3.2 "If the finish is before the start: ... Save still works (never
-  // block a save), and the times save as not confirmed." A confirmed-but-
-  // backwards pair would otherwise let timing.ts's trainingMinutes() see two
-  // confirmed timestamps and compute a negative/nonsense duration — this is
-  // the one place that can never happen from, not a UI-only warning.
-  const timingBackwards =
-    state.herStartAt !== null &&
-    herEndAtFinal !== null &&
-    new Date(herEndAtFinal).getTime() < new Date(state.herStartAt).getTime();
-  const herStartConfirmedFinal = timingBackwards ? false : state.herStartConfirmed;
-  const herEndConfirmedFinal = timingBackwards ? false : state.herEndConfirmed;
-  // Subtract any paused time — stepping away (dishes, a phone call) shouldn't
-  // inflate the logged workout duration (Allison Jul 7 2026).
-  const rawDurationSec = Math.max(
-    0,
-    Math.round(
-      (new Date(completedAt).getTime() - new Date(startedAt).getTime() - totalPausedMs()) / 1000
-    )
-  );
-  // Safety net (v32, Sep 11 2026): a session that sat open for hours or days
-  // before Done has no honest duration. Blank it instead of logging 46 hours.
-  const leftOpen = rawDurationSec > MAX_PLAUSIBLE_DURATION_SEC;
-  // Cardio either/or (Sep 7 2026): the apartment lane has nothing to track, so
-  // the PRESCRIBED minutes are the honest number.
-  // v45: when she ran the lane's timer, the minutes she actually did win over
-  // the prescription (Done at 4 of 10 min used to log 10).
-  // v48 (Sep 24 2026): the lane, its minutes and the elliptical readings go to
-  // their OWN columns — no more "cardio: elliptical 10 min · level 7 · …" prose
-  // in `notes` read back by regex (a note of hers in that shape would have been
-  // misread as her level, data-integrity #1). walk_minutes is for real walks only.
-  const laneDone = laneDoneMinutes();
-  const prescribedElliptical = ellipticalMinutes();
-  const prescribedApartment = apartmentCardioMinutes();
-  const cardioLane: LogEntry['cardioLane'] =
-    prescribedElliptical !== null
-      ? 'elliptical'
-      : prescribedApartment !== null
-        ? 'apartment'
-        : ui.workoutWalk
-          ? 'walk'
-          : null;
-  // v61 fix pass (Sep 28 2026, CHECK-v61 must #2): the elliptical lane used
-  // to fall back to the PRESCRIBED length (laneDone ?? prescribedElliptical)
-  // — but laneDone is always null now (no app timer left to run,
-  // captureLaneMinutesIfLeaving's own WW_LANE_STARTED_KEY is never set for
-  // the ride any more, spec item e), so every save silently logged the
-  // planned minutes as if she'd done exactly that, even when she typed a
-  // real 25:00 (driven repro: saved 30). cardio_minutes means "what she
-  // actually did" (ride-aim.ts/ridge.ts both read it that way) — her typed
-  // time (ellipticalTimeSec, which already prefers the typed box) or
-  // nothing, never a guess from the prescription.
-  const typedEllipticalSec = cardioLane === 'elliptical' ? ellipticalTimeSec() : null;
-  const cardioMinutes =
-    cardioLane === 'elliptical'
-      ? typedEllipticalSec !== null
-        ? Math.round(typedEllipticalSec / 60)
-        : null
-      : cardioLane === 'apartment'
-        ? (laneDone ?? prescribedApartment)
-        : cardioLane === 'walk' && ui.workoutWalk
-          ? ui.workoutWalk.minutes
-          : null;
-  const onElliptical = cardioLane === 'elliptical';
-  // Her free-text line from the post-log (v44): "a way to put in any
-  // information at the end about what I did". Kept verbatim, in its own column
-  // from v48 — her words, not the tail of a machine log line.
-  const sessionNote = state.sessionNote.trim() || null;
-  // `notes` = system annotations only. v48 (Sep 24 2026): "stopped early at
-  // <move>" when she logged a partial session from the quit panel.
-  const notes =
-    [
-      leftOpen
-        ? `duration not recorded — session was left open ${Math.round(rawDurationSec / 3600)}h before Done`
-        : null,
-      state.stoppedEarlyAt ? `stopped early at ${state.stoppedEarlyAt}` : null,
-    ]
-      .filter((s): s is string => s !== null)
-      .join(' · ') || null;
-  // v48 · P4 (Sep 24 2026): the firsts of THIS session, worked out before the
-  // save (after it, "New tonight" is already false). Home's "Done ✓" card
-  // shows them until midnight — uxui post-log 4/5: "the win went unwitnessed".
-  const { firsts, back } = sessionFirsts(onElliptical);
-  const stored = saveLog({
-    date: completedAt,
-    workout: state.selectedWorkout,
-    // v46: a slider she never moved is not a reading — null, shown as "—".
-    capacityBefore: state.capacityBeforeTouched ? state.capacityBefore : null,
-    capacityAfter: state.capacityAfterTouched ? state.capacityAfter : null,
-    // v50 · mood: a chip she never tapped is not a reading — null, same rule as capacity.
-    moodBefore: state.moodBeforeTouched ? state.moodBefore : null,
-    moodAfter: state.moodAfterTouched ? state.moodAfter : null,
-    wallSitSec: state.wallSitSec,
-    backPain: state.backPainTouched ? state.backPain : null,
-    // v49 · engine: same null-means-not-answered shape as backPain.
-    wristPain: state.wristPainTouched ? state.wristPain : null,
-    // v51: a chip she never tapped is not a reading — null, same rule as above.
-    backPainBefore: state.backPainBeforeTouched ? state.backPainBefore : null,
-    wristPainBefore: state.wristPainBeforeTouched ? state.wristPainBefore : null,
-    stepFeel: state.stepFeel,
-    word: state.word,
-    startedAt,
-    completedAt,
-    // T1 (Sep 27 2026), §3: her own start/finish answers — see the
-    // `timingBackwards` guard above, which is the only place these
-    // confirmed flags can differ from what's on state.
-    herStartAt: state.herStartAt,
-    herStartConfirmed: herStartConfirmedFinal,
-    herEndAt: herEndAtFinal,
-    herEndConfirmed: herEndConfirmedFinal,
-    breakMinutes: state.breakMinutes,
-    ...(leftOpen ? {} : { durationSec: rawDurationSec }),
-    walkMinutes: ui.workoutWalk ? ui.workoutWalk.minutes : null,
-    walkSteps: walkFitSteps,
-    walkMeters: null, // v48 · P3: GPS distance archived — minutes only
-    notes,
-    cardioLane,
-    cardioMinutes,
-    ellipticalLevel: onElliptical ? ellipticalLevel() : null,
-    ellipticalKm: onElliptical ? ellipticalKm() : null,
-    ellipticalPulse: onElliptical ? ellipticalPulse() : null,
-    ellipticalTimeSec: onElliptical ? ellipticalTimeSec() : null,
-    ellipticalKcal: onElliptical ? ellipticalKcal() : null,
-    sessionNote,
-    liteDay: state.liteDay,
-    // v48 · P5 (Sep 24 2026): "curl=easy@2kg;row=right@1kg" — only the parts
-    // she engaged with, null when none. v55: the "@load" suffix carries her
-    // per-set weight pick, sent to Supabase as-is since fix r3 (Sep 28 2026,
-    // migrations/2026-09-28-v55-arm-feel-load.sql — see sessionPayload's
-    // comment).
-    // v55 · fix r1: armLoadMax (heaviest tapped this session), not armLoad
-    // (current chip display) — see armLoadMax's own comment.
-    // v55 · fix r3, should #1: setsDoneFor is how armFeelString knows she was
-    // really on that step this session, so a load survives even without a
-    // feel tap (see armFeelString's own comment).
-    armFeel: armFeelString(state.armFeel, state.armLoadMax, state.setsDoneFor),
-    // v58 (Sep 28 2026): only the moves she actually tapped a feel on, paired
-    // with THIS week's own stepped-move list so the qty/unit is always the
-    // real prescription, never a stale one from a plan that changed mid-
-    // session (moveFeelString's own comment).
-    // v61 (Sep 28 2026), spec item f: the ride's Easy/Right/Hard is ALWAYS
-    // asked (never gated on "stepped" the way the rest of moveFeel is) —
-    // withOverrideFeel replaces/adds just the 'ride' segment, minutes = her
-    // typed time on the numbers screen, rounded (ellipticalTimeSec already
-    // prefers what she typed over anything else).
-    // v61 fix pass (CHECK-v61 should #5): a blank Time box used to fall back
-    // to the PLANNED minutes (ellipticalMinutes() ?? 1), saving a qty she
-    // never typed — "ride=right@30min" for a ride she logged no time for at
-    // all. No typed time now saves the feel with no qty ("ride=right"), a
-    // valid move_feel shape (the slug's own CHECK — see move-feel.ts's
-    // isValidMoveFeelString — makes `@qty` optional).
-    moveFeel: (() => {
-      const base = moveFeelString(state.moveFeel, currentSteppedMoves());
-      if (!onElliptical || !state.rideFeel) return base;
-      const sec = ellipticalTimeSec();
-      const minutes = sec !== null ? Math.max(1, Math.round(sec / 60)) : null;
-      return withOverrideFeel(base, 'ride', state.rideFeel, minutes, 'min');
-    })(),
-    voicePlays: state.voicePlays,
-    stepsSkipped: w ? skippedStepsCount(w) : null,
-  });
-  if (stored.id) saveLastDone({ id: stored.id, firsts, back });
-  resetState();
-  render();
-  state.syncStatus = 'syncing';
-  updateSyncIndicator();
-  void pushLogToSupabase(stored).then((ok) => {
-    state.syncStatus = ok ? 'synced' : 'offline';
-    updateSyncIndicator();
-  });
 }
 
 // Screens that count as "in a workout" for resume purposes.
@@ -2851,15 +2398,6 @@ function saveActiveSession(): void {
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
   } catch {
     // Non-fatal — resume is a convenience, never block the app on it.
-  }
-}
-
-function clearActiveSession(): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    localStorage.removeItem(ACTIVE_SESSION_KEY);
-  } catch {
-    // Non-fatal.
   }
 }
 
@@ -3120,50 +2658,6 @@ function restoreActiveSession(): boolean {
   return true;
 }
 
-// "Yes, I did it": log the left-open workout for the day it was STARTED. No
-// post-log ever happened, so after-capacity, back pain, end time and duration
-// are unknown — saved as null (shown "—"), with a note saying why. The one
-// number that was really entered, capacity-before, is kept.
-function logStaleSessionAsDone(): void {
-  const snap = ui.staleSnapshot;
-  if (!snap) return;
-  const startedAt = snap.startedAt ?? new Date().toISOString();
-  const stored = saveLog({
-    date: startedAt,
-    workout: snap.selectedWorkout,
-    capacityBefore: snap.capacityBeforeTouched ? snap.capacityBefore : null, // v46: only if she moved it
-    capacityAfter: null,
-    // v50 · mood: same rule as capacity — before survives if she moved it, after is unknown.
-    moodBefore: snap.moodBeforeTouched ? snap.moodBefore : null,
-    moodAfter: null,
-    wallSitSec: snap.wallSitSec,
-    backPain: null,
-    // v51: same rule as capacity/mood above — the pre-log Back & wrist
-    // reading survives if she tapped it; the post-log (after) half never
-    // happened, so it stays null like backPain above.
-    backPainBefore: snap.backPainBeforeTouched ? snap.backPainBefore : null,
-    wristPainBefore: snap.wristPainBeforeTouched ? snap.wristPainBefore : null,
-    // T1: the start half survives (beginExercises() finalized it before this
-    // session was ever resumable); the finish half never happened — no
-    // post-log means no her_end_at/confirmed, same as capacityAfter above.
-    herStartAt: snap.herStartAt,
-    herStartConfirmed: snap.herStartConfirmed,
-    word: snap.word,
-    startedAt,
-    notes:
-      'logged after the fact — Done was never tapped, so no end time, after-capacity or back pain',
-  });
-  ui.staleSnapshot = null;
-  clearActiveSession();
-  render();
-  state.syncStatus = 'syncing';
-  updateSyncIndicator();
-  void pushLogToSupabase(stored).then((ok) => {
-    state.syncStatus = ok ? 'synced' : 'offline';
-    updateSyncIndicator();
-  });
-}
-
 function discardStaleSession(): void {
   ui.staleSnapshot = null;
   clearActiveSession();
@@ -3399,60 +2893,6 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   if (w.__wtRoundsSeed) appendRounds(w.__wtRoundsSeed);
 }
 
-// "Period started today" (or a picked day): her own logging, one tap, with a
-// 10s undo (app-building-guide §1-2: <=2 taps, and every destructive-feeling
-// action gets an out). Optimistic local write first — offline-safe, same as
-// every other save in this app — then pushed if a network is allowed.
-const CYCLE_UNDO_MS = 10_000;
-
-function logPeriodStart(dateISO: string): void {
-  const periods = loadCyclePeriods();
-  const existing = periods.find((p) => p.startDate === dateISO);
-  if (ui.cycleUndoTimer) clearTimeout(ui.cycleUndoTimer);
-  if (existing) {
-    // Already logged — leave the row exactly as it was (never overwrite an
-    // earlier 'reproductive.md' source with 'app', never re-push and risk a
-    // conflict). Show "Already logged" with no Undo, since there's nothing
-    // this tap created.
-    ui.cycleUndoStartDate = dateISO;
-    ui.cycleUndoCreated = false;
-    ui.cycleUndoTimer = setTimeout(() => {
-      ui.cycleUndoStartDate = null;
-      render();
-    }, CYCLE_UNDO_MS);
-    render();
-    return;
-  }
-  const stored: StoredCyclePeriod = {
-    startDate: dateISO,
-    source: 'app',
-    note: null,
-    synced: syncDisabled(), // automation: mark synced so no network is attempted
-  };
-  writeCyclePeriods([...periods, stored]);
-  ui.cycleUndoStartDate = dateISO;
-  ui.cycleUndoCreated = true;
-  ui.cycleUndoTimer = setTimeout(() => {
-    ui.cycleUndoStartDate = null;
-    ui.cycleUndoCreated = false;
-    render();
-  }, CYCLE_UNDO_MS);
-  void pushCyclePeriod(stored);
-  render();
-}
-
-function undoPeriodStart(): void {
-  if (!ui.cycleUndoStartDate || !ui.cycleUndoCreated) return; // nothing this tap created — no-op
-  const dateISO = ui.cycleUndoStartDate;
-  if (ui.cycleUndoTimer) clearTimeout(ui.cycleUndoTimer);
-  ui.cycleUndoTimer = null;
-  ui.cycleUndoStartDate = null;
-  ui.cycleUndoCreated = false;
-  writeCyclePeriods(loadCyclePeriods().filter((p) => p.startDate !== dateISO));
-  void deleteCyclePeriod(dateISO);
-  render();
-}
-
 // v53 (Sep 26 2026) — the history-edit screen's draft (renderHistoryEdit,
 // openHistoryEdit, saveHistoryEdit). Transient, module-level, like the cycle
 // fields above — the screen is reached by an explicit tap (Edit, on the
@@ -3477,65 +2917,6 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   // assert the exact push body + the pure merge without a real network call.
   w.__wtWeekMovePayload = weekMovePayload;
   w.__wtMergeWeekMoves = mergeWeekMoves;
-}
-
-async function flushPendingSyncs(): Promise<void> {
-  if (syncDisabled()) {
-    // v48 · P4 (Sep 24 2026): under automation nothing syncs, so say so rather
-    // than sit on "syncing…" forever (walk-in-her-shoes: the pill never settled
-    // in the test setup). Nothing pending → the indicator is empty.
-    state.syncStatus = 'offline';
-    updateSyncIndicator();
-    return;
-  }
-  const pendingLogs = loadLogs().filter((l) => !l.synced && l.id);
-  // v50 · fix (Sep 25 2026): a "Period started today" tap made offline, or
-  // one whose POST failed, was staying synced:false forever — nothing ever
-  // retried it (flushPendingSyncs only looked at session logs). Fail-loud +
-  // tandem rule: an unsynced row that never reaches cycle_periods is a row I
-  // can't see either. Push those alongside pending session logs.
-  const pendingPeriods = loadCyclePeriods().filter((p) => !p.synced);
-  // WK3 (Sep 27 2026): a "Move on without it" tap made offline, or one whose
-  // POST failed, retries here too — same fail-loud reasoning as pendingPeriods
-  // above (an unsynced week_moves row is a row Claude can't see either).
-  // WK3 fix r1 (checker must #1): split into live moves (retry the POST) and
-  // Undo tombstones (retry the DELETE instead) — pushing a tombstone would
-  // re-create on Supabase the exact row she just undid.
-  const pendingWeekMoves = loadWeekMoves().filter((m) => !m.synced && !m.deleted);
-  const pendingWeekMoveDeletes = loadWeekMoves().filter((m) => !m.synced && m.deleted);
-  if (
-    pendingLogs.length === 0 &&
-    pendingPeriods.length === 0 &&
-    pendingWeekMoves.length === 0 &&
-    pendingWeekMoveDeletes.length === 0
-  ) {
-    state.syncStatus = 'synced';
-    updateSyncIndicator();
-    return;
-  }
-  state.syncStatus = 'syncing';
-  updateSyncIndicator();
-  let allOk = true;
-  for (const entry of pendingLogs) {
-    // v53: an edited-after-the-fact row PATCHes an existing server row; a
-    // brand-new session POSTs one. See patchSessionRequest's comment for why
-    // the two can never share one code path.
-    const ok = entry.pendingEdit ? await patchLogToSupabase(entry) : await pushLogToSupabase(entry);
-    if (!ok) allOk = false;
-  }
-  for (const period of pendingPeriods) {
-    await pushCyclePeriod(period); // marks synced:true in localStorage on success
-  }
-  if (loadCyclePeriods().some((p) => !p.synced)) allOk = false;
-  for (const move of pendingWeekMoves) {
-    await pushWeekMove(move); // marks synced:true in localStorage on success
-  }
-  for (const tombstone of pendingWeekMoveDeletes) {
-    await deleteWeekMove(tombstone.round, tombstone.week); // drops the tombstone in localStorage on success
-  }
-  if (loadWeekMoves().some((m) => !m.synced)) allOk = false;
-  state.syncStatus = allOk ? 'synced' : 'offline';
-  updateSyncIndicator();
 }
 
 function updateSyncIndicator(): void {
@@ -3707,61 +3088,6 @@ function renderLegacyWeekDots(weekDots: WeekDotInfo[]): string {
 // instant (2026-09-26T22:30, already past), so Home/pre-log/post-log — which
 // only ever show the CURRENT moment — read the new model exclusively.
 // ---------------------------------------------------------------------------
-
-/** §2.4's quiet week-card button: her explicit "Move on without it" tap.
- * Optimistic local write first (offline-safe, same as every other save in
- * this app), then pushed if a network is allowed — never network-first (the
- * tap must never silently do nothing on a bad connection). */
-function moveOnWithoutIt(key: WeekKey, missing: readonly string[]): void {
-  const move: StoredWeekMove = {
-    round: key.round,
-    week: key.week,
-    at: new Date().toISOString(),
-    missing: missing.join(''),
-    // Sep 27 fix: always false on write, like every other save in this app
-    // (logLog's `synced: false` at line 3333, logWalk's at 3575) — the push
-    // below (pushWeekMove) already has its own `if (syncDisabled()) return`
-    // guard, so no network is ever attempted under automation. Marking it
-    // synced HERE too was a bug: it made a "Move on" tap silently skip the
-    // offline queue under test automation, unlike every other save path.
-    synced: false,
-  };
-  writeWeekMoves([
-    move,
-    ...loadWeekMoves().filter(
-      (m) => weekMoveKey(m.round, m.week) !== weekMoveKey(key.round, key.week)
-    ),
-  ]);
-  void pushWeekMove(move);
-  render();
-}
-
-/** §2.4's Undo. Live only "for the rest of that day" (todaysWeekMove below is
- * date-driven, not a timer), so there's no undo window to manage: the button
- * simply stops rendering once local midnight passes, same as the note above
- * it.
- *
- * WK3 fix r1 (checker must #1, Sep 27 2026): this used to just filter the row
- * out locally and fire-and-forget a DELETE. If she'd tapped Move on while
- * online (row already reached Supabase), or the DELETE failed, or a push was
- * still in flight, the next pull merged the remote row straight back in as
- * synced:true — the week moved on again with no tap of hers, and past
- * midnight there was no Undo left to fix it. Now it queues like any other
- * offline write: a tombstone (deleted:true, synced:false) replaces the row
- * instead of just removing it, so a pull can't resurrect what she just
- * undid, and the real DELETE keeps retrying (flushPendingSyncs) until
- * Supabase confirms it — only then does the tombstone itself disappear. */
-function undoWeekMove(move: StoredWeekMove): void {
-  const tombstone: StoredWeekMove = { ...move, deleted: true, synced: false };
-  writeWeekMoves([
-    tombstone,
-    ...loadWeekMoves().filter(
-      (m) => weekMoveKey(m.round, m.week) !== weekMoveKey(move.round, move.week)
-    ),
-  ]);
-  void deleteWeekMove(move.round, move.week);
-  render();
-}
 
 /** The move (if any) she made TODAY — drives §2.4's moved-note under the
  * header. Date-driven on purpose: the note (and its Undo) stops appearing
@@ -7818,53 +7144,6 @@ function renderHistoryEdit(): string {
   `;
 }
 
-// Merges the draft back into the ONE saved row it came from — every other
-// field on `existing` is spread through untouched.
-//
-// v53 fix (CHECK M2, Sep 26 2026): pendingEdit only goes true when the
-// server already HAS this row (synced, or a previous edit is still queued
-// for it) — that's the only case a PATCH-by-id can find anything. A session
-// that finished OFFLINE and never reached Supabase has no server row yet;
-// routing it through pendingEdit meant every PATCH matched 0 rows (M2) and
-// the retry would never switch to a POST — the whole session, not just the
-// edit, was silently unrecoverable. Such a row stays a normal unsynced entry
-// here, and the flush below (matching the pendingEdit ternary everywhere
-// else in this file — see patchLogToSupabase's own call site) posts it with
-// the edited numbers already folded in, same as any other queued session.
-function saveHistoryEdit(): void {
-  const id = state.historyDetailId;
-  const draft = ui.historyEditDraft;
-  if (!id || !draft) return;
-  const logs = loadLogs();
-  const idx = logs.findIndex((l) => l.id === id);
-  if (idx === -1) return;
-  const existing = logs[idx];
-  if (!existing) return;
-  const existingOnServer = existing.synced === true || existing.pendingEdit === true;
-  const updated: LogEntry = {
-    ...existing,
-    ellipticalTimeSec: parseMmSs(draft.timeStr),
-    ellipticalKm: parseKmReading(draft.kmStr),
-    ellipticalKcal: parseKcalReading(draft.kcalStr),
-    ellipticalLevel: draft.level,
-    ellipticalPulse: parsePulseReading(draft.pulseStr),
-    sessionNote: draft.note.trim() || null,
-    synced: false,
-    pendingEdit: existingOnServer,
-  };
-  logs[idx] = updated;
-  writeLogs(logs);
-  ui.historyEditDraft = null;
-  state.screen = 'history-detail';
-  render();
-  state.syncStatus = 'syncing';
-  updateSyncIndicator();
-  void (existingOnServer ? patchLogToSupabase(updated) : pushLogToSupabase(updated)).then((ok) => {
-    state.syncStatus = ok ? 'synced' : 'offline';
-    updateSyncIndicator();
-  });
-}
-
 // ---------- Ship 4: weekly review (2026-05-15) ----------
 //
 // A per-week debrief screen, reached from home's week card. The screen respects
@@ -10970,6 +10249,17 @@ function updateRideAimCompare(): void {
 
 document.addEventListener('DOMContentLoaded', () => {
   setWorkoutDProvider(getWorkoutD); // week-clock.ts: planForLog needs the fixed D workout
+  setActionHooks({
+    // actions.ts (the save side) calls these UI-side effects back, at the points the old inline calls ran.
+    updateSyncIndicator,
+    getCurrentWorkout,
+    harvestWorkoutWalk,
+    endPostLogClockTick,
+    sessionFirsts,
+    currentSteppedMoves,
+    skippedStepsCount,
+    resetState,
+  });
   setRenderer(render); // bus.ts: screens that leave this file ask for a redraw through requestRender()
   setScrollRestoreSink((y) => {
     ui.pendingScrollRestore = y; // bus.ts: ...and for a scroll restore through requestScrollRestore()
