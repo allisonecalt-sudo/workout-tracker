@@ -101,11 +101,10 @@ import {
   type WeekPlan,
   type CalendarMarks,
 } from './program.js';
-import type { LogEntry, StoredWeekMove, WalkEntry, TimerKind, LastDone } from './types.js';
+import type { LogEntry, StoredWeekMove, TimerKind, LastDone } from './types.js';
 import { ui } from './ui.js';
 import {
   genId,
-  logWalk,
   saveCompletedSession,
   clearActiveSession,
   logStaleSessionAsDone,
@@ -139,9 +138,6 @@ import {
   STORAGE_KEY,
   HOWTO_SEEN_KEY_PREFIX,
   ACTIVE_SESSION_KEY,
-  WALK_ACTIVE_KEY,
-  LEGACY_WALK_COUNTER_KEYS,
-  WW_START_KEY,
   WW_RESULT_KEY,
   WW_APARTMENT_KEY,
   WW_ELLIPTICAL_KEY,
@@ -180,6 +176,26 @@ import {
 import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
 import {
+  setWalkLineUpdater,
+  walkFeelReady,
+  activeWalkStart,
+  walkLiveText,
+  acquireWalkWakeLock,
+  beginWalkTracking,
+  startWalk,
+  finishWalk,
+  cancelWalk,
+  workoutWalkStart,
+  harvestWorkoutWalk,
+  clearWorkoutWalk,
+  resumeWalkTracking,
+  startWorkoutWalk,
+  APARTMENT_CARDIO_NAME,
+  walkStepMinutes,
+  apartmentCardioStep,
+  fetchStepsToday,
+} from './walk.js';
+import {
   unlockAudio,
   playCountBeep,
   playGoBeep,
@@ -199,7 +215,7 @@ import {
   mergeRemoteSessions,
   TIMING_LAUNCH_LABEL,
 } from './sync.js';
-import { flushPendingWalks, fetchFitSteps } from './sync-movement.js';
+import { flushPendingWalks } from './sync-movement.js';
 import { pullCyclePeriodsFromSupabase, cyclePeriodPayload } from './sync-cycle.js';
 import { mergeWeekMoves, pullWeekMovesFromSupabase, weekMovePayload } from './sync-week-moves.js';
 import * as pw from './program-week.js';
@@ -641,49 +657,6 @@ if (typeof document !== 'undefined') {
 // stop showing numbers that are wrong. The wake lock stays.
 // The v47 counters' keys — only cleared now (a phone may still hold them).
 
-// v59 (Sep 28 2026), CHECK-v58 round 2 nice #R2-N2: the walk-outside lane's
-// Easy/Right/Hard chip (renderMoveFeel via the Outdoor-walk branch below)
-// used to show the instant she tapped ▶ Walk outside — "Walking · 0 min ·
-// how did it feel?" — before she'd walked at all. Gated on real elapsed time
-// instead: no opinion to ask about yet under 3 min.
-const WALK_FEEL_GATE_MS = 3 * 60_000;
-function walkFeelReady(start: number | null): boolean {
-  return start !== null && Date.now() - start >= WALK_FEEL_GATE_MS;
-}
-
-function clearLegacyWalkCounters(): void {
-  for (const k of LEGACY_WALK_COUNTER_KEYS) localStorage.removeItem(k);
-}
-
-function activeWalkStart(): number | null {
-  const raw = localStorage.getItem(WALK_ACTIVE_KEY);
-  if (!raw) return null;
-  const t = Number(raw);
-  return Number.isFinite(t) && t > 0 ? t : null;
-}
-
-// v48 · P3: the one live line, minutes only — "Walking · 12 min".
-function walkLiveText(start: number | null): string {
-  const mins = start ? Math.max(0, Math.floor((Date.now() - start) / 60000)) : 0;
-  return `Walking · ${mins} min`;
-}
-
-async function acquireWalkWakeLock(): Promise<void> {
-  // Her call (Jul 4): the screen SHOULD stay on during a walk (v48: so the
-  // minute tick keeps running; the sensors are archived). try/catch: headless tests and
-  // older browsers have no wakeLock.
-  try {
-    const nav = navigator as Navigator & {
-      wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
-    };
-    if (nav.wakeLock && document.visibilityState === 'visible') {
-      ui.walkWakeLock = await nav.wakeLock.request('screen');
-    }
-  } catch {
-    ui.walkWakeLock = null;
-  }
-}
-
 // v48 · P3 (Sep 24 2026): minutes only — "Walking · 12 min", refreshed by the
 // 30 s tick. The step/km parts are gone with the sensors (archived).
 // v59 (Sep 28 2026, R2-N2): also the walk-lane feel chip's own reveal — the
@@ -697,26 +670,6 @@ function updateWalkLiveLine(): void {
   if (el) el.textContent = walkLiveText(start);
   const feelSlot = document.getElementById('walk-move-feel-slot');
   if (feelSlot) feelSlot.classList.toggle('wt-hidden', !walkFeelReady(workoutWalkStart()));
-}
-
-// v48 · P3: the wake lock + the minute tick. No GPS watch, no devicemotion
-// listener any more (archive/walk-sensors-2026-09-24/).
-function beginWalkTracking(): void {
-  void acquireWalkWakeLock();
-  if (ui.walkTickId === null) {
-    ui.walkTickId = window.setInterval(updateWalkLiveLine, 30000);
-  }
-}
-
-function endWalkTracking(): void {
-  if (ui.walkTickId !== null) {
-    window.clearInterval(ui.walkTickId);
-    ui.walkTickId = null;
-  }
-  if (ui.walkWakeLock) {
-    void ui.walkWakeLock.release().catch(() => undefined);
-    ui.walkWakeLock = null;
-  }
 }
 
 // T1 (Sep 27 2026), PLAN-2026-09-26.md §3.1: "the clock is the time the
@@ -766,62 +719,6 @@ function endPostLogClockTick(): void {
   }
 }
 
-function startWalk(): void {
-  localStorage.setItem(WALK_ACTIVE_KEY, String(Date.now()));
-  clearLegacyWalkCounters();
-  beginWalkTracking();
-}
-
-function finishWalk(): WalkEntry | null {
-  const start = activeWalkStart();
-  // v45: a second "Done walking" tap (while Fit is answering) found no walk and
-  // still logged an empty one. No active walk = nothing to log.
-  if (start === null) return null;
-  const end = Date.now();
-  endWalkTracking();
-  localStorage.removeItem(WALK_ACTIVE_KEY);
-  // v48 · P3: minutes only — the movement_log row carries no steps or meters
-  // (DECISIONS-v48 §4). Today's Fit steps show on home instead (P4).
-  const minutes = Math.max(1, Math.round((end - start) / 60000));
-  return logWalk(minutes, null, null);
-}
-
-// Discard an active standalone walk WITHOUT logging it (Allison Jul 9 2026):
-// "only log walks where i finish the walk — if i just open [it] to check, [it]
-// doesn't count." Tapping "Start a walk" just to look needs a non-logging exit;
-// this clears the active state and writes NO entry.
-function cancelWalk(): void {
-  endWalkTracking();
-  localStorage.removeItem(WALK_ACTIVE_KEY);
-}
-
-function workoutWalkStart(): number | null {
-  const raw = localStorage.getItem(WW_START_KEY);
-  if (!raw) return null;
-  const t = Number(raw);
-  return Number.isFinite(t) && t > 0 ? t : null;
-}
-
-function harvestWorkoutWalk(): void {
-  const start = workoutWalkStart();
-  if (start === null) return;
-  const end = Date.now();
-  const minutes = Math.max(1, Math.round((end - start) / 60000));
-  // Don't kill the engine if a STANDALONE walk is (somehow) also live.
-  if (!activeWalkStart()) endWalkTracking();
-  localStorage.removeItem(WW_START_KEY);
-  // Keep start/end so logCompleteAndHome can ask Google Fit for the real count.
-  ui.workoutWalk = { minutes, startMs: start, endMs: end };
-  // v45: persisted too — the walk is the FIRST step, so if the phone drops the
-  // app during the strength rounds, the numbers must still be there at Save.
-  localStorage.setItem(WW_RESULT_KEY, JSON.stringify(ui.workoutWalk));
-}
-
-function clearWorkoutWalk(): void {
-  ui.workoutWalk = null;
-  localStorage.removeItem(WW_RESULT_KEY);
-}
-
 // The in-workout walk no longer auto-starts just because she lands on the step
 // (Allison Jul 9 2026: "just because I'm on the page doesn't mean it started
 // walking"). Tracking begins only when she taps Start (startWorkoutWalk); before
@@ -834,24 +731,14 @@ function syncWorkoutWalkTracking(): void {
   const started = workoutWalkStart() !== null;
   const standaloneActive = activeWalkStart() !== null;
   if (onWalkStep && started && !standaloneActive) {
-    if (ui.walkTickId === null) {
-      // First tick after Start, or resumed after an app close — (re)start the
-      // wake lock + minute tick; the start stamp is already in localStorage.
-      beginWalkTracking();
-    }
+    // First tick after Start, or resumed after an app close — (re)start the
+    // wake lock + minute tick (walk.ts: only if it is not already ticking); the
+    // start stamp is already in localStorage.
+    resumeWalkTracking();
     updateWalkLiveLine();
   } else if (!onWalkStep && started) {
     harvestWorkoutWalk();
   }
-}
-
-// Explicit Start for the in-workout walk (her Jul-9 rule above). Stamps the
-// start time, then lights up the wake lock + minute tick.
-function startWorkoutWalk(): void {
-  if (activeWalkStart() !== null) return; // a standalone walk owns the engine
-  localStorage.setItem(WW_START_KEY, String(Date.now()));
-  clearLegacyWalkCounters();
-  beginWalkTracking();
 }
 
 // ---------- Cardio either/or (Allison Sep 7 2026) ----------
@@ -868,14 +755,6 @@ function startWorkoutWalk(): void {
 // step for a timed apartment step while it's set. NO Supabase schema change —
 // the minutes land in the existing walk_minutes column and a marker string goes
 // into the existing notes column, so the two lanes stay tellable apart later.
-const APARTMENT_CARDIO_NAME = 'Apartment cardio';
-
-// Minutes the walk step prescribes — read off its own reps text ("10 min").
-function walkStepMinutes(ex: Exercise): number {
-  const m = /(\d+)\s*min/.exec(ex.reps ?? '');
-  return m?.[1] ? Number(m[1]) : 10;
-}
-
 function chooseApartmentCardio(minutes: number): void {
   clearElliptical(); // one lane at a time
   localStorage.setItem(WW_APARTMENT_KEY, String(minutes));
@@ -884,17 +763,6 @@ function chooseApartmentCardio(minutes: number): void {
 function clearApartmentCardio(): void {
   clearLaneProgress();
   localStorage.removeItem(WW_APARTMENT_KEY);
-}
-
-function apartmentCardioStep(minutes: number): Exercise {
-  return {
-    name: APARTMENT_CARDIO_NAME,
-    reps: `${minutes} min`,
-    notes:
-      "Same minutes as the walk, inside — and you don't have to invent it. Start the timer and the strip below runs itself: five moves, two minutes each, cycling until the time is up. Conversational effort the whole way — you should still be able to talk. Rather do the building stairs? Same minutes there works too. Nothing is tracked here; the timer is the whole thing.",
-    durationSec: minutes * 60,
-    isTimed: true,
-  };
 }
 
 // ---------- Elliptical lane (Allison Sep 24 2026, v43) ----------
@@ -1154,15 +1022,6 @@ function reachedWallSit(w: Workout): boolean {
     return state.currentExerciseIndex > i;
   }
   return false;
-}
-
-async function fetchStepsToday(): Promise<void> {
-  const midnight = new Date();
-  midnight.setHours(0, 0, 0, 0);
-  const n = await fetchFitSteps(midnight.getTime(), Date.now());
-  if (n === null) return;
-  ui.stepsToday = n;
-  if (state.screen === 'home') render();
 }
 
 // Test hook (automation only — Fit is off under navigator.webdriver).
@@ -10183,6 +10042,7 @@ document.addEventListener('DOMContentLoaded', () => {
     skippedStepsCount,
     resetState,
   });
+  setWalkLineUpdater(updateWalkLiveLine); // walk.ts: the minute tick calls the line updater that stays here (it writes the DOM)
   setRenderer(render); // bus.ts: screens that leave this file ask for a redraw through requestRender()
   setScrollRestoreSink((y) => {
     ui.pendingScrollRestore = y; // bus.ts: ...and for a scroll restore through requestScrollRestore()

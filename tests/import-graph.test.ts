@@ -306,6 +306,19 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
       dom: ['window'],
       why: 'window.AudioContext / webkitAudioContext is the audio engine, not the page',
     },
+    'walk.ts': {
+      imports: [
+        'actions.ts',
+        'bus.ts',
+        'program.ts',
+        'state.ts',
+        'sync-movement.ts',
+        'types.ts',
+        'ui.ts',
+      ],
+      dom: ['window', 'navigator', 'document'],
+      why: 'window.setInterval (the 30 s tick) and the Wake Lock API + its visibility guard are browser APIs, not page writes',
+    },
   };
 
   test('the domain modules (audio / timer / walk) import only the shared layer, never app.ts or a screen, and write no DOM (step 11)', () => {
