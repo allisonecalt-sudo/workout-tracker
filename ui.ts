@@ -15,7 +15,6 @@
 // BUILT: scripts/ui-rename.mjs did the rewrite (TypeScript language service, not
 // text search-and-replace).
 
-import type { CycleMetric } from './cycle.js';
 import type { ActiveSessionSnapshot } from './state.js';
 import type { HistoryEditDraft, TimerHandle, WorkoutWalkResult } from './types.js';
 
@@ -77,15 +76,8 @@ export interface Ui {
   // ORIGINAL row — it's gone from localStorage and a DELETE reaches Supabase
   // too. false = "the date already existed; nothing for Undo to remove."
   cycleUndoCreated: boolean;
-  // v51 · cycle page (Sep 25 2026) — see renderCycle's own comment for why.
-  // `cycleReturnTo` says which door she came in by (the Progress row, or the
-  // Home "Period started?" row — see SPEC-cycle-page.md §2.1, §3), so the back
-  // button and its scroll restore match. `cycleCompareMetric` is Card C's own
-  // selected chip; it resets to 'body' every time the page is (re-)opened
-  // (§2.1).
-  cycleReturnTo: 'progress' | 'home';
-  cycleCompareMetric: CycleMetric;
-  progressScrollForCycle: number;
+  // (The cycle PAGE's own return-to / compare-metric / scroll fields moved into screens/cycle.ts
+  // as module-local lets in step 12c: nothing but that page touched them.)
   historyEditDraft: HistoryEditDraft | null;
   // Which week the user is currently looking at on the home screen. 0 = this
   // (current) Sat-Fri week. 1 = one week ago. Etc. Module-level — purely UI state.
@@ -132,9 +124,6 @@ export const ui: Ui = {
   cycleUndoTimer: null,
   cycleUndoStartDate: null,
   cycleUndoCreated: false,
-  cycleReturnTo: 'progress',
-  cycleCompareMetric: 'body',
-  progressScrollForCycle: 0,
   historyEditDraft: null,
   viewedWeekOffset: 0,
   viewingLastClosedWeek: false,
