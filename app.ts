@@ -165,6 +165,7 @@ import {
   weekClockInput,
   loadWalks,
   loadCyclePeriods,
+  cyclePeriodsForLogic,
 } from './state.js';
 import { escapeHtml, formatMmSs, formatMonthDay, SHORT_MONTHS } from './format.js';
 import {
@@ -204,7 +205,8 @@ import {
   fetchStepsToday,
 } from './walk.js';
 import { unlockAudio, stopVoiceNote, toggleVoiceNote as toggleVoiceNoteAudio } from './audio.js';
-import { bindClick } from './dom.js';
+import { bindClick, wireHoldToSkip, HOLD_TO_SKIP_MS } from './dom.js';
+import { APP_VERSION, BUILD_DATE } from './version.js';
 import {
   sessionPayload,
   legacySessionPayload,
@@ -269,7 +271,6 @@ const STALE_SESSION_MS = 3 * 60 * 60 * 1000;
 // need the brakes in between exercises." Default rest is now 0 (skip).
 // Range allows 0-180 in Settings — bump back up if she ever wants it.
 // (DEFAULT_REST_SEC and DEFAULT_PRE_COUNT_SEC now live in state.ts, with the settings getters.)
-const HOLD_TO_SKIP_MS = 500;
 const HOLD_TO_CLEAR_MS = 500;
 
 // v48 · P4 (Sep 24 2026): getAutoSuggestEnabled() retired with its toggle.
@@ -310,10 +311,6 @@ const HOLD_TO_CLEAR_MS = 500;
 // branch's ride numbers (Next -> "from the machine" entry screen) + Cue ->
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
-declare const __APP_VERSION__: string;
-declare const __BUILD_DATE__: string;
-const APP_VERSION = __APP_VERSION__;
-const BUILD_DATE = __BUILD_DATE__;
 
 // Thin wrappers over program.ts's pure resolvers. With NO date they answer for
 // "now": program-week.ts's currentWeekPlan() - post-launch the completion
@@ -7856,14 +7853,6 @@ function wristSessionsFrom(logs: LogEntry[]): WristSession[] {
   }));
 }
 
-function cyclePeriodsForLogic(): CyclePeriod[] {
-  return loadCyclePeriods().map((p) => ({
-    startDate: p.startDate,
-    source: p.source,
-    note: p.note,
-  }));
-}
-
 // ---------- v51 · "Your cycle" page (Sep 25 2026) — its own screen ----------
 //
 // See renderCycle's own comment for her words on why. Was the "Capacity &
@@ -8712,54 +8701,6 @@ function render(): void {
   // Persist live position so reopening the app resumes the workout (cleared on
   // quit/finish via resetState). No-op for non-resumable screens.
   saveActiveSession();
-}
-
-// Group 2H: hold-to-skip implementation. The button shows a fill that
-// progresses over HOLD_TO_SKIP_MS; on release before complete, fill resets.
-function wireHoldToSkip(btn: HTMLElement, onSkip: () => void): void {
-  const holdMs = parseInt(btn.dataset['holdMs'] ?? `${HOLD_TO_SKIP_MS}`, 10) || HOLD_TO_SKIP_MS;
-  const fill = btn.querySelector<HTMLElement>('.hold-fill');
-  let holdStart: number | null = null;
-  let raf: number | null = null;
-  let fired = false;
-
-  function tick(): void {
-    if (holdStart === null) return;
-    const elapsed = Date.now() - holdStart;
-    const pct = Math.min(1, elapsed / holdMs);
-    if (fill) fill.style.width = `${pct * 100}%`;
-    if (pct >= 1 && !fired) {
-      fired = true;
-      reset();
-      onSkip();
-      return;
-    }
-    raf = requestAnimationFrame(tick);
-  }
-
-  function reset(): void {
-    holdStart = null;
-    if (raf !== null) cancelAnimationFrame(raf);
-    raf = null;
-    if (fill) fill.style.width = '0%';
-  }
-
-  function down(e: Event): void {
-    e.preventDefault();
-    if (fired) return;
-    holdStart = Date.now();
-    tick();
-  }
-
-  function up(): void {
-    if (fired) return;
-    reset();
-  }
-
-  btn.addEventListener('pointerdown', down);
-  btn.addEventListener('pointerup', up);
-  btn.addEventListener('pointercancel', up);
-  btn.addEventListener('pointerleave', up);
 }
 
 function attachHandlers(): void {

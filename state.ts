@@ -23,6 +23,7 @@ import type { AnyWorkoutId, Phase } from './program.js';
 import type { WeekKey } from './week.js';
 import type { MoveFeelValue } from './move-feel.js';
 import type { LogEntry, StoredWeekMove, WalkEntry, StoredCyclePeriod } from './types.js';
+import type { CyclePeriod } from './cycle.js';
 import type { WeekClockInput } from './program-week.js';
 
 // ---------- types ----------
@@ -733,6 +734,16 @@ export function loadCyclePeriods(): StoredCyclePeriod[] {
   } catch {
     return [];
   }
+}
+
+// The cycle periods as the pure cycle.ts logic wants them (start / source / note, no sync flag).
+// Moved verbatim out of app.ts (step 12a): Home's door, Progress's door and the Your-cycle page all read it.
+export function cyclePeriodsForLogic(): CyclePeriod[] {
+  return loadCyclePeriods().map((p) => ({
+    startDate: p.startDate,
+    source: p.source,
+    note: p.note,
+  }));
 }
 
 export function writeCyclePeriods(periods: StoredCyclePeriod[]): void {
