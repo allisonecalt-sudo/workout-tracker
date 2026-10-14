@@ -144,7 +144,7 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
     expect(graph.get('app.ts')).toEqual(expect.arrayContaining(['state.ts', 'bus.ts']));
     // bus.ts imports nothing; state.ts only the pure data modules its types come from
     expect(graph.get('bus.ts')).toEqual([]);
-    const allowed = ['move-feel.ts', 'program.ts', 'types.ts', 'week.ts'];
+    const allowed = ['move-feel.ts', 'program-week.ts', 'program.ts', 'types.ts', 'week.ts'];
     expect((graph.get('state.ts') ?? []).filter((d) => !allowed.includes(d))).toEqual([]);
   });
 

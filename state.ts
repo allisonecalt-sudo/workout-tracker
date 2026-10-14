@@ -23,6 +23,7 @@ import type { AnyWorkoutId, Phase } from './program.js';
 import type { WeekKey } from './week.js';
 import type { MoveFeelValue } from './move-feel.js';
 import type { LogEntry, StoredWeekMove } from './types.js';
+import type { WeekClockInput } from './program-week.js';
 
 // ---------- types ----------
 
@@ -672,4 +673,24 @@ export function writeWeekMoves(moves: StoredWeekMove[]): void {
   } catch {
     // localStorage full/unavailable — non-fatal, same as writeCyclePeriods.
   }
+}
+
+// ---- accessors that read the stores above (code-shape step 8b, Oct 14 2026) ----------
+// Moved verbatim from app.ts so a screen module can call them without importing app.ts.
+
+// Oldest → newest array of all logs. v48 · P6 (Sep 24 2026): sorted by DATE —
+// the old `.reverse()` trusted storage order, and writeLogs keeps unsynced rows
+// first, so a session saved offline could sit at the "latest" end of a chart.
+export function getChronologicalLogs(): LogEntry[] {
+  return [...loadLogs()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// The week clock (program-week.ts) is pure: it takes logs, stored week moves and "now"
+// as parameters. This gathers today's values for it from storage + the clock.
+/** Everything the week clock reads, gathered from today's storage + clock. */
+export function weekClockInput(
+  logs: LogEntry[] = loadLogs(),
+  now: Date = new Date()
+): WeekClockInput {
+  return { logs, moves: loadWeekMoves(), now };
 }

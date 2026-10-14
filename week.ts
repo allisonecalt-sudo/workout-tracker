@@ -196,6 +196,23 @@ export const COMPLETION_WEEKS_FROM: { round: number; week: number; at: string } 
   at: '2026-09-26T22:30:00+03:00',
 };
 
+// WK2 fix r1 (Sep 27 2026, checker's must #2): the legacy fallback below means
+// exactly ONE thing — the calendar week that closed the night before the real
+// launch (Sat Sep 19-Fri Sep 25 2026 = Week 4, per PLAN-2026-09-26.md §2.4's
+// own "Pin the legacy fallback to the calendar week just before
+// COMPLETION_WEEKS_FROM.at"). It used to read `getViewedProgramWeek(1)` /
+// `getWeekCount(1)` / `getWeekDots(1, …)`, all of which anchor on
+// `saturdayForOffset(1)` — ONE WEEK BEFORE WHATEVER "TODAY" HAPPENS TO BE.
+// Checker's exact repro: her 42 live rows plus a Mon-Sep-28 A and a Wed-Sep-30
+// B, clock set to Sat Oct 3 (Week 5 still open at day 8) — "today minus 1
+// week" is then Sep 26, i.e. Week 5 itself, so the peek showed "‹ Week 5"
+// while she's still IN Week 5: the exact "wrong week on top" confusion this
+// whole model exists to fix. Pinned to a FIXED instant (launch minus 7 days,
+// landing back on that same Saturday) instead, so it never drifts with "now".
+export const LEGACY_LAST_CLOSED_WEEK_INSTANT = new Date(
+  new Date(COMPLETION_WEEKS_FROM.at).getTime() - 7 * 24 * 60 * 60 * 1000
+);
+
 const LETTER_ORDER: readonly Letter[] = ['A', 'B', 'C'];
 
 function doneAndMissing(doneSet: ReadonlySet<Letter>): { done: Letter[]; missing: Letter[] } {

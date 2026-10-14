@@ -68,6 +68,7 @@ import {
   // schema dependency, so it's safe to read now.
   canMoveOn as weekCanMoveOn,
   COMPLETION_WEEKS_FROM,
+  LEGACY_LAST_CLOSED_WEEK_INSTANT,
   type WeekSpan,
   type WeekKey,
   type PendingWeek,
@@ -163,7 +164,16 @@ import {
   writeLogs,
   loadWeekMoves,
   writeWeekMoves,
+  getChronologicalLogs,
+  weekClockInput,
 } from './state.js';
+import { escapeHtml, formatMmSs, formatMonthDay, SHORT_MONTHS } from './format.js';
+import {
+  splitNotes,
+  sessionCardio,
+  ellipticalRideRecords,
+  type SessionCardio,
+} from './cardio-notes.js';
 import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
 import { bindClick } from './dom.js';
@@ -173,7 +183,6 @@ import {
   calendarSaturdayMs,
   attributeSessionsToWeeks,
   sessionsAttributedTo,
-  type WeekClockInput,
 } from './program-week.js';
 
 // Hand routine retired 2026-05-15 per Allison. All hand-routine types,
@@ -1292,12 +1301,6 @@ function parseMmSs(raw: string): number | null {
   }
   const n = Number(v);
   return Number.isFinite(n) && n > 0 && n < 18000 ? Math.round(n) : null;
-}
-
-function formatMmSs(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 // v53 (Sep 26 2026) — the same three console-reading validators as
@@ -4548,15 +4551,10 @@ function formatTimerDisplay(sec: number): string {
 // The logic lives in program-week.ts and is PURE: it takes the logs, the
 // stored week moves and the clock ("now") as parameters. These wrappers keep
 // every call site in this file unchanged by supplying today's values — the
-// storage reads (loadLogs, loadWeekMoves) and `new Date()` all stay HERE, in
-// app.ts. (Sick/break weeks are entries in SKIPPED_WEEKS, program.ts; there is
+// storage reads (loadLogs, loadWeekMoves) and `new Date()` are gathered by
+// weekClockInput() in state.ts (step 8b). (Sick/break weeks are entries in SKIPPED_WEEKS, program.ts; there is
 // no app branch for tests.)
 // ---------------------------------------------------------------------------
-
-/** Everything the week clock reads, gathered from today's storage + clock. */
-function weekClockInput(logs: LogEntry[] = loadLogs(), now: Date = new Date()): WeekClockInput {
-  return { logs, moves: loadWeekMoves(), now };
-}
 
 function getProgramWeek(date: Date = new Date()): ReturnType<typeof pw.getProgramWeek> {
   return pw.getProgramWeek(date);
@@ -4642,15 +4640,6 @@ function formatWeekRange(start: Date, end: Date): string {
   const startStr = `${months[start.getMonth()]} ${start.getDate()}`;
   const endStr = sameMonth ? `${end.getDate()}` : `${months[end.getMonth()]} ${end.getDate()}`;
   return `${startStr}–${endStr}`;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
 }
 
 // Week dots (group 2J): one entry per weekday. Color is the workout letter.
@@ -4950,23 +4939,6 @@ function todaysWeekMove(): StoredWeekMove | null {
 /** What "‹ Week 4" (§8c amendment) peeks at: a plain weekNum + rendered dots
  * + count line, from WHICHEVER model actually closed that week. */
 type WeekPeek = { weekNum: number; dotsHtml: string; countText: string };
-
-// WK2 fix r1 (Sep 27 2026, checker's must #2): the legacy fallback below means
-// exactly ONE thing — the calendar week that closed the night before the real
-// launch (Sat Sep 19-Fri Sep 25 2026 = Week 4, per PLAN-2026-09-26.md §2.4's
-// own "Pin the legacy fallback to the calendar week just before
-// COMPLETION_WEEKS_FROM.at"). It used to read `getViewedProgramWeek(1)` /
-// `getWeekCount(1)` / `getWeekDots(1, …)`, all of which anchor on
-// `saturdayForOffset(1)` — ONE WEEK BEFORE WHATEVER "TODAY" HAPPENS TO BE.
-// Checker's exact repro: her 42 live rows plus a Mon-Sep-28 A and a Wed-Sep-30
-// B, clock set to Sat Oct 3 (Week 5 still open at day 8) — "today minus 1
-// week" is then Sep 26, i.e. Week 5 itself, so the peek showed "‹ Week 5"
-// while she's still IN Week 5: the exact "wrong week on top" confusion this
-// whole model exists to fix. Pinned to a FIXED instant (launch minus 7 days,
-// landing back on that same Saturday) instead, so it never drifts with "now".
-const LEGACY_LAST_CLOSED_WEEK_INSTANT = new Date(
-  new Date(COMPLETION_WEEKS_FROM.at).getTime() - 7 * 24 * 60 * 60 * 1000
-);
 
 /** The legacy calendar/swing model's own last completed week — always Week 4
  * (the fixed instant above), never "whatever today happens to be minus a
@@ -8674,31 +8646,11 @@ function backToWorkoutFromStop(): void {
 // ---------------------------------------------------------------------------
 
 const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const SHORT_MONTHS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
 
 // "Sat Sep 19" — the weekday makes the Saturday swing readable in the list.
 function formatRowDate(iso: string): string {
   const d = new Date(iso);
   return `${SHORT_WEEKDAYS[d.getDay()]} ${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
-}
-
-// "Sep 19" — for "since May 2" and the like.
-function formatMonthDay(iso: string): string {
-  const d = new Date(iso);
-  return `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
 // "18:31" — the 24-hour clock she reads (the old locale time could come out as
@@ -8728,146 +8680,6 @@ function combineDateAndClock(baseIso: string, hhmm: string): string {
     0
   );
   return combined.toISOString();
-}
-
-// v47 rows carry the cardio lane, the machine readings and her words as prose
-// in `notes` ("cardio: elliptical 10 min · level 7 · 1.4 km · pulse 128 · knee
-// fine · duration not recorded — …"). Same head as ELLIPTICAL_MARKER_RE, with
-// the readings captured too, so an old ride shows the same Cardio row as a new one.
-const LEGACY_ELLIPTICAL_RE =
-  /cardio: elliptical (\d+) min(?: · level (\d+))?(?: · (\d+(?:\.\d+)?) km)?(?: · pulse (\d+))?/;
-const LEGACY_APARTMENT_RE = /cardio: apartment (\d+) min/;
-// The app's own annotations (v32 left-open / logged after the fact, v48 "Log
-// what I did") — "System", never shown as if she wrote them.
-const SYSTEM_NOTE_RE = /^(duration not recorded|logged after the fact|stopped early at)/;
-
-type SessionCardio = {
-  lane: 'walk' | 'apartment' | 'elliptical';
-  minutes: number | null;
-  level: number | null;
-  km: number | null;
-  pulse: number | null;
-  // v49 (Sep 25 2026): calories + time off the console. null on every row
-  // logged before v49 — legacy notes never carried them.
-  kcal: number | null;
-  timeSec: number | null;
-};
-
-function numOrNull(s: string | undefined): number | null {
-  if (s === undefined) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
-}
-
-// Splits a `notes` string into the legacy cardio marker, her words and the
-// app's annotations. A v48 row's notes are annotations only, so its words come
-// back empty; a v47 row gets all three pulled apart.
-function splitNotes(notes: string | null | undefined): {
-  cardio: SessionCardio | null;
-  words: string[];
-  system: string[];
-} {
-  let rest = notes ?? '';
-  let cardio: SessionCardio | null = null;
-  const ell = LEGACY_ELLIPTICAL_RE.exec(rest);
-  if (ell) {
-    cardio = {
-      lane: 'elliptical',
-      minutes: numOrNull(ell[1]),
-      level: numOrNull(ell[2]),
-      km: numOrNull(ell[3]),
-      pulse: numOrNull(ell[4]),
-      kcal: null,
-      timeSec: null,
-    };
-    rest = rest.replace(ell[0], '');
-  }
-  const apt = LEGACY_APARTMENT_RE.exec(rest);
-  if (apt) {
-    if (!cardio) {
-      cardio = {
-        lane: 'apartment',
-        minutes: numOrNull(apt[1]),
-        level: null,
-        km: null,
-        pulse: null,
-        kcal: null,
-        timeSec: null,
-      };
-    }
-    rest = rest.replace(apt[0], '');
-  }
-  const words: string[] = [];
-  const system: string[] = [];
-  for (const part of rest.split(' · ')) {
-    const t = part.trim();
-    if (!t) continue;
-    (SYSTEM_NOTE_RE.test(t) ? system : words).push(t);
-  }
-  return { cardio, words, system };
-}
-
-// The session's cardio: the v48 columns first; a v47 row falls back to its
-// notes marker; an old real walk to walkMinutes.
-function sessionCardio(l: LogEntry): SessionCardio | null {
-  if (l.cardioLane) {
-    const ell = l.cardioLane === 'elliptical';
-    return {
-      lane: l.cardioLane,
-      minutes: l.cardioMinutes ?? (l.cardioLane === 'walk' ? (l.walkMinutes ?? null) : null),
-      level: ell ? (l.ellipticalLevel ?? null) : null,
-      km: ell ? (l.ellipticalKm ?? null) : null,
-      pulse: ell ? (l.ellipticalPulse ?? null) : null,
-      kcal: ell ? (l.ellipticalKcal ?? null) : null,
-      timeSec: ell ? (l.ellipticalTimeSec ?? null) : null,
-    };
-  }
-  const legacy = splitNotes(l.notes).cardio;
-  if (legacy) return legacy;
-  if (typeof l.walkMinutes === 'number' && l.walkMinutes > 0) {
-    return {
-      lane: 'walk',
-      minutes: l.walkMinutes,
-      level: null,
-      km: null,
-      pulse: null,
-      kcal: null,
-      timeSec: null,
-    };
-  }
-  return null;
-}
-
-// THE RIDES PAGE (Sep 27 2026) — every elliptical session, oldest -> newest,
-// as ride.ts's plain RideRecord shape. Reuses sessionCardio() (above) so a
-// legacy v47 row's notes-marker ride and a v48+ row's real columns build the
-// exact same record a v49+ row does — one source of "was this an elliptical
-// ride" for the whole app, never a second parallel reader of the columns.
-// An id-less log is dropped (same fail-loud rule as sessionsForWeekModel —
-// ride.ts's RideRecord.id is how the chart's tap and "usual"/"best" are
-// keyed back to a session).
-function ellipticalRideRecords(logs: LogEntry[]): RideRecord[] {
-  const records: RideRecord[] = [];
-  for (const l of logs) {
-    if (!l.id) continue;
-    const cardio = sessionCardio(l);
-    if (!cardio || cardio.lane !== 'elliptical') continue;
-    records.push({
-      id: l.id,
-      date: l.date,
-      workout: l.workout,
-      level: cardio.level,
-      km: cardio.km,
-      kcal: cardio.kcal,
-      timeSec: cardio.timeSec,
-      // v61 fix pass (CHECK-v61 must #1): carried alongside timeSec so
-      // ride-aim.ts can still bucket a row that has no typed time but does
-      // have cardio_minutes (her real Sep 28 D row — see ride-aim.ts's
-      // effectiveTimeSec()).
-      minutes: cardio.minutes,
-    });
-  }
-  return records;
 }
 
 // "Elliptical 10 min · L7 · 1.4 km · 63.4 kcal · 10:02 · pulse 128" /
@@ -9823,13 +9635,6 @@ function renderWeeklyReview(): string {
 //  - No new color tokens — only D-1 + cooler-look additions.
 //  - v48 · P6 (Sep 24 2026): chart ink is --accent-progress, never the sage
 //    that means "the primary action right now" (DECISIONS §5, one sage per screen).
-
-// Oldest → newest array of all logs. v48 · P6 (Sep 24 2026): sorted by DATE —
-// the old `.reverse()` trusted storage order, and writeLogs keeps unsynced rows
-// first, so a session saved offline could sit at the "latest" end of a chart.
-function getChronologicalLogs(): LogEntry[] {
-  return [...loadLogs()].sort((a, b) => a.date.localeCompare(b.date));
-}
 
 // Bar chart for back pain — categorical (0-10), bar per session.
 // v48 · P6 (Sep 24 2026): a pain-free session gets a faint tick instead of
