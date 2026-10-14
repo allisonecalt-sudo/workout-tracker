@@ -101,7 +101,7 @@ import {
   type WeekPlan,
   type CalendarMarks,
 } from './program.js';
-import type { LogEntry, StoredWeekMove, TimerKind, LastDone } from './types.js';
+import type { LogEntry, StoredWeekMove, LastDone } from './types.js';
 import { ui } from './ui.js';
 import {
   genId,
@@ -176,11 +176,19 @@ import {
 import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
 import {
+  stopTimer,
+  startTimerCore,
+  startRestTimer,
+  skipRest,
+  startPreCountdown,
+  togglePause,
+  installTimerVisibilityHandler,
+} from './timer.js';
+import {
   setWalkLineUpdater,
   walkFeelReady,
   activeWalkStart,
   walkLiveText,
-  acquireWalkWakeLock,
   beginWalkTracking,
   startWalk,
   finishWalk,
@@ -195,14 +203,7 @@ import {
   apartmentCardioStep,
   fetchStepsToday,
 } from './walk.js';
-import {
-  unlockAudio,
-  playCountBeep,
-  playGoBeep,
-  playFinishBeep,
-  stopVoiceNote,
-  toggleVoiceNote as toggleVoiceNoteAudio,
-} from './audio.js';
+import { unlockAudio, stopVoiceNote, toggleVoiceNote as toggleVoiceNoteAudio } from './audio.js';
 import { bindClick } from './dom.js';
 import {
   sessionPayload,
@@ -268,7 +269,6 @@ const STALE_SESSION_MS = 3 * 60 * 60 * 1000;
 // need the brakes in between exercises." Default rest is now 0 (skip).
 // Range allows 0-180 in Settings — bump back up if she ever wants it.
 // (DEFAULT_REST_SEC and DEFAULT_PRE_COUNT_SEC now live in state.ts, with the settings getters.)
-const COUNT_BEEP_FROM_SEC = 3;
 const HOLD_TO_SKIP_MS = 500;
 const HOLD_TO_CLEAR_MS = 500;
 
@@ -427,204 +427,9 @@ function currentSteppedMoves(): SteppedMove[] {
 
 // HAND_ROUTINES retired 2026-05-15 — see archive/hand-routine-2026-05-15/.
 
-// ---------- timer (clock-anchored, group 1B) ----------
-//
-// Why this design (audit §3): the previous setInterval-based countdown was
-// throttled when the phone screen slept (iOS Safari pauses background
-// intervals entirely), so a 25-sec wall-sit would freeze and never finish.
-// Pre-countdown had its own closure-local interval, leaking a "ghost timer"
-// on Quit. This replaces all of that with a single rAF loop reading the
-// wall-clock — endsAt is captured once, every frame computes
-// `endsAt - Date.now()`. Survives sleep/wake; pause is trivial.
-
-// v46: keep the screen awake through a long timed block (the 10-25 min
-// elliptical / apartment rides). Only walks held a wake lock; on a ride the
-// Pixel slept, the timer loop stopped with it, and no 3-2-1 or finish chime
-// played until she woke the phone (UX audit Sep 24; her Jul-4 walk rule was
-// "it should make the screen stay open"). Reuses the walk's lock; released when
-// the timer ends or stops — unless a walk still needs it.
-const TIMER_WAKE_LOCK_MIN_SEC = 60;
-
-function releaseTimerWakeLock(): void {
-  if (!ui.timerHoldsWakeLock) return;
-  ui.timerHoldsWakeLock = false;
-  if (activeWalkStart() !== null || workoutWalkStart() !== null) return; // a walk still holds it
-  if (ui.walkWakeLock) {
-    void ui.walkWakeLock.release().catch(() => undefined);
-    ui.walkWakeLock = null;
-  }
-}
-
-function stopTimer(): void {
-  if (ui.rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
-    cancelAnimationFrame(ui.rafHandle);
-  }
-  ui.rafHandle = null;
-  ui.activeTimer = null;
-  state.timerSeconds = 0;
-  state.preCountdown = 0;
-  releaseTimerWakeLock();
-  ui.timerPipOpen = false; // v53: the pip's sheet never outlives the timer it belongs to
-}
-
-function startTimerCore(kind: TimerKind, seconds: number, onComplete: () => void): void {
-  stopTimer();
-  ui.activeTimer = {
-    kind,
-    endsAt: Date.now() + seconds * 1000,
-    onComplete,
-    lastSecRendered: seconds + 1, // force first render
-  };
-  if (kind === 'pre-countdown') {
-    state.preCountdown = seconds;
-  } else {
-    state.timerSeconds = seconds;
-  }
-  if (kind === 'timed-exercise' && seconds >= TIMER_WAKE_LOCK_MIN_SEC) {
-    ui.timerHoldsWakeLock = true;
-    void acquireWalkWakeLock(); // guarded inside: no-op without navigator.wakeLock
-  }
-  render();
-  timerLoop();
-}
-
-function timerLoop(): void {
-  if (!ui.activeTimer) return;
-  // Paused: freeze the countdown. `togglePause` shifts `endsAt` forward by the
-  // paused span on resume and re-enters the loop, so no ticks are lost. This
-  // guard also makes the visibilitychange re-entry safe while paused.
-  if (state.pausedAt !== null) return;
-  const remainMs = ui.activeTimer.endsAt - Date.now();
-  const remainSec = Math.max(0, Math.ceil(remainMs / 1000));
-
-  if (remainSec !== ui.activeTimer.lastSecRendered) {
-    ui.activeTimer.lastSecRendered = remainSec;
-    if (ui.activeTimer.kind === 'pre-countdown') {
-      state.preCountdown = remainSec;
-    } else {
-      state.timerSeconds = remainSec;
-    }
-    // Count beeps at the last COUNT_BEEP_FROM_SEC seconds (audit T6 fix:
-    // only the count beep, not finish beep, fires on the way down).
-    if (remainSec > 0 && remainSec <= COUNT_BEEP_FROM_SEC) {
-      playCountBeep();
-    }
-    render();
-  }
-
-  if (remainMs <= 0) {
-    const t = ui.activeTimer;
-    ui.activeTimer = null;
-    ui.rafHandle = null;
-    releaseTimerWakeLock();
-    if (t.kind === 'pre-countdown') {
-      playGoBeep();
-    } else {
-      playFinishBeep();
-    }
-    t.onComplete();
-    return;
-  }
-
-  if (typeof requestAnimationFrame !== 'undefined') {
-    ui.rafHandle = requestAnimationFrame(timerLoop);
-  } else {
-    // Fallback for environments without rAF (e.g. some test runners): poll @100ms.
-    ui.rafHandle = window.setTimeout(timerLoop, 100) as unknown as number;
-  }
-}
-
-function startRestTimer(): void {
-  // Ship 6: rest duration is user-configurable via Settings.
-  // 2026-05-15 18:07 update: 0 means skip rest entirely — go straight to
-  // the next exercise. Allison's call: "i do not need the brakes anymore."
-  const rest = getRestSec();
-  if (rest <= 0) {
-    state.isResting = false;
-    render();
-    return;
-  }
-  state.isResting = true;
-  startTimerCore('rest', rest, () => {
-    state.isResting = false;
-    render();
-  });
-}
-
-function skipRest(): void {
-  stopTimer();
-  state.isResting = false;
-  state.timerSeconds = 0; // Group 1A: ensure no stale value blocks next "Start timer"
-  render();
-}
-
-function startPreCountdown(then: () => void): void {
-  // Ship 6: pre-countdown duration is user-configurable. If set to 0, skip
-  // the countdown entirely and proceed directly to the next phase.
-  const pre = getPreCountSec();
-  if (pre <= 0) {
-    state.preCountdown = 0;
-    then();
-    return;
-  }
-  startTimerCore('pre-countdown', pre, () => {
-    state.preCountdown = 0;
-    then();
-  });
-}
-
-// ---------- pause (Allison Jul 7 2026) ----------
-// Toggle the workout between running and paused. Pausing accumulates real
-// elapsed time into `state.pausedMs` (subtracted from the logged duration at
-// save) and freezes any running countdown + wall-sit hold by shifting their
-// clock-anchors forward by the paused span on resume — so a 3-minute dish
-// break neither inflates the workout time nor burns a rest/hold timer.
-function togglePause(): void {
-  if (state.pausedAt === null) {
-    // → pause
-    state.pausedAt = Date.now();
-    if (ui.rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
-      cancelAnimationFrame(ui.rafHandle);
-    }
-    ui.rafHandle = null;
-    render();
-    return;
-  }
-  // → resume
-  const pausedFor = Date.now() - state.pausedAt;
-  state.pausedMs += pausedFor;
-  state.pausedAt = null;
-  if (ui.activeTimer) ui.activeTimer.endsAt += pausedFor; // don't burn the frozen countdown
-  if (state.wallSitStartedAt !== null) state.wallSitStartedAt += pausedFor; // keep held-sec honest
-  render();
-  if (ui.activeTimer) timerLoop();
-}
-
-// Recompute on tab visibility — if the user backgrounded the app the rAF
-// loop pauses and the timer would freeze. On return we fast-forward.
-if (typeof document !== 'undefined') {
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && ui.activeTimer) {
-      // v45: cancel the pending frame first, or every background/foreground
-      // cycle added one more parallel loop until the timer ended.
-      if (ui.rafHandle !== null && typeof cancelAnimationFrame !== 'undefined') {
-        cancelAnimationFrame(ui.rafHandle);
-      }
-      ui.rafHandle = null;
-      timerLoop();
-    }
-    // Wake lock auto-releases when the app is backgrounded; if a walk is
-    // still running when she comes back, grab it again so the screen stays
-    // on for the rest of the walk (her Jul-4 call). v46: same for a long
-    // timed block still counting down.
-    if (
-      document.visibilityState === 'visible' &&
-      (activeWalkStart() || (ui.activeTimer !== null && ui.timerHoldsWakeLock))
-    ) {
-      void acquireWalkWakeLock();
-    }
-  });
-}
+// The timer engine lives in timer.ts (step 11a). Its visibility fast-forward is
+// installed here, where the old inline listener ran.
+installTimerVisibilityHandler();
 
 // ---------- persistence ----------
 

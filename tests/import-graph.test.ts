@@ -306,6 +306,11 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
       dom: ['window'],
       why: 'window.AudioContext / webkitAudioContext is the audio engine, not the page',
     },
+    'timer.ts': {
+      imports: ['audio.ts', 'bus.ts', 'state.ts', 'types.ts', 'ui.ts', 'walk.ts'],
+      dom: ['window', 'document'],
+      why: 'document.visibilityState + the visibilitychange listener, and window.setTimeout (the no-rAF fallback), are browser APIs, not page writes',
+    },
     'walk.ts': {
       imports: [
         'actions.ts',
