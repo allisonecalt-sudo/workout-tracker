@@ -626,3 +626,55 @@ test.describe('sync - step 9c: guards on her cycle and week-move data', () => {
     expect(loadWeekMoves()).toEqual([{ ...move, synced: true }]);
   });
 });
+
+// ---- v62.2: an empty pull never deletes local rows (the v33 sessions rule, now for all) ----
+test.describe('sync - v62.2: an empty remote never deletes local cycle periods or week moves', () => {
+  test('cycle_periods: an EMPTY pull keeps synced local rows (and unsynced ones)', async () => {
+    state.screen = 'cycle';
+    setRenderer(() => undefined);
+    const mine = [
+      { startDate: '2026-10-01', source: 'app', note: null, synced: false },
+      { startDate: '2026-09-01', source: 'app', note: 'x', synced: true },
+      { startDate: '2026-08-01', source: null, note: null, synced: true },
+    ];
+    writeCyclePeriods(mine);
+    replies.push(reply(200, []));
+    await pullCyclePeriodsFromSupabase();
+    expect(loadCyclePeriods()).toEqual(mine);
+  });
+
+  test('cycle_periods: a NON-empty pull that lacks one synced row still removes it', async () => {
+    state.screen = 'cycle';
+    setRenderer(() => undefined);
+    writeCyclePeriods([
+      { startDate: '2026-09-01', source: 'app', note: null, synced: true },
+      { startDate: '2026-08-01', source: 'app', note: null, synced: true },
+    ]);
+    replies.push(reply(200, [{ start_date: '2026-09-01', source: 'app', note: null }]));
+    await pullCyclePeriodsFromSupabase();
+    expect(loadCyclePeriods().map((p) => p.startDate)).toEqual(['2026-09-01']);
+  });
+
+  test('week_moves: an EMPTY pull keeps synced local moves', async () => {
+    const mine = [
+      { round: 1, week: 2, at: '2026-10-01T10:00:00Z', missing: 'A', synced: true },
+      { round: 2, week: 6, at: '2026-10-12T10:00:00Z', missing: '', synced: false },
+    ];
+    writeWeekMoves(mine);
+    replies.push(reply(200, []));
+    await pullWeekMovesFromSupabase();
+    expect(loadWeekMoves()).toEqual(mine);
+  });
+
+  test('week_moves: a NON-empty pull that lacks one synced move still removes it', async () => {
+    writeWeekMoves([
+      { round: 1, week: 2, at: '2026-10-01T10:00:00Z', missing: 'A', synced: true },
+      { round: 1, week: 3, at: '2026-10-02T10:00:00Z', missing: '', synced: true },
+    ]);
+    replies.push(
+      reply(200, [{ round: 1, week: 2, moved_at: '2026-10-01T10:00:00Z', missing: 'A' }])
+    );
+    await pullWeekMovesFromSupabase();
+    expect(loadWeekMoves().map((m) => `${m.round}-${m.week}`)).toEqual(['1-2']);
+  });
+});

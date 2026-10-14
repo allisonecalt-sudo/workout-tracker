@@ -29,6 +29,10 @@ function mergeCyclePeriods(
   local: StoredCyclePeriod[],
   remote: RemoteCyclePeriod[]
 ): StoredCyclePeriod[] {
+  // v62.2: an EMPTY remote never deletes local rows - the same rule mergeRemoteSessions has
+  // had since v33. An empty answer is far likelier a wiped table, a bad filter or a dropped
+  // connection than "every period was removed"; synced rows used to vanish here.
+  if (remote.length === 0) return local;
   const byDate = new Map<string, StoredCyclePeriod>();
   for (const l of local) if (l.synced === false) byDate.set(l.startDate, l);
   for (const r of remote) {

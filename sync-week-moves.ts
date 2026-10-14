@@ -41,6 +41,8 @@ export function mergeWeekMoves(
   local: StoredWeekMove[],
   remote: RemoteWeekMove[]
 ): StoredWeekMove[] {
+  // v62.2: an EMPTY remote never deletes local rows (the v33 sessions rule) - see sync-cycle.ts.
+  if (remote.length === 0) return local;
   const byKey = new Map<string, StoredWeekMove>();
   for (const l of local) if (l.synced === false) byKey.set(weekMoveKey(l.round, l.week), l);
   for (const r of remote) {
