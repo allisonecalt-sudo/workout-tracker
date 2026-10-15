@@ -4,9 +4,10 @@
 //
 // Owns: the page's render functions, its click handlers, and its own transient
 // state (the module-local lets below). Imports state/bus/pure modules only -
-// NEVER app.ts. app.ts imports renderRides (render() switch), renderRidesDoorRow
-// (Progress's one door row), attachRidesHandlers (attachHandlers(), same slot as
-// before) and ridesVsDelta (the __wt test hook).
+// NEVER app.ts. app.ts imports renderRides (render() switch), attachRidesHandlers
+// (attachHandlers(), same slot as before) and ridesVsDelta (the __wt test hook).
+// (Progress's one door row to this page, renderRidesDoorRow + ridesDoorSub, moved into
+// screens/progress.ts in step 13b: a screen never imports another screen.)
 
 import { state, getChronologicalLogs } from '../state.js';
 import { requestRender, requestScrollRestore } from '../bus.js';
@@ -81,31 +82,6 @@ let ridesSelectedWeekChartKey: string | null = null;
 function shortChartDate(iso: string): string {
   const d = new Date(iso);
   return `${d.getDate()}`;
-}
-
-function ridesDoorSub(rides: RideRecord[]): string {
-  if (rides.length === 0) return 'No rides yet';
-  const latest = rides[rides.length - 1]!;
-  const rate = rideRate(latest);
-  return rate.kcalPerMin !== null
-    ? `${formatMonthDay(latest.date)} · ${rate.kcalPerMin} kcal/min`
-    : `${formatMonthDay(latest.date)} · no numbers`;
-}
-
-// The one row that opens the page — lives on Progress, both the empty and
-// normal states (same placement rule as renderCycleDoorRow).
-export function renderRidesDoorRow(logs: LogEntry[]): string {
-  const rides = ellipticalRideRecords(logs);
-  return `
-    <div class="card progress-card">
-      <button class="door-row rides-door" id="open-rides" type="button">
-        <span class="rides-door-text">
-          <span class="rides-door-title">🚴 Your rides</span>
-          <span class="rides-door-sub">${escapeHtml(ridesDoorSub(rides))}</span>
-        </span>
-        <span class="door-chev" aria-hidden="true">›</span>
-      </button>
-    </div>`;
 }
 
 // TOP card: the latest ride, big — her hero number is kcal a minute (§4.2's
