@@ -189,9 +189,6 @@ the `__wt` test hooks, it still holds, on purpose:
   the pre-log, whose clock tick is the pre-log screen's.
 - `updateWalkLiveLine`, `syncWorkoutWalkTracking` - they write the DOM / run on every `render()`.
 - `sessionFirsts`, `updateSyncIndicator`, `weekAttributionSummary` - hooks and test hooks for actions.ts.
-- The session snapshot / resume / reset code (`readActiveSnapshot`, `applyActiveSnapshot`,
-  `restoreActiveSession`, `discardStaleSession`, `continueStaleSession`, `resetState`, the sanitizers):
-  it spans every resumable screen and calls the pre-log / post-log clock ticks (screens), so it cannot sit
-  in the shared layer until those come in through hooks.
+- `discardStaleSession` / `continueStaleSession` - the left-open card's buttons; they redraw and are bound in app.ts with the rest of Home's shared bindings. The snapshot / resume / reset code itself is in `session-resume.ts` (17c-3, shared layer; the clock ticks it needs come in through `setResumeHooks()`).
 - The shared `[data-detail]` click, the walk row's three bindings, the left-open card's three buttons,
   `back-home` - they belong to no single screen (see `screens/home.ts` above).

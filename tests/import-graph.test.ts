@@ -320,7 +320,14 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
     const shared = ['actions.ts', 'cardio-readings.ts', 'ui.ts'];
     // the guard read the modules it names (not "found nothing, so nothing to break")
     for (const f of shared) expect([...graph.keys()]).toContain(f);
-    expect(graph.get('app.ts')).toEqual(expect.arrayContaining(shared));
+    // reachable from the bundle: app.ts imports actions.ts and ui.ts itself; cardio-readings.ts is
+    // imported by a screen / shared module since 17c-3 (app.ts no longer reads it directly)
+    for (const f of shared) {
+      expect(
+        [...graph.entries()].some(([from, deps]) => from !== f && deps.includes(f)),
+        f + ' is imported by something in the bundle'
+      ).toBe(true);
+    }
     for (const file of shared) {
       expect(
         (graph.get(file) ?? []).filter((d) => d === 'app.ts' || d.startsWith('screens/')),
