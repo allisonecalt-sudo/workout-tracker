@@ -10,13 +10,19 @@
 //                                     NON-main worktree (`git worktree list`), and REFUSES if ANY
 //                                     link/junction sits anywhere under it (node_modules included).
 //                                     Otherwise fs.rmSync the folder, then `git worktree prune`.
+// Relative paths resolve against INIT_CWD (the folder she typed the command in; npm sets it and
+// runs the script from the package root) so `npm run wt:add -- ..\x HEAD` means what it says.
+// wt:remove also refuses, in plain words, when you are standing inside the worktree (Windows
+// cannot delete a folder that is a process's current directory; that used to be a raw EPERM stack).
 import { spawnSync } from 'node:child_process';
 import { existsSync, realpathSync, rmSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findLinks, parseWorktrees, whyNotRemovable } from './wt-links.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// Where she typed the command: npm sets INIT_CWD and runs scripts from the package root.
+const base = process.env.INIT_CWD || process.cwd();
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 function git(args) {
@@ -34,7 +40,7 @@ const [cmd, target, ref] = process.argv.slice(2);
 
 if (cmd === 'add') {
   if (!target || !ref) die(['usage: wt:add <path> <ref>'], 1);
-  const wt = resolve(target);
+  const wt = resolve(base, target);
   if (existsSync(wt)) die([`[worktree] refusing: ${wt} already exists`], 1);
   git(['worktree', 'add', '--detach', wt, ref]);
   console.log(`[worktree] created ${wt} at ${ref}; running npm ci (real install, no links)`);
@@ -47,14 +53,27 @@ if (cmd === 'add') {
   console.log(`[worktree] ready: ${wt}`);
 } else if (cmd === 'remove') {
   if (!target) die(['usage: wt:remove <path>'], 1);
-  if (!existsSync(resolve(target))) die([`[worktree] nothing at ${resolve(target)}`], 1);
-  const wt = realpathSync(resolve(target));
+  const asked = resolve(base, target);
+  if (!existsSync(asked)) die([`[worktree] nothing at ${asked}`], 1);
+  const wt = realpathSync(asked);
   const why = whyNotRemovable(wt, parseWorktrees(git(['worktree', 'list', '--porcelain'])));
   if (why) {
     die([
       `[worktree] REFUSED, NOTHING DELETED: ${wt}`,
       `  ${why}. wt:remove only removes a registered worktree that is not the main checkout.`,
     ]);
+  }
+  for (const here of new Set([base, process.cwd()])) {
+    if (!existsSync(here)) continue;
+    const rel = relative(wt, realpathSync(here));
+    const inside = rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+    if (inside) {
+      die([
+        `[worktree] NOT REMOVED: you are standing inside ${wt}`,
+        `  (current folder: ${here}). Windows cannot delete the folder a program is in.`,
+        '  cd out of it (for example to the main checkout), then run wt:remove again.',
+      ]);
+    }
   }
   const links = findLinks(wt);
   if (links.length > 0) {
