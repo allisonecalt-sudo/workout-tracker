@@ -241,6 +241,7 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
 
   test('a screen imports only the shared layer: never app.ts, never another screen (step 8)', () => {
     const allowed = [
+      'action-bar.ts',
       'actions.ts',
       'bus.ts',
       'cardio-notes.ts',

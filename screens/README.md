@@ -2,7 +2,7 @@
 
 First one: `screens/rides.ts` (code-shape step 8, Oct 14 2026). Steps 13-17 copy this
 shape, one screen per run. Read `rides.ts` next to this file: it is the worked example.
-`screens/settings.ts` and `screens/cycle.ts` (step 12) are two more worked examples: settings
+`screens/history.ts` (step 14) is the example for a screen whose edit form saves through `actions.ts` and whose draft is shared (`ui.historyEditDraft`). `screens/settings.ts` and `screens/cycle.ts` (step 12) are two more worked examples: settings
 shows a screen with many small handlers and the build-time `version.ts` import; cycle shows
 module-local state (return-to, compare metric, scroll) that used to live in `ui`.
 
@@ -23,7 +23,7 @@ module-local state (return-to, compare metric, scroll) that used to live in `ui`
 
 ## What it may import
 
-`state.ts`, `bus.ts`, `dom.ts`, `format.ts`, `version.ts`, `ui.ts`, `actions.ts`, `cardio-readings.ts`, `viz.ts` (sparklines / wall-sit trend), `session-row.ts` (the one session row), and the pure modules (`ride.ts`,
+`state.ts`, `bus.ts`, `dom.ts`, `format.ts`, `action-bar.ts`, `version.ts`, `ui.ts`, `actions.ts`, `cardio-readings.ts`, `viz.ts` (sparklines / wall-sit trend), `session-row.ts` (the one session row), and the pure modules (`ride.ts`,
 `ride-aim.ts`, `chart.ts`, `program-week.ts`, `week.ts`, `week-d.ts`, `timing.ts`, `dates.ts`,
 `cardio-notes.ts`, `types.ts`, `week-clock.ts`, `cycle.ts`, `program.ts`, `sync.ts`, `sync-cycle.ts`, `sync-week-moves.ts`,
 `sync-movement.ts` ...). `week-clock.ts` and `sync*.ts` are shared-layer modules in their own
