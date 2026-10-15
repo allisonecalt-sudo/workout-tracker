@@ -45,10 +45,8 @@ export interface Ui {
   timerHoldsWakeLock: boolean;
   walkWakeLock: { release: () => Promise<void> } | null;
   walkTickId: number | null;
-  // T1 (Sep 27 2026): the pre-log/post-log "is this the time?" minute ticks —
-  // see beginPostLogClockTick below, same shape as walkTickId just above. The
-  // pre-log's tick id is module-local in screens/prelog.ts since step 15b.
-  postLogTickId: number | null;
+  // (The pre-log / post-log "is this the time?" tick ids are module-local in
+  // screens/prelog.ts and screens/postlog.ts since step 15.)
   // In-workout walk tracking (v13 — her actual idea, Jul 4: "each time I go on a
   // walk WITHIN each workout it tracks information, saves it"). The 'Outdoor
   // walk' step that opens A/B (10 min) and C (25 min) times the walk (v48: minutes
@@ -60,9 +58,6 @@ export interface Ui {
   // boot; shown only when Fit answers — when it doesn't, nothing is invented
   // (fail-loud: a missing number stays missing, never a 0).
   stepsToday: number | null;
-  // v45: one save at a time. The walk lane awaits Google Fit (up to 5 s) before
-  // saving, and a second tap on "Save & finish" in that window wrote a 2nd row.
-  savingLog: boolean;
   // A snapshot too old to resume silently (see STALE_SESSION_MS). Held here until
   // she answers the home card; the snapshot stays in localStorage meanwhile so a
   // reload asks again rather than losing it.
@@ -117,10 +112,8 @@ export const ui: Ui = {
   timerHoldsWakeLock: false,
   walkWakeLock: null,
   walkTickId: null,
-  postLogTickId: null,
   workoutWalk: null,
   stepsToday: null,
-  savingLog: false,
   staleSnapshot: null,
   cycleUndoTimer: null,
   cycleUndoStartDate: null,

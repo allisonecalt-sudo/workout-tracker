@@ -26,7 +26,9 @@ import { state, loadLogs, type ArmFeelState } from './state.js';
 import { flattenSteps, type WorkoutSteps } from './step-list.js';
 import { steppedMovesForWorkout, type SteppedMove } from './move-feel.js';
 import type { WeekSpan, PendingWeek } from './week.js';
+import { sessionsAttributedTo } from './program-week.js';
 import {
+  saturdayForOffset,
   getWeekPlan,
   isNowAfterCompletionLaunch,
   gapCountsBackToWeekKey,
@@ -342,4 +344,10 @@ export function liveWeekDTarget(shown: {
   if (shown.span) return { open: shown.span };
   if (shown.pending) return { pending: true };
   return null;
+}
+
+// Count sessions in the Sat-Fri week `offset` weeks back.
+export function getWeekCount(offset = 0): number {
+  // Swing-aware (v42): a Saturday session may count toward the week before.
+  return sessionsAttributedTo(loadLogs(), saturdayForOffset(offset)).length;
 }
