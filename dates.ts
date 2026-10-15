@@ -47,3 +47,25 @@ export function formatDateLong(iso: string): string {
     year: 'numeric',
   });
 }
+
+// T1 (Sep 27 2026), §3.1's ✎ time box — formatClock's inverse. Takes the
+// calendar day from `baseIso` (the candidate she's fixing — always tonight,
+// never a date she has to also type) and the clock from the native
+// `<input type=time>`'s own "HH:MM" value.
+export function combineDateAndClock(baseIso: string, hhmm: string): string {
+  const m = /^(\d{2}):(\d{2})$/.exec(hhmm);
+  if (!m) return baseIso;
+  const base = new Date(baseIso);
+  const hours = Number(m[1]);
+  const minutes = Number(m[2]);
+  const combined = new Date(
+    base.getFullYear(),
+    base.getMonth(),
+    base.getDate(),
+    hours,
+    minutes,
+    0,
+    0
+  );
+  return combined.toISOString();
+}

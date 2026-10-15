@@ -45,6 +45,8 @@ import {
   type ArmLoadState,
   type ArmFeel,
   type ArmFeelState,
+  type AppScreen,
+  type ActiveSessionSnapshot,
 } from './state.js';
 import { ui } from './ui.js';
 import { requestRender } from './bus.js';
@@ -679,4 +681,72 @@ export function saveHistoryEdit(): void {
     state.syncStatus = ok ? 'synced' : 'offline';
     hooks().updateSyncIndicator();
   });
+}
+
+// Step 15a (Oct 15 2026): moved verbatim out of app.ts. The post-log's note / wall-sit
+// inputs and the workout's feel chips all save the resume snapshot through this one function.
+// Screens that count as "in a workout" for resume purposes.
+export const RESUMABLE_SCREENS: readonly AppScreen[] = ['workout', 'post-log'];
+
+export function saveActiveSession(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (!state.selectedWorkout || !RESUMABLE_SCREENS.includes(state.screen)) return;
+    const snap: ActiveSessionSnapshot = {
+      screen: state.screen,
+      selectedWorkout: state.selectedWorkout,
+      capacityBefore: state.capacityBefore,
+      capacityAfter: state.capacityAfter,
+      moodBefore: state.moodBefore,
+      moodAfter: state.moodAfter,
+      moodBeforeTouched: state.moodBeforeTouched,
+      moodAfterTouched: state.moodAfterTouched,
+      wallSitSec: state.wallSitSec,
+      backPain: state.backPain,
+      wristPain: state.wristPain,
+      wristPainTouched: state.wristPainTouched,
+      backPainBefore: state.backPainBefore,
+      backPainBeforeTouched: state.backPainBeforeTouched,
+      wristPainBefore: state.wristPainBefore,
+      wristPainBeforeTouched: state.wristPainBeforeTouched,
+      herStartAt: state.herStartAt,
+      herStartConfirmed: state.herStartConfirmed,
+      herEndAt: state.herEndAt,
+      herEndConfirmed: state.herEndConfirmed,
+      breakMinutes: state.breakMinutes,
+      stepFeel: state.stepFeel,
+      capacityBeforeTouched: state.capacityBeforeTouched,
+      capacityAfterTouched: state.capacityAfterTouched,
+      backPainTouched: state.backPainTouched,
+      word: state.word,
+      sessionNote: state.sessionNote,
+      voicePlays: state.voicePlays,
+      currentRound: state.currentRound,
+      currentPhase: state.currentPhase,
+      currentExerciseIndex: state.currentExerciseIndex,
+      startedAt: state.startedAt,
+      pausedAt: state.pausedAt,
+      pausedMs: state.pausedMs,
+      liteDay: state.liteDay,
+      roundBreak: state.roundBreak,
+      finishHereLitePrev: state.finishHereLitePrev,
+      stoppedEarlyAt: state.stoppedEarlyAt,
+      stoppedEarlyLitePrev: state.stoppedEarlyLitePrev,
+      armFeel: state.armFeel,
+      moveFeel: state.moveFeel,
+      rideFeel: state.rideFeel,
+      armLoad: state.armLoad,
+      armLoadMax: state.armLoadMax,
+      setsDoneFor: state.setsDoneFor,
+      heldSetsFor: state.heldSetsFor,
+      stretchTicks: state.stretchTicks,
+      completedSteps: state.completedSteps,
+      rideNumbersOpen: state.rideNumbersOpen,
+      pinnedPlanDateIso: state.pinnedPlanDateIso,
+      pinnedWeekKey: state.pinnedWeekKey,
+    };
+    localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
+  } catch {
+    // Non-fatal — resume is a convenience, never block the app on it.
+  }
 }

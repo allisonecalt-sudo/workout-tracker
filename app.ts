@@ -7,7 +7,7 @@
 import { EXERCISE_VISUALS } from './exercise-visuals.js';
 import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
 import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
-import { painFromFeel, feelFromPain } from './pain-feel.js';
+import { painFromFeel } from './pain-feel.js';
 import { setsPrescribed, holdSetsFace, formatHeldSeconds, workoutHasWallSit } from './hold-sets.js';
 import { trainingMinutes } from './timing.js';
 import { rideRate } from './ride.js';
@@ -19,18 +19,15 @@ import {
   reachedCount,
   stepKey as buildStepKey,
   type WorkoutStep,
-  type WorkoutSteps,
 } from './step-list.js';
 import {
   canMoveOn as weekCanMoveOn,
   COMPLETION_WEEKS_FROM,
   LEGACY_LAST_CLOSED_WEEK_INSTANT,
   type WeekSpan,
-  type PendingWeek,
 } from './week.js';
 import { weekCountLine, weekTargetForD, weekWindowFor, type DWeekTarget } from './week-d.js';
 import {
-  steppedMovesForWorkout,
   steppedLineText,
   steppedLineFor,
   isMoveFeelValue,
@@ -40,7 +37,6 @@ import {
 } from './move-feel.js';
 import { deriveRideAim, lastTimeAtSameAim } from './ride-aim.js';
 import {
-  PROGRAM,
   EXERCISE_GUIDE,
   SAFETY_LINE,
   planForWeekKey,
@@ -53,12 +49,13 @@ import {
   type Exercise,
   type Workout,
   type Phase,
-  type WeekPlan,
   type CalendarMarks,
 } from './program.js';
 import type { LogEntry, StoredWeekMove, LastDone } from './types.js';
 import { ui } from './ui.js';
 import {
+  saveActiveSession,
+  RESUMABLE_SCREENS,
   saveCompletedSession,
   clearActiveSession,
   logStaleSessionAsDone,
@@ -122,6 +119,7 @@ import {
   localIsoDate,
   formatClock,
   formatDateLong,
+  combineDateAndClock,
 } from './dates.js';
 import { renderActionBar } from './action-bar.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
@@ -203,6 +201,26 @@ import {
   sessionsAttributedTo,
 } from './program-week.js';
 import { honestWallSitLogs } from './viz.js';
+import { renderBodyChips, renderBackWristControl, renderTimeConfirmBlock } from './log-fields.js';
+import {
+  ELLIPTICAL_NAME,
+  ARM_FEEL_STEPS,
+  ellipticalStep,
+  getWorkoutById,
+  getWorkoutD,
+  currentSteppedMoves,
+  getCurrentWorkout,
+  effectiveRounds,
+  reachedWallSit,
+  toStepWorkout,
+  skippedStepsCount,
+  displayName,
+  lastCardioLane,
+  workoutMinutesLabel,
+  tonightKind,
+  tonightNames,
+  liveWeekDTarget,
+} from './workout-now.js';
 import { renderProgress } from './screens/progress.js';
 import { renderWeeklyReview, computeWeekTotals, attachReviewHandlers } from './screens/review.js';
 
@@ -269,97 +287,6 @@ const STALE_SESSION_MS = 3 * 60 * 60 * 1000;
 // branch's ride numbers (Next -> "from the machine" entry screen) + Cue ->
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
-
-function getWorkoutById(id: WorkoutId, date?: Date): Workout {
-  return getWeekPlan(date).workouts[id];
-}
-
-// v54 (Sep 27 2026) — Workout D: "Cardio · 30 min elliptical". Her Sep 27
-// NotebookLM reflection: "I definitely don't do enough cardio... maybe what I
-// could add is 30 minutes on the elliptical separately... we definitely need
-// a 4th element a week... call it Workout D... ideally not the same day as
-// another workout, but it can also be if it needs to be." Fixed, not week-
-// programmed — it never bumps, never appears in PROGRAM/WeekPlan, and is
-// available any day (including a day with A/B/C already done — she was
-// explicit it's allowed on the same day, just not the ideal). ONE step: the
-// elliptical itself, straight in (no "Outdoor walk" lane picker — D IS the
-// ride, so beginExercisesForWorkoutD below forces chooseElliptical(30)
-// directly, same as if she'd tapped ▶ Elliptical). No warmup list beyond the
-// ride's own note ("First two minutes easy...", ellipticalStep's built-in
-// line — her "short warm-up line"), no strength main block, no cool-down
-// list (empty cooldown; advanceExercise's cooldown-skip below sends her
-// straight to post-log once the ride's done).
-function getWorkoutD(): Workout {
-  return {
-    id: 'D',
-    name: 'Cardio · 30 min elliptical',
-    description: 'Steady elliptical, talk-test level 3-5 — extra, on top of A/B/C.',
-    warmup: [ellipticalStep(30)],
-    main: [],
-    cooldown: [],
-    rounds: 1,
-  };
-}
-
-// v58 (Sep 28 2026) — the moves that STEPPED this week for `id`, computed the
-// exact same way diffWorkout above already diffs a week against its own
-// predecessor in PROGRAM (renderComingNextWeek/renderPastWeeks' own pattern:
-// `PROGRAM.indexOf` + `PROGRAM[idx - 1]`) — never a second, competing notion
-// of "last week's plan". `id === 'D'` never steps (D isn't in PROGRAM's A/B/C
-// rotation at all — see AnyWorkoutId's own comment); the very first encoded
-// week (idx 0) has no predecessor, so every one of its moves reads as new —
-// same as diffWorkout's own `!prev` branch. Curl/row (ARM_FEEL_STEPS' two
-// names) are always excluded — they keep arm_feel, never migrated (her spec
-// item 1).
-//
-// v58 fix pass (Sep 28 2026, checker's must): this used to call
-// `getWeekPlan()` (which then went through a made-up calendar date; since v62
-// it finds the row by week key) — and diff it against
-// `PROGRAM[idx-1]` unconditionally. On a REPEAT week (planForWeekKey's own
-// `repeatsWeek` fallback — "same moves as Week N", no new PROGRAM row yet)
-// that lands on the SAME row as the week it repeats, so the diff compared
-// that row against the week BEFORE the one it repeats and found stepped
-// moves that already stepped last week, not this one (repro: Week 5 steps
-// the ride 10->12; Week 6 repeats Week 5 with no new row; opening Workout A
-// in Week 6 still said "Stepped this week: ride 12 min"). It also ignored
-// state.pinnedWeekKey, so a session pinned to one week (startWorkout) could
-// ask about a DIFFERENT week's moves if "now" crossed the Sat/Sun boundary
-// before she finished. Fixed by resolving the SAME key getCurrentWorkout
-// uses (pinnedWeekKey -> pinnedPlanDateIso -> the live completion-model key
-// -> the pre-launch calendar scan) and returning [] outright on a repeat
-// week — there is nothing to diff, and diffing against the wrong
-// predecessor is worse than showing nothing.
-function steppedMovesForWorkoutId(id: AnyWorkoutId | null): SteppedMove[] {
-  if (!id || id === 'D') return [];
-  const excludeNames = new Set(Object.keys(ARM_FEEL_STEPS));
-  let current: WeekPlan;
-  if (state.pinnedWeekKey) {
-    const { plan, repeatsWeek } = planForWeekKey(state.pinnedWeekKey);
-    if (repeatsWeek !== null) return [];
-    current = plan;
-  } else if (state.pinnedPlanDateIso) {
-    // Pre-launch pin — same calendar-date lookup getCurrentWorkout's own
-    // pinnedPlanDateIso branch uses; PROGRAM has no "repeat" concept there.
-    current = getWeekPlan(new Date(state.pinnedPlanDateIso));
-  } else if (isNowAfterCompletionLaunch()) {
-    const key = gapCountsBackToWeekKey() ?? shownWeek().key;
-    const { plan, repeatsWeek } = planForWeekKey(key);
-    if (repeatsWeek !== null) return [];
-    current = plan;
-  } else {
-    current = getWeekPlan();
-  }
-  const idx = PROGRAM.indexOf(current);
-  const prev = idx > 0 ? PROGRAM[idx - 1] : undefined;
-  return steppedMovesForWorkout(prev?.workouts[id], current.workouts[id], excludeNames);
-}
-
-// The live session's own stepped-moves list — the one call site every render
-// (the chip, the pre-log line) reads, so they can never quietly disagree
-// about which moves stepped tonight.
-function currentSteppedMoves(): SteppedMove[] {
-  return steppedMovesForWorkoutId(state.selectedWorkout);
-}
 
 // HAND_ROUTINES retired 2026-05-15 — see archive/hand-routine-2026-05-15/.
 
@@ -521,7 +448,6 @@ function clearApartmentCardio(): void {
 // Supabase change: minutes → walk_minutes, "cardio: elliptical N min · level L"
 // → notes. The next session's starting level is read back off that marker in
 // the saved logs, not from a separate remembered number.
-const ELLIPTICAL_NAME = 'Elliptical';
 // One tap on + or −. The first tap starts from her last level (or 3 on a first
 // ride) and moves one from there; after that it moves from what's shown.
 function stepEllipticalLevel(delta: number): void {
@@ -625,17 +551,6 @@ function clearElliptical(): void {
   localStorage.removeItem(WW_ELLIPTICAL_KCAL_KEY);
 }
 
-function ellipticalStep(minutes: number): Exercise {
-  return {
-    name: ELLIPTICAL_NAME,
-    reps: `${minutes} min`,
-    notes:
-      'First two minutes easy. Then raise the level until you can still talk in full sentences, and stay there. Ease off for the last minute.',
-    durationSec: minutes * 60,
-    isTimed: true,
-  };
-}
-
 // ---------- The guided indoor strip (Allison Sep 7 2026, v30) ----------
 // WHAT CHANGED from v29: the apartment lane was a countdown plus a written menu
 // ("pick one: stairs, laps, or marching") — i.e. a timer and a DECISION, which
@@ -719,26 +634,6 @@ function walksThisWeek(): number {
   return loadWalks().filter((w) => new Date(w.date).getTime() >= since).length;
 }
 
-// v48 · fix r1 (Sep 24 2026): after "Log what I did", did she get past the wall
-// sit? A stop before it (at the hinge, round 1) left an empty "Wall sit (s)"
-// asking about a hold she never reached — the post-log hides it then. Reached =
-// held something, or stopped on/after its step (phase order warmup → main →
-// upperBack → cooldown; any later round of main is past round 1's).
-function reachedWallSit(w: Workout): boolean {
-  if (state.wallSitSec > 0) return true;
-  const order: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
-  const here = order.indexOf(state.currentPhase);
-  for (const p of order) {
-    const i = (w[p] ?? []).findIndex((ex) => ex.name === 'Wall sit');
-    if (i < 0) continue;
-    const at = order.indexOf(p);
-    if (here !== at) return here > at;
-    if (p === 'main' && state.currentRound > 1) return true;
-    return state.currentExerciseIndex > i;
-  }
-  return false;
-}
-
 // Test hook (automation only — Fit is off under navigator.webdriver).
 if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   (window as unknown as { __wtSetStepsToday?: (n: number | null) => void }).__wtSetStepsToday = (
@@ -750,53 +645,6 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
 }
 
 // ---------- state machine ----------
-
-function getCurrentWorkout(): Workout | null {
-  if (!state.selectedWorkout) return null;
-  // v54 (Sep 27 2026): D is fixed, not week-programmed — resolve it straight
-  // off getWorkoutD() and skip every plan/week lookup below (they're all
-  // indexed by the PROGRAM-only WorkoutId, which never has a 'D' key). This
-  // return also narrows state.selectedWorkout to WorkoutId for the rest of
-  // the function, so every `.workouts[state.selectedWorkout]` index below
-  // stays exactly as type-safe as it was before D existed.
-  if (state.selectedWorkout === 'D') return getWorkoutD();
-  // WK4 (Sep 27 2026): the RESOLVED-key pin (post-launch sessions) wins first
-  // — see its own comment on AppState.pinnedWeekKey and startWorkout().
-  if (state.pinnedWeekKey) {
-    return planForWeekKey(state.pinnedWeekKey).plan.workouts[state.selectedWorkout];
-  }
-  // WK2 (Sep 27 2026): a pinned date (pre-launch sessions, set at
-  // startWorkout()) wins over the live "now" — see the pin's own comment
-  // there. Exactly one of pinnedWeekKey/pinnedPlanDateIso is ever set.
-  if (state.pinnedPlanDateIso) {
-    return getWorkoutById(state.selectedWorkout, new Date(state.pinnedPlanDateIso));
-  }
-  // WK2 fix r1 (Sep 27 2026, checker's should #7): post-launch and UNPINNED
-  // (Home/pre-log, before Start is tapped), resolve straight off the
-  // completion model's own week key — the SAME lookup that drives every
-  // "Week N" / "same moves as" string she reads (preLogWeekLabel,
-  // homeWeekTitle, the post-log line) — instead of round-tripping through a
-  // SYNTHETIC calendar date and re-deriving the week from it via a date scan
-  // (deleted in v62, step 5c; getWeekPlan() now resolves the same way). That
-  // round trip could disagree
-  // with planForWeekKey the moment a future PROGRAM row's own `startsOn`
-  // lands off the round's 7-day grid — she'd train one week's moves while
-  // the screen names a different one, with no repeat line to flag it.
-  // A session already IN PROGRESS reads its pinned KEY (above) once WK4's
-  // startWorkout sets one — this branch is reached only pre-launch, or for a
-  // stale snapshot saved before WK4 (readActiveSnapshot resolves that case).
-  // WK2 fix r2 (Sep 27 2026, checker's should #2): during a GAP, shownWeek()
-  // .key is the PENDING week — exactly what preLogWeekLabel/weekSubLabel
-  // already stopped naming here (gapCountsBackToWeekKey). Reading the raw key
-  // instead would preview the PENDING week's content while the text right
-  // above it says the save counts toward the closed one — a session that
-  // hadn't even reached Start yet would already disagree with its own label.
-  if (isNowAfterCompletionLaunch()) {
-    const key = gapCountsBackToWeekKey() ?? shownWeek().key;
-    return planForWeekKey(key).plan.workouts[state.selectedWorkout];
-  }
-  return getWorkoutById(state.selectedWorkout);
-}
 
 // The step exactly as PROGRAM has it — no substitutions. Use this whenever the
 // programmed content is what matters (e.g. reading the walk's prescribed
@@ -820,11 +668,6 @@ function getCurrentExercise(): Exercise | null {
     if (minutes !== null) return apartmentCardioStep(minutes);
   }
   return ex;
-}
-
-// Lite day: one round less than programmed, never below 1 (A/B 3→2, C 2→1).
-function effectiveRounds(w: Workout): number {
-  return state.liteDay ? Math.max(1, w.rounds - 1) : w.rounds;
 }
 
 function startWorkout(id: AnyWorkoutId): void {
@@ -854,28 +697,6 @@ function startWorkout(id: AnyWorkoutId): void {
   state.herStartEditingOpen = false;
   render();
   beginPreLogClockTick();
-}
-
-// v48 · P3 (Sep 24 2026): the cardio step's name on screen. The key stays
-// 'Outdoor walk' in PROGRAM / DETAIL / HOWTO / VISUALS (and in saved data); she
-// sees "Cardio" — her Sep 24 words: "no more walk it could be walk or elliptical".
-// v48 · fix r2 (Sep 25 2026): takes the Exercise, so a per-week `label` (the
-// Week-4 "Hip hinge") wins everywhere she reads the name — step title, the
-// pre-log list, the rest screen's "Next ·" line, the round-break line.
-function displayName(ex: Pick<Exercise, 'name' | 'label'>): string {
-  if (ex.label) return ex.label;
-  return ex.name === 'Outdoor walk' ? 'Cardio' : ex.name;
-}
-
-// v48 · P3 — lane memory (DECISIONS §2 #3): the lane of her newest saved
-// session. The cardio_lane column first; a v47 row only carries the notes
-// marker ("cardio: elliptical …" / "cardio: apartment …").
-function lastCardioLane(): LogEntry['cardioLane'] {
-  const newest = [...loadLogs()].sort((a, b) => b.date.localeCompare(a.date))[0];
-  if (!newest) return null;
-  if (newest.cardioLane) return newest.cardioLane;
-  const m = /cardio: (elliptical|apartment)\b/.exec(newest.notes ?? '');
-  return m?.[1] === 'elliptical' || m?.[1] === 'apartment' ? m[1] : null;
 }
 
 function beginExercises(): void {
@@ -971,14 +792,6 @@ function enterPostLog(): void {
   resetPostLogFields();
   render();
   beginPostLogClockTick();
-}
-
-// v50 · jump list (Sep 25 2026) — step-list.ts's flat, ordered move list needs
-// only the warmup/main/upperBack arrays (never cooldown: that's already its
-// own one-step checklist screen, see step-list.ts's module doc). Structural
-// adapter only — Exercise already satisfies StepExercise's shape.
-function toStepWorkout(w: Workout): WorkoutSteps {
-  return { warmup: w.warmup, main: w.main, upperBack: w.upperBack };
 }
 
 // The key for wherever she's standing right now, in step-list.ts's
@@ -1350,25 +1163,6 @@ function workoutStepPosition(w: Workout): { index: number; total: number } {
   return { index: Math.max(1, Math.min(total, index)), total };
 }
 
-// v50 · jump list (Sep 25 2026): how many warm-up/main/upper-back moves never
-// got a Done tap this session — the post-log's plain "N moves skipped" line
-// and the steps_skipped column (no verdict either place, just the count).
-//
-// v50 · fix (Sep 25 2026): "Finish here — it still counts" (finishAtRoundOne)
-// deliberately drops round 2+ AND the upper-back block — effectiveRounds()
-// above already takes round 2+ out of `movable`, but upper-back stayed in
-// it, so a floor the app itself just told her "still counts" logged "6 moves
-// skipped" right under "Nice. Workout A done." — a mixed message. Leave out
-// the same steps the floor removed on purpose, the same way Lite leaves out
-// round 2: when finishHereLitePrev is set (non-null = "Finish here" was
-// tapped this session), upper-back doesn't count as skipped either.
-function skippedStepsCount(w: Workout): number {
-  const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
-  const countable =
-    state.finishHereLitePrev !== null ? movable.filter((s) => s.phase !== 'upperBack') : movable;
-  return countable.filter((s) => state.completedSteps[s.key] !== true).length;
-}
-
 function phaseLabelFor(w: Workout): string {
   const base =
     // v55 (Sep 27 2026) — CHECK N1/N3: Workout D's one step is the ride
@@ -1412,50 +1206,6 @@ function renderProgressLine(w: Workout): string {
     <div class="progress-bar">
       <div class="progress-bar-fill" style="width: ${(index / total) * 100}%"></div>
     </div>`;
-}
-
-// v48 (Sep 24 2026): "New tonight" — a move that wasn't in this workout last
-// encoded week AND she hasn't done this workout since the week began. Her first
-// split squat sat on the same face as her 40th bridge (walk-in-her-shoes: "A
-// 'New tonight' badge"). Nothing to decide — a label, gone after one session.
-// Reused by P4/P5 (pre-log overview, home hero).
-function isNewTonight(ex: Exercise, id: AnyWorkoutId): boolean {
-  // v54 (Sep 27 2026): D has no PROGRAM history to compare against (it isn't
-  // week-versioned at all — see getWorkoutD's own comment) — never "new
-  // tonight"/"again tonight" for it.
-  if (id === 'D') return false;
-  const current = getWeekPlan();
-  const idx = PROGRAM.indexOf(current);
-  const prev = idx > 0 ? PROGRAM[idx - 1] : undefined;
-  if (!prev) return false; // Week 1 of the program: everything is new, so nothing is
-  const pw = prev.workouts[id];
-  const phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
-  if (phases.some((p) => (pw[p] ?? []).some((e) => e.name === ex.name))) return false;
-  const startMs = new Date(current.startsOn + 'T00:00:00').getTime();
-  return !loadLogs().some((l) => l.workout === id && new Date(l.date).getTime() >= startMs);
-}
-
-// v48 · fix r1 (Sep 24 2026): "new" splits in two. A move that sat in ANY
-// earlier week of the program (any workout, any block) is a RETURN, not a first
-// — the 1 kg curl and the prone row were in her Round 1 Week 7 (UPPER_BACK_W7,
-// Jun 13-19) before the arm pause, so "Firsts: 1 kg biceps curl" told her
-// something untrue about her own history (fail-loud rule). Returns read "Back".
-type TonightKind = 'new' | 'back';
-
-function wasInEarlierWeek(name: string): boolean {
-  const idx = PROGRAM.indexOf(getWeekPlan());
-  if (idx <= 0) return false;
-  const phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
-  return PROGRAM.slice(0, idx).some((week) =>
-    (['A', 'B', 'C'] as WorkoutId[]).some((wid) =>
-      phases.some((p) => (week.workouts[wid][p] ?? []).some((e) => e.name === name))
-    )
-  );
-}
-
-function tonightKind(ex: Exercise, id: AnyWorkoutId): TonightKind | null {
-  if (!isNewTonight(ex, id)) return null;
-  return wasInEarlierWeek(ex.name) ? 'back' : 'new';
 }
 
 // v48: is the current step a hold (wall sit, plank, wall lean) rather than a
@@ -1714,10 +1464,7 @@ function loadLastDone(): LastDone | null {
 // rule 8e, "Get rid of Lisa. I decide based on pain" (Sep 26 23:15), and she
 // has 2 kg now (20:08). The LOAD CHIP replaces it: she picks 1 kg or 2 kg
 // herself, every set, no question asked.
-const ARM_FEEL_STEPS: Record<string, keyof ArmFeelState> = {
-  '1 kg biceps curl': 'curl',
-  'Prone row (bodyweight)': 'row',
-};
+// ARM_FEEL_STEPS (the two 1 kg moves -> curl / row) lives in workout-now.ts (step 15a).
 const ARM_FEEL_VALUES: readonly ArmFeel[] = ['easy', 'right', 'hard'];
 const ARM_LOAD_VALUES: readonly ArmLoad[] = ['1kg', '2kg'];
 
@@ -1847,72 +1594,6 @@ async function logCompleteAndHome(): Promise<void> {
     await saveCompletedSession();
   } finally {
     ui.savingLog = false;
-  }
-}
-
-// Screens that count as "in a workout" for resume purposes.
-const RESUMABLE_SCREENS: readonly AppScreen[] = ['workout', 'post-log'];
-
-function saveActiveSession(): void {
-  try {
-    if (typeof localStorage === 'undefined') return;
-    if (!state.selectedWorkout || !RESUMABLE_SCREENS.includes(state.screen)) return;
-    const snap: ActiveSessionSnapshot = {
-      screen: state.screen,
-      selectedWorkout: state.selectedWorkout,
-      capacityBefore: state.capacityBefore,
-      capacityAfter: state.capacityAfter,
-      moodBefore: state.moodBefore,
-      moodAfter: state.moodAfter,
-      moodBeforeTouched: state.moodBeforeTouched,
-      moodAfterTouched: state.moodAfterTouched,
-      wallSitSec: state.wallSitSec,
-      backPain: state.backPain,
-      wristPain: state.wristPain,
-      wristPainTouched: state.wristPainTouched,
-      backPainBefore: state.backPainBefore,
-      backPainBeforeTouched: state.backPainBeforeTouched,
-      wristPainBefore: state.wristPainBefore,
-      wristPainBeforeTouched: state.wristPainBeforeTouched,
-      herStartAt: state.herStartAt,
-      herStartConfirmed: state.herStartConfirmed,
-      herEndAt: state.herEndAt,
-      herEndConfirmed: state.herEndConfirmed,
-      breakMinutes: state.breakMinutes,
-      stepFeel: state.stepFeel,
-      capacityBeforeTouched: state.capacityBeforeTouched,
-      capacityAfterTouched: state.capacityAfterTouched,
-      backPainTouched: state.backPainTouched,
-      word: state.word,
-      sessionNote: state.sessionNote,
-      voicePlays: state.voicePlays,
-      currentRound: state.currentRound,
-      currentPhase: state.currentPhase,
-      currentExerciseIndex: state.currentExerciseIndex,
-      startedAt: state.startedAt,
-      pausedAt: state.pausedAt,
-      pausedMs: state.pausedMs,
-      liteDay: state.liteDay,
-      roundBreak: state.roundBreak,
-      finishHereLitePrev: state.finishHereLitePrev,
-      stoppedEarlyAt: state.stoppedEarlyAt,
-      stoppedEarlyLitePrev: state.stoppedEarlyLitePrev,
-      armFeel: state.armFeel,
-      moveFeel: state.moveFeel,
-      rideFeel: state.rideFeel,
-      armLoad: state.armLoad,
-      armLoadMax: state.armLoadMax,
-      setsDoneFor: state.setsDoneFor,
-      heldSetsFor: state.heldSetsFor,
-      stretchTicks: state.stretchTicks,
-      completedSteps: state.completedSteps,
-      rideNumbersOpen: state.rideNumbersOpen,
-      pinnedPlanDateIso: state.pinnedPlanDateIso,
-      pinnedWeekKey: state.pinnedWeekKey,
-    };
-    localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snap));
-  } catch {
-    // Non-fatal — resume is a convenience, never block the app on it.
   }
 }
 
@@ -2641,14 +2322,6 @@ function lastClosedWeekForPeek(): WeekPeek | null {
  * its own anchor forward (week-d.ts's whole point — see its header). Both
  * null (the "shouldn't happen" launch-fallback week.ts's own comment names)
  * falls through to `weekHasDFor(null, ...)` → false, same as always. */
-function liveWeekDTarget(shown: {
-  span: WeekSpan | null;
-  pending: PendingWeek | null;
-}): { span: WeekSpan } | { open: WeekSpan } | { pending: true } | null {
-  if (shown.span) return { open: shown.span };
-  if (shown.pending) return { pending: true };
-  return null;
-}
 
 type CompletionWeekDot =
   | {
@@ -3256,12 +2929,6 @@ function homeVersionTag(): string {
   return `${APP_VERSION} · ${BUILD_DATE.replace(/,\s*\d{4}/, '')}`;
 }
 
-// Minutes from the workout's own description ("… · ~40 min"); 30 if it has none.
-function workoutMinutesLabel(w: Workout): string {
-  const m = /~(\d+)\s*min/.exec(w.description);
-  return `~${m?.[1] ?? '30'} min`;
-}
-
 // The hero's cardio line: the lane she used last time + this workout's minutes
 // (walk-in-her-shoes: "A says 'cardio optional' → 'Today: elliptical 10 min'").
 function heroCardioLine(w: Workout): string {
@@ -3270,28 +2937,6 @@ function heroCardioLine(w: Workout): string {
   const minutes = walkStepMinutes(step);
   const lane = lastCardioLane();
   return lane ? `Cardio: ${lane} ${minutes} min` : `Cardio: ${minutes} min, your pick`;
-}
-
-// Moves new (or back, v48 · fix r1) in this workout tonight, lower-cased, once
-// each, over the given blocks.
-function tonightNames(
-  w: Workout,
-  id: AnyWorkoutId,
-  want: TonightKind,
-  phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown']
-): string[] {
-  const out: string[] = [];
-  for (const p of phases) {
-    for (const ex of w[p] ?? []) {
-      // Terse: "prone row", not "prone row (bodyweight)" — the hero line stays
-      // one line at phone width (the step itself keeps the full name).
-      const name = displayName(ex)
-        .replace(/\s*\([^)]*\)/g, '')
-        .toLowerCase();
-      if (tonightKind(ex, id) === want && !out.includes(name)) out.push(name);
-    }
-  }
-  return out;
 }
 
 // v55 (Sep 27 2026) — her words: "exercise B has a lot of upper body, is it
@@ -3946,97 +3591,6 @@ function renderHomeStartNowCard(logs: LogEntry[]): string {
     </div>`;
 }
 
-// v48 · P5 (Sep 24 2026) — the body reading as 1-10 tap chips (DECISIONS Q6).
-// BLANK until she taps: the v46 fix was made because the invented 5 faked a
-// decline (after = 5 in 6 of 8 Round-2 sessions), and a slider pre-set to her
-// last number would bring the same lie back as "same as last time". A chip
-// keeps an honest reading at one tap; tapping the chosen one again clears it.
-// Selected = --accent-progress (a reading, not the primary action — no sage).
-function renderChipRow(
-  idPrefix: string,
-  value: number,
-  touched: boolean,
-  ariaLabel: string
-): string {
-  const chip = (n: number): string => {
-    const on = touched && value === n;
-    return `<button class="body-chip${on ? ' body-chip-on' : ''}" id="${idPrefix}-${n}" type="button" role="radio" aria-checked="${on ? 'true' : 'false'}" data-body-chip="${idPrefix}" data-value="${n}">${n}</button>`;
-  };
-  const row = (from: number): string =>
-    `<div class="body-chip-row">${[0, 1, 2, 3, 4].map((i) => chip(from + i)).join('')}</div>`;
-  return `<div class="body-chips" role="radiogroup" aria-label="${escapeHtml(ariaLabel)}">${row(1)}${row(6)}</div>`;
-}
-
-// v50 · mood: same component, a different anchor line — the default stays
-// the BODY wording so every other caller is untouched.
-function renderBodyChips(
-  idPrefix: string,
-  value: number,
-  touched: boolean,
-  label = '',
-  anchor = '1 empty · 5 ordinary · 10 strong'
-): string {
-  return `
-    <div class="field body-field">
-      <span class="label-text body-label">${escapeHtml(label)}</span>
-      ${renderChipRow(idPrefix, value, touched, label)}
-      <div class="body-anchor">${escapeHtml(anchor)}</div>
-    </div>`;
-}
-
-// v51 (Sep 25 2026): the Back & wrist combined control (Fine · Back · Wrist),
-// shared by post-log AND pre-log now — her words: "and all metrics bf
-// workout have after as well". Same component either place (one Fine tap for
-// a clean session; Back/Wrist each open their own 1-10 row) — only the ids
-// and which state fields feed it differ, passed in by the caller so post-
-// log's already-shipped ids (and tests) never move.
-// v53 (Sep 26 2026): backValue/wristValue arrive here as STORED PAIN — the
-// chip row itself is drawn and read back in FEEL (feelFromPain), so the tap
-// handler below is the only other place that has to know about the flip.
-function renderBackWristControl(opts: {
-  fineId: string;
-  backSomeId: string;
-  wristSomeId: string;
-  backChipGroup: string;
-  wristChipGroup: string;
-  backValue: number;
-  backTouched: boolean;
-  backOpen: boolean;
-  wristValue: number;
-  wristTouched: boolean;
-  wristOpen: boolean;
-}): string {
-  const bothFine =
-    opts.backTouched && opts.backValue === 0 && opts.wristTouched && opts.wristValue === 0;
-  // v53 fix (CHECK M5, Sep 26 2026): the lit flag used to be `touched &&
-  // value > 0` — feel 10 IS pain 0, so tapping the good end (10 · feels
-  // fine) saved correctly but never lit, and looked un-tappable/broken (her
-  // Cue complaint again). `touched` alone is the right flag: it's already
-  // reset on open by the Back/Wrist buttons, so it can't leak a stale light
-  // from a previous session.
-  const backRow = opts.backOpen
-    ? `<div class="label-text body-label">How does your back feel?</div>
-       ${renderChipRow(opts.backChipGroup, feelFromPain(opts.backValue), opts.backTouched, 'How does your back feel, 1 to 10')}
-       <div class="body-anchor">1 hurts a lot · 10 feels fine</div>`
-    : '';
-  const wristRow = opts.wristOpen
-    ? `<div class="label-text body-label">How does your wrist feel?</div>
-       ${renderChipRow(opts.wristChipGroup, feelFromPain(opts.wristValue), opts.wristTouched, 'How does your wrist feel, 1 to 10')}
-       <div class="body-anchor">1 hurts a lot · 10 feels fine</div>`
-    : '';
-  return `
-    <div class="field back-field">
-      <span class="label-text">Back &amp; wrist</span>
-      <div class="back-choice">
-        <button class="back-chip${bothFine ? ' body-chip-on' : ''}" id="${opts.fineId}" type="button" aria-pressed="${bothFine ? 'true' : 'false'}">Fine</button>
-        <button class="back-chip${opts.backOpen ? ' back-chip-open' : ''}" id="${opts.backSomeId}" type="button" aria-pressed="${opts.backOpen ? 'true' : 'false'}">Back</button>
-        <button class="back-chip${opts.wristOpen ? ' back-chip-open' : ''}" id="${opts.wristSomeId}" type="button" aria-pressed="${opts.wristOpen ? 'true' : 'false'}">Wrist</button>
-      </div>
-      ${backRow}
-      ${wristRow}
-    </div>`;
-}
-
 // Moves that put pressure on the palms or the grip — where the one wrist + back
 // line belongs (DECISIONS §5: the amber box was 58 words, the same every
 // session, and shown on C too, where none of these moves exist).
@@ -4083,49 +3637,6 @@ function preLogWeekLabel(): string {
   return planInfo.repeatsWeek === null
     ? `Week ${shown.key.week}`
     : `Week ${shown.key.week} · same moves as Week ${planInfo.repeatsWeek}`;
-}
-
-// T1 (Sep 27 2026), PLAN-2026-09-26.md §3.1/§3.2: the "is this the time?"
-// confirm row — shared shape for the pre-log start question and the
-// post-log finish question, only the label/ids/kind differing. Live
-// (unconfirmed): a plain line + ✓ Right / ✎ Fix, plus the time box + "N min
-// ago" chips once ✎ is tapped. Confirmed: one dim line, no buttons.
-function renderTimeConfirmBlock(opts: {
-  kind: 'start' | 'end';
-  label: string;
-  at: string | null;
-  confirmed: boolean;
-  editingOpen: boolean;
-}): string {
-  const candidateIso = opts.confirmed && opts.at ? opts.at : new Date().toISOString();
-  const clock = formatClock(candidateIso);
-  if (opts.confirmed) {
-    const verb = opts.kind === 'start' ? 'Started' : 'Finished';
-    return `<p class="timing-line timing-confirmed" id="time-${opts.kind}">${verb} ${clock} ✓</p>`;
-  }
-  const editRow = opts.editingOpen
-    ? `<div class="timing-edit">
-        <input type="time" id="time-${opts.kind}-input" value="${clock}" />
-        <div class="timing-ago-row">
-          ${[5, 10, 15]
-            .map(
-              (m) =>
-                `<button class="timing-ago-chip" type="button" data-time-chip="${opts.kind}" data-mins="${m}">${m} min ago</button>`
-            )
-            .join('')}
-        </div>
-      </div>`
-    : '';
-  return `
-    <div class="timing-row">
-      <p class="timing-line" id="time-${opts.kind}">${escapeHtml(opts.label)} · ${clock}. Right?</p>
-      <div class="timing-actions">
-        <button class="timing-btn" type="button" id="time-${opts.kind}-ok">✓ Right</button>
-        <button class="timing-btn" type="button" id="time-${opts.kind}-fix">✎ Fix</button>
-      </div>
-    </div>
-    ${editRow}
-  `;
 }
 
 function renderPreLog(): string {
@@ -5796,28 +5307,6 @@ function backToWorkoutFromStop(): void {
   state.isResting = false;
   state.roundBreak = false;
   render();
-}
-
-// T1 (Sep 27 2026), §3.1's ✎ time box — formatClock's inverse. Takes the
-// calendar day from `baseIso` (the candidate she's fixing — always tonight,
-// never a date she has to also type) and the clock from the native
-// `<input type=time>`'s own "HH:MM" value.
-function combineDateAndClock(baseIso: string, hhmm: string): string {
-  const m = /^(\d{2}):(\d{2})$/.exec(hhmm);
-  if (!m) return baseIso;
-  const base = new Date(baseIso);
-  const hours = Number(m[1]);
-  const minutes = Number(m[2]);
-  const combined = new Date(
-    base.getFullYear(),
-    base.getMonth(),
-    base.getDate(),
-    hours,
-    minutes,
-    0,
-    0
-  );
-  return combined.toISOString();
 }
 
 // ---------- Ship 4: weekly review (2026-05-15) ----------
