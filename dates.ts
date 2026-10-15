@@ -30,3 +30,20 @@ export function weekStartIso(weekStart: Date): string {
   const d = String(weekStart.getDate()).padStart(2, '0');
   return `${weekStart.getFullYear()}-${m}-${d}`;
 }
+
+// "18:31" — the 24-hour clock she reads (the old locale time could come out as
+// "06:31 PM" on one phone and "18:31" on another).
+export function formatClock(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+export function formatDateLong(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}

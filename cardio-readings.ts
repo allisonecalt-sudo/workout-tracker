@@ -19,6 +19,7 @@ import {
   WW_ELLIPTICAL_PULSE_KEY,
   WW_ELLIPTICAL_TIME_KEY,
   WW_LANE_DONE_MIN_KEY,
+  loadLogs,
 } from './state.js';
 
 export function apartmentCardioMinutes(): number | null {
@@ -151,4 +152,30 @@ export function parseKcalReading(raw: string): number | null {
 export function laneDoneMinutes(): number | null {
   const n = Number(localStorage.getItem(WW_LANE_DONE_MIN_KEY) ?? '');
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+// v48 · P3 (Sep 24 2026): the level every ride starts AND ends on — "Start on
+// level 3, easy". Also where the after-ride stepper starts when there's no last
+// level. (v47 guessed 5 before the ride while the steps said 3 — walk §2.)
+export const ELLIPTICAL_START_LEVEL = 3;
+const ELLIPTICAL_MARKER_RE = /cardio: elliptical \d+ min · level (\d+)/;
+
+// The level from her most recent elliptical session. v48 (Sep 24 2026): the
+// real `ellipticalLevel` column first; older rows (and a v47 ride saved tonight)
+// only carry the notes marker, so the regex stays as the fallback.
+export function lastEllipticalLevel(): number | null {
+  const newestFirst = [...loadLogs()].sort((a, b) => b.date.localeCompare(a.date));
+  for (const l of newestFirst) {
+    if (typeof l.ellipticalLevel === 'number' && l.ellipticalLevel > 0) {
+      return clampEllipticalLevel(l.ellipticalLevel);
+    }
+    // v49 · look fix (Sep 25 2026): skip the notes-marker fallback once a row
+    // carries cardioLane — same rule as rideLevel() at L8477. A v48+ ride with
+    // a null level was left null ON PURPOSE (Decision Q5); guessing it back
+    // from old notes text offered her "5 again" for a level she never rode.
+    if (l.cardioLane) continue;
+    const m = ELLIPTICAL_MARKER_RE.exec(l.notes ?? '');
+    if (m?.[1]) return clampEllipticalLevel(Number(m[1]));
+  }
+  return null;
 }

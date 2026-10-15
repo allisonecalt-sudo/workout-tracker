@@ -79,6 +79,8 @@ import {
   parseKcalReading,
   clampEllipticalLevel,
   ELLIPTICAL_MAX_LEVEL,
+  ELLIPTICAL_START_LEVEL,
+  lastEllipticalLevel,
 } from './cardio-readings.js';
 import {
   type AppScreen,
@@ -123,7 +125,14 @@ import {
   rideKm,
   rideTimeSec,
 } from './cardio-notes.js';
-import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
+import {
+  formatDate,
+  formatWeekdayDate,
+  localIsoDate,
+  formatClock,
+  formatDateLong,
+} from './dates.js';
+import { renderActionBar } from './action-bar.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
 import {
   stopTimer,
@@ -519,32 +528,6 @@ function clearApartmentCardio(): void {
 // → notes. The next session's starting level is read back off that marker in
 // the saved logs, not from a separate remembered number.
 const ELLIPTICAL_NAME = 'Elliptical';
-// v48 · P3 (Sep 24 2026): the level every ride starts AND ends on — "Start on
-// level 3, easy". Also where the after-ride stepper starts when there's no last
-// level. (v47 guessed 5 before the ride while the steps said 3 — walk §2.)
-const ELLIPTICAL_START_LEVEL = 3;
-const ELLIPTICAL_MARKER_RE = /cardio: elliptical \d+ min · level (\d+)/;
-
-// The level from her most recent elliptical session. v48 (Sep 24 2026): the
-// real `ellipticalLevel` column first; older rows (and a v47 ride saved tonight)
-// only carry the notes marker, so the regex stays as the fallback.
-function lastEllipticalLevel(): number | null {
-  const newestFirst = [...loadLogs()].sort((a, b) => b.date.localeCompare(a.date));
-  for (const l of newestFirst) {
-    if (typeof l.ellipticalLevel === 'number' && l.ellipticalLevel > 0) {
-      return clampEllipticalLevel(l.ellipticalLevel);
-    }
-    // v49 · look fix (Sep 25 2026): skip the notes-marker fallback once a row
-    // carries cardioLane — same rule as rideLevel() at L8477. A v48+ ride with
-    // a null level was left null ON PURPOSE (Decision Q5); guessing it back
-    // from old notes text offered her "5 again" for a level she never rode.
-    if (l.cardioLane) continue;
-    const m = ELLIPTICAL_MARKER_RE.exec(l.notes ?? '');
-    if (m?.[1]) return clampEllipticalLevel(Number(m[1]));
-  }
-  return null;
-}
-
 // One tap on + or −. The first tap starts from her last level (or 3 on a first
 // ride) and moves one from there; after that it moves from what's shown.
 function stepEllipticalLevel(delta: number): void {
@@ -1316,15 +1299,6 @@ function jumpToStep(key: string): void {
   state.currentExerciseIndex = parsed.index;
   ui.stepListOpen = false;
   render();
-}
-
-// v48 (Sep 24 2026): the pinned bottom bar. Done sat at the END of each step's
-// scroll — under a video, a detail card and a cue paragraph — so on most steps
-// it was below the fold (walk-in-her-shoes: "Back and Done pinned to the
-// bottom"). One helper so pre-log Start and post-log Save (P5) pin the same way.
-// render() gives #app the matching bottom padding whenever a bar is on screen.
-function renderActionBar(inner: string): string {
-  return `<div class="action-bar"><div class="action-bar-inner">${inner}</div></div>`;
 }
 
 // The Back + Done pair under every step (v47), pinned since v48. v53 fix
@@ -2490,16 +2464,6 @@ function syncIndicatorText(): string {
 }
 
 // ---------- formatting ----------
-
-function formatDateLong(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -5847,13 +5811,6 @@ function backToWorkoutFromStop(): void {
 // review, × Back in the header, the list's scroll kept when she comes back.
 // Voice rule: her words verbatim, never the tail of a machine log line.
 // ---------------------------------------------------------------------------
-
-// "18:31" — the 24-hour clock she reads (the old locale time could come out as
-// "06:31 PM" on one phone and "18:31" on another).
-function formatClock(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
 
 // T1 (Sep 27 2026), §3.1's ✎ time box — formatClock's inverse. Takes the
 // calendar day from `baseIso` (the candidate she's fixing — always tonight,
