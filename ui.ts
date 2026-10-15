@@ -46,9 +46,8 @@ export interface Ui {
   walkWakeLock: { release: () => Promise<void> } | null;
   walkTickId: number | null;
   // T1 (Sep 27 2026): the pre-log/post-log "is this the time?" minute ticks —
-  // see beginPreLogClockTick/beginPostLogClockTick below, same shape as
-  // walkTickId just above.
-  preLogTickId: number | null;
+  // see beginPostLogClockTick below, same shape as walkTickId just above. The
+  // pre-log's tick id is module-local in screens/prelog.ts since step 15b.
   postLogTickId: number | null;
   // In-workout walk tracking (v13 — her actual idea, Jul 4: "each time I go on a
   // walk WITHIN each workout it tracks information, saves it"). The 'Outdoor
@@ -118,7 +117,6 @@ export const ui: Ui = {
   timerHoldsWakeLock: false,
   walkWakeLock: null,
   walkTickId: null,
-  preLogTickId: null,
   postLogTickId: null,
   workoutWalk: null,
   stepsToday: null,

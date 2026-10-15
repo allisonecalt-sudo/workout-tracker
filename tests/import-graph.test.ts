@@ -251,6 +251,9 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
       'dates.ts',
       'dom.ts',
       'format.ts',
+      'log-fields.ts',
+      'move-feel.ts',
+      'pain-feel.ts',
       'program-week.ts',
       'program.ts',
       'ride-aim.ts',
@@ -269,6 +272,7 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
       'week-clock.ts',
       'week-d.ts',
       'week.ts',
+      'workout-now.ts',
     ];
     for (const [file, deps] of graph) {
       if (!file.startsWith('screens/')) continue;

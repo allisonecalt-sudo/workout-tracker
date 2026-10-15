@@ -25,7 +25,7 @@ module-local state (return-to, compare metric, scroll) that used to live in `ui`
 
 ## What it may import
 
-`state.ts`, `bus.ts`, `dom.ts`, `format.ts`, `action-bar.ts`, `version.ts`, `ui.ts`, `actions.ts`, `cardio-readings.ts`, `viz.ts` (sparklines / wall-sit trend), `session-row.ts` (the one session row), and the pure modules (`ride.ts`,
+`state.ts`, `bus.ts`, `dom.ts`, `format.ts`, `action-bar.ts`, `version.ts`, `ui.ts`, `actions.ts`, `cardio-readings.ts`, `viz.ts` (sparklines / wall-sit trend), `session-row.ts` (the one session row), `workout-now.ts` (the current workout lookups), `log-fields.ts` (the pre/post-log field markup), and the pure modules (`ride.ts`,
 `ride-aim.ts`, `chart.ts`, `program-week.ts`, `week.ts`, `week-d.ts`, `timing.ts`, `dates.ts`,
 `cardio-notes.ts`, `types.ts`, `week-clock.ts`, `cycle.ts`, `program.ts`, `sync.ts`, `sync-cycle.ts`, `sync-week-moves.ts`,
 `sync-movement.ts` ...). `week-clock.ts` and `sync*.ts` are shared-layer modules in their own
