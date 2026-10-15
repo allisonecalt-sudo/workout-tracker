@@ -164,3 +164,23 @@ export function legacyCardioMarker(entry: LogEntry): string | null {
   if (entry.ellipticalPulse != null) parts.push(`pulse ${entry.ellipticalPulse}`);
   return parts.join(' · ');
 }
+
+// The level / km she recorded on a ride: the v48 columns, else the v47 marker.
+export function rideLevel(l: LogEntry): number | null {
+  if (typeof l.ellipticalLevel === 'number' && l.ellipticalLevel > 0) return l.ellipticalLevel;
+  return l.cardioLane ? null : (splitNotes(l.notes).cardio?.level ?? null);
+}
+
+export function rideKm(l: LogEntry): number | null {
+  if (typeof l.ellipticalKm === 'number' && l.ellipticalKm > 0) return l.ellipticalKm;
+  return l.cardioLane ? null : (splitNotes(l.notes).cardio?.km ?? null);
+}
+
+// v51 · Start -> Now's combined elliptical line ("... 0.72 km in 10 min"):
+// the real ride duration, v49's own column only (no pre-v49 marker to fall
+// back to — those rides predate the elliptical entirely).
+export function rideTimeSec(l: LogEntry): number | null {
+  return typeof l.ellipticalTimeSec === 'number' && l.ellipticalTimeSec > 0
+    ? l.ellipticalTimeSec
+    : null;
+}

@@ -39,13 +39,11 @@ import {
   type PendingWeek,
 } from './week.js';
 import {
-  weekHasD,
   weekCountLine,
   weekTargetForD,
   weekWindowFor,
   type DWeekModel,
   type DWeekTarget,
-  type DLogLite as WeekDLogLite,
 } from './week-d.js';
 import {
   steppedMovesForWorkout,
@@ -71,7 +69,6 @@ import {
   replaceCalendarMarks,
   appendRounds,
   weekPlanTitle,
-  programWeekPlan,
   programFutureWeekPlans,
   programFutureWeekPlansAfter,
   programPastWeekPlans,
@@ -137,17 +134,19 @@ import {
   loadLogs,
   loadWeekMoves,
   getChronologicalLogs,
-  weekClockInput,
   loadWalks,
   loadCyclePeriods,
   cyclePeriodsForLogic,
 } from './state.js';
-import { escapeHtml, formatMmSs, formatMonthDay, SHORT_MONTHS } from './format.js';
+import { escapeHtml, formatMmSs, formatMonthDay, formatWeekRange } from './format.js';
 import {
   splitNotes,
   sessionCardio,
   ellipticalRideRecords,
   type SessionCardio,
+  rideLevel,
+  rideKm,
+  rideTimeSec,
 } from './cardio-notes.js';
 import { formatDate, formatWeekdayDate, localIsoDate } from './dates.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
@@ -198,7 +197,6 @@ import {
 import { flushPendingWalks } from './sync-movement.js';
 import { pullCyclePeriodsFromSupabase, cyclePeriodPayload } from './sync-cycle.js';
 import { mergeWeekMoves, pullWeekMovesFromSupabase, weekMovePayload } from './sync-week-moves.js';
-import * as pw from './program-week.js';
 import {
   setWorkoutDProvider,
   getProgramWeek,
@@ -216,6 +214,9 @@ import {
   gapCountsBackToWeekNum,
   weekSubLabel,
   currentHowToWeekKey,
+  getWeekPlan,
+  weekHasDFor,
+  firstProgramSaturday,
 } from './week-clock.js';
 import {
   SESSIONS_PER_WEEK_TARGET,
@@ -223,7 +224,14 @@ import {
   attributeSessionsToWeeks,
   sessionsAttributedTo,
 } from './program-week.js';
-import { honestWallSitLogs, getWallSitTrend, renderSparkline } from './viz.js';
+import { honestWallSitLogs } from './viz.js';
+import {
+  formatRowDate,
+  sessionWords,
+  BACK_PAIN_STOP_AT,
+  renderSessionRow,
+  logsNewestFirst,
+} from './session-row.js';
 
 // Hand routine retired 2026-05-15 per Allison. All hand-routine types,
 // constants, persistence, sync, state machine, render, and event handlers
@@ -288,17 +296,6 @@ const STALE_SESSION_MS = 3 * 60 * 60 * 1000;
 // branch's ride numbers (Next -> "from the machine" entry screen) + Cue ->
 // Tips (no program notes in what she reads) + W0's offline-list fix. Her
 // words: "dont go to next week till i approve".
-
-// Thin wrappers over program.ts's pure resolvers. With NO date they answer for
-// "now": program-week.ts's currentWeekPlan() - post-launch the completion
-// model's week KEY resolves straight to its PROGRAM row (v62, step 5c; no
-// synthetic calendar date), pre-launch the original calendar + swing lookup.
-// With a date they are the plain calendar scan (history, pinned pre-launch
-// sessions). Every call site stays untouched and tests can still mock the
-// system clock.
-function getWeekPlan(date?: Date): WeekPlan {
-  return date ? programWeekPlan(date) : pw.currentWeekPlan(weekClockInput());
-}
 
 function getWorkoutById(id: WorkoutId, date?: Date): Workout {
   return getWeekPlan(date).workouts[id];
@@ -2557,27 +2554,6 @@ function formatTimerDisplay(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function formatWeekRange(start: Date, end: Date): string {
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  const sameMonth = start.getMonth() === end.getMonth();
-  const startStr = `${months[start.getMonth()]} ${start.getDate()}`;
-  const endStr = sameMonth ? `${end.getDate()}` : `${months[end.getMonth()]} ${end.getDate()}`;
-  return `${startStr}–${endStr}`;
-}
-
 // Week dots (group 2J): one entry per weekday. Color is the workout letter.
 type WeekDotInfo = {
   letter: string;
@@ -2736,38 +2712,6 @@ function lastClosedWeekForPeek(): WeekPeek | null {
     };
   }
   return legacyLastClosedWeekPeek();
-}
-
-// v61 (Sep 28 2026), spec item d — her words 15:35, looking at her first
-// Workout D: "she did not say one of four." D never counts toward the week
-// CLOSING (week.ts's own completion rule is untouched — three distinct
-// A/B/C letters, D never required, never part of `span.missing`), but it
-// DOES count toward the number shown to her. week.ts drops D entirely by
-// design (its own header comment), so this reads it straight off her logs
-// instead.
-//
-// v61 fix pass 2 (Oct 2 2026, CHECK-v61.md round 2 must #1): the window a D
-// counts against moved out of here into week-d.ts (a pure module, unit-
-// tested — round 1's should #7) — a strict [openedAt, closedAt] window
-// undercounted a D logged before the opening session or after the closing
-// one, both real on her rows. `weekHasDFor` below is a thin app.ts-side
-// wrapper: it builds the `DWeekTarget` week-d.ts needs from whichever of
-// `span`/`open`/`pending` a call site already has in hand, so every call
-// site below only changes its OWN local target-selection, never the window
-// math itself (that lives once, in week-d.ts, covered by its own tests).
-function weekHasDFor(
-  which: { span: WeekSpan } | { open: WeekSpan } | { pending: true } | null,
-  model: DWeekModel,
-  dLogs: readonly WeekDLogLite[]
-): boolean {
-  if (!which) return false;
-  const target: DWeekTarget =
-    'open' in which
-      ? { kind: 'open' }
-      : 'pending' in which
-        ? { kind: 'pending' }
-        : { kind: 'span', key: which.span.key };
-  return weekHasD(target, model, dLogs);
 }
 
 /** The {kind:'open'|'pending'} target for whichever week is LIVE right now
@@ -6229,14 +6173,6 @@ function backToWorkoutFromStop(): void {
 // Voice rule: her words verbatim, never the tail of a machine log line.
 // ---------------------------------------------------------------------------
 
-const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-// "Sat Sep 19" — the weekday makes the Saturday swing readable in the list.
-function formatRowDate(iso: string): string {
-  const d = new Date(iso);
-  return `${SHORT_WEEKDAYS[d.getDay()]} ${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
-}
-
 // "18:31" — the 24-hour clock she reads (the old locale time could come out as
 // "06:31 PM" on one phone and "18:31" on another).
 function formatClock(iso: string): string {
@@ -6285,19 +6221,6 @@ function cardioText(c: SessionCardio): string {
   return `${c.lane === 'apartment' ? 'Apartment' : 'Walk'}${mins}`;
 }
 
-// Her words for one session, verbatim: the v48 note, the old one-word box, and
-// (v47 rows) whatever she wrote into notes — the machine marker and the app's
-// annotations stripped off. One entry per line.
-function sessionWords(l: LogEntry): string {
-  const parts: string[] = [];
-  const note = (l.sessionNote ?? '').trim();
-  if (note) parts.push(note);
-  const word = (l.word || '').trim();
-  if (word && word !== note) parts.push(word);
-  parts.push(...splitNotes(l.notes).words);
-  return parts.join('\n');
-}
-
 // "curl=easy;row=right" → "curl easy · row right".
 function armFeelText(raw: string | null | undefined): string {
   if (!raw) return '';
@@ -6306,53 +6229,6 @@ function armFeelText(raw: string | null | undefined): string {
     .map((p) => p.split('=').join(' '))
     .filter((p) => p.trim() !== '')
     .join(' · ');
-}
-
-// The back-pain number turns amber only at her own stop line — "Back pain at
-// 3/10 → stop that exercise". A 1/10 lit up like a verdict (uxui weekly 2/5).
-const BACK_PAIN_STOP_AT = 3;
-
-// ONE row, everywhere a session is listed (Sessions, Weekly review):
-// badge · "Sat Sep 19 · 40 min" · the wall-sit sparkline (A only) · a dim meta
-// line · her words, verbatim. `logs` = newest-first by date (for the sparkline).
-function renderSessionRow(l: LogEntry, logs: LogEntry[]): string {
-  const idAttr = l.id ? `data-detail="${escapeHtml(l.id)}"` : '';
-  const trend = l.workout === 'A' && l.wallSitSec > 0 ? getWallSitTrend(logs, l.id ?? null) : [];
-  const spark = renderSparkline(trend);
-  // v53 (Sep 26 2026): "back pain" (was "back") — labeled, not converted. The
-  // stored number here is still PAIN (higher = worse); only the live 1-10
-  // TAP on the pre/post-log screens flipped to "feel" (10 = fine). Naming
-  // this one plainly as pain keeps the two screens from reading as the same
-  // scale in opposite directions (her ask: "make it all align").
-  const back =
-    l.backPain === null
-      ? 'back pain —'
-      : `back pain <span class="session-back${l.backPain >= BACK_PAIN_STOP_AT ? ' session-back-warn' : ''}">${l.backPain}</span>`;
-  const wall =
-    // v46: B and C have no wall sit — "wall 0s" there read as a zero.
-    l.wallSitSec > 0 || l.workout === 'A' ? ` · wall ${l.wallSitSec}s` : '';
-  const words = sessionWords(l).split('\n')[0] ?? '';
-  // T2 (Sep 27 2026), PLAN-2026-09-26.md §3.4/§10: "about N min" through the
-  // one shared formatter, never the app's own tap-to-tap durationSec — that
-  // was "76 min"/"1s" shown as fact (her 22:33 "it really doesn't know
-  // timing"). formatWorkoutTime already returns '' on an unconfirmed/old row
-  // (no her_start_at/her_end_at pair), which is the honest "old rows show no
-  // length" behavior §3.4 asks for — no fallback needed here.
-  const workoutTime = formatWorkoutTime(l);
-  return `
-    <button class="history-row history-row-btn session-row" ${idAttr} type="button">
-      <span class="history-workout-badge">${l.workout}</span>
-      <div class="session-row-body">
-        <div class="history-date">${formatRowDate(l.date)}${workoutTime ? ` · ${workoutTime}` : ''}${spark ? ` <span class="history-sparkline-wrap">${spark}</span>` : ''}</div>
-        <div class="history-meta">cap ${l.capacityBefore ?? '—'}→${l.capacityAfter ?? '—'}${wall} · ${back}</div>
-        ${words ? `<div class="history-word" dir="auto">${escapeHtml(words)}</div>` : ''}
-      </div>
-      <span class="session-chev" aria-hidden="true">›</span>
-    </button>`;
-}
-
-function logsNewestFirst(): LogEntry[] {
-  return [...loadLogs()].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 function renderHistory(): string {
@@ -6778,14 +6654,6 @@ function renderDeltaDecimal(
     (kind === 'higher-better' && diff > 0) || (kind === 'lower-better' && diff < 0);
   const cls = isImprovement ? 'delta-up' : 'delta-down';
   return `<span class="weekly-review-delta-num ${cls}">${arrow} ${sign}${diff.toFixed(1)}</span>`;
-}
-
-// The Saturday the program's first week starts on — the ‹ arrow stops there.
-function firstProgramSaturday(): Date {
-  const start = new Date(PROGRAM_START_DATE + 'T00:00:00');
-  start.setDate(start.getDate() - ((start.getDay() + 1) % 7));
-  start.setHours(0, 0, 0, 0);
-  return start;
 }
 
 // The review's title in home's words: "This week · R2 · Week 4 · Sep 19–25",
@@ -7228,26 +7096,6 @@ function renderProgressBarChart(
 }
 
 // ----- Per-card render helpers -----
-
-// The level / km she recorded on a ride: the v48 columns, else the v47 marker.
-function rideLevel(l: LogEntry): number | null {
-  if (typeof l.ellipticalLevel === 'number' && l.ellipticalLevel > 0) return l.ellipticalLevel;
-  return l.cardioLane ? null : (splitNotes(l.notes).cardio?.level ?? null);
-}
-
-function rideKm(l: LogEntry): number | null {
-  if (typeof l.ellipticalKm === 'number' && l.ellipticalKm > 0) return l.ellipticalKm;
-  return l.cardioLane ? null : (splitNotes(l.notes).cardio?.km ?? null);
-}
-
-// v51 · Start -> Now's combined elliptical line ("... 0.72 km in 10 min"):
-// the real ride duration, v49's own column only (no pre-v49 marker to fall
-// back to — those rides predate the elliptical entirely).
-function rideTimeSec(l: LogEntry): number | null {
-  return typeof l.ellipticalTimeSec === 'number' && l.ellipticalTimeSec > 0
-    ? l.ellipticalTimeSec
-    : null;
-}
 
 // v48 · P6 (Sep 24 2026): "Start → Now" — DECISIONS §2 #5 (Gemini, taken):
 // "elliptical level first → latest, km first → latest, wall sit first → latest,

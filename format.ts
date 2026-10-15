@@ -39,3 +39,24 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+
+export function formatWeekRange(start: Date, end: Date): string {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const sameMonth = start.getMonth() === end.getMonth();
+  const startStr = `${months[start.getMonth()]} ${start.getDate()}`;
+  const endStr = sameMonth ? `${end.getDate()}` : `${months[end.getMonth()]} ${end.getDate()}`;
+  return `${startStr}–${endStr}`;
+}
