@@ -1,5 +1,5 @@
 // session-row.ts - the ONE session row, shared by Sessions (History) and Weekly review (code-shape
-// step 13a, Oct 15 2026).
+// step 13a2, Oct 15 2026).
 //
 // What: renderSessionRow (badge, date + confirmed time, wall-sit sparkline, meta line, her words),
 // its date label and the words it quotes, the back-pain stop line the row and Progress's back-pain

@@ -387,6 +387,35 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
     }
   });
 
+  // DEFAULT-DENY shared layer (code-shape step 13d). Every bundled module that is not app.ts
+  // and not under screens/ is "shared": it may never import app.ts or a screen, and it writes
+  // no DOM - unless it is on the explicit, reasoned allow-list below. A new file is covered
+  // the day app.ts first imports it; nothing to remember to add.
+  const domWriteAllowed: Record<string, string> = {
+    'dom.ts':
+      'exists to touch the DOM: wireHoldToSkip sets fill.style.width, bindClick looks elements up',
+  };
+  const sharedModules = (): string[] =>
+    [...graph.keys()].filter((f) => f !== 'app.ts' && !f.startsWith('screens/'));
+
+  test('every shared-layer module (not app.ts, not screens/) never imports app.ts or a screen, and writes no DOM unless allow-listed (step 13d)', () => {
+    const shared = sharedModules();
+    // the guard read the layer (not "found nothing, so nothing to break")
+    expect(shared).toEqual(
+      expect.arrayContaining(['viz.ts', 'session-row.ts', 'state.ts', 'dom.ts', 'sync.ts'])
+    );
+    for (const file of shared) {
+      expect(
+        (graph.get(file) ?? []).filter((d) => d === 'app.ts' || d.startsWith('screens/')),
+        file + ' imports the entry or a screen'
+      ).toEqual([]);
+      if (file in domWriteAllowed) continue;
+      expect(domWrites(files.find((x) => x.file === file)!.src), file + ' DOM write').toEqual([]);
+    }
+    // the allow-list may not rot: each entry names a real shared module
+    for (const f of Object.keys(domWriteAllowed)) expect(shared, f).toContain(f);
+  });
+
   test('the guard itself: domWrites flags DOM writes, location, style and createElement but passes reads and comparisons', () => {
     expect(domWrites("document.title = 'x';")).toEqual(['.title =', 'document.title']);
     expect(domWrites('window.location.reload();')).toEqual(['.reload(', 'location']);
