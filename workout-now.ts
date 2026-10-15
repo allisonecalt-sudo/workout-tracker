@@ -23,7 +23,9 @@ import {
 } from './program.js';
 import type { LogEntry } from './types.js';
 import { state, loadLogs, type ArmFeelState } from './state.js';
-import { flattenSteps, type WorkoutSteps } from './step-list.js';
+import { flattenSteps, stepKey as buildStepKey, type WorkoutSteps } from './step-list.js';
+import { ellipticalMinutes, apartmentCardioMinutes } from './cardio-readings.js';
+import { APARTMENT_CARDIO_NAME, apartmentCardioStep } from './walk.js';
 import { steppedMovesForWorkout, type SteppedMove } from './move-feel.js';
 import type { WeekSpan, PendingWeek } from './week.js';
 import { sessionsAttributedTo } from './program-week.js';
@@ -350,4 +352,72 @@ export function liveWeekDTarget(shown: {
 export function getWeekCount(offset = 0): number {
   // Swing-aware (v42): a Saturday session may count toward the week before.
   return sessionsAttributedTo(loadLogs(), saturdayForOffset(offset)).length;
+}
+
+// The step exactly as PROGRAM has it — no substitutions. Use this whenever the
+// programmed content is what matters (e.g. reading the walk's prescribed
+// minutes after the apartment swap has already happened).
+export function rawCurrentExercise(): Exercise | null {
+  const w = getCurrentWorkout();
+  if (!w) return null;
+  const list = w[state.currentPhase] ?? [];
+  return list[state.currentExerciseIndex] ?? null;
+}
+
+export function getCurrentExercise(): Exercise | null {
+  const ex = rawCurrentExercise();
+  // Cardio either/or (Sep 7 2026): while the apartment option is chosen, the
+  // walk step IS the apartment timer — same minutes, no tracking.
+  // Same swap for the elliptical lane (Sep 24 2026).
+  if (ex && ex.name === 'Outdoor walk') {
+    const ellMinutes = ellipticalMinutes();
+    if (ellMinutes !== null) return ellipticalStep(ellMinutes);
+    const minutes = apartmentCardioMinutes();
+    if (minutes !== null) return apartmentCardioStep(minutes);
+  }
+  return ex;
+}
+
+export function isIndoorLane(name: string): boolean {
+  return name === ELLIPTICAL_NAME || name === APARTMENT_CARDIO_NAME;
+}
+
+// The key for wherever she's standing right now, in step-list.ts's
+// `phase:round:index` shape. Round is meaningless off the main phase, so it's
+// pinned to 1 there — the same convention flattenSteps uses.
+export function currentStepKey(): string {
+  const phase = state.currentPhase;
+  if (phase === 'cooldown') return 'cooldown:1:0'; // never in the movable list; see below
+  const round = phase === 'main' ? state.currentRound : 1;
+  return buildStepKey(phase, round, state.currentExerciseIndex);
+}
+
+// Back is on whenever the workout screen is up (the goBack walk itself stays in app.ts).
+export function canGoBack(): boolean {
+  return state.screen === 'workout';
+}
+
+// v48: is the current step a hold (wall sit, plank, wall lean) rather than a
+// cardio lane? Lanes keep their v46 face — P3 owns them.
+export function isHoldStep(ex: Exercise): boolean {
+  return !!ex.isTimed && !isIndoorLane(ex.name) && ex.name !== 'Outdoor walk';
+}
+
+// v48: round 2+ of the main block — the quieter face (visual folded, how-to
+// never auto-open).
+export function isLaterRound(): boolean {
+  return state.currentPhase === 'main' && state.currentRound > 1;
+}
+
+// The hold done-faces are keyed per STEP (phase|round|index), not per name: the
+// wall sit comes round again in round 2, and that one hasn't been held yet —
+// a name key would greet round 2 with "✓ held 45 s". Back to a held step
+// shows its done-face again.
+export function holdStepKey(): string {
+  return `${state.currentPhase}|${state.currentRound}|${state.currentExerciseIndex}`;
+}
+
+// Seconds held on THIS step so far (0 = not run yet).
+export function heldOnThisStep(): number {
+  return state.heldSecFor[holdStepKey()] ?? 0;
 }

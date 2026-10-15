@@ -4,23 +4,38 @@
 // hold-to-skip rest, today's pick, week-dots, history-detail), and visual
 // layer (still images + YouTube embeds + collapsible how-to).
 
-import { EXERCISE_VISUALS } from './exercise-visuals.js';
-import { EXERCISE_HOWTO, type HowToFrame } from './exercise-howto.js';
-import { EXERCISE_DETAIL, muscleDiagram } from './exercise-detail.js';
+import { EXERCISE_DETAIL } from './exercise-detail.js';
 import { setsPrescribed, holdSetsFace, formatHeldSeconds } from './hold-sets.js';
 import { rideRate } from './ride.js';
 import { renderRides, attachRidesHandlers, ridesVsDelta } from './screens/rides.js';
+import { flattenSteps, nextUndoneStep, type WorkoutStep } from './step-list.js';
+import { isMoveFeelValue, MOVE_FEEL_VALUES } from './move-feel.js';
 import {
-  flattenSteps,
-  nextUndoneStep,
-  reachedCount,
-  stepKey as buildStepKey,
-  type WorkoutStep,
-} from './step-list.js';
-import { isMoveFeelValue, canonicalMoveName, MOVE_FEEL_VALUES } from './move-feel.js';
+  isArmFeel,
+  isArmLoad,
+  heavierArmLoad,
+  markPaceRuleSeen,
+  renderArmFeel,
+  renderMoveFeel,
+} from './workout-feel.js';
+import {
+  formatTimerDisplay,
+  renderStepNav,
+  renderProgressLine,
+  renderPauseButton,
+  renderListButton,
+  groupStretchPairs,
+  type StretchGroup,
+} from './workout-parts.js';
+import {
+  renderExerciseSetup,
+  renderExerciseVisual,
+  renderDetailCard,
+  renderHowToCard,
+  markHowToSeenThisWeek,
+} from './workout-cards.js';
 import { deriveRideAim, lastTimeAtSameAim } from './ride-aim.js';
 import {
-  EXERCISE_GUIDE,
   SAFETY_LINE,
   injectMarkerProgramWeek,
   replaceCalendarMarks,
@@ -46,7 +61,6 @@ import {
 import {
   laneDoneMinutes,
   ellipticalMinutes,
-  apartmentCardioMinutes,
   ellipticalLevel,
   parseMmSs,
   parseKmReading,
@@ -58,13 +72,11 @@ import {
 } from './cardio-readings.js';
 import {
   type AppScreen,
-  type ArmFeel,
   type ArmFeelState,
   type MoveFeelState,
   type ArmLoad,
   type ArmLoadState,
   type ActiveSessionSnapshot,
-  HOWTO_SEEN_KEY_PREFIX,
   ACTIVE_SESSION_KEY,
   WW_RESULT_KEY,
   WW_APARTMENT_KEY,
@@ -76,9 +88,7 @@ import {
   WW_ELLIPTICAL_KCAL_KEY,
   WW_LANE_STARTED_KEY,
   WW_LANE_DONE_MIN_KEY,
-  PACE_RULE_SEEN_KEY,
   getRestSec,
-  getHowToFirstExpand,
   state,
   isValidLogEntry,
   loadLogs,
@@ -112,7 +122,6 @@ import {
   startWorkoutWalk,
   APARTMENT_CARDIO_NAME,
   walkStepMinutes,
-  apartmentCardioStep,
   fetchStepsToday,
 } from './walk.js';
 import { unlockAudio, stopVoiceNote, toggleVoiceNote as toggleVoiceNoteAudio } from './audio.js';
@@ -173,7 +182,6 @@ import { honestWallSitLogs } from './viz.js';
 import {
   ELLIPTICAL_NAME,
   ARM_FEEL_STEPS,
-  ellipticalStep,
   getWorkoutById,
   getWorkoutD,
   currentSteppedMoves,
@@ -185,6 +193,15 @@ import {
   lastCardioLane,
   tonightKind,
   tonightNames,
+  rawCurrentExercise,
+  getCurrentExercise,
+  isIndoorLane,
+  currentStepKey,
+  canGoBack,
+  isHoldStep,
+  isLaterRound,
+  holdStepKey,
+  heldOnThisStep,
 } from './workout-now.js';
 import { renderProgress } from './screens/progress.js';
 import { renderWeeklyReview, computeWeekTotals, attachReviewHandlers } from './screens/review.js';
@@ -406,10 +423,6 @@ function setEllipticalReading(key: string, raw: string): void {
 // or the full block if it ran out. Never started the timer → nothing stored,
 // and the prescription stands (she may have used the machine's own clock).
 
-function isIndoorLane(name: string): boolean {
-  return name === ELLIPTICAL_NAME || name === APARTMENT_CARDIO_NAME;
-}
-
 function captureLaneMinutesIfLeaving(): void {
   const ex = getCurrentExercise();
   if (!ex || !isIndoorLane(ex.name) || !ex.durationSec) return;
@@ -533,30 +546,6 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
 
 // ---------- state machine ----------
 
-// The step exactly as PROGRAM has it — no substitutions. Use this whenever the
-// programmed content is what matters (e.g. reading the walk's prescribed
-// minutes after the apartment swap has already happened).
-function rawCurrentExercise(): Exercise | null {
-  const w = getCurrentWorkout();
-  if (!w) return null;
-  const list = w[state.currentPhase] ?? [];
-  return list[state.currentExerciseIndex] ?? null;
-}
-
-function getCurrentExercise(): Exercise | null {
-  const ex = rawCurrentExercise();
-  // Cardio either/or (Sep 7 2026): while the apartment option is chosen, the
-  // walk step IS the apartment timer — same minutes, no tracking.
-  // Same swap for the elliptical lane (Sep 24 2026).
-  if (ex && ex.name === 'Outdoor walk') {
-    const ellMinutes = ellipticalMinutes();
-    if (ellMinutes !== null) return ellipticalStep(ellMinutes);
-    const minutes = apartmentCardioMinutes();
-    if (minutes !== null) return apartmentCardioStep(minutes);
-  }
-  return ex;
-}
-
 function startWorkout(id: AnyWorkoutId): void {
   state.selectedWorkout = id;
   // WK2 (Sep 27 2026), §2.3 "pin the plan for a session in progress": fixed
@@ -679,16 +668,6 @@ function enterPostLog(): void {
   resetPostLogFields();
   render();
   beginPostLogClockTick();
-}
-
-// The key for wherever she's standing right now, in step-list.ts's
-// `phase:round:index` shape. Round is meaningless off the main phase, so it's
-// pinned to 1 there — the same convention flattenSteps uses.
-function currentStepKey(): string {
-  const phase = state.currentPhase;
-  if (phase === 'cooldown') return 'cooldown:1:0'; // never in the movable list; see below
-  const round = phase === 'main' ? state.currentRound : 1;
-  return buildStepKey(phase, round, state.currentExerciseIndex);
 }
 
 function markStepDone(key: string): void {
@@ -877,10 +856,6 @@ function captureRunningProgressIfLeaving(): void {
 // back"). The lead's call while she's asleep (undoable): Back from step 1
 // goes to the pre-log instead of a step behind it — there is none. See the
 // step-1 branch at the top of goBack.
-function canGoBack(): boolean {
-  return state.screen === 'workout';
-}
-
 function goBack(): void {
   const w = getCurrentWorkout();
   if (!w || !canGoBack()) return;
@@ -993,131 +968,6 @@ function jumpToStep(key: string): void {
   state.currentExerciseIndex = parsed.index;
   ui.stepListOpen = false;
   render();
-}
-
-// The Back + Done pair under every step (v47), pinned since v48. v53 fix
-// (CHECK M4): Back used to hide on the very first step ("nothing behind
-// her") — it now always shows; from step 1 specifically it goes to the
-// pre-log instead of a step further back (see goBack). `quiet` = Done in the
-// Back style (v48: a timed hold before it has run — the sage belongs to
-// Start timer then; one sage per screen). Still tappable either way: she may
-// have used her own clock.
-function renderStepNav(doneLabel: string, quiet = false): string {
-  const back = canGoBack()
-    ? `<button class="btn-large btn-back" id="step-back" type="button" aria-label="Back one step">‹ Back</button>`
-    : '';
-  return renderActionBar(`
-    <div class="step-nav">
-      ${back}
-      <button class="btn-large ${quiet ? 'btn-back btn-done-quiet' : 'btn-primary'}" id="next" type="button">${doneLabel}</button>
-    </div>
-  `);
-}
-
-// v48 (Sep 24 2026): ONE count for the whole workout, replacing the round pill +
-// "Exercise N of M" (which restarted at 1 in every phase and every round) + the
-// in-card phase label — three counters, none of which said how far along she
-// was. Total = warm-up + main × rounds + upper back + 1 (the cool-down list is
-// one step).
-// v50 · jump list (Sep 25 2026): the numerator is step-list.ts's reachedCount
-// (every step marked done, plus the one she's currently viewing if it isn't
-// done yet) — "count completed steps, not position" per her spec. On a plain
-// forward walk this is numerically identical to the old position count (every
-// step up to "here" really was done in order), so nothing on an untouched
-// List sheet changes; it only diverges once she jumps BACK to view an
-// already-finished step out of order, where it correctly stops claiming
-// credit for a position she's since revisited rather than newly reached.
-// Cool-down is still always the full bar — it's one step, always last,
-// whether or not everything before it got done (finishAtRoundOne can reach it
-// early on purpose).
-function workoutStepPosition(w: Workout): { index: number; total: number } {
-  const warm = w.warmup.length;
-  const main = w.main.length;
-  const rounds = effectiveRounds(w);
-  const upper = w.upperBack?.length ?? 0;
-  // v55 (Sep 27 2026) — CHECK round1/2/3 N1: the trailing "+1" stood for the
-  // cool-down step, so a workout with none (Workout D: warmup:[ride], main:[],
-  // cooldown:[]) still counted a step that never happens — "Warm-up · 1 of 2"
-  // on a genuinely one-step ride. Only add it when there's a real cool-down
-  // to reach.
-  const hasCooldown = (w.cooldown ?? []).length > 0;
-  const total = warm + main * rounds + upper + (hasCooldown ? 1 : 0);
-  if (state.currentPhase === 'cooldown') {
-    return { index: total, total };
-  }
-  const movable = flattenSteps(toStepWorkout(w), rounds);
-  const index = reachedCount(movable, state.completedSteps, currentStepKey());
-  return { index: Math.max(1, Math.min(total, index)), total };
-}
-
-function phaseLabelFor(w: Workout): string {
-  const base =
-    // v55 (Sep 27 2026) — CHECK N1/N3: Workout D's one step is the ride
-    // itself, not a "Warm-up" leading up to something else. "Ride · 1 of 1".
-    w.id === 'D' && state.currentPhase === 'warmup'
-      ? 'Ride'
-      : state.currentPhase === 'main'
-        ? `Main · Round ${state.currentRound} of ${effectiveRounds(w)}`
-        : state.currentPhase === 'warmup'
-          ? 'Warm-up'
-          : state.currentPhase === 'upperBack'
-            ? 'Upper back'
-            : cooldownChipLabel(w);
-  return `${base}${state.liteDay ? ' · lite' : ''}`;
-}
-
-// v48 · P7 (Sep 24 2026): the cool-down chip counts HER rows — "Stretch · 11",
-// not "Stretch · 18 stretches" (a number that overstated the hill at the end of
-// a workout, and said "stretch" twice — uxui cooldown). An empty list keeps the
-// plain phase name rather than print "Stretch · 0".
-function cooldownChipLabel(w: Workout): string {
-  const n = groupStretchPairs(w.cooldown ?? []).length;
-  return n > 0 ? `Stretch · ${n}` : 'Cool-down';
-}
-
-// The one progress line + the one bar (v48). `.round-indicator` stays on the
-// left label — the resume tests key on it.
-function renderProgressLine(w: Workout): string {
-  const { index, total } = workoutStepPosition(w);
-  // v48 · P8 (Sep 24 2026): no "23 of 23" on the cool-down. It's always the
-  // last step, so the number only repeats the full bar. The list's own live
-  // line ("~13 min · 5 of 11") is the one count on that screen (DECISIONS §2:
-  // "one quiet count").
-  const count =
-    state.currentPhase === 'cooldown' ? '' : `<span class="step-count">${index} of ${total}</span>`;
-  return `
-    <div class="step-progress">
-      <span class="round-indicator">${phaseLabelFor(w)}</span>
-      ${count}
-    </div>
-    <div class="progress-bar">
-      <div class="progress-bar-fill" style="width: ${(index / total) * 100}%"></div>
-    </div>`;
-}
-
-// v48: is the current step a hold (wall sit, plank, wall lean) rather than a
-// cardio lane? Lanes keep their v46 face — P3 owns them.
-function isHoldStep(ex: Exercise): boolean {
-  return !!ex.isTimed && !isIndoorLane(ex.name) && ex.name !== 'Outdoor walk';
-}
-
-// v48: round 2+ of the main block — the quieter face (visual folded, how-to
-// never auto-open).
-function isLaterRound(): boolean {
-  return state.currentPhase === 'main' && state.currentRound > 1;
-}
-
-// The hold done-faces are keyed per STEP (phase|round|index), not per name: the
-// wall sit comes round again in round 2, and that one hasn't been held yet —
-// a name key would greet round 2 with "✓ held 45 s". Back to a held step
-// shows its done-face again.
-function holdStepKey(): string {
-  return `${state.currentPhase}|${state.currentRound}|${state.currentExerciseIndex}`;
-}
-
-// Seconds held on THIS step so far (0 = not run yet).
-function heldOnThisStep(): number {
-  return state.heldSecFor[holdStepKey()] ?? 0;
 }
 
 function recordHeld(key: string, sec: number): void {
@@ -1322,24 +1172,6 @@ function sessionFirsts(onElliptical: boolean): { firsts: string[]; back: string[
   }
   return { firsts: out, back };
 }
-
-// ---------- v48 · P5 (Sep 24 2026): arm feel + the LOAD CHIP ----------
-// The 2 kg trigger was her Jul 3 buy-bigger ask, and the app logs no arm reps
-// (assumptions, 19). One optional tap on the two 1 kg moves — inside her
-// 2-tap line — read her feel.
-//
-// v55 (Sep 27 2026): the old "Ask Lisa about 2 kg?" card is RETIRED — her
-// rule 8e, "Get rid of Lisa. I decide based on pain" (Sep 26 23:15), and she
-// has 2 kg now (20:08). The LOAD CHIP replaces it: she picks 1 kg or 2 kg
-// herself, every set, no question asked.
-// ARM_FEEL_STEPS (the two 1 kg moves -> curl / row) lives in workout-now.ts (step 15a).
-const ARM_FEEL_VALUES: readonly ArmFeel[] = ['easy', 'right', 'hard'];
-const ARM_LOAD_VALUES: readonly ArmLoad[] = ['1kg', '2kg'];
-
-function isArmFeel(v: unknown): v is ArmFeel {
-  return typeof v === 'string' && (ARM_FEEL_VALUES as readonly string[]).includes(v);
-}
-
 // v48 · P7: only string keys with `true` survive — a corrupt value is dropped,
 // never crashed on (the snapshot is a convenience).
 function sanitizeStretchTicks(v: unknown): Record<string, boolean> {
@@ -1370,10 +1202,6 @@ function sanitizeMoveFeel(v: unknown): MoveFeelState {
     if (/^[a-z]+$/.test(slug) && isMoveFeelValue(val)) out[slug] = val;
   }
   return out;
-}
-
-function isArmLoad(v: unknown): v is ArmLoad {
-  return v === '1kg' || v === '2kg';
 }
 
 // v55 (Sep 27 2026): a pre-v55 snapshot has no load → {} (defaultArmLoad
@@ -1446,13 +1274,6 @@ function lastUsedArmLoad(logs: LogEntry[], key: 'curl' | 'row'): ArmLoad {
 
 function defaultArmLoad(logs: LogEntry[]): ArmLoadState {
   return { curl: lastUsedArmLoad(logs, 'curl'), row: lastUsedArmLoad(logs, 'row') };
-}
-
-// v55 · fix r1: the heavier of two loads (or the one that's set, if only one
-// is) — armLoadMax's own update rule. '2kg' always wins over '1kg'.
-function heavierArmLoad(a: ArmLoad | undefined, b: ArmLoad | undefined): ArmLoad | undefined {
-  if (a === '2kg' || b === '2kg') return '2kg';
-  return a ?? b;
 }
 
 // Read + validate the in-progress snapshot against the live program (a workout
@@ -1965,186 +1786,7 @@ function updateSyncIndicator(): void {
 
 // ---------- formatting ----------
 
-// The big countdown face. Holds are all under a minute so they keep reading as
-// bare seconds; the apartment-cardio timer runs 10-25 minutes, where a raw
-// "600" reads as nonsense — those show as m:ss.
-function formatTimerDisplay(sec: number): string {
-  if (sec < 60) return String(sec);
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
 // ---------- visual layer (group 3) ----------
-
-// Primary on-screen still for an exercise: the curated loop JPG if we have one,
-// otherwise the first how-to illustration (SVG/JPG). Allison 2026-06-06: every
-// actual exercise should show a PICTURE — not just a "watch video" poster —
-// AND keep its video. Every real exercise has a how-to frame, so this gives
-// picture + video coverage without sourcing new assets.
-function getPrimaryStill(exerciseName: string): { svg: string } | { image: string } | null {
-  const v = EXERCISE_VISUALS[exerciseName];
-  if (v?.loop) return { image: v.loop };
-  const frame = EXERCISE_HOWTO[exerciseName]?.frames?.[0];
-  if (frame?.svg) return { svg: frame.svg };
-  if (frame?.image) return { image: frame.image };
-  return null;
-}
-
-// One-time kit setup for THIS week's version of an exercise (v37). Opens by
-// default the first time she meets it — a step she has not done yet should not
-// be hidden behind a tap — and remembers being closed for the rest of the
-// session. Its video is a SECOND video, separate from the movement video in
-// EXERCISE_VISUALS, because tying a band and doing a clamshell are two things.
-function renderExerciseSetup(ex: Exercise): string {
-  const s = ex.setup;
-  if (!s) return '';
-  const key = `setup:${ex.name}`;
-  const open = state.openSections[key] !== false; // default OPEN
-  const videoOpen = state.videoExpandedFor === key;
-  const stepsHtml = s.steps.map((t) => `<li>${t}</li>`).join('');
-  return `
-    <div class="setup-block${open ? ' setup-block-open' : ''}">
-      <button class="setup-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${open}">
-        <span class="setup-toggle-title">🔧 ${escapeHtml(s.title)}</span>
-        <span class="setup-toggle-chev">${open ? '▾' : '▸'}</span>
-      </button>
-      ${
-        open
-          ? `<div class="setup-body">
-        <ol class="setup-steps">${stepsHtml}</ol>
-        ${s.footnote ? `<p class="setup-footnote">${s.footnote}</p>` : ''}
-        ${
-          s.youtubeId
-            ? `<button class="visual-video-toggle" data-expand-video="${escapeHtml(key)}" type="button" aria-expanded="${videoOpen}">
-                ${videoOpen ? '× Hide the video' : '▶ Watch someone do it (40 sec)'}
-              </button>
-              ${
-                videoOpen
-                  ? `<div class="visual-video-wrap">
-                      <iframe
-                        src="https://www.youtube.com/embed/${escapeHtml(s.youtubeId)}?rel=0&modestbranding=1"
-                        title="${escapeHtml(s.title)}"
-                        frameborder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowfullscreen
-                        loading="lazy"
-                      ></iframe>
-                    </div>`
-                  : ''
-              }
-              ${s.attribution ? `<div class="visual-attribution">${escapeHtml(s.attribution)}</div>` : ''}`
-            : ''
-        }
-      </div>`
-          : ''
-      }
-    </div>
-  `;
-}
-
-// `compact` (v48, Sep 24 2026): one quiet "▶ Watch how it looks" row that
-// expands on tap — used from round 2 on (she has just done the move; walk:
-// "Round 2 notes closed") and ALWAYS for moves with no still, where the old
-// face was a 342×257 black poster with a play icon (split squat, bird dog).
-function renderExerciseVisual(exerciseName: string, compact = false): string {
-  const v = EXERCISE_VISUALS[exerciseName];
-  const still = getPrimaryStill(exerciseName);
-  const youtubeId = v?.youtubeId;
-
-  // Nothing to show at all.
-  if (!still && !youtubeId) return '';
-
-  const isExpanded = state.videoExpandedFor === exerciseName;
-  const safeAlt = escapeHtml(`${exerciseName} — exercise demonstration`);
-  const attribution = v?.attribution ? escapeHtml(v.attribution) : '';
-
-  const stillMarkup = still
-    ? 'svg' in still
-      ? `<div class="exercise-visual-still exercise-visual-still-svg">${still.svg}</div>`
-      : `<img class="exercise-visual-still" src="${escapeHtml(still.image)}" alt="${safeAlt}" loading="lazy" />`
-    : '';
-
-  const videoIframe = youtubeId
-    ? `<div class="visual-video-wrap">
-        <iframe
-          src="https://www.youtube.com/embed/${escapeHtml(youtubeId)}?rel=0&modestbranding=1"
-          title="${safeAlt}"
-          frameborder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowfullscreen
-          loading="lazy"
-        ></iframe>
-      </div>`
-    : '';
-
-  // v48: the compact row (round 2+, or no still to show). Open = the picture
-  // (if any) and the video together, closed = one quiet line.
-  if (compact || !still) {
-    return `
-      <div class="exercise-visual exercise-visual-compact">
-        <button class="visual-video-toggle" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isExpanded}">
-          ${isExpanded ? '× Hide' : '▶ Watch how it looks'}
-        </button>
-        ${isExpanded ? `${stillMarkup}${videoIframe}` : ''}
-        ${isExpanded && attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
-      </div>
-    `;
-  }
-
-  // Still picture (trusted inline SVG, or a curated/illustration JPG). Shown as
-  // the primary visual; the video sits behind a "Watch full video" expander.
-  // (v48: the no-still video POSTER that used to follow is gone — a still-less
-  // move takes the compact row above. Autoplay stays off: the embed loads on tap.)
-  const videoBlock = youtubeId
-    ? `
-      <button class="visual-video-toggle" data-expand-video="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isExpanded}">
-        ${isExpanded ? '× Hide video' : '▶ Watch full video'}
-      </button>
-      ${isExpanded ? videoIframe : ''}`
-    : '';
-
-  return `
-      <div class="exercise-visual">
-        ${stillMarkup}
-        ${videoBlock}
-        ${attribution ? `<div class="visual-attribution">${attribution}</div>` : ''}
-      </div>
-    `;
-}
-
-function renderHowToFrame(frame: HowToFrame, idx: number, exerciseName: string): string {
-  const safeAlt = escapeHtml(`${exerciseName} — frame ${idx + 1}`);
-  // Visual: either an <img> or inline SVG. SVG is trusted (hand-coded in our
-  // own source) so we render it directly.
-  const visualHtml = frame.svg
-    ? `<div class="howto-frame-visual howto-frame-visual-svg">${frame.svg}</div>`
-    : frame.image
-      ? `<div class="howto-frame-visual"><img src="${escapeHtml(frame.image)}" alt="${safeAlt}" loading="lazy" /></div>`
-      : '<div class="howto-frame-visual howto-frame-visual-empty"></div>';
-
-  return `
-    <div class="howto-frame">
-      ${visualHtml}
-      <div class="howto-frame-text">
-        <div class="howto-cue howto-cue-do">
-          <span class="howto-cue-icon" aria-hidden="true">✓</span>
-          <span class="howto-cue-label">Do:</span>
-          <span class="howto-cue-body">${escapeHtml(frame.do)}</span>
-        </div>
-        ${
-          frame.avoid
-            ? `<div class="howto-cue howto-cue-avoid">
-            <span class="howto-cue-icon" aria-hidden="true">✗</span>
-            <span class="howto-cue-label">Avoid:</span>
-            <span class="howto-cue-body">${escapeHtml(frame.avoid)}</span>
-          </div>`
-            : ''
-        }
-      </div>
-    </div>
-  `;
-}
 
 function setVoiceBtnPlaying(btn: HTMLElement, playing: boolean): void {
   btn.classList.toggle('voice-note-playing', playing);
@@ -2164,149 +1806,6 @@ function toggleVoiceNote(btn: HTMLButtonElement, src: string): void {
       saveActiveSession();
     },
   });
-}
-
-// One collapsed dropdown inside the enriched detail card. Closed by default;
-// its open-state lives in state.openSections keyed "<exercise>::<section>".
-function renderDetailSection(
-  exerciseName: string,
-  sectionKey: string,
-  label: string,
-  icon: string,
-  innerHtml: string
-): string {
-  const key = `${exerciseName}::${sectionKey}`;
-  const isOpen = !!state.openSections[key];
-  return `
-    <div class="detail-section ${isOpen ? 'detail-section-open' : ''}">
-      <button class="detail-section-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${isOpen}">
-        <span class="detail-section-label"><span class="detail-section-icon" aria-hidden="true">${icon}</span> ${escapeHtml(label)}</span>
-        <span class="detail-chev" aria-hidden="true">▸</span>
-      </button>
-      ${isOpen ? `<div class="detail-section-body">${innerHtml}</div>` : ''}
-    </div>`;
-}
-
-// The enriched, low-overwhelm detail card (Allison Jul 9 2026). Face shows only
-// the important, low-reading things — the ▶ voice note + the muscle-target
-// picture. Steps / Do & Don't / Common mistakes are each a collapsed dropdown
-// she taps to open. See exercise-detail.ts for the "why".
-function renderDetailCard(exerciseName: string): string {
-  const d = EXERCISE_DETAIL[exerciseName];
-  if (!d) return '';
-
-  const stepsHtml = `<ol class="detail-steps">${d.steps
-    .map((s) => `<li>${escapeHtml(s)}</li>`)
-    .join('')}</ol>`;
-
-  const doDontHtml = `<ul class="detail-cues">${d.dos
-    .map(
-      (x) =>
-        `<li class="detail-cue-do"><span class="detail-cue-mark" aria-hidden="true">✓</span>${escapeHtml(x)}</li>`
-    )
-    .join('')}${d.donts
-    .map(
-      (x) =>
-        `<li class="detail-cue-dont"><span class="detail-cue-mark" aria-hidden="true">✗</span>${escapeHtml(x)}</li>`
-    )
-    .join('')}</ul>`;
-
-  const mistakesHtml = `<ul class="detail-mistakes">${d.mistakes
-    .map(
-      (m) =>
-        `<li><span class="detail-mistake">${escapeHtml(m.mistake)}</span><span class="detail-fix">${escapeHtml(m.fix)}</span></li>`
-    )
-    .join('')}</ul>`;
-
-  return `
-    <div class="detail-card">
-      <div class="detail-face">
-        <button class="voice-note-btn is-secondary" data-voice-src="${escapeHtml(d.voiceSrc)}" type="button">
-          <span class="voice-note-icon" aria-hidden="true">▶</span>
-          <span class="voice-note-label">Listen — how to do it</span>
-        </button>
-        <div class="muscle-target">
-          <div class="muscle-target-diagram">${muscleDiagram(d.muscles)}</div>
-          <div class="muscle-target-label"><span class="muscle-target-title">Targets</span>${escapeHtml(d.muscleLabel)}</div>
-        </div>
-      </div>
-      ${renderDetailSection(exerciseName, 'steps', 'Steps', '🔢', stepsHtml)}
-      ${renderDetailSection(exerciseName, 'dodont', "Do & Don't", '✓', doDontHtml)}
-      ${renderDetailSection(exerciseName, 'mistakes', 'Common mistakes', '⚠️', mistakesHtml)}
-    </div>`;
-}
-
-function renderHowToCard(exerciseName: string): string {
-  // Prefer multi-frame visual how-to. Fall back to legacy EXERCISE_GUIDE text
-  // if the exercise hasn't been mapped to EXERCISE_HOWTO yet (archive-not-
-  // delete principle: EXERCISE_GUIDE stays in source as a permanent fallback).
-  const howto = EXERCISE_HOWTO[exerciseName];
-  const guide = EXERCISE_GUIDE[exerciseName];
-  if (!howto && !guide) return '';
-
-  // First-time-this-week → open by default. After that, collapsed.
-  // WK4 (Sep 27 2026): currentHowToWeekKey() branches pre/post-launch — see
-  // its own comment next to howToWeekKey.
-  const week = currentHowToWeekKey();
-  const seenKey = `${HOWTO_SEEN_KEY_PREFIX}${howToWeekKey(week)}`;
-  let seen: Record<string, boolean> = {};
-  try {
-    const raw = localStorage.getItem(seenKey);
-    if (raw) seen = JSON.parse(raw) as Record<string, boolean>;
-  } catch {
-    seen = {};
-  }
-  const isFirstThisWeek = !seen[exerciseName];
-  const userOpened = state.howToOpenFor === exerciseName;
-  const userClosed = state.howToOpenFor === `__closed__${exerciseName}`;
-  // Ship 6: respect "Show how-to expanded first time per week" setting (default
-  // on). If off, never auto-expand — only show when user explicitly opens.
-  // v48 (Sep 24 2026): never auto-open from round 2 on — she has just done the
-  // move (walk-in-her-shoes: "Round 2 notes closed").
-  const autoExpand = getHowToFirstExpand() && !isLaterRound();
-  const isOpen = userOpened || (autoExpand && isFirstThisWeek && !userClosed);
-
-  const innerHtml = howto
-    ? `<div class="howto-frames">
-        ${howto.frames.map((f, i) => renderHowToFrame(f, i, exerciseName)).join('')}
-      </div>`
-    : guide
-      ? `<p class="how-to-text">${escapeHtml(guide.howTo)}</p>`
-      : '';
-
-  return `
-    <div class="how-to-card ${isOpen ? 'how-to-open' : ''}">
-      <button class="how-to-toggle" data-toggle-howto="${escapeHtml(exerciseName)}" type="button" aria-expanded="${isOpen}">
-        <span>📖 How to do it</span>
-        <span class="how-to-chev">▸</span>
-      </button>
-      ${isOpen ? innerHtml : ''}
-    </div>
-  `;
-}
-
-// Rounds repeat week numbers, so the localStorage seen-key needs the round in
-// it from round 2 on. Round-1 keys stay bare numbers (backwards compatible).
-function howToWeekKey(week: { num: number; round: number }): string {
-  return week.round > 1 ? `r${week.round}-${week.num}` : `${week.num}`;
-}
-
-function markHowToSeenThisWeek(exerciseName: string): void {
-  const week = currentHowToWeekKey();
-  const seenKey = `${HOWTO_SEEN_KEY_PREFIX}${howToWeekKey(week)}`;
-  let seen: Record<string, boolean> = {};
-  try {
-    const raw = localStorage.getItem(seenKey);
-    if (raw) seen = JSON.parse(raw) as Record<string, boolean>;
-  } catch {
-    seen = {};
-  }
-  seen[exerciseName] = true;
-  try {
-    localStorage.setItem(seenKey, JSON.stringify(seen));
-  } catch {
-    // localStorage full or unavailable — non-fatal
-  }
 }
 
 // ---------- Ship 3: data viz (2026-05-15) ----------
@@ -2429,61 +1928,6 @@ function renderRoundBreak(w: Workout): string {
   `;
 }
 
-// Cool-down = stretches. Allison's call (2026-06-06): show the whole block as
-// ONE scrollable list — name + cue per row — instead of stepping through each
-// stretch as its own screen. No per-stretch video, no per-stretch timer; the
-// reps text already carries the hold time and the notes carry the cue. Real
-// (non-stretch) exercises keep their stepped screens + videos.
-//
-// v48 · P7 (Sep 24 2026): her 18 stretches as 11 tick-off rows. The list is
-// HER routine — "i dont do yur stretches i do this" (May 29) — so all 18 stay
-// in the data; only the right/left pairs fold into one "each side" row. It was
-// 2.9 screens and 547 words under a "No timer" line with "45 sec" on every row
-// (uxui cooldown 4/5; walk-in-her-shoes: "rows I tick off, and ~13 min · 5 of
-// 18"). Cues sit behind a closed ▸; the one sage stays Done · Finish.
-type StretchGroup = {
-  key: string;
-  name: string;
-  eachSide: boolean;
-  cue: string | null;
-  items: Exercise[];
-};
-
-// "Wrist extension — right" / "— left" → one "Wrist extension" group; the two
-// hip-flexor rows ("Hip flexor — right knee in, left leg dangles" / "— left
-// knee in, …") → "Hip flexor". The side word right after " — " is the marker.
-// Singles pass through in order. A placeholder cue ("Your usual neck
-// stretch.") says nothing on a list she already knows, so it becomes null.
-function groupStretchPairs(stretches: Exercise[]): StretchGroup[] {
-  const groups: StretchGroup[] = [];
-  const byStem = new Map<string, StretchGroup>();
-  for (const s of stretches) {
-    const m = s.name.match(/^(.+?) — (?:right|left)\b/i);
-    const stem = m?.[1];
-    if (stem) {
-      const existing = byStem.get(stem);
-      if (existing) {
-        existing.items.push(s);
-        existing.eachSide = true;
-        continue;
-      }
-    }
-    const notes = s.notes?.trim() ?? '';
-    const g: StretchGroup = {
-      key: stem ?? s.name,
-      name: stem ?? s.name,
-      // A single entry can still be "each side" by its own reps (the Week 1-4
-      // "Figure-4 stretch · 45 sec each side").
-      eachSide: /each side/i.test(s.reps ?? ''),
-      cue: notes === '' || /^Your usual .* stretch\.$/.test(notes) ? null : notes,
-      items: [s],
-    };
-    groups.push(g);
-    if (stem) byStem.set(stem, g);
-  }
-  return groups;
-}
-
 // Seconds one entry asks for: durationSec, else the number in "45 sec"/"60 sec";
 // null for a count ("8 breaths").
 function stretchHoldSec(s: Exercise): number | null {
@@ -2583,28 +2027,6 @@ function renderCooldownList(w: Workout): string {
 
     ${renderStepNav('Done stretching ✓')}
   `;
-}
-
-// Pause control — a quiet button in every workout sub-view's header, left of
-// Quit (v46). It was a fixed pill at the bottom-left, which sat on top of
-// Start timer and the setup steps on the elliptical screen (UI audit Sep 24).
-// Nothing while paused: the overlay's Resume is the only control then.
-function renderPauseButton(): string {
-  if (state.pausedAt !== null) return '';
-  return `<button class="pause-inline" id="pause-toggle" type="button" aria-label="Pause workout">⏸ Pause</button>`;
-}
-
-// v50 · jump list (Sep 25 2026) — a quiet button beside Pause, same look (ink,
-// not sage — this is wayfinding, not the one primary action per step). Her
-// words: "I dont always do the workouts in [order]" → "2" = the exercises
-// inside a workout. Opens renderStepListSheet below.
-function renderListButton(): string {
-  if (state.pausedAt !== null) return '';
-  // Icon only (not "☰ List") — with Pause + Quit already in this row, the
-  // full word pushed "Workout A" onto two lines at 412px and broke the fold
-  // on the elliptical first-ride screen (P8 sweep caught it). The aria-label
-  // still says the whole thing.
-  return `<button class="pause-inline step-list-open-btn" id="step-list-open" type="button" aria-label="List every step">☰</button>`;
 }
 
 // One row of the List sheet: display name + reps, a ✓ once she's tapped Done
@@ -3370,154 +2792,6 @@ function renderWorkout(): string {
       renderStepNav('Done · Next', (hold && !holdRan) || (indoorLane && !(laneRan && timerIdle)))
     }
   `;
-}
-
-// v54 (Sep 27 2026) — how many sets a move's own `reps` text says ("2 sets ·
-// 12 reps", "2 sets · 12 reps each side"). An "N sets" / "N ×" / "N x" count
-// anywhere in the string; anything else (no match, or N <= 1) is a
-// single-set move and unaffected — same "single-set holds don't change"
-// convention as F1's own wall-lean-sets spec (PLAN-2026-09-26.md §7 F1),
-// applied here to the Easy/Right/Hard chip instead of a timer.
-// v58 fix pass (Sep 28 2026, checker's should #3): used to anchor the count
-// to the very START of the string (`^`), so "12 reps · 2 sets each round"
-// (hip hinge's own reps text — the count sits AFTER the reps number, not
-// before it) never matched at all and read as single-set. The chip then
-// showed the instant round 2's step appeared, before either set was done,
-// instead of waiting for "Set 2 done" the way curl/row's own 2-set moves
-// already do. Searching anywhere (dropping the `^`) finds "2 sets" wherever
-// it sits; "sets?"/×/x still can't false-match a hold's "2-sec hold" or a
-// tempo's "3-1-3" (no digit-then-whitespace-then-s/x there).
-function multiSetCount(reps: string | undefined): number {
-  const m = /(\d+)\s*(?:sets?|[×x])\b/i.exec((reps ?? '').trim());
-  const n = m ? Number(m[1]) : NaN;
-  return Number.isFinite(n) && n > 1 ? n : 1;
-}
-
-// v48 · P5 (Sep 24 2026): "How did it feel?" on the 1 kg curl and the prone
-// row — three small chips, optional; tap selects, tap again clears. Quiet
-// (outlined), so Done · Next stays the one sage on the step.
-//
-// v54 (Sep 27 2026) — CHIP AFTER THE LAST SET. Her Sep 27 reflection: "for
-// the good right hard... there's two sets? Maybe I should only do on the
-// second time? Should I do both times?" Both curl and the prone row say "2
-// sets" in their own reps text, done off ONE screen with no timer between
-// them (no Start/Stop boundary the app can see) — so before this, the chip
-// simply appeared the instant the step did, with nothing marking "you've
-// actually finished both sets" first. Now a multi-set move shows a plain "Set
-// X done" tap instead, and the chip itself waits for the LAST one: it never
-// asks the question after only set 1. A single-set move (multiSetCount <= 1)
-// is unchanged — chip shows immediately, exactly as before.
-// v55 (Sep 27 2026) — LOAD CHIP: "1 kg · 2 kg" per SET, her pick by pain
-// ("no Lisa approval, I decide based on pain", Sep 26 23:15). Default is
-// whatever state.armLoad already holds (set at session start by
-// defaultArmLoad — last used, else 1 kg); tapping just selects, never clears.
-function renderArmLoadChips(step: 'curl' | 'row'): string {
-  const current = state.armLoad[step] ?? '1kg';
-  const chips = ARM_LOAD_VALUES.map((load) => {
-    const on = current === load;
-    const label = load === '1kg' ? '1 kg' : '2 kg';
-    return `<button class="arm-load-chip${on ? ' arm-load-chip-on' : ''}" type="button" data-arm-load-step="${step}" data-arm-load="${load}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
-  }).join('');
-  return `<div class="arm-load-row" role="group" aria-label="Load">${chips}</div>`;
-}
-
-// v55 — the pace rule from training-review v2 item 5, said ONCE (ever, this
-// device) right on the step, not repeated every set/session: "Easy twice at
-// 15 slow reps + pain gone by morning → try 2 kg on the first set."
-// v55 · fix r1 (Sep 27 2026): used to mark itself seen INSIDE render() — so
-// it vanished on the very next re-render, including her first tap on a load
-// chip, before she'd necessarily read it. Now it only reads the flag here;
-// markPaceRuleSeen() (below) sets it, called from the "Set N done" tap —
-// same convention as the CHIP AFTER THE LAST SET timing already uses.
-// Storage blocked → it just shows every time (never crashes, never blocks).
-function renderPaceRuleOnce(): string {
-  try {
-    if (localStorage.getItem(PACE_RULE_SEEN_KEY) === '1') return '';
-  } catch {
-    // storage blocked — fall through and show it this render
-  }
-  return `<p class="arm-load-pace-rule">Easy twice at 15 slow reps + pain gone by morning → try 2 kg on the first set.</p>`;
-}
-
-function markPaceRuleSeen(): void {
-  try {
-    localStorage.setItem(PACE_RULE_SEEN_KEY, '1');
-  } catch {
-    // non-fatal — the rule just keeps showing every time
-  }
-}
-
-function renderArmFeel(ex: Exercise): string {
-  const step = ARM_FEEL_STEPS[ex.name];
-  if (!step) return '';
-  const total = multiSetCount(ex.reps);
-  const done = Math.min(state.setsDoneFor[ex.name] ?? 0, total);
-  const loadRow = renderArmLoadChips(step);
-  if (total > 1 && done < total) {
-    return `
-      <div class="arm-feel arm-feel-sets" role="group" aria-label="Sets">
-        <span class="arm-feel-label">Set ${done + 1} of ${total}</span>
-        ${loadRow}
-        ${step === 'curl' ? renderPaceRuleOnce() : ''}
-        <button class="arm-set-btn" type="button" data-mark-set="${escapeHtml(ex.name)}">Set ${done + 1} done</button>
-      </div>`;
-  }
-  const current = state.armFeel[step];
-  const chips = ARM_FEEL_VALUES.map((v) => {
-    const on = current === v;
-    const label = v === 'easy' ? 'Easy' : v === 'right' ? 'Right' : 'Hard';
-    return `<button class="arm-chip${on ? ' arm-chip-on' : ''}" type="button" data-arm-step="${step}" data-arm-feel="${v}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
-  }).join('');
-  return `
-    <div class="arm-feel" role="group" aria-label="How did it feel?">
-      ${total > 1 ? `<span class="arm-feel-label arm-feel-sets-done">${total} sets ✓</span>` : ''}
-      ${loadRow}
-      ${step === 'curl' ? renderPaceRuleOnce() : ''}
-      <span class="arm-feel-label">How did it feel?</span>
-      <div class="arm-feel-chips">${chips}</div>
-    </div>`;
-}
-
-// v58 (Sep 28 2026) — the SAME chip, generalized to every move that stepped
-// this week (never curl/row — renderArmFeel above still owns those). Gating
-// is the same "after the last set (or after the timer/ride ends)" rule
-// renderArmFeel already proved (CHIP AFTER THE LAST SET, v54): a hold waits
-// for holdRan, a cardio lane waits for laneRan && timerIdle, a multi-set
-// reps move reuses the exact same setsDoneFor + "Set N done" mechanism
-// (data-mark-set is already keyed by exercise NAME, not curl/row-specific —
-// no new tap handler needed for that half). A main-phase move that repeats
-// across rounds only asks on its LAST round (`isLastRoundOrNA`) — asking the
-// same question every round would be noise, and there's no per-round
-// boundary here the way curl/row's "2 sets, one screen" already has one.
-function renderMoveFeel(
-  ex: Exercise,
-  gate: { hold: boolean; ready: boolean; isLastRoundOrNA: boolean }
-): string {
-  if (ARM_FEEL_STEPS[ex.name]) return ''; // curl/row keep arm_feel, unmigrated
-  if (!gate.isLastRoundOrNA) return '';
-  const stepped = currentSteppedMoves().find((s) => s.name === canonicalMoveName(ex.name));
-  if (!stepped) return '';
-  if (!gate.ready) return '';
-  const total = multiSetCount(ex.reps);
-  const done = Math.min(state.setsDoneFor[ex.name] ?? 0, total);
-  if (!gate.hold && total > 1 && done < total) {
-    return `
-      <div class="move-feel move-feel-sets" role="group" aria-label="Sets">
-        <span class="move-feel-label">Set ${done + 1} of ${total}</span>
-        <button class="arm-set-btn" type="button" data-mark-set="${escapeHtml(ex.name)}">Set ${done + 1} done</button>
-      </div>`;
-  }
-  const current = state.moveFeel[stepped.slug];
-  const chips = MOVE_FEEL_VALUES.map((v) => {
-    const on = current === v;
-    const label = v === 'easy' ? 'Easy' : v === 'right' ? 'Right' : 'Hard';
-    return `<button class="arm-chip${on ? ' arm-chip-on' : ''}" type="button" data-move-feel-slug="${stepped.slug}" data-move-feel="${v}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
-  }).join('');
-  return `
-    <div class="move-feel" role="group" aria-label="How did it feel?">
-      <span class="move-feel-label">Stepped this week — how did it feel?</span>
-      <div class="arm-feel-chips">${chips}</div>
-    </div>`;
 }
 
 // ---------- Ship 4: weekly review (2026-05-15) ----------
