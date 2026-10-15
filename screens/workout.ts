@@ -47,9 +47,8 @@ import { renderActionBar } from '../action-bar.js';
 import { flattenSteps } from '../step-list.js';
 import { setsPrescribed, holdSetsFace, formatHeldSeconds } from '../hold-sets.js';
 import { honestWallSitLogs } from '../viz.js';
-import { isMoveFeelValue } from '../move-feel.js';
+import { isMoveFeelValue, MOVE_FEEL_VALUES } from '../move-feel.js';
 import { EXERCISE_DETAIL } from '../exercise-detail.js';
-import { MOVE_FEEL_VALUES } from '../move-feel.js';
 import { rideRate } from '../ride.js';
 import { deriveRideAim, lastTimeAtSameAim } from '../ride-aim.js';
 import { ellipticalRideRecords } from '../cardio-notes.js';
@@ -127,7 +126,7 @@ import {
   markHowToSeenThisWeek,
 } from '../workout-cards.js';
 
-// The sub-views that are still in app.ts (ride lanes: 17b; rest / round break / cool-down: 17c)
+// The sub-views that are still in app.ts (rest / round break / cool-down: 17c; the ride lanes live here since 17b)
 // and the jump (the state machine: 17c). app.ts registers them once at boot; the forwarding
 // stubs below keep renderWorkout and the handlers byte-identical to the code that moved.
 export type WorkoutSubviews = {

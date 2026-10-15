@@ -328,7 +328,7 @@ function syncWorkoutWalkTracking(): void {
 // post-ride and never saw it ("it didn't show up for me... I don't know what
 // I was supposed to see or where"). Now the tap opens this screen instead, in
 // ANY ride state: a live timer is stopped and its real minutes kept first,
-// same as the quiet Stop (stopLaneTimer above) — nothing is lost either way.
+// same as the quiet Stop (stopLaneTimer, in screens/workout.ts) — nothing is lost either way.
 function openRideNumbers(): void {
   captureLaneMinutesIfLeaving();
   stopTimer();
