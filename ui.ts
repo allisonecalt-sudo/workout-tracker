@@ -32,13 +32,6 @@ export interface Ui {
   // path that ends a running timer — Stop, Back, advancing, quitting) resets it,
   // so it can never outlive the timer it belongs to.
   timerPipOpen: boolean;
-  // v60 (Sep 28 2026): whether the timed hold about to run/running is a REDO of
-  // the last completed SET, not a fresh next one — same transient-UI reasoning
-  // as stepListOpen/timerPipOpen above (not session progress, not persisted).
-  // Only read by recordHeldSet, and only matters for a multi-set hold
-  // (hold-sets.ts setsPrescribed > 1); a single-set hold's Redo still goes
-  // through the untouched recordHeld/heldSecFor path.
-  holdRedoInProgress: boolean;
   audioCtx: AudioContext | null;
   activeTimer: TimerHandle | null;
   rafHandle: number | null;
@@ -105,7 +98,6 @@ export interface Ui {
 export const ui: Ui = {
   stepListOpen: false,
   timerPipOpen: false,
-  holdRedoInProgress: false,
   audioCtx: null,
   activeTimer: null,
   rafHandle: null,

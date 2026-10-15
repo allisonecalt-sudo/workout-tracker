@@ -1,5 +1,5 @@
-// screens/workout.ts - the workout screen: the exercise step (code-shape step 17a) and the ride
-// lanes (step 17b), Oct 15 2026. Moved verbatim out of app.ts; no behaviour change, no version bump.
+// screens/workout.ts - the workout screen: the exercise step (code-shape step 17a), the ride
+// lanes (step 17b) and the state machine + overlays' bindings (step 17c), Oct 15-16 2026. Moved verbatim out of app.ts; no behaviour change, no version bump.
 //
 // WHAT (17a): renderWorkout (the render entry for state.screen === 'workout' - it picks the
 // sub-view), the exercise step itself (name + reps + feel chips + safety + Tips + setup card +
@@ -18,21 +18,29 @@
 // more sub-views are shared-layer modules named workout-*.ts (workout-now.ts: lookups;
 // workout-parts.ts: step nav / progress line / header buttons; workout-feel.ts: feel chips;
 // workout-cards.ts: picture / setup / detail / how-to cards); everything that binds, saves or
-// moves the state machine stays in THIS file (or app.ts until its run). 17b (done, below the
-// exercise step) brought the ride lanes' renderers and handlers here; workout-lanes.ts is the shared
-// lane-choice STATE (localStorage) that app.ts and these handlers both call; 17c adds
-// rest / round break / cool-down / paused (strings -> a shared workout-breaks.ts) and the state
-// machine here. Until then app.ts registers the sub-views this file still has to call through
-// setWorkoutSubviews() (below) - each forwarding stub is deleted when its sub-view arrives.
+// moves the state machine lives in THIS file. 17b brought the ride lanes' renderers and handlers
+// here; workout-lanes.ts is the shared lane-choice STATE (localStorage) that these handlers and the
+// state machine both call. 17c (done) brought in the state machine (advanceExercise, goBack,
+// jumpToStep, begin / next / step-back, the hold start / stop logic, round two / finish here, quit
+// and "Log what I did") and the bindings of rest / round break / cool-down / paused; their strings
+// are in the shared workout-breaks.ts. app.ts is now the shell: render()'s switch,
+// attachHandlers() calling every screen's attach* in the original order, boot, and the test hooks.
 //
-// ui: nothing here is module-local. stepListOpen is written by app.ts (jumpToStep, resume,
-// resetState) and read by render(); timerPipOpen is written by timer.ts (the timer's end) -
-// both stay on `ui` (grep proof in the step 17a hand-off).
+// What the state machine calls back for and cannot import (the session reset, the pre-log and
+// post-log clock ticks, which belong to other screens/app.ts) comes in ONCE at boot through
+// setWorkoutHooks(), like actions.ts' setActionHooks(). timer.ts / actions.ts / walk.ts need no
+// callback into the machine: they take the caller's closure (startTimerCore's onComplete,
+// startPreCountdown's then) and only set state + requestRender().
+//
+// ui: stepListOpen is written by app.ts (resume, resetState) and here (jumpToStep), and read by
+// render(); timerPipOpen is written by timer.ts (the timer's end) - both stay on `ui`. 17c made
+// holdRedoInProgress module-local (below the state machine's header): no other file touched it.
 
 import {
   state,
   loadLogs,
   WW_LANE_STARTED_KEY,
+  WW_LANE_DONE_MIN_KEY,
   WW_ELLIPTICAL_LEVEL_KEY,
   WW_ELLIPTICAL_KM_KEY,
   WW_ELLIPTICAL_PULSE_KEY,
@@ -41,10 +49,10 @@ import {
 } from '../state.js';
 import { ui } from '../ui.js';
 import { requestRender } from '../bus.js';
-import { bindClick } from '../dom.js';
+import { bindClick, wireHoldToSkip } from '../dom.js';
 import { escapeHtml } from '../format.js';
 import { renderActionBar } from '../action-bar.js';
-import { flattenSteps } from '../step-list.js';
+import { flattenSteps, nextUndoneStep, type WorkoutStep } from '../step-list.js';
 import { setsPrescribed, holdSetsFace, formatHeldSeconds } from '../hold-sets.js';
 import { honestWallSitLogs } from '../viz.js';
 import { isMoveFeelValue, MOVE_FEEL_VALUES } from '../move-feel.js';
@@ -71,15 +79,23 @@ import {
   clearElliptical,
   captureLaneMinutesIfLeaving,
 } from '../workout-lanes.js';
-import { SAFETY_LINE, type Exercise, type Workout } from '../program.js';
+import { SAFETY_LINE, type Exercise, type Workout, type Phase } from '../program.js';
 import { saveActiveSession } from '../actions.js';
-import { togglePause, stopTimer } from '../timer.js';
-import { toggleVoiceNote as toggleVoiceNoteAudio } from '../audio.js';
+import {
+  togglePause,
+  stopTimer,
+  startTimerCore,
+  startRestTimer,
+  skipRest,
+  startPreCountdown,
+} from '../timer.js';
+import { toggleVoiceNote as toggleVoiceNoteAudio, unlockAudio } from '../audio.js';
 import {
   workoutWalkStart,
   startWorkoutWalk,
   updateWalkLine,
   walkStepMinutes,
+  clearWorkoutWalk,
   walkFeelReady,
   walkLiveText,
   APARTMENT_CARDIO_NAME,
@@ -89,6 +105,7 @@ import {
   ARM_FEEL_STEPS,
   getCurrentWorkout,
   getCurrentExercise,
+  lastCardioLane,
   rawCurrentExercise,
   effectiveRounds,
   toStepWorkout,
@@ -106,6 +123,7 @@ import {
   isArmFeel,
   isArmLoad,
   heavierArmLoad,
+  defaultArmLoad,
   markPaceRuleSeen,
   renderArmFeel,
   renderMoveFeel,
@@ -127,31 +145,35 @@ import {
 } from '../workout-cards.js';
 import { renderRestScreen, renderRoundBreak, renderCooldownList } from '../workout-breaks.js';
 
-// The jump and the advance (the state machine: 17c) are still in app.ts. app.ts registers them
-// once at boot; the forwarding stubs below keep renderWorkout and the handlers byte-identical
-// to the code that moved. (The rest / round break / cool-down strings now come from
-// workout-breaks.ts, 17c-1.)
-export type WorkoutSubviews = {
-  jumpToStep: (key: string) => void;
-  advanceExercise: () => void;
+// What the state machine needs from the rest of the app and cannot import (a screen never imports
+// app.ts or another screen): the session reset, and the two clock ticks the pre-log and post-log
+// screens own. app.ts hands them over ONCE at boot (setWorkoutHooks), like setActionHooks; the
+// private forwarding functions below carry the moved code's own names, so its calls are unchanged.
+export type WorkoutHooks = {
+  resetState: () => void;
+  beginPostLogClockTick: () => void;
+  endPreLogClockTick: () => void;
 };
 
-let subviews: WorkoutSubviews | null = null;
+let hooks: WorkoutHooks | null = null;
 
-export function setWorkoutSubviews(s: WorkoutSubviews): void {
-  subviews = s;
+export function setWorkoutHooks(h: WorkoutHooks): void {
+  hooks = h;
 }
 
-function sub(): WorkoutSubviews {
-  if (!subviews) throw new Error('screens/workout.ts: setWorkoutSubviews() was never called');
-  return subviews;
+function hook(): WorkoutHooks {
+  if (!hooks) throw new Error('screens/workout.ts: setWorkoutHooks() was never called');
+  return hooks;
 }
 
-function jumpToStep(key: string): void {
-  sub().jumpToStep(key);
+function resetState(): void {
+  hook().resetState();
 }
-function advanceExercise(): void {
-  sub().advanceExercise();
+function beginPostLogClockTick(): void {
+  hook().beginPostLogClockTick();
+}
+function endPreLogClockTick(): void {
+  hook().endPreLogClockTick();
 }
 
 function renderTempoBar(): string {
@@ -1344,4 +1366,748 @@ function updateRideAimCompare(): void {
   compareEl.hidden = aimLine === '';
   lastEl.textContent = lastLine;
   lastEl.hidden = lastLine === '';
+}
+
+// ---------- binding groups (17c): each sits where its bindings sat in attachHandlers() ----------
+
+// begin (the pre-log's Start), next, step-back: bound after the shared [data-detail] click.
+export function attachWorkoutNavHandlers(): void {
+  bindClick('begin', () => {
+    unlockAudio(); // Group 1C
+    beginExercises();
+  });
+
+  bindClick('next', () => {
+    // v51 (Sep 25 2026): Done · Next on the elliptical step opens the ride-
+    // numbers screen instead of advancing, in any ride state — her words:
+    // "I click the next button and then I fill in information." Once that
+    // screen is open this same button reads "Save · Next" and behaves like
+    // every other Done · Next (advanceExercise clears the flag on the way out).
+    const ex = getCurrentExercise();
+    if (
+      state.screen === 'workout' &&
+      !state.isResting &&
+      !state.roundBreak &&
+      ex?.name === ELLIPTICAL_NAME &&
+      !state.rideNumbersOpen
+    ) {
+      openRideNumbers();
+      return;
+    }
+    advanceExercise();
+  });
+  // v47: one step back (her ask Sep 24: "i need to be able to go back").
+  bindClick('step-back', () => {
+    goBack();
+  });
+}
+
+export function attachWorkoutCooldownHandlers(): void {
+  // v60 (Sep 28 2026) — F2: "Skip" on the cool-down list does exactly what
+  // Done stretching ✓ does (advanceExercise() already treats the whole
+  // cool-down as one step, and the app never recorded per-stretch state) —
+  // same handler, a quieter button for whenever she'd rather not tap the
+  // sage one. Her words (Sep 25 14:54): "I don't mark them in the app and
+  // do it on my own." (The old per-row tick handler this replaced is gone —
+  // see git history / the F2 commit for its shape.)
+  bindClick('cooldown-skip', () => {
+    advanceExercise();
+  });
+}
+
+// Pause / resume, Quit, hold-to-skip rest, and the hold's Start / Stop.
+export function attachWorkoutControlHandlers(): void {
+  // Pause / resume the active workout (Allison Jul 7 2026).
+  bindClick('pause-toggle', () => {
+    togglePause();
+  });
+  bindClick('pause-resume', () => {
+    togglePause();
+  });
+
+  // v48 · fix r1 (Sep 24 2026): a plain tap on Quit opens the in-app panel
+  // (Cancel / Quit / Log what I did). It used to open a native OK/Cancel
+  // window.confirm on a tap and the panel only on a 500 ms hold nothing on
+  // screen told her about — so the path she'd actually use still threw the
+  // half session away ("a half session vanishing is the quiet quit", ux.md #8).
+  // A click also fires on Enter/Space, so keyboard users get the same panel.
+  bindClick('quit', () => {
+    showQuitConfirmPanel();
+  });
+
+  // Hold-to-skip rest (group 2H)
+  const skipBtn = document.getElementById('skip-rest');
+  if (skipBtn) {
+    wireHoldToSkip(skipBtn, () => {
+      skipRest();
+    });
+  }
+
+  bindClick('start-timed', () => {
+    startTimedExercise();
+  });
+  // v48 (Sep 24 2026): the hold's quiet Stop (real seconds) and Redo.
+  bindClick('stop-timed', () => {
+    stopTimedHold();
+  });
+}
+
+// Redo, the multi-set hold's two buttons, and the round-1 floor.
+export function attachWorkoutHoldHandlers(): void {
+  bindClick('redo-timed', () => {
+    startTimedExercise();
+  });
+  // v60 (Sep 28 2026): a multi-set hold's own two buttons — "Start set N"
+  // (a fresh next set) and "Redo set N" (redoes the last one). See
+  // startNextHoldSet/redoLastHoldSet's own comments.
+  bindClick('hold-set-next', () => {
+    startNextHoldSet();
+  });
+  bindClick('hold-redo', () => {
+    redoLastHoldSet();
+  });
+  // v48: the round-1 floor — go on, or finish here (it still counts).
+  bindClick('start-round-2', () => {
+    startRoundTwo();
+  });
+  bindClick('finish-here', () => {
+    finishAtRoundOne();
+  });
+}
+
+// ---------- the workout state machine (17c): moved verbatim from app.ts ----------
+
+// v60 (Sep 28 2026): whether the timed hold about to run/running is a REDO of the last
+// completed SET, not a fresh next one - transient UI, not session progress, not persisted.
+// Only read by recordHeldSet, and only matters for a multi-set hold (hold-sets.ts
+// setsPrescribed > 1); a single-set hold's Redo still goes through the untouched
+// recordHeld/heldSecFor path. Module-local since 17c (was `ui.holdRedoInProgress`; grep proof:
+// no other file read or wrote it).
+let holdRedoInProgress = false;
+
+// v51 (Sep 25 2026) — her words: "I click the next button and then I fill in
+// information. That's how simple it is." Done · Next on the elliptical step
+// used to advance straight past the after-ride readings card, which only
+// showed once she'd already stopped/finished — she tapped Done · Next mid- or
+// post-ride and never saw it ("it didn't show up for me... I don't know what
+// I was supposed to see or where"). Now the tap opens this screen instead, in
+// ANY ride state: a live timer is stopped and its real minutes kept first,
+// same as the quiet Stop (stopLaneTimer, in screens/workout.ts) — nothing is lost either way.
+function openRideNumbers(): void {
+  captureLaneMinutesIfLeaving();
+  stopTimer();
+  state.rideNumbersOpen = true;
+  requestRender();
+}
+
+function beginExercises(): void {
+  // T1 (Sep 27 2026), §3.1 "Untouched at Start": if she never tapped ✓ or ✎,
+  // the Start-tap instant becomes her_start_at — her_start_confirmed stays
+  // false either way (a guess is never promoted to a confirmed reading just
+  // because Start was tapped). Already-confirmed values pass straight
+  // through untouched.
+  if (!state.herStartConfirmed) {
+    state.herStartAt = new Date().toISOString();
+  }
+  endPreLogClockTick();
+  state.screen = 'workout';
+  state.currentRound = 1;
+  state.currentPhase = 'warmup';
+  state.currentExerciseIndex = 0;
+  state.isResting = false;
+  state.startedAt = new Date().toISOString();
+  state.pausedAt = null; // fresh session, no paused time carried in
+  state.pausedMs = 0;
+  state.voicePlays = 0; // v48: plays are counted per session
+  // v48 (Sep 24 2026): the round-1 floor, the stop-early marker and the hold
+  // done-faces all start fresh with the session.
+  state.roundBreak = false;
+  state.finishHereLitePrev = null;
+  state.stoppedEarlyAt = null;
+  state.stoppedEarlyLitePrev = null;
+  state.heldSecFor = {};
+  state.heldSetsFor = {}; // v60: same as heldSecFor — a hold's sets belong to one session
+  state.armFeel = {}; // v48 · P5: a feel belongs to one session
+  state.moveFeel = {}; // v58: same — a feel belongs to one session
+  state.rideFeel = null; // v61: same — the ride feel belongs to one session
+  state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
+  state.armLoadMax = { ...state.armLoad }; // v55 · fix r1: starts equal, then only climbs
+  state.setsDoneFor = {}; // v54: sets-done belongs to one session, same as armFeel
+  state.stretchTicks = {}; // v48 · P7: ticks belong to one session
+  state.completedSteps = {}; // v50 · jump list: done-marks belong to one session
+  state.rideNumbersOpen = false; // v51: the ride-numbers sub-screen belongs to one session
+  // v46: the post-log sliders haven't been seen yet (capacity-before was just
+  // set on pre-log, so its flag stays as it is).
+  state.capacityAfterTouched = false;
+  // v50 · mood: same shape — mood-before was just set on pre-log, keep it;
+  // mood-after hasn't been seen yet.
+  state.moodAfterTouched = false;
+  state.backPainTouched = false;
+  state.backSomethingOpen = false;
+  state.wristPainTouched = false;
+  state.wristSomethingOpen = false;
+  state.stepFeel = null; // v49 · engine: a feel belongs to one session
+  state.howToOpenFor = null;
+  state.videoExpandedFor = null;
+  clearWorkoutWalk(); // fresh session, fresh walk numbers
+  clearApartmentCardio(); // fresh session, cardio lane unchosen again
+  clearElliptical();
+  // v48 · P3 (Sep 24 2026): open straight on the lane she used last time when
+  // it was the elliptical or the apartment — nothing starts until she taps
+  // Start, and the "↩ … instead" link is right there. A walk (or no history)
+  // gets the choice screen: the walk only starts on her tap as she heads out.
+  // v54 (Sep 27 2026): Workout D IS the elliptical — no lane choice at all.
+  // Force it straight in, same as tapping ▶ Elliptical herself, so the step
+  // renders on the ride face immediately (renderEllipticalStep) instead of
+  // the "Outdoor walk" placeholder D's own warmup doesn't carry.
+  if (state.selectedWorkout === 'D') {
+    chooseElliptical(30);
+  } else {
+    const cardio = getCurrentWorkout()?.warmup.find((e) => e.name === 'Outdoor walk');
+    if (cardio) {
+      const lane = lastCardioLane();
+      if (lane === 'elliptical') chooseElliptical(walkStepMinutes(cardio));
+      else if (lane === 'apartment') chooseApartmentCardio(walkStepMinutes(cardio));
+    }
+  }
+  requestRender();
+}
+
+// T1 (Sep 27 2026), §3.2: the one place post-log's own fields get reset —
+// every path that ends a session (cool-down's Done · Finish, the quit
+// panel's "Log what I did") runs this instead of setting state.screen by
+// hand, so the finish-time question and the breaks chip always start fresh.
+// No requestRender()/tick here: advanceExercise's own final branch shares ONE
+// requestRender() call across several outcomes, so it calls this then falls through
+// to that shared render (see its own comment) — enterPostLog() below is for
+// every OTHER caller, which owns its render timing outright.
+function resetPostLogFields(): void {
+  state.screen = 'post-log';
+  state.herEndAt = null;
+  state.herEndConfirmed = false;
+  state.herEndEditingOpen = false;
+  state.breakMinutes = null;
+}
+
+function enterPostLog(): void {
+  resetPostLogFields();
+  requestRender();
+  beginPostLogClockTick();
+}
+
+function markStepDone(key: string): void {
+  if (state.completedSteps[key]) return; // no-op re-render churn on a repeat
+  state.completedSteps = { ...state.completedSteps, [key]: true };
+}
+
+function applyStepTarget(step: WorkoutStep): void {
+  state.currentPhase = step.phase;
+  state.currentRound = step.round;
+  state.currentExerciseIndex = step.index;
+}
+
+function advanceExercise(): void {
+  const w = getCurrentWorkout();
+  if (!w) return;
+
+  // Group 1D: if we're leaving a timed wall-sit and the user tapped Done
+  // before the timer ran out, capture actual held duration.
+  captureWallSitIfPending();
+  captureLaneMinutesIfLeaving(); // v45: minutes actually done on the elliptical/apartment
+  state.rideNumbersOpen = false; // v51: the ride-numbers sub-screen belongs to one visit
+
+  stopTimer();
+  state.isResting = false;
+  state.videoExpandedFor = null; // collapse video when moving on
+
+  // Cool-down is one scrollable list (not stepped) — its single "Done · Finish"
+  // button ends the session regardless of how many stretches it contains.
+  if (state.currentPhase === 'cooldown') {
+    enterPostLog();
+    return;
+  }
+
+  // v50 · jump list — mark what she just finished, then check whether an
+  // EARLIER skipped move is waiting before we walk on. Her ask: Done should
+  // come back for whatever she jumped past, not plow forward as if it never
+  // existed ("I dont always do the workouts in [order]"). We only ever
+  // deviate from the plain phase-by-phase walk below when a gap actually
+  // exists — `target.key !== structuralNextKey` is false on every ordinary
+  // tap, so an untouched List sheet leaves this whole block a no-op and the
+  // walk below runs exactly as it always has. The round-1 floor is a
+  // deliberate pause, never skipped over just because something else is open.
+  const curKey = currentStepKey();
+  markStepDone(curKey);
+  const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
+  const curPos = movable.findIndex((s) => s.key === curKey);
+  const structuralNextKey = curPos >= 0 ? (movable[curPos + 1]?.key ?? null) : null;
+  // v50 · fix (Sep 25 2026): compute target BEFORE deciding the round-1 floor.
+  // Her bug — finish the last skipped move and Done marches her forward
+  // through every move she already did (the Round 1 done screen even came
+  // back) — was this floor firing unconditionally on the last main move of
+  // round 1, with no check for whether round 2+ actually still has anything
+  // undone.
+  const target = nextUndoneStep(movable, curKey, state.completedSteps);
+  // v50 · fix 2 (Sep 25 2026): `target !== null` was "anything undone
+  // ANYWHERE" (nextUndoneStep wraps the whole list, warm-up included), not
+  // "round 2+ still has something undone". Her repro: jump to round 2 first,
+  // finish round 2 + upper back, then skip Cardio (warm-up) via the List
+  // sheet and walk round 1 last — round 1's last move still found Cardio
+  // undone and threw up "Round 1 done ✓ / Start round 2" even though round 2
+  // was already done, then landed the tap on an already-✓ move. The floor is
+  // about round 2+, so gate it on round 2+ specifically.
+  const roundTwoOpen = movable.some(
+    (s) => s.phase === 'main' && s.round > 1 && !state.completedSteps[s.key]
+  );
+  const isRoundOneFloor =
+    state.currentPhase === 'main' &&
+    state.currentRound === 1 &&
+    state.currentExerciseIndex === w.main.length - 1 &&
+    effectiveRounds(w) > 1 &&
+    roundTwoOpen;
+  if (!isRoundOneFloor) {
+    if (target && target.key !== structuralNextKey) {
+      applyStepTarget(target);
+      if (target.phase === 'main') {
+        startRestTimer();
+      } else {
+        requestRender();
+      }
+      return;
+    }
+    if (!target) {
+      // Nothing undone anywhere — she just finished the last thing that was
+      // still open (often the last of a run of previously-skipped moves).
+      // Go straight to cool-down instead of the plain in-order walk below,
+      // which would re-tour every move she's already ✓.
+      // v54 (Sep 27 2026): Workout D has no cool-down list at all (her spec —
+      // it's the ride, nothing else) — an empty cooldown screen is nothing
+      // to land on, so finish straight into post-log instead, same as the
+      // existing empty-upperBack branch below already does for that block.
+      if (w.cooldown.length === 0) {
+        resetPostLogFields();
+      } else {
+        state.currentPhase = 'cooldown';
+        state.currentExerciseIndex = 0;
+      }
+      requestRender();
+      if (state.screen === 'post-log') beginPostLogClockTick();
+      return;
+    }
+  }
+
+  const list = w[state.currentPhase] ?? [];
+  if (state.currentExerciseIndex < list.length - 1) {
+    state.currentExerciseIndex += 1;
+    if (state.currentPhase === 'main') {
+      startRestTimer();
+      return;
+    }
+  } else if (state.currentPhase === 'warmup') {
+    state.currentPhase = 'main';
+    state.currentExerciseIndex = 0;
+  } else if (state.currentPhase === 'main') {
+    if (state.currentRound < effectiveRounds(w)) {
+      // v48 (Sep 24 2026) — the round-1 floor: after round 1's last move, a
+      // "Round 1 done ✓" screen offers "Start round 2" or "Finish here — it
+      // still counts". Her weeks are 3/3 or 0 (7 zero weeks); Lite exists but
+      // only before she starts, and a bad day shows up mid-session.
+      if (state.currentRound === 1) {
+        state.roundBreak = true;
+        requestRender();
+        return;
+      }
+      state.currentRound += 1;
+      state.currentExerciseIndex = 0;
+      startRestTimer();
+      return;
+    } else {
+      // Upper-back block (once, straight sets) sits between main and cooldown.
+      state.currentPhase = w.upperBack?.length ? 'upperBack' : 'cooldown';
+      state.currentExerciseIndex = 0;
+    }
+  } else if (state.currentPhase === 'upperBack') {
+    state.currentPhase = 'cooldown';
+    state.currentExerciseIndex = 0;
+  } else {
+    resetPostLogFields();
+  }
+  requestRender();
+  // T1 (Sep 27 2026): this requestRender() is shared across several outcomes above —
+  // only start the finish-time tick when this particular call actually
+  // landed on post-log (the `else` branch just above).
+  if (state.screen === 'post-log') beginPostLogClockTick();
+}
+
+// v53 (Sep 26 2026): "from the timer I need to be able to go back like it
+// wasn't able to go back" — Back from a RUNNING ride/hold used to discard the
+// minutes/seconds she'd already done (goBack called stopTimer() straight,
+// same as the "she's redoing it" wall-sit discard below). That's right for a
+// step she hasn't started measuring yet, but wrong once a real timer is
+// counting down: leaving mid-ride or mid-hold isn't a redo, so the time she
+// already put in is kept exactly the way the quiet Stop keeps it
+// (captureLaneMinutesIfLeaving for the elliptical/apartment lane; the same
+// held-seconds math stopTimedHold uses, plus captureWallSitIfPending for the
+// wall sit's own logged number). Called BEFORE stopTimer() clears the clock.
+function captureRunningProgressIfLeaving(): void {
+  const ex = getCurrentExercise();
+  if (!ex) return;
+  if (isIndoorLane(ex.name)) {
+    captureLaneMinutesIfLeaving();
+    return;
+  }
+  if (!isHoldStep(ex)) return;
+  const t = ui.activeTimer;
+  if (t && t.kind === 'timed-exercise' && ex.durationSec) {
+    const remainSec = Math.max(0, (t.endsAt - Date.now()) / 1000);
+    recordHeld(holdStepKey(), Math.max(0, Math.round(ex.durationSec - remainSec)));
+  }
+  if (ex.name === 'Wall sit') captureWallSitIfPending();
+}
+
+// ---------- Back (Allison Sep 24 2026, v47) ----------
+// Her words: "this app needs back button like i can go back an exercise or a
+// round" → "i need to be able to go back". One step backwards through the
+// same walk advanceExercise takes forwards: within a phase, then across the
+// round boundary (Round 2 step 1 → Round 1 last step), then across phases
+// (main → warm-up, upper back → main last round, cool-down → the block before
+// it). A pending wall-sit capture that never got a real second on the clock
+// is still discarded (nothing to keep); a rest is cancelled. v53: a RUNNING
+// timer is different — see captureRunningProgressIfLeaving above.
+// v53 fix (CHECK M4, Sep 26 2026): step 1 (warm-up, index 0, not resting)
+// used to have NO Back at all — R2 Week 4 opens A, B and C all on the ride,
+// so "the ride IS step 1" this week and Back vanished on the exact step she
+// most wants to leave mid-run ("from the timer I need to be able to go
+// back"). The lead's call while she's asleep (undoable): Back from step 1
+// goes to the pre-log instead of a step behind it — there is none. See the
+// step-1 branch at the top of goBack.
+function goBack(): void {
+  const w = getCurrentWorkout();
+  if (!w || !canGoBack()) return;
+  captureRunningProgressIfLeaving(); // v53: keep the real seconds/minutes — read BEFORE stopTimer() clears the clock
+  stopTimer();
+  state.wallSitStartedAt = null;
+  state.videoExpandedFor = null;
+  state.rideNumbersOpen = false; // v51: leaving the elliptical step by any route closes it
+  // v53 fix (CHECK M4): step 1 has no step behind it — Back here goes to the
+  // pre-log instead. captureRunningProgressIfLeaving + stopTimer above already
+  // kept a running ride's real minutes; her pre-log answers are untouched
+  // (they live directly on `state`, never cleared by beginExercises).
+  if (state.currentPhase === 'warmup' && state.currentExerciseIndex === 0 && !state.isResting) {
+    state.screen = 'pre-log';
+    requestRender();
+    return;
+  }
+  // v48: Back from the "Round 1 done ✓" screen = round 1's last move, which is
+  // where the state already points (the break sits on top of it).
+  if (state.roundBreak) {
+    state.roundBreak = false;
+    requestRender();
+    return;
+  }
+  // On the rest screen the index already points at the NEXT exercise, so
+  // "back" from rest = the exercise she just finished = one index back.
+  state.isResting = false;
+
+  const lastOf = (phase: Phase): number => Math.max(0, (w[phase] ?? []).length - 1);
+  if (state.currentPhase === 'cooldown' && state.finishHereLitePrev !== null) {
+    // v48: she tapped "Finish here" — Back undoes exactly that: the round-break
+    // screen again, with Lite as it was before the tap (she skipped round 2 and
+    // the upper-back block, so they are not "one step back").
+    state.liteDay = state.finishHereLitePrev;
+    state.finishHereLitePrev = null;
+    state.currentPhase = 'main';
+    state.currentRound = 1;
+    state.currentExerciseIndex = lastOf('main');
+    state.roundBreak = true;
+  } else if (state.currentPhase === 'cooldown') {
+    if (w.upperBack?.length) {
+      state.currentPhase = 'upperBack';
+      state.currentExerciseIndex = lastOf('upperBack');
+    } else {
+      state.currentPhase = 'main';
+      state.currentRound = effectiveRounds(w);
+      state.currentExerciseIndex = lastOf('main');
+    }
+  } else if (state.currentExerciseIndex > 0) {
+    state.currentExerciseIndex -= 1;
+  } else if (state.currentPhase === 'main') {
+    if (state.currentRound > 1) {
+      state.currentRound -= 1;
+      state.currentExerciseIndex = lastOf('main');
+    } else {
+      state.currentPhase = 'warmup';
+      state.currentExerciseIndex = lastOf('warmup');
+    }
+  } else if (state.currentPhase === 'upperBack') {
+    state.currentPhase = 'main';
+    state.currentRound = effectiveRounds(w);
+    state.currentExerciseIndex = lastOf('main');
+  }
+  requestRender();
+}
+
+// v50 · jump list (Sep 25 2026): a row's `data-jump-key`, parsed back into a
+// position. Bounds-checked against the live workout the same defensive way
+// readActiveSnapshot checks a resumed index — a stale or hand-edited key is
+// dropped, never crashed on.
+function parseStepKey(
+  w: Workout,
+  key: string
+): { phase: Phase; round: number; index: number } | null {
+  const parts = key.split(':');
+  if (parts.length !== 3) return null;
+  const [phaseRaw, roundRaw, indexRaw] = parts;
+  const phase = phaseRaw as Phase;
+  if (phase !== 'warmup' && phase !== 'main' && phase !== 'upperBack' && phase !== 'cooldown') {
+    return null;
+  }
+  const round = Number(roundRaw);
+  const index = Number(indexRaw);
+  if (!Number.isInteger(round) || round < 1 || !Number.isInteger(index) || index < 0) return null;
+  if (phase === 'cooldown') return { phase, round: 1, index: 0 };
+  const list = w[phase] ?? [];
+  if (index >= list.length) return null;
+  if (phase === 'main' && round > effectiveRounds(w)) return null;
+  return { phase, round, index };
+}
+
+// "Tapping a row jumps straight there" (her List-sheet spec, Sep 25 2026):
+// same cleanup as goBack() — a running timer stops, a pending wall-sit
+// capture is discarded, a rest is cancelled — but nothing is marked done and
+// nothing is logged. Unlike goBack this can land anywhere, so it also closes
+// the round-1 floor if it was up (she's jumping past the question it asks).
+function jumpToStep(key: string): void {
+  const w = getCurrentWorkout();
+  if (!w) return;
+  const parsed = parseStepKey(w, key);
+  if (!parsed) return;
+  stopTimer();
+  state.wallSitStartedAt = null;
+  state.videoExpandedFor = null;
+  state.isResting = false;
+  state.roundBreak = false;
+  state.rideNumbersOpen = false; // v51: leaving the elliptical step by any route closes it
+  state.currentPhase = parsed.phase;
+  state.currentRound = parsed.round;
+  state.currentExerciseIndex = parsed.index;
+  ui.stepListOpen = false;
+  requestRender();
+}
+
+function recordHeld(key: string, sec: number): void {
+  // Max: a redo can add a better hold, never erase a real one (the saved wall
+  // sit follows the same rule in captureWallSitIfPending).
+  if (sec > 0) state.heldSecFor[key] = Math.max(state.heldSecFor[key] ?? 0, sec);
+}
+
+// v60 (Sep 28 2026) — the multi-set hold's own recordHeld: appends a fresh
+// set, or (holdRedoInProgress) replaces the LAST one, both via the same
+// "never erase a real one" max rule recordHeld above already uses. Untouched
+// by any single-set hold — those keep calling recordHeld/heldSecFor.
+function recordHeldSet(key: string, sec: number): void {
+  if (sec <= 0) return;
+  const next = [...(state.heldSetsFor[key] ?? [])];
+  const idx = holdRedoInProgress ? next.length - 1 : next.length;
+  if (idx < 0) return; // a redo with no prior set — shouldn't happen; fail quiet
+  next[idx] = Math.max(next[idx] ?? 0, sec);
+  state.heldSetsFor[key] = next;
+}
+
+// v48 (Sep 24 2026): the quiet Stop on a running hold. Saves the REAL seconds
+// — walk §4: "No way to say I held less". There used to be only a disabled
+// "Running…" slab. Stopped during the 3-2-1 = nothing held, back to Ready.
+function stopTimedHold(): void {
+  const ex = getCurrentExercise();
+  if (!ex) return;
+  const t = ui.activeTimer;
+  if (t && t.kind === 'timed-exercise' && ex.durationSec) {
+    const remainSec = Math.max(0, (t.endsAt - Date.now()) / 1000);
+    const heldSec = Math.max(0, Math.round(ex.durationSec - remainSec));
+    if (setsPrescribed(ex.reps) > 1) recordHeldSet(holdStepKey(), heldSec);
+    else recordHeld(holdStepKey(), heldSec);
+  }
+  if (ex.name === 'Wall sit') captureWallSitIfPending(); // the saved number
+  holdRedoInProgress = false;
+  stopTimer();
+  requestRender();
+}
+
+// v60 (Sep 28 2026): "Start set N" (#hold-set-next) — a fresh next set, same
+// countdown+timer machinery as the very first "Start timer" tap. Kept as its
+// own function (rather than reusing #start-timed's id) so a multi-set hold's
+// "Set N of M" ready face never collides with the untouched single-set Ready
+// face above it in renderHoldTimerCard.
+function startNextHoldSet(): void {
+  holdRedoInProgress = false;
+  startTimedExercise();
+}
+
+// v60 (Sep 28 2026): "Redo set N" (#hold-redo) on a multi-set hold — redoes
+// the LAST completed set (recordHeldSet replaces it via max, never erases a
+// real hold). #redo-timed (single-set) stays exactly as it was, calling
+// startTimedExercise() straight — unaffected by this flag.
+function redoLastHoldSet(): void {
+  holdRedoInProgress = true;
+  startTimedExercise();
+}
+
+// "Start round 2" on the round-break screen (v48). Rest (if she set one) runs
+// first, exactly as it did at the round boundary before.
+function startRoundTwo(): void {
+  // Round 2 opens quiet: the Cue and detail dropdowns she opened in round 1
+  // close again (walk-in-her-shoes: "Round 2 notes closed"). Setup blocks
+  // ("setup:<name>") keep whatever she chose.
+  for (const key of Object.keys(state.openSections)) {
+    if (key.includes('::')) delete state.openSections[key];
+  }
+  state.roundBreak = false;
+  state.currentRound = 2;
+  state.currentExerciseIndex = 0;
+  startRestTimer(); // rest 0 (her default) = straight on; it renders either way
+}
+
+// "Finish here — it still counts" (v48): skip round 2 and the upper-back block,
+// land on the cool-down list in Lite, save lite_day = true. Your weeks are 3/3
+// or 0 — the cheapest floor is inside the session you're already in.
+function finishAtRoundOne(): void {
+  state.finishHereLitePrev = state.liteDay;
+  state.liteDay = true;
+  state.roundBreak = false;
+  state.currentPhase = 'cooldown';
+  state.currentExerciseIndex = 0;
+  requestRender();
+}
+
+// Quit panel's "Log what I did" (v48): the half session is logged, not thrown
+// away (assumptions Kill #10, ux.md #8). Lite if round 2 never started.
+function logWhatIDid(): void {
+  const ex = getCurrentExercise();
+  captureWallSitIfPending(); // a hold she was in the middle of still counts
+  captureLaneMinutesIfLeaving();
+  stopTimer();
+  state.stoppedEarlyLitePrev = state.liteDay; // v48 · fix r1: for Back to the workout
+  state.stoppedEarlyAt =
+    state.currentPhase === 'cooldown'
+      ? 'the cool-down'
+      : ex
+        ? displayName(ex) // v48 · P3: "Cardio", not the internal key
+        : state.currentPhase;
+  if (
+    state.currentRound === 1 &&
+    (state.currentPhase === 'warmup' || state.currentPhase === 'main')
+  ) {
+    state.liteDay = true;
+  }
+  state.isResting = false;
+  state.roundBreak = false;
+  enterPostLog();
+}
+
+function captureWallSitIfPending(): void {
+  if (state.wallSitStartedAt !== null) {
+    const heldSec = Math.max(0, Math.round((Date.now() - state.wallSitStartedAt) / 1000));
+    state.wallSitSec = Math.max(state.wallSitSec, heldSec);
+    state.wallSitStartedAt = null;
+  }
+}
+
+function startTimedExercise(): void {
+  const ex = getCurrentExercise();
+  if (!ex || !ex.durationSec) return;
+  const duration = ex.durationSec;
+  const exerciseName = ex.name;
+  unlockAudio(); // Group 1C: synchronous resume in user-gesture handler
+  const go = (): void => {
+    // v45: the hold clock starts on GO, not on the tap. It used to start
+    // before the 3-2-1, so every completed wall sit logged target + 3 s
+    // (10 of 10 timed holds, May 19 → Sep 14).
+    if (exerciseName === 'Wall sit') {
+      state.wallSitStartedAt = Date.now();
+    }
+    if (isIndoorLane(exerciseName)) {
+      localStorage.setItem(WW_LANE_STARTED_KEY, String(Date.now()));
+      localStorage.removeItem(WW_LANE_DONE_MIN_KEY); // a fresh ride, fresh minutes
+      // v48 · P3: the setup expander never reopens after the ride — forget any
+      // before-ride open/close so the after-ride face starts it closed.
+      delete state.openSections[`${ELLIPTICAL_NAME}::setup`];
+    }
+    const stepKey = holdStepKey(); // v48: the done-face belongs to this step
+    startTimerCore('timed-exercise', duration, () => {
+      if (!isIndoorLane(exerciseName)) {
+        // v60: a hold prescribed "N ×" (setsPrescribed > 1) records into
+        // heldSetsFor instead — one array entry per set, a redo replacing the
+        // last one. Every other hold (setsPrescribed <= 1) is untouched.
+        if (setsPrescribed(ex.reps) > 1) recordHeldSet(stepKey, duration);
+        else recordHeld(stepKey, duration); // v48 "✓ held 45 s"
+      }
+      holdRedoInProgress = false;
+      if (exerciseName === 'Wall sit') {
+        // v48 (Sep 24 2026): a hold that ran to the end held exactly its
+        // duration. Measuring the wall clock here logged 46+ when the frame
+        // fired late (phone asleep → the loop resumes minutes later), and the
+        // new "✓ held 45 s" face would repeat that number to her.
+        state.wallSitStartedAt = null;
+        state.wallSitSec = Math.max(state.wallSitSec, duration);
+      }
+      requestRender();
+    });
+  };
+  // v48 · P3 (Sep 24 2026) — decision Q8: no 3-2-1 before a 10-25 minute ride
+  // ("the page jumps", walk §2). Holds keep it: it's what stops the +3 s wall
+  // sit coming back (v45).
+  if (isIndoorLane(exerciseName)) go();
+  else startPreCountdown(go);
+}
+
+// ---------- Ship 6: hold-to-confirm panel (slide-out, not window.confirm) ----------
+//
+// Used by Quit during workout (v48 · fix r1: on every tap now — the native
+// window.confirm is gone) and by destructive settings actions.
+
+function showQuitConfirmPanel(): void {
+  if (document.getElementById('quit-confirm-panel')) return;
+  const panel = document.createElement('div');
+  panel.id = 'quit-confirm-panel';
+  panel.className = 'quit-confirm-panel';
+  // v48 · fix r2 (Sep 25 2026): the kind way out comes FIRST. It was last and
+  // quiet while "Quit" (nothing saved) was a filled orange button — the panel
+  // leaned toward the half session vanishing, which DECISIONS names "the quiet
+  // quit" (ux.md #8), and the orange broke the no-red rule. Now: "Log what I
+  // did" (full width, the panel's one sage), Cancel, then a quiet text link
+  // that says exactly what it does.
+  panel.innerHTML = `
+    <div class="quit-confirm-card">
+      <div class="quit-confirm-title">Quit this workout?</div>
+      <div class="quit-confirm-sub">What you did so far still counts.</div>
+      <button class="btn quit-confirm-log" id="quit-log" type="button">Log what I did</button>
+      <button class="btn quit-confirm-cancel" id="quit-cancel" type="button">Cancel</button>
+      <button class="back-link quit-confirm-yes" id="quit-yes" type="button">Quit without saving</button>
+    </div>
+  `;
+  document.body.appendChild(panel);
+  requestAnimationFrame(() => panel.classList.add('quit-confirm-open'));
+
+  const dismiss = (): void => {
+    panel.classList.remove('quit-confirm-open');
+    setTimeout(() => {
+      if (panel.parentNode) panel.parentNode.removeChild(panel);
+    }, 220);
+  };
+
+  panel.querySelector('#quit-cancel')?.addEventListener('click', dismiss);
+  // v48 (Sep 24 2026): the third choice — keep the half session (ux.md #8: "a
+  // half session vanishing is the quiet quit"). Goes to the post-log as usual.
+  panel.querySelector('#quit-log')?.addEventListener('click', () => {
+    dismiss();
+    logWhatIDid();
+  });
+  panel.querySelector('#quit-yes')?.addEventListener('click', () => {
+    dismiss();
+    resetState();
+    requestRender();
+  });
+  panel.addEventListener('click', (e) => {
+    if (e.target === panel) dismiss();
+  });
 }

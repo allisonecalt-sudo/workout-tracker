@@ -140,49 +140,58 @@ keeps today's binding ORDER:
 6. Render-equivalence against the previous commit's build with real-shaped data, and interaction equivalence for each handler.
 7. `npm run verify:commits` on the range.
 
-## The workout: one screen, sub-views (steps 17a-17b, Oct 15 2026)
+## The workout: one screen, sub-views (steps 17a-17c, Oct 15-16 2026 - done)
 
 The workout is ONE screen (`state.screen === 'workout'`) with sub-views: the exercise step, the ride
 lanes (elliptical / walk / apartment), rest, round break, cool-down, paused. Screens may not import
 each other, so the sub-views are NOT separate screens. The rule:
 
-- `screens/workout.ts` owns the render entry (`renderWorkout`), every handler, and (from 17c) the
-  state machine. It is the only workout file that binds, saves or moves state.
+- `screens/workout.ts` owns the render entry (`renderWorkout`), every handler, and the state machine
+  (`advanceExercise`, `goBack`, `jumpToStep`, `beginExercises`, `openRideNumbers`, the hold logic,
+  round two / finish here, `logWhatIDid`, the Quit panel). It is the only workout file that binds,
+  saves or moves state.
 - Pure render-string helpers used by TWO OR MORE sub-views are shared-layer modules named
   `workout-*.ts` (default-deny guard covers them: strings out, no DOM writes, never app.ts or a
   screen): `workout-now.ts` (lookups), `workout-parts.ts` (step nav, progress line, header buttons),
-  `workout-feel.ts` (feel / load chips + guards), `workout-cards.ts` (picture / setup / detail /
-  how-to / Tips). A helper used by one sub-view only stays next to that sub-view.
-- 17b (done) moved the lane renderers and handlers (`ww-*`, `ell-*`, `ride-numbers-*`, `stop-lane`,
-  the ride's own feel binding) into `workout.ts`. No lane renderer is used by two sub-views, so they
-  stayed next to their handlers; `workout-lanes.ts` holds the lane-choice STATE helpers that app.ts
-  (the state machine) and the handlers both call (no DOM, no redraw). 17c adds rest / round break / cool-down / paused (a shared `workout-breaks.ts` of strings), the
-  state machine (`advanceExercise`, `goBack`, `jumpToStep`, `next` / `begin` / `step-back`, the hold
-  bindings) and the overlays' handlers into `workout.ts`. app.ts ends as the shell.
-- Until a sub-view moves, app.ts registers it through `setWorkoutSubviews({...})` (called once in the
-  boot block). `workout.ts` calls it through private forwarding stubs that carry the moved code's own
-  names, so the moved code stays byte-identical; delete a stub when its sub-view arrives. Today's
-  registered set: round break, rest, cool-down, `jumpToStep`, `advanceExercise` (the lane skip buttons
-  call it).
-- Handler groups keep their ORIGINAL binding order: `attachWorkoutStepListHandlers` (List + pip +
-  jump rows) sits where those bindings sat, `attachWorkoutFeelHandlers` / `attachWorkoutFeelHandlers2`
-  surround the ride's own feel binding (`attachWorkoutRideFeelHandlers`), the lane handlers sit where
-  they sat (`attachWorkoutLaneHandlers` after the cool-down skip; `attachWorkoutLaneStopHandler` and
-  `attachWorkoutLaneSkipHandler` between the hold bindings), `attachWorkoutCardHandlers` closes
-  `attachHandlers()`. The card handlers bind document-wide (the cool-down rows use the same data
-  attributes), so they are not "the exercise step's" alone.
-- `ui` fields: `stepListOpen` and `timerPipOpen` stay on `ui` (written outside this screen: app.ts
-  jumpToStep / resume / resetState, and timer.ts). Nothing became module-local in 17a or 17b: the lane
-  state lives in localStorage keys (state.ts); `rideNumbersOpen` / `rideFeel` are on `state`.
+  `workout-feel.ts` (feel / load chips + guards + `defaultArmLoad`), `workout-cards.ts` (picture /
+  setup / detail / how-to / Tips), `workout-breaks.ts` (17c-1: rest, round break, cool-down, paused).
+  A helper used by one sub-view only stays next to that sub-view. `workout-lanes.ts` holds the
+  lane-choice STATE helpers (localStorage, no DOM, no redraw) that the handlers and the machine call.
+- Handler groups keep their ORIGINAL binding order; each is exported and called by `attachHandlers()`
+  where those bindings sat: `attachWorkoutNavHandlers` (begin / next / step-back) ->
+  `attachWorkoutStepListHandlers` -> (post-log, pre-log) -> `attachWorkoutFeelHandlers` /
+  `attachWorkoutRideFeelHandlers` / `attachWorkoutFeelHandlers2` -> `attachWorkoutCooldownHandlers` ->
+  `attachWorkoutLaneHandlers` -> `attachWorkoutControlHandlers` (pause / quit / hold-to-skip rest /
+  start-timed / stop-timed) -> `attachWorkoutLaneStopHandler` -> `attachWorkoutLaneSkipHandler` ->
+  `attachWorkoutHoldHandlers` (redo / set buttons / round two / finish here) ->
+  `attachWorkoutCardHandlers`. The card handlers bind document-wide (the cool-down rows use the same
+  data attributes), so they are not "the exercise step's" alone.
+- How the machine calls OUT. It needs three things that live elsewhere and that a screen cannot
+  import: `resetState` (app.ts), `beginPostLogClockTick` (screens/postlog.ts) and
+  `endPreLogClockTick` (screens/prelog.ts). app.ts hands them over ONCE at boot through
+  `setWorkoutHooks()` (same pattern as `setActionHooks()` / `setWalkLineUpdater()` / `setRenderer()`);
+  `workout.ts` calls them through private forwarding functions with the same names, and throws if used
+  before the setter ran. The calls happen at exactly the points the old inline calls ran.
+- How `timer.ts` / `actions.ts` / `walk.ts` call INTO the machine: they do not. `startTimerCore` and
+  `startPreCountdown` take their `onComplete` / `then` closure from the CALLER (the machine), and
+  `startRestTimer` / `skipRest` only set state and `requestRender()`. Nothing to register.
+- `ui` fields: `stepListOpen` (app.ts resume / resetState + the machine) and `timerPipOpen` (timer.ts)
+  stay on `ui`. `holdRedoInProgress` became module-local in `workout.ts` (17c; grep proof: no other file
+  read or wrote it). The lane state lives in localStorage keys (state.ts); `rideNumbersOpen` / `rideFeel`
+  are on `state`.
 
-- How `timer.ts` / `actions.ts` call INTO the state machine (17c plan). They cannot import a screen, so
-  nothing is imported: the same boot-time registration pattern as `setActionHooks()` / `setWorkoutSubviews()`
-  / `setRenderer()`. Today `timer.ts` needs no callback into the machine: `startTimerCore` and
-  `startPreCountdown` take their `onComplete` / `then` closure from the CALLER, and `startRestTimer` /
-  `skipRest` only set state and `requestRender()`. In 17c, whatever the machine must be called back for
-  (`advanceExercise` after a timer ends, `goBack`, `jumpToStep`) is handed over ONCE at boot: `app.ts`
-  passes the machine's functions (exported by `screens/workout.ts`) to a tiny setter that lives in the
-  module that needs them (`setTimerHooks()` in `timer.ts`, extra fields on `ActionHooks` in
-  `actions.ts`), in the boot block next to `setWorkoutSubviews`. The module throws if used before its
-  setter ran (as `actions.ts` does), and the calls happen at exactly the points the old inline calls
-  ran, in the same order.
+## What stays in app.ts (end of step 17c)
+
+`app.ts` is the shell. Beyond `render()`'s switch, `attachHandlers()`'s ordered calls, the boot block and
+the `__wt` test hooks, it still holds, on purpose:
+
+- `startWorkout` - the Home Up-next / chip tap (and `__wtStartWorkout`); it only pins the plan and opens
+  the pre-log, whose clock tick is the pre-log screen's.
+- `updateWalkLiveLine`, `syncWorkoutWalkTracking` - they write the DOM / run on every `render()`.
+- `sessionFirsts`, `updateSyncIndicator`, `weekAttributionSummary` - hooks and test hooks for actions.ts.
+- The session snapshot / resume / reset code (`readActiveSnapshot`, `applyActiveSnapshot`,
+  `restoreActiveSession`, `discardStaleSession`, `continueStaleSession`, `resetState`, the sanitizers):
+  it spans every resumable screen and calls the pre-log / post-log clock ticks (screens), so it cannot sit
+  in the shared layer until those come in through hooks.
+- The shared `[data-detail]` click, the walk row's three bindings, the left-open card's three buttons,
+  `back-home` - they belong to no single screen (see `screens/home.ts` above).
