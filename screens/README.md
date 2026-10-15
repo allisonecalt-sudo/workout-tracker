@@ -6,7 +6,7 @@ shape, one screen per run. Read `rides.ts` next to this file: it is the worked e
 shows a screen with many small handlers and the build-time `version.ts` import; cycle shows
 module-local state (return-to, compare metric, scroll) that used to live in `ui`.
 
-**Worktrees (builders and checkers):** never link `node_modules` into one and never `git worktree remove --force`; use `npm run wt:add -- <path> <ref>` / `npm run wt:remove -- <path>` (Oct 15 18:00 incident, see CLAUDE.md).
+**Worktrees (builders and checkers):** never link `node_modules` into one (sole exception: `verify:commits`, in its own temp worktrees) and never `git worktree remove --force`; use `npm run wt:add -- <path> <ref>` / `npm run wt:remove -- <path>` (Oct 15 18:00 incident, see CLAUDE.md).
 
 ## What a screen module owns
 

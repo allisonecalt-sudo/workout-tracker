@@ -17,11 +17,51 @@ export function lexists(p) {
   }
 }
 
-/** Names at the TOP LEVEL of dir that are links / junctions (node_modules included). */
-export function topLevelLinks(dir) {
+/** True when p is itself a link / junction (lstat, never followed). */
+export function isLink(p) {
+  return lexists(p) && lstatSync(p).isSymbolicLink();
+}
+
+/** Every link / junction ANYWHERE under dir (recursive; lstat only, a link is reported and
+ *  never entered). Returns paths relative to dir; stops after `max` hits (one is enough to refuse). */
+export function findLinks(dir, max = 5) {
   const found = [];
-  for (const name of readdirSync(dir)) {
-    if (lstatSync(join(dir, name)).isSymbolicLink()) found.push(name);
-  }
+  const walk = (d, rel) => {
+    for (const name of readdirSync(d)) {
+      if (found.length >= max) return;
+      const p = join(d, name);
+      const st = lstatSync(p);
+      if (st.isSymbolicLink()) found.push(rel ? `${rel}/${name}` : name);
+      else if (st.isDirectory()) walk(p, rel ? `${rel}/${name}` : name);
+    }
+  };
+  walk(dir, '');
   return found;
+}
+
+const norm = (p) => p.replaceAll(String.fromCharCode(92), '/').replace(/\/+$/, '');
+const same = (a, b) =>
+  process.platform === 'win32'
+    ? norm(a).toLowerCase() === norm(b).toLowerCase()
+    : norm(a) === norm(b);
+
+/** Registered worktree paths from `git worktree list --porcelain` output; the FIRST is the main one. */
+export function parseWorktrees(porcelain) {
+  return porcelain
+    .split('\n')
+    .filter((l) => l.startsWith('worktree '))
+    .map((l) => l.slice('worktree '.length).trim());
+}
+
+/** Decide whether `target` (already realpath-resolved) may be removed. Pure: touches nothing.
+ *  Returns null when allowed, else the reason. Allowed ONLY if registered, not main, not an
+ *  ancestor of (or equal to) main. */
+export function whyNotRemovable(target, registered) {
+  const [main, ...others] = registered;
+  if (!main) return 'git lists no worktrees';
+  if (same(target, main)) return 'it is the MAIN checkout';
+  const t = norm(target).toLowerCase() + '/';
+  if (norm(main).toLowerCase().startsWith(t)) return 'it contains the MAIN checkout';
+  if (!others.some((w) => same(w, target))) return 'it is not a registered git worktree';
+  return null;
 }

@@ -6,14 +6,15 @@
 //
 //   npm run wt:add -- <path> <ref>    creates the worktree (detached at <ref>) and runs a REAL
 //                                     `npm ci` inside it. No link, no junction, ever.
-//   npm run wt:remove -- <path>       REFUSES (loud, deletes nothing) if ANY link/junction sits
-//                                     at the worktree root's top level (node_modules included).
+//   npm run wt:remove -- <path>       REFUSES (loud, deletes nothing) unless <path> is a registered,
+//                                     NON-main worktree (`git worktree list`), and REFUSES if ANY
+//                                     link/junction sits anywhere under it (node_modules included).
 //                                     Otherwise fs.rmSync the folder, then `git worktree prune`.
 import { spawnSync } from 'node:child_process';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, realpathSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { topLevelLinks } from './wt-links.mjs';
+import { findLinks, parseWorktrees, whyNotRemovable } from './wt-links.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -46,13 +47,20 @@ if (cmd === 'add') {
   console.log(`[worktree] ready: ${wt}`);
 } else if (cmd === 'remove') {
   if (!target) die(['usage: wt:remove <path>'], 1);
-  const wt = resolve(target);
-  if (!existsSync(wt)) die([`[worktree] nothing at ${wt}`], 1);
-  const links = topLevelLinks(wt);
+  if (!existsSync(resolve(target))) die([`[worktree] nothing at ${resolve(target)}`], 1);
+  const wt = realpathSync(resolve(target));
+  const why = whyNotRemovable(wt, parseWorktrees(git(['worktree', 'list', '--porcelain'])));
+  if (why) {
+    die([
+      `[worktree] REFUSED, NOTHING DELETED: ${wt}`,
+      `  ${why}. wt:remove only removes a registered worktree that is not the main checkout.`,
+    ]);
+  }
+  const links = findLinks(wt);
   if (links.length > 0) {
     die([
       `[worktree] REFUSED, NOTHING DELETED: ${wt}`,
-      `  link/junction at its top level: ${links.join(', ')}`,
+      `  link/junction inside it: ${links.join(', ')}`,
       '  Deleting now could empty the REAL folder the link points at (the Oct 15 18:00 incident).',
       '  Remove each link by hand (cmd: rmdir <link>, NO /s), then re-run wt:remove.',
     ]);

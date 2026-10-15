@@ -9,14 +9,14 @@
 //   node scripts/verify-commits.mjs [range]      (default: origin/main..HEAD)
 //   npm run verify:commits
 //
-// node_modules: when package-lock.json at the commit is byte-identical to this
+// node_modules: this is the ONE sanctioned exception to CLAUDE.md's "never link node_modules":
+// when package-lock.json at the commit is byte-identical to this
 // checkout's, node_modules is shared (a junction); otherwise `npm ci` runs in the
 // worktree. Exit 0 only if every commit passes every step. A failing intermediate
 // commit is fixed by re-splitting the commits, never by --no-verify.
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
-  lstatSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -29,7 +29,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { lexists } from './wt-links.mjs';
+import { isLink, lexists } from './wt-links.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const range = process.argv[2] ?? 'origin/main..HEAD';
@@ -69,8 +69,7 @@ function run(cmd, args, cwd) {
  *  without deleting anything else. */
 class LinkStuck extends Error {}
 function removeLinkSafely(link) {
-  if (!lexists(link)) return;
-  if (!lstatSync(link).isSymbolicLink()) return; // a real directory (npm ci): not a link
+  if (!isLink(link)) return; // absent, or a real directory (npm ci): not a link
   try {
     unlinkSync(link); // a symlink / file-style link
   } catch {
