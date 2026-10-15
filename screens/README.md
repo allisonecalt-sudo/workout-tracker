@@ -140,7 +140,7 @@ keeps today's binding ORDER:
 6. Render-equivalence against the previous commit's build with real-shaped data, and interaction equivalence for each handler.
 7. `npm run verify:commits` on the range.
 
-## The workout: one screen, sub-views (step 17a, Oct 15 2026)
+## The workout: one screen, sub-views (steps 17a-17b, Oct 15 2026)
 
 The workout is ONE screen (`state.screen === 'workout'`) with sub-views: the exercise step, the ride
 lanes (elliptical / walk / apartment), rest, round break, cool-down, paused. Screens may not import
@@ -153,23 +153,27 @@ each other, so the sub-views are NOT separate screens. The rule:
   screen): `workout-now.ts` (lookups), `workout-parts.ts` (step nav, progress line, header buttons),
   `workout-feel.ts` (feel / load chips + guards), `workout-cards.ts` (picture / setup / detail /
   how-to / Tips). A helper used by one sub-view only stays next to that sub-view.
-- 17b adds the lane renderers (a shared `workout-lanes.ts` of strings) and moves the lane handlers
-  (`ww-*`, `ell-*`, `ride-numbers-*`, `stop-lane`, the ride's own feel binding) into `workout.ts`.
-  17c adds rest / round break / cool-down / paused (a shared `workout-breaks.ts` of strings), the
+- 17b (done) moved the lane renderers and handlers (`ww-*`, `ell-*`, `ride-numbers-*`, `stop-lane`,
+  the ride's own feel binding) into `workout.ts`. No lane renderer is used by two sub-views, so they
+  stayed next to their handlers; `workout-lanes.ts` holds the lane-choice STATE helpers that app.ts
+  (the state machine) and the handlers both call (no DOM, no redraw). 17c adds rest / round break / cool-down / paused (a shared `workout-breaks.ts` of strings), the
   state machine (`advanceExercise`, `goBack`, `jumpToStep`, `next` / `begin` / `step-back`, the hold
   bindings) and the overlays' handlers into `workout.ts`. app.ts ends as the shell.
 - Until a sub-view moves, app.ts registers it through `setWorkoutSubviews({...})` (called once in the
   boot block). `workout.ts` calls it through private forwarding stubs that carry the moved code's own
   names, so the moved code stays byte-identical; delete a stub when its sub-view arrives. Today's
-  registered set: round break, rest, cool-down, elliptical step, lane timer card, apartment routine,
-  `jumpToStep`.
+  registered set: round break, rest, cool-down, `jumpToStep`, `advanceExercise` (the lane skip buttons
+  call it).
 - Handler groups keep their ORIGINAL binding order: `attachWorkoutStepListHandlers` (List + pip +
   jump rows) sits where those bindings sat, `attachWorkoutFeelHandlers` / `attachWorkoutFeelHandlers2`
-  surround the ride's own feel binding (still in app.ts), `attachWorkoutCardHandlers` closes
+  surround the ride's own feel binding (`attachWorkoutRideFeelHandlers`), the lane handlers sit where
+  they sat (`attachWorkoutLaneHandlers` after the cool-down skip; `attachWorkoutLaneStopHandler` and
+  `attachWorkoutLaneSkipHandler` between the hold bindings), `attachWorkoutCardHandlers` closes
   `attachHandlers()`. The card handlers bind document-wide (the cool-down rows use the same data
   attributes), so they are not "the exercise step's" alone.
 - `ui` fields: `stepListOpen` and `timerPipOpen` stay on `ui` (written outside this screen: app.ts
-  jumpToStep / resume / resetState, and timer.ts). Nothing became module-local in 17a.
+  jumpToStep / resume / resetState, and timer.ts). Nothing became module-local in 17a or 17b: the lane
+  state lives in localStorage keys (state.ts); `rideNumbersOpen` / `rideFeel` are on `state`.
 
 - How `timer.ts` / `actions.ts` call INTO the state machine (17c plan). They cannot import a screen, so
   nothing is imported: the same boot-time registration pattern as `setActionHooks()` / `setWorkoutSubviews()`

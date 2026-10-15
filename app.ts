@@ -5,13 +5,11 @@
 // layer (still images + YouTube embeds + collapsible how-to).
 
 import { setsPrescribed } from './hold-sets.js';
-import { rideRate } from './ride.js';
 import { renderRides, attachRidesHandlers, ridesVsDelta } from './screens/rides.js';
 import { flattenSteps, nextUndoneStep, type WorkoutStep } from './step-list.js';
-import { isMoveFeelValue, MOVE_FEEL_VALUES } from './move-feel.js';
+import { isMoveFeelValue } from './move-feel.js';
 import { isArmFeel, isArmLoad, heavierArmLoad } from './workout-feel.js';
 import {
-  formatTimerDisplay,
   renderStepNav,
   renderProgressLine,
   renderPauseButton,
@@ -20,7 +18,6 @@ import {
   type StretchGroup,
 } from './workout-parts.js';
 import { renderExerciseSetup } from './workout-cards.js';
-import { deriveRideAim, lastTimeAtSameAim } from './ride-aim.js';
 import {
   injectMarkerProgramWeek,
   replaceCalendarMarks,
@@ -34,6 +31,14 @@ import {
 } from './program.js';
 import type { LogEntry } from './types.js';
 import { ui } from './ui.js';
+import { ellipticalMinutes } from './cardio-readings.js';
+import {
+  chooseApartmentCardio,
+  clearApartmentCardio,
+  chooseElliptical,
+  clearElliptical,
+  captureLaneMinutesIfLeaving,
+} from './workout-lanes.js';
 import {
   saveActiveSession,
   RESUMABLE_SCREENS,
@@ -44,18 +49,6 @@ import {
   setActionHooks,
 } from './actions.js';
 import {
-  laneDoneMinutes,
-  ellipticalMinutes,
-  ellipticalLevel,
-  parseMmSs,
-  parseKmReading,
-  parseKcalReading,
-  clampEllipticalLevel,
-  ELLIPTICAL_MAX_LEVEL,
-  ELLIPTICAL_START_LEVEL,
-  lastEllipticalLevel,
-} from './cardio-readings.js';
-import {
   type AppScreen,
   type ArmFeelState,
   type MoveFeelState,
@@ -64,13 +57,6 @@ import {
   type ActiveSessionSnapshot,
   ACTIVE_SESSION_KEY,
   WW_RESULT_KEY,
-  WW_APARTMENT_KEY,
-  WW_ELLIPTICAL_KEY,
-  WW_ELLIPTICAL_LEVEL_KEY,
-  WW_ELLIPTICAL_KM_KEY,
-  WW_ELLIPTICAL_PULSE_KEY,
-  WW_ELLIPTICAL_TIME_KEY,
-  WW_ELLIPTICAL_KCAL_KEY,
   WW_LANE_STARTED_KEY,
   WW_LANE_DONE_MIN_KEY,
   getRestSec,
@@ -79,7 +65,6 @@ import {
   loadLogs,
 } from './state.js';
 import { escapeHtml } from './format.js';
-import { ellipticalRideRecords } from './cardio-notes.js';
 import { renderActionBar } from './action-bar.js';
 import { setRenderer, setScrollRestoreSink } from './bus.js';
 import {
@@ -104,7 +89,6 @@ import {
   harvestWorkoutWalk,
   clearWorkoutWalk,
   resumeWalkTracking,
-  startWorkoutWalk,
   walkStepMinutes,
   fetchStepsToday,
 } from './walk.js';
@@ -189,6 +173,10 @@ import {
   attachWorkoutStepListHandlers,
   attachWorkoutFeelHandlers,
   attachWorkoutFeelHandlers2,
+  attachWorkoutRideFeelHandlers,
+  attachWorkoutLaneHandlers,
+  attachWorkoutLaneStopHandler,
+  attachWorkoutLaneSkipHandler,
   attachWorkoutCardHandlers,
   setWorkoutSubviews,
 } from './screens/workout.js';
@@ -333,114 +321,6 @@ function syncWorkoutWalkTracking(): void {
   }
 }
 
-// ---------- Cardio either/or (Allison Sep 7 2026) ----------
-// WHAT: the cardio step that opens A/B (10 min) and C (25 min) is now a CHOICE —
-// walk outside (the tracked flow, entirely unchanged: the walk minutes) OR the
-// apartment on a plain countdown for the SAME minutes (building stairs in
-// intervals, apartment laps, marching in place), with nothing tracked.
-// WHY: her ask, verbatim — "also i want cardio i can do in apt or walk like pick
-// either or". Weather, dark, chagim, or just not wanting to leave the building
-// shouldn't cost her the cardio. Rounds first, reps second, the walk never
-// (her Jul-3 escape hatch) — so the minutes stay identical either way.
-// HOW: the choice is one localStorage key (same trick as WW_START_KEY, so it
-// survives an app close mid-session) and getCurrentExercise() swaps the walk
-// step for a timed apartment step while it's set. NO Supabase schema change —
-// the minutes land in the existing walk_minutes column and a marker string goes
-// into the existing notes column, so the two lanes stay tellable apart later.
-function chooseApartmentCardio(minutes: number): void {
-  clearElliptical(); // one lane at a time
-  localStorage.setItem(WW_APARTMENT_KEY, String(minutes));
-}
-
-function clearApartmentCardio(): void {
-  clearLaneProgress();
-  localStorage.removeItem(WW_APARTMENT_KEY);
-}
-
-// ---------- Elliptical lane (Allison Sep 24 2026, v43) ----------
-// WHAT: a third lane on the cardio step — the York BX200 elliptical, which
-// arrived Thu Sep 24. Same minutes as the walk (10 in A/B, 25 in C) on a
-// countdown, and the LEVEL she rode at saves with the session.
-// WHY: her words the morning it arrived — "let's start putting the elliptical
-// in" → "So no more walk it could be walk or elliptical". The machine was bought
-// to make the cardio she already does countable (Sep 19: "its jstu hard to
-// measuere"). Minutes + level are the countable part; the console's distance is
-// strides × an assumed stride length, so it isn't logged.
-// HOW: the apartment-lane trick again — one localStorage key holds the chosen
-// minutes (survives an app close mid-session), one holds the level, and
-// getCurrentExercise() swaps the walk step for a timed elliptical step. NO
-// Supabase change: minutes → walk_minutes, "cardio: elliptical N min · level L"
-// → notes. The next session's starting level is read back off that marker in
-// the saved logs, not from a separate remembered number.
-// One tap on + or −. The first tap starts from her last level (or 3 on a first
-// ride) and moves one from there; after that it moves from what's shown.
-function stepEllipticalLevel(delta: number): void {
-  const from = ellipticalLevel() ?? lastEllipticalLevel() ?? ELLIPTICAL_START_LEVEL;
-  setEllipticalLevel(from + delta);
-}
-
-function setEllipticalLevel(n: number): void {
-  localStorage.setItem(WW_ELLIPTICAL_LEVEL_KEY, String(clampEllipticalLevel(n)));
-}
-
-function chooseElliptical(minutes: number): void {
-  clearApartmentCardio(); // one lane at a time
-  localStorage.setItem(WW_ELLIPTICAL_KEY, String(minutes));
-  // v48 · P3: no level pre-set any more — it's recorded on touch, after the ride.
-}
-
-// Console readings (v44, Sep 24 2026 — her words: "make it measurable whatever
-// you say I'm gonna copy it"). Two numbers copied off the BX200's screen after
-// the ride: DISTANCE (same machine, same minutes → more km = fitter; comparable
-// against HER OWN rides, not against a walk) and PULSE (read off the fixed grips
-// in the last 30 s — says whether the level was really conversational). The
-// console's calories are its own estimate from the same inputs, so they're not
-// asked for. Blank = not recorded, never a zero.
-// v49 (Sep 25 2026): "every time put in" — calories and time off the console,
-// alongside distance/level/pulse. Time is seconds (mm:ss typed, or prefilled
-// from the app's own timer); calories is the console's own estimate.
-
-// Saved on every keystroke so the value survives a re-render or an app close.
-function setEllipticalReading(key: string, raw: string): void {
-  const v = raw.trim().replace(',', '.');
-  if (v === '') localStorage.removeItem(key);
-  else localStorage.setItem(key, v);
-}
-
-// v45 — minutes actually done on an indoor lane (elliptical / apartment). Set
-// when she leaves the step after running its timer: the timer's elapsed time,
-// or the full block if it ran out. Never started the timer → nothing stored,
-// and the prescription stands (she may have used the machine's own clock).
-
-function captureLaneMinutesIfLeaving(): void {
-  const ex = getCurrentExercise();
-  if (!ex || !isIndoorLane(ex.name) || !ex.durationSec) return;
-  if (localStorage.getItem(WW_LANE_STARTED_KEY) === null) return;
-  // v48 · P3 (Sep 24 2026): a ride she STOPPED already holds its real minutes —
-  // with the timer idle, the "0 left" arithmetic below would overwrite them
-  // with the full block. Only a live timer (or nothing stored yet) is measured.
-  const t = ui.activeTimer;
-  const running = t !== null && t.kind === 'timed-exercise';
-  if (!running && laneDoneMinutes() !== null) return;
-  // Live: read the clock itself, not the last rendered second (a tap can land
-  // before the next frame). Idle: 0 left once it ran out.
-  // Paused: the countdown is frozen at the rendered second.
-  const leftSec =
-    running && state.pausedAt === null
-      ? Math.max(0, (t.endsAt - Date.now()) / 1000)
-      : state.timerSeconds;
-  const doneSec = Math.max(0, ex.durationSec - leftSec);
-  localStorage.setItem(WW_LANE_DONE_MIN_KEY, String(Math.max(1, Math.round(doneSec / 60))));
-}
-
-// v48 · P3: the quiet Stop on a running ride (elliptical / apartment) — the
-// minutes she actually did are kept, and the after-ride face shows them.
-function stopLaneTimer(): void {
-  captureLaneMinutesIfLeaving();
-  stopTimer();
-  render();
-}
-
 // v51 (Sep 25 2026) — her words: "I click the next button and then I fill in
 // information. That's how simple it is." Done · Next on the elliptical step
 // used to advance straight past the after-ride readings card, which only
@@ -454,73 +334,6 @@ function openRideNumbers(): void {
   stopTimer();
   state.rideNumbersOpen = true;
   render();
-}
-
-function clearLaneProgress(): void {
-  localStorage.removeItem(WW_LANE_STARTED_KEY);
-  localStorage.removeItem(WW_LANE_DONE_MIN_KEY);
-}
-
-function clearElliptical(): void {
-  clearLaneProgress();
-  localStorage.removeItem(WW_ELLIPTICAL_KEY);
-  localStorage.removeItem(WW_ELLIPTICAL_LEVEL_KEY);
-  localStorage.removeItem(WW_ELLIPTICAL_KM_KEY);
-  localStorage.removeItem(WW_ELLIPTICAL_PULSE_KEY);
-  localStorage.removeItem(WW_ELLIPTICAL_TIME_KEY);
-  localStorage.removeItem(WW_ELLIPTICAL_KCAL_KEY);
-}
-
-// ---------- The guided indoor strip (Allison Sep 7 2026, v30) ----------
-// WHAT CHANGED from v29: the apartment lane was a countdown plus a written menu
-// ("pick one: stairs, laps, or marching") — i.e. a timer and a DECISION, which
-// is not an equivalent to a 10-minute walk. Her words the same day: "Also did
-// you make alternative to outdoor walk / Because I often don't want to go
-// outside" → "Something similar with a similar amount of like movement warm up
-// cardio". So the step now RUNS a routine instead of describing one.
-// CONSTRAINTS these five satisfy on purpose: nothing jumps and nothing has a
-// flight phase (apartment building, neighbours below, and impact is out with
-// her back baseline), no hands on the floor, nothing to grip, and the effort
-// stays conversational start to finish — it's a warm-up, not a session.
-// SHAPE: this is still ONE exercise in the phase array. The segments are a
-// DISPLAY derived from the existing countdown — never extra steps, no index
-// arithmetic, nothing for the engine to know about.
-type CardioSegment = { name: string; cue: string };
-
-const APARTMENT_SEGMENT_SEC = 120;
-
-const APARTMENT_CARDIO_SEGMENTS: readonly CardioSegment[] = [
-  { name: 'Easy marching in place', cue: 'Loose arms swinging. Just get moving.' },
-  {
-    name: 'Step touch, side to side',
-    cue: 'Step out, tap the other foot in, reach the arms as you go.',
-  },
-  { name: 'Knee lifts', cue: 'March taller. Bring the opposite hand toward the knee.' },
-  { name: 'Heel kicks back', cue: 'Light and quiet, one foot always on the floor.' },
-  { name: 'Marching, a bit quicker', cue: 'Finish warm, still able to talk.' },
-];
-
-// Which segment is live, read off the countdown alone — so it advances by
-// itself as the timer runs and she never has to work out "which two minutes am
-// I in". Cycles: 10 min = one pass of the five; 25 min keeps going round and
-// ends mid-list; a Lite/odd duration works the same way. Elapsed is clamped one
-// second short of the end so the last tick can't flip the strip back to segment
-// one as the timer lands on 0:00.
-function apartmentSegmentIndex(totalSec: number, remainingSec: number): number {
-  const n = APARTMENT_CARDIO_SEGMENTS.length;
-  if (totalSec <= 0 || n === 0) return 0;
-  const remain = Math.max(0, Math.min(totalSec, remainingSec));
-  const elapsed = Math.min(totalSec - remain, Math.max(0, totalSec - 1));
-  return Math.floor(elapsed / APARTMENT_SEGMENT_SEC) % n;
-}
-
-// Seconds left in the CURRENT segment — capped by what's left overall, so a
-// part-segment at the end of an odd block counts down honestly.
-function apartmentSegmentRemainingSec(totalSec: number, remainingSec: number): number {
-  if (totalSec <= 0) return 0;
-  const remain = Math.max(0, Math.min(totalSec, remainingSec));
-  const intoSegment = (totalSec - remain) % APARTMENT_SEGMENT_SEC;
-  return Math.max(0, Math.min(APARTMENT_SEGMENT_SEC - intoSegment, remain));
 }
 
 // Test hook (automation only — Fit is off under navigator.webdriver).
@@ -2002,300 +1815,6 @@ function renderPausedOverlay(): string {
     </div>`;
 }
 
-// The guided indoor strip (v30). Rendered only while the apartment cardio step
-// is the current exercise. `remainingSec` mirrors the timer display's own
-// fallback (idle = the whole duration), so before she taps Start the strip sits
-// on segment 1 as "Starts with" — and once running it re-derives on every tick,
-// because timerLoop re-renders each time the second changes.
-function renderApartmentRoutine(totalSec: number, remainingSec: number, running: boolean): string {
-  const idx = apartmentSegmentIndex(totalSec, remainingSec);
-  const seg = APARTMENT_CARDIO_SEGMENTS[idx];
-  if (!seg) return '';
-  const left = apartmentSegmentRemainingSec(totalSec, remainingSec);
-  const items = APARTMENT_CARDIO_SEGMENTS.map(
-    (s, i) =>
-      `<li class="cardio-seg-item${i === idx ? ' is-current' : ''}"><span class="cardio-seg-num" aria-hidden="true">${i + 1}</span><span class="cardio-seg-name">${escapeHtml(s.name)}</span></li>`
-  ).join('');
-  return `
-    <div class="card cardio-routine" data-segment-index="${idx}">
-      <div class="cardio-seg-label">${running ? 'Right now' : 'Starts with'}</div>
-      <div class="cardio-seg-now">${escapeHtml(seg.name)}</div>
-      <p class="cardio-seg-cue">${escapeHtml(seg.cue)}</p>
-      ${running ? `<div class="cardio-seg-left">${formatTimerDisplay(left)} left in this move</div>` : ''}
-      <ol class="cardio-seg-list">${items}</ol>
-      <p class="cardio-seg-foot">Two minutes each — it moves on by itself and loops back round until your time is up. Rather do the building stairs? Take the same minutes there instead: up easy, walk down as the rest.</p>
-    </div>
-  `;
-}
-
-// v51 (Sep 25 2026) — the ride-numbers screen's one card: what she reads off
-// the machine BEFORE she presses STOP, in the order she reads them off the
-// console — Time, Distance, Calories, Level, Pulse (her lead's spec). Replaces
-// v49's renderEllipticalAfterCard, whose level-first order and inline
-// placement on the ride's after-face she never scrolled down to see ("it
-// didn't show up for me"). Decision Q5 still holds: the ride ENDS on level 3,
-// so a level set before it was a guess — the stepper still starts at "—".
-function renderRideNumbersCard(ex: Exercise): string {
-  const level = ellipticalLevel();
-  const last = lastEllipticalLevel();
-  const km = localStorage.getItem(WW_ELLIPTICAL_KM_KEY) ?? '';
-  const pulse = localStorage.getItem(WW_ELLIPTICAL_PULSE_KEY) ?? '';
-  const kcal = localStorage.getItem(WW_ELLIPTICAL_KCAL_KEY) ?? '';
-  // v61 (Sep 28 2026), spec item e — her words 15:36: "it doesn't need a
-  // timer because I use the timer on the bike now... it just says that it
-  // only did one minute when that's not true cuz I just started — no timer
-  // for elliptical, I'll use the bike." No app-timer prefill any more (the
-  // app never ran one to begin with, but this box used to ALSO fall back to
-  // "the full planned block" as a guess on a never-started ride) — blank
-  // until she types it, same "blank = not recorded" rule as every other
-  // field here.
-  const typedTime = localStorage.getItem(WW_ELLIPTICAL_TIME_KEY);
-  const time = typedTime ?? '';
-  // THE RIDES PAGE / R1 (Sep 27 2026), PLAN-2026-09-26.md §4.3: "a live line,
-  // no extra screen" — appears once Time + Calories are filled, adds km/h
-  // once Distance is too. Computed through ride.ts's rideRate() so this line
-  // and the rides page's hero can never disagree on the math. Rendered here
-  // so a prefilled time (the app's own timer, laneDoneMinutes) already shows
-  // it before she types anything; updateRideLiveLine() (attachWorkoutHandlers)
-  // keeps it live per keystroke, same "no re-render, keeps focus" rule as
-  // every other reading on this screen.
-  const liveRate = rideRate({
-    kcal: parseKcalReading(kcal),
-    timeSec: time ? parseMmSs(time) : null,
-    km: km ? parseKmReading(km) : null,
-  });
-  const liveLine =
-    liveRate.kcalPerMin !== null
-      ? `= ${liveRate.kcalPerMin} kcal a minute${liveRate.kmh !== null ? ` · ${liveRate.kmh} km/h` : ''}`
-      : '';
-  // v61 (Sep 28 2026), spec item g — the after-ride half of the derived aim:
-  // "2.15 km · aim 2.1" + "last time → today" (no colors, no ✗, no verdict).
-  // Uses whatever level she's ALREADY logged this ride (ellipticalLevel()) —
-  // falling back to her last-known level before she's touched the stepper —
-  // and the ride's own chosen minutes (ellipticalMinutes()), same source the
-  // ride card above used for the SAME ride's own aim line.
-  const kmVal = km ? parseKmReading(km) : null;
-  const aimLevel = level ?? last ?? ELLIPTICAL_START_LEVEL;
-  const aimMinutes = ellipticalMinutes() ?? Math.round((ex.durationSec ?? 0) / 60);
-  const rideHistory = ellipticalRideRecords(loadLogs());
-  const rideAim = deriveRideAim(rideHistory, aimMinutes, aimLevel);
-  const lastKm = lastTimeAtSameAim(rideHistory, aimMinutes, aimLevel);
-  const aimCompareLine =
-    kmVal !== null && !('isFirst' in rideAim) ? `${kmVal} km · aim ${rideAim.km} km` : '';
-  const lastTimeLine =
-    kmVal !== null && lastKm !== null ? `last time → today: ${lastKm} km → ${kmVal} km` : '';
-  // "—" until she touches it: an untouched stepper saves null, never a guess.
-  const sameChip =
-    last !== null
-      ? `<button class="ell-same-chip${level === last ? ' is-on' : ''}" id="ell-level-same" type="button" aria-pressed="${level === last}">${last} again</button>`
-      : '';
-  const readingRow = (
-    id: string,
-    label: string,
-    value: string,
-    unit: string,
-    opts: { type?: string; step?: string; min?: string; max?: string; sub?: string } = {}
-  ): string => `
-      <label class="ell-reading" for="${id}">
-        <span class="ell-reading-label">${label}${opts.sub ? `<span class="ell-reading-sub" id="${id}-sub">${opts.sub}</span>` : ''}</span>
-        <span class="ell-reading-field">
-          <input type="${opts.type ?? 'number'}" id="${id}" inputmode="${opts.type === 'text' ? 'numeric' : 'decimal'}" ${opts.step ? `step="${opts.step}"` : ''} ${opts.min ? `min="${opts.min}"` : ''} ${opts.max ? `max="${opts.max}"` : ''} placeholder="–" value="${escapeHtml(value)}" />
-          ${unit ? `<span class="ell-reading-unit">${unit}</span>` : ''}
-        </span>
-      </label>`;
-  return `
-    <div class="card ell-after-card">
-      <div class="ell-readings-title">Your ride — from the machine</div>
-      <p class="ell-numbers-note">Read them before you press STOP on the machine.</p>
-      <div class="ell-readings-row">
-        ${readingRow('ell-time', 'Time', time, '', { type: 'text' })}
-        ${readingRow('ell-km', 'Distance', km, 'km', { step: '0.01', min: '0' })}
-        ${readingRow('ell-kcal', 'Calories', kcal, 'kcal', { step: '0.1', min: '0' })}
-      </div>
-      <div class="ell-live-line" id="ride-live-line"${liveLine ? '' : ' hidden'}>${escapeHtml(liveLine)}</div>
-      <p class="ell-aim-compare" id="ell-aim-compare"${aimCompareLine ? '' : ' hidden'}>${escapeHtml(aimCompareLine)}</p>
-      <p class="ell-last-time" id="ell-last-time"${lastTimeLine ? '' : ' hidden'}>${escapeHtml(lastTimeLine)}</p>
-      <div class="ell-field ell-field-level">
-        <span class="ell-field-label">Level you rode at</span>
-        <div class="ell-level-controls">
-          <div class="settings-stepper ell-stepper">
-            <button class="settings-stepper-btn" id="ell-level-down" type="button" aria-label="Level down" ${level !== null && level <= 1 ? 'disabled' : ''}>−</button>
-            <span class="settings-stepper-val${level === null ? ' is-empty' : ''}" id="ell-level">${level ?? '—'}</span>
-            <button class="settings-stepper-btn" id="ell-level-up" type="button" aria-label="Level up" ${level !== null && level >= ELLIPTICAL_MAX_LEVEL ? 'disabled' : ''}>+</button>
-          </div>
-          ${sameChip}
-        </div>
-      </div>
-      <div class="ell-readings-row">
-        ${readingRow('ell-pulse', 'Pulse', pulse, 'bpm', { step: '1', min: '30', max: '230' })}
-      </div>
-      <p class="ell-pulse-hint">The machine's number at the end, hands on the grips — or leave it blank.</p>
-      ${renderRideFeel()}
-    </div>`;
-}
-
-// v61 (Sep 28 2026), spec item f: the ride's Easy/Right/Hard, every ride, on
-// the numbers card (never gated on "stepped" — currentSteppedMoves() has
-// nothing to do with this). One tap selects, tapping the same one again
-// clears — same convention as the arm-feel/move-feel chips it visually
-// matches (renderArmFeel/renderMoveFeel), and just as optional: nothing
-// downstream depends on it, a ride she never taps a feel on simply saves no
-// 'ride=' segment at all.
-function renderRideFeel(): string {
-  const current = state.rideFeel;
-  const chips = MOVE_FEEL_VALUES.map((v) => {
-    const on = current === v;
-    const label = v === 'easy' ? 'Easy' : v === 'right' ? 'Right' : 'Hard';
-    return `<button class="arm-chip${on ? ' arm-chip-on' : ''}" type="button" data-ride-feel="${v}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
-  }).join('');
-  // v61 (Sep 28 2026), P8-style compactness (fix pass, checker's should):
-  // no separate visible label line (the group aria-label carries it for
-  // screen readers) — a phone-height budget can't afford one more text row
-  // on top of the hint line below.
-  return `
-    <div class="ride-feel" role="group" aria-label="How did that feel?">
-      <div class="arm-feel-chips">${chips}</div>
-      <p class="ride-feel-hint">Easy = full sentences · Right = short sentences · Hard = a few words</p>
-    </div>`;
-}
-
-// v51 — the sub-screen itself: the same workout header as every step, the
-// fields card, a quiet way out with no numbers, then the pinned pair. `‹
-// Back` here is LOCAL to this screen (just closes it, same step) — never the
-// global step-back, which would leave the elliptical step entirely.
-function renderRideNumbersScreen(ex: Exercise, header: string): string {
-  return `
-    ${header}
-    ${renderRideNumbersCard(ex)}
-    <button class="back-link ell-numbers-skip" id="ride-numbers-skip" type="button">Skip — no numbers today</button>
-    ${renderActionBar(`
-      <div class="step-nav">
-        <button class="btn-large btn-back" id="ride-numbers-back" type="button" aria-label="Back to the ride">‹ Back</button>
-        <button class="btn-large btn-primary" id="next" type="button">Save · Next</button>
-      </div>
-    `)}
-  `;
-}
-
-// Setup (v44, her ask: "make sure you tell me how to do it and how to set the
-// elliptical"). NO BX200 manual is published online (searched Sep 24: York,
-// ManualsLib, 4 Israeli stores) — so the console steps are the standard ones
-// for this class of console and SAY so, until she sends a photo of hers.
-// v48 · P3 (Sep 24 2026): 3 short steps (was 4 long ones + a 6-step "ride"
-// list). The ride list's content is now the live "Right now" line.
-const ELLIPTICAL_SETUP_STEPS: readonly string[] = [
-  'Plug it in, step on and pedal to wake the screen.',
-  'Choose MANUAL. Press ENTER to skip time, age and weight.',
-  'Press START and set level 3.',
-];
-
-// One expander, "🛠 Set up the machine". v48 · P3: open on the FIRST ride only
-// (before it — no level on record yet), closed otherwise, NEVER reopened after
-// the ride (walk §2: it reopened under the after-ride boxes), and not drawn at
-// all while the timer runs. Same toggle handler as the detail-card sections.
-function renderEllipticalGuide(beforeFirstRide: boolean): string {
-  const key = `${ELLIPTICAL_NAME}::setup`;
-  const isOpen = beforeFirstRide
-    ? state.openSections[key] !== false
-    : state.openSections[key] === true;
-  // v48 · fix r2 (Sep 25 2026): marks the tall first-ride screen (setup open
-  // above Start) so styles.css can tighten it — "↩ Walk or apartment instead"
-  // sat half under the pinned Done · Next bar.
-  const firstMark = isOpen && beforeFirstRide ? ' ell-guide-first' : '';
-  return `
-    <div class="card ell-guide ${isOpen ? 'detail-section-open' : 'ell-guide-collapsed'}${firstMark}">
-      <button class="detail-section-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${isOpen}">
-        <span class="detail-section-label"><span class="detail-section-icon" aria-hidden="true">🛠</span> Set up the machine</span>
-        <span class="detail-chev" aria-hidden="true">▸</span>
-      </button>
-      ${
-        isOpen
-          ? `<div class="detail-section-body ell-guide-body">
-        <ol class="ell-steps">${ELLIPTICAL_SETUP_STEPS.map((s) => `<li>${escapeHtml(s)}</li>`).join('')}</ol>
-        <p class="gear-note">${/* v48 · fix r1: one line (was 3), so Start clears the pinned bar with the steps above it. Same honesty: no BX200 manual online. */ 'Typical steps — your buttons may differ.'}</p>
-      </div>`
-          : ''
-      }
-    </div>
-  `;
-}
-
-// v48 · P3: the timer card of an indoor lane (elliptical / apartment). Ready →
-// sage Start (no 3-2-1 any more, Q8) · Running → the countdown + a quiet Stop
-// that keeps the minutes she did (no dead "Running…" slab, same as the holds) ·
-// Done → "✓ 10 min done" (v46: it used to reset to Ready as if the ride never
-// happened; v48: plain text like the holds' "✓ held" — a witness, so Done · Next
-// is the one sage). `under` sits below Start before the ride (the back-out link).
-function renderLaneTimerCard(ex: Exercise, laneRan: boolean, under = ''): string {
-  const running = state.timerSeconds > 0 || state.preCountdown > 0;
-  let inner: string;
-  if (running) {
-    // v53 (Sep 26 2026): the countdown moved into the floating pip (her words,
-    // "maybe the timer should just be like a small circle that pops up") —
-    // this slab used to take the card here; now the ride/apartment content
-    // (name, "Right now" line, the guided strip) stays visible underneath
-    // instead, and Stop lives in the pip's sheet (same #stop-lane id/handler).
-    return '';
-  } else if (laneRan) {
-    const mins = laneDoneMinutes() ?? Math.round((ex.durationSec ?? 0) / 60);
-    inner = `
-      <div class="timer-label">Done</div>
-      <div class="timer-done timer-held">✓ ${mins} min done</div>`;
-  } else {
-    inner = `
-      <div class="timer-label">Ready</div>
-      <div class="timer-display timer-idle">${formatTimerDisplay(ex.durationSec ?? 0)}</div>
-      <button class="btn-large btn-primary" id="start-timed" type="button">Start timer</button>
-      ${under}`;
-  }
-  return `<div class="card timer-card">${inner}</div>`;
-}
-
-// The elliptical step (v61, Sep 28 2026, spec item e — her words 15:36:
-// "it doesn't need a timer because I use the timer on the bike now... it
-// just says that it only did one minute when that's not true cuz I just
-// started — no timer for elliptical, I'll use the bike"). NO app timer any
-// more — no Start, no running face, no pip, no "Right now" line, no "✓ N
-// min done" witness. One plain card the whole time she's on this step:
-// planned minutes, the level she's likely riding at (last logged, or the
-// start level on a first ride), the derived distance aim (ride-aim.ts, spec
-// item g), and "hands light". Done · Next opens the ride-numbers screen
-// directly (openRideNumbers, unchanged) — the only door in, now the only
-// door full stop. Holds (wall sit, planks, wall lean) keep their own timers;
-// walk/apartment lanes are untouched (they never went through this
-// function).
-function renderEllipticalStep(ex: Exercise, header: string): string {
-  if (state.rideNumbersOpen) {
-    return renderRideNumbersScreen(ex, header);
-  }
-  const minutes = Math.round((ex.durationSec ?? 0) / 60);
-  const level = lastEllipticalLevel() ?? ELLIPTICAL_START_LEVEL;
-  const firstRide = lastEllipticalLevel() === null;
-  const aim = deriveRideAim(ellipticalRideRecords(loadLogs()), minutes, level);
-  const aimText = 'isFirst' in aim ? `first ride at ${minutes} sets your aim` : `aim ${aim.km} km`;
-  const planLine = `${minutes} min · level ${level} · ${aimText} · hands light`;
-  const instead =
-    state.selectedWorkout === 'D'
-      ? ''
-      : `<button class="back-link cardio-back-out" id="ww-outdoor" type="button">↩ Walk or apartment instead</button>`;
-  const guide = renderEllipticalGuide(firstRide);
-  return `
-    ${header}
-    <div class="card">
-      <div class="exercise-display">
-        <div class="exercise-name-row">
-          <div class="exercise-name">${ELLIPTICAL_NAME}</div>
-          ${firstRide ? `<span class="new-tonight-badge">First ride</span>` : ''}
-        </div>
-        <p class="ride-plan-line" id="ride-plan-line">${escapeHtml(planLine)}</p>
-        ${instead}
-      </div>
-    </div>
-    ${guide}
-    ${renderStepNav('Done · Next')}
-  `;
-}
-
 // ---------- Ship 4: weekly review (2026-05-15) ----------
 //
 // A per-week debrief screen, reached from home's week card. The screen respects
@@ -2617,18 +2136,7 @@ function attachHandlers(): void {
   attachPreLogHandlers();
 
   attachWorkoutFeelHandlers();
-  // v61 (Sep 28 2026), spec item f: the ride's own always-on Easy/Right/Hard
-  // — one value per session (there's only ever one ride/D step), tap-selects
-  // /tap-clears same as every other feel chip in this app.
-  document.querySelectorAll<HTMLButtonElement>('[data-ride-feel]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const feel = btn.dataset['rideFeel'];
-      if (!isMoveFeelValue(feel)) return;
-      state.rideFeel = state.rideFeel === feel ? null : feel;
-      saveActiveSession();
-      render();
-    });
-  });
+  attachWorkoutRideFeelHandlers();
   attachWorkoutFeelHandlers2();
   // v60 (Sep 28 2026) — F2: "Skip" on the cool-down list does exactly what
   // Done stretching ✓ does (advanceExercise() already treats the whole
@@ -2640,89 +2148,7 @@ function attachHandlers(): void {
   bindClick('cooldown-skip', () => {
     advanceExercise();
   });
-  // Explicit Start for the in-workout walk — nothing tracks until she taps it
-  // (Allison Jul 9 2026: being on the page ≠ walking started).
-  bindClick('ww-start', () => {
-    startWorkoutWalk();
-    render();
-    updateWalkLiveLine();
-  });
-
-  // Cardio either/or (Allison Sep 7 2026): "i want cardio i can do in apt or
-  // walk like pick either or". Same minutes, indoors, on a plain timer.
-  bindClick('ww-apartment', () => {
-    const raw = rawCurrentExercise();
-    if (!raw) return;
-    chooseApartmentCardio(walkStepMinutes(raw));
-    render();
-  });
-
-  // Elliptical lane (Allison Sep 24 2026): "So no more walk it could be walk
-  // or elliptical". Same minutes on a timer, plus the level she rode at.
-  bindClick('ww-elliptical', () => {
-    const raw = rawCurrentExercise();
-    if (!raw) return;
-    chooseElliptical(walkStepMinutes(raw));
-    render();
-  });
-  bindClick('ell-level-down', () => {
-    stepEllipticalLevel(-1);
-    render();
-  });
-  bindClick('ell-level-up', () => {
-    stepEllipticalLevel(1);
-    render();
-  });
-  // v48 · P3: "7 again" — the same level as last time, one tap.
-  bindClick('ell-level-same', () => {
-    const last = lastEllipticalLevel();
-    if (last !== null) setEllipticalLevel(last);
-    render();
-  });
-  // Console readings (v44): saved per keystroke, no re-render (keeps focus).
-  const ellKm = document.getElementById('ell-km') as HTMLInputElement | null;
-  ellKm?.addEventListener('input', () => {
-    setEllipticalReading(WW_ELLIPTICAL_KM_KEY, ellKm.value);
-    updateRideLiveLine();
-    updateRideAimCompare(); // v61, spec item g: keeps the aim-compare line current too
-  });
-  const ellPulse = document.getElementById('ell-pulse') as HTMLInputElement | null;
-  ellPulse?.addEventListener('input', () =>
-    setEllipticalReading(WW_ELLIPTICAL_PULSE_KEY, ellPulse.value)
-  );
-  // v49: calories + time, same per-keystroke save, no re-render.
-  const ellKcal = document.getElementById('ell-kcal') as HTMLInputElement | null;
-  ellKcal?.addEventListener('input', () => {
-    setEllipticalReading(WW_ELLIPTICAL_KCAL_KEY, ellKcal.value);
-    updateRideLiveLine();
-  });
-  const ellTime = document.getElementById('ell-time') as HTMLInputElement | null;
-  ellTime?.addEventListener('input', () => {
-    setEllipticalReading(WW_ELLIPTICAL_TIME_KEY, ellTime.value);
-    updateRideLiveLine();
-  });
-
-  // v51 (Sep 25 2026): the ride-numbers screen's local Back — closes the
-  // screen and returns to whichever ride face she left (values kept, nothing
-  // cleared). Never the global step-back, which would leave the elliptical
-  // step entirely.
-  bindClick('ride-numbers-back', () => {
-    state.rideNumbersOpen = false;
-    render();
-  });
-  // v51: "no numbers today" — advances with whatever she filled; an untouched
-  // field stays null, same rule as every reading on this screen.
-  bindClick('ride-numbers-skip', () => {
-    advanceExercise();
-  });
-
-  // …and back out again to the three-way choice, in case she changes her mind.
-  bindClick('ww-outdoor', () => {
-    clearApartmentCardio();
-    clearElliptical();
-    stopTimer();
-    render();
-  });
+  attachWorkoutLaneHandlers();
 
   // Pause / resume the active workout (Allison Jul 7 2026).
   bindClick('pause-toggle', () => {
@@ -2757,15 +2183,8 @@ function attachHandlers(): void {
   bindClick('stop-timed', () => {
     stopTimedHold();
   });
-  // v48 · P3: the ride's quiet Stop keeps the minutes she actually did.
-  bindClick('stop-lane', () => {
-    stopLaneTimer();
-  });
-  // v48 · P3: "Skip cardio today" — on to the next step, no lane (cardio_lane
-  // stays null). The old sage Done · Next skipped cardio without saying so.
-  bindClick('ww-skip', () => {
-    advanceExercise();
-  });
+  attachWorkoutLaneStopHandler();
+  attachWorkoutLaneSkipHandler();
   bindClick('redo-timed', () => {
     startTimedExercise();
   });
@@ -2791,63 +2210,6 @@ function attachHandlers(): void {
   // renderChipRow) — the touched flag is still what makes a number a reading.
 }
 
-// R1 (Sep 27 2026), PLAN-2026-09-26.md §4.3 — the ride-numbers screen's
-// #ride-live-line, kept current per keystroke on ell-km/ell-kcal/ell-time
-// (no re-render, same rule as every other reading there — see
-// renderRideNumbersCard's own comment on why this reads through rideRate()).
-function updateRideLiveLine(): void {
-  const el = document.getElementById('ride-live-line');
-  if (!el) return;
-  const kcalRaw = (document.getElementById('ell-kcal') as HTMLInputElement | null)?.value ?? '';
-  const timeRaw = (document.getElementById('ell-time') as HTMLInputElement | null)?.value ?? '';
-  const kmRaw = (document.getElementById('ell-km') as HTMLInputElement | null)?.value ?? '';
-  const rate = rideRate({
-    kcal: parseKcalReading(kcalRaw),
-    timeSec: timeRaw ? parseMmSs(timeRaw) : null,
-    km: kmRaw ? parseKmReading(kmRaw) : null,
-  });
-  if (rate.kcalPerMin === null) {
-    el.textContent = '';
-    el.hidden = true;
-    return;
-  }
-  el.hidden = false;
-  el.textContent = `= ${rate.kcalPerMin} kcal a minute${rate.kmh !== null ? ` · ${rate.kmh} km/h` : ''}`;
-}
-
-// v61 (Sep 28 2026), spec item g: "#ell-aim-compare"/"#ell-last-time", kept
-// current per keystroke on ell-km — same "no re-render, keeps focus" rule as
-// updateRideLiveLine above (its own fix pass found this gap: without it, the
-// two lines stayed frozen at whatever they read when the screen first opened
-// — blank, on a never-typed-yet km — and never caught up to what she typed).
-// Level/minutes don't change per keystroke here (the level stepper and any
-// other control on this screen already go through a full render()), so
-// recomputing them fresh from the same sources renderRideNumbersCard itself
-// reads can never disagree with what she saw when the screen opened.
-function updateRideAimCompare(): void {
-  const compareEl = document.getElementById('ell-aim-compare');
-  const lastEl = document.getElementById('ell-last-time');
-  if (!compareEl || !lastEl) return;
-  const kmRaw = (document.getElementById('ell-km') as HTMLInputElement | null)?.value ?? '';
-  const kmVal = kmRaw ? parseKmReading(kmRaw) : null;
-  const level = ellipticalLevel();
-  const last = lastEllipticalLevel();
-  const aimLevel = level ?? last ?? ELLIPTICAL_START_LEVEL;
-  const ex = getCurrentExercise();
-  const aimMinutes = ellipticalMinutes() ?? Math.round((ex?.durationSec ?? 0) / 60);
-  const rideHistory = ellipticalRideRecords(loadLogs());
-  const rideAim = deriveRideAim(rideHistory, aimMinutes, aimLevel);
-  const lastKm = lastTimeAtSameAim(rideHistory, aimMinutes, aimLevel);
-  const aimLine =
-    kmVal !== null && !('isFirst' in rideAim) ? `${kmVal} km · aim ${rideAim.km} km` : '';
-  const lastLine =
-    kmVal !== null && lastKm !== null ? `last time → today: ${lastKm} km → ${kmVal} km` : '';
-  compareEl.textContent = aimLine;
-  compareEl.hidden = aimLine === '';
-  lastEl.textContent = lastLine;
-  lastEl.hidden = lastLine === '';
-}
-
 document.addEventListener('DOMContentLoaded', () => {
   setWorkoutDProvider(getWorkoutD); // week-clock.ts: planForLog needs the fixed D workout
   setActionHooks({
@@ -2861,15 +2223,13 @@ document.addEventListener('DOMContentLoaded', () => {
     skippedStepsCount,
     resetState,
   });
-  // screens/workout.ts: the sub-views and the jump that still live here (17b lanes / 17c overlays + state machine)
+  // screens/workout.ts: the sub-views and the jump that still live here (17c overlays + state machine)
   setWorkoutSubviews({
     renderRoundBreak,
     renderRestScreen,
     renderCooldownList,
-    renderEllipticalStep,
-    renderLaneTimerCard,
-    renderApartmentRoutine,
     jumpToStep,
+    advanceExercise,
   });
   setWalkLineUpdater(updateWalkLiveLine); // walk.ts: the minute tick calls the line updater that stays here (it writes the DOM)
   setRenderer(render); // bus.ts: screens that leave this file ask for a redraw through requestRender()

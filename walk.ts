@@ -43,7 +43,7 @@ export function setWalkLineUpdater(fn: () => void): void {
   walkLineUpdater = fn;
 }
 
-function updateWalkLine(): void {
+export function updateWalkLine(): void {
   if (walkLineUpdater === null) {
     throw new Error('walk.ts used before setWalkLineUpdater()');
   }

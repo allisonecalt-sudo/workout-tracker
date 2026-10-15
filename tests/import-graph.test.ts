@@ -280,6 +280,7 @@ test.describe('import graph — no cycles, nothing imports the entry (step 4c)',
       'week.ts',
       'workout-cards.ts',
       'workout-feel.ts',
+      'workout-lanes.ts',
       'workout-now.ts',
       'workout-parts.ts',
     ];
