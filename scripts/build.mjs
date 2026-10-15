@@ -9,8 +9,8 @@
 // this script never type-checks.
 //
 // Single source of truth for the version: package.json's "appVersion" field.
-// Never edit APP_VERSION/BUILD_DATE in app.ts or VERSION in sw.js directly —
-// both now read this script's output (app.ts via esbuild --define, sw.js at
+// Never edit APP_VERSION/BUILD_DATE in version.ts or VERSION in sw.js directly —
+// both now read this script's output (version.ts via esbuild --define, sw.js at
 // runtime via dist/build-info.js). Bump appVersion in package.json only.
 //
 // Deterministic: the bundle filename is a hash of its own CODE (not the

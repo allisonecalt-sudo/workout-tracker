@@ -1,7 +1,10 @@
 # screens/ - the template for a screen module
 
-First one: `screens/rides.ts` (code-shape step 8, Oct 14 2026). Steps 12-17 copy this
+First one: `screens/rides.ts` (code-shape step 8, Oct 14 2026). Steps 13-17 copy this
 shape, one screen per run. Read `rides.ts` next to this file: it is the worked example.
+`screens/settings.ts` and `screens/cycle.ts` (step 12) are two more worked examples: settings
+shows a screen with many small handlers and the build-time `version.ts` import; cycle shows
+module-local state (return-to, compare metric, scroll) that used to live in `ui`.
 
 ## What a screen module owns
 
@@ -19,9 +22,9 @@ shape, one screen per run. Read `rides.ts` next to this file: it is the worked e
 
 ## What it may import
 
-`state.ts`, `bus.ts`, `dom.ts`, `format.ts`, and the pure modules (`ride.ts`,
+`state.ts`, `bus.ts`, `dom.ts`, `format.ts`, `version.ts`, `ui.ts`, `actions.ts`, `cardio-readings.ts`, and the pure modules (`ride.ts`,
 `ride-aim.ts`, `chart.ts`, `program-week.ts`, `week.ts`, `week-d.ts`, `dates.ts`,
-`cardio-notes.ts`, `types.ts`, `week-clock.ts`, `sync.ts`, `sync-cycle.ts`, `sync-week-moves.ts`,
+`cardio-notes.ts`, `types.ts`, `week-clock.ts`, `cycle.ts`, `program.ts`, `sync.ts`, `sync-cycle.ts`, `sync-week-moves.ts`,
 `sync-movement.ts` ...). `week-clock.ts` and `sync*.ts` are shared-layer modules in their own
 right: they may never import a screen or `app.ts` (enforced by `tests/import-graph.test.ts`). Never `app.ts`, never another screen, no
 `index.ts` barrels. Dependency direction: `app.ts` -> screens -> state/bus/domain.
