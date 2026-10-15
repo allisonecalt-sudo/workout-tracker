@@ -125,14 +125,13 @@ import {
   renderTipsExpander,
   markHowToSeenThisWeek,
 } from '../workout-cards.js';
+import { renderRestScreen, renderRoundBreak, renderCooldownList } from '../workout-breaks.js';
 
-// The sub-views that are still in app.ts (rest / round break / cool-down: 17c; the ride lanes live here since 17b)
-// and the jump (the state machine: 17c). app.ts registers them once at boot; the forwarding
-// stubs below keep renderWorkout and the handlers byte-identical to the code that moved.
+// The jump and the advance (the state machine: 17c) are still in app.ts. app.ts registers them
+// once at boot; the forwarding stubs below keep renderWorkout and the handlers byte-identical
+// to the code that moved. (The rest / round break / cool-down strings now come from
+// workout-breaks.ts, 17c-1.)
 export type WorkoutSubviews = {
-  renderRoundBreak: (w: Workout) => string;
-  renderRestScreen: (w: Workout) => string;
-  renderCooldownList: (w: Workout) => string;
   jumpToStep: (key: string) => void;
   advanceExercise: () => void;
 };
@@ -148,15 +147,6 @@ function sub(): WorkoutSubviews {
   return subviews;
 }
 
-function renderRoundBreak(w: Workout): string {
-  return sub().renderRoundBreak(w);
-}
-function renderRestScreen(w: Workout): string {
-  return sub().renderRestScreen(w);
-}
-function renderCooldownList(w: Workout): string {
-  return sub().renderCooldownList(w);
-}
 function jumpToStep(key: string): void {
   sub().jumpToStep(key);
 }
