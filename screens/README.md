@@ -24,7 +24,7 @@ module-local state (return-to, compare metric, scroll) that used to live in `ui`
 ## What it may import
 
 `state.ts`, `bus.ts`, `dom.ts`, `format.ts`, `version.ts`, `ui.ts`, `actions.ts`, `cardio-readings.ts`, `viz.ts` (sparklines / wall-sit trend), `session-row.ts` (the one session row), and the pure modules (`ride.ts`,
-`ride-aim.ts`, `chart.ts`, `program-week.ts`, `week.ts`, `week-d.ts`, `dates.ts`,
+`ride-aim.ts`, `chart.ts`, `program-week.ts`, `week.ts`, `week-d.ts`, `timing.ts`, `dates.ts`,
 `cardio-notes.ts`, `types.ts`, `week-clock.ts`, `cycle.ts`, `program.ts`, `sync.ts`, `sync-cycle.ts`, `sync-week-moves.ts`,
 `sync-movement.ts` ...). `week-clock.ts` and `sync*.ts` are shared-layer modules in their own
 right: they may never import a screen or `app.ts` (enforced by `tests/import-graph.test.ts`). Never `app.ts`, never another screen, no
