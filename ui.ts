@@ -15,7 +15,7 @@
 // BUILT: scripts/ui-rename.mjs did the rewrite (TypeScript language service, not
 // text search-and-replace).
 
-import type { ActiveSessionSnapshot } from './state.js';
+import type { ActiveSessionSnapshot, AppScreen } from './state.js';
 import type { HistoryEditDraft, TimerHandle, WorkoutWalkResult } from './types.js';
 
 export interface Ui {
@@ -103,6 +103,9 @@ export interface Ui {
   // re-renders every second and must never move the page.
   lastNavKey: string | null;
   pendingScrollRestore: number | null;
+  // v48 · P6: the list's scroll when a Session was opened from it, per screen (written by the
+  // data-detail click in app.ts, read by the Session screen's × Back in screens/history.ts).
+  detailOpenedAtScroll: Partial<Record<AppScreen, number>>;
 }
 
 export const ui: Ui = {
@@ -132,4 +135,5 @@ export const ui: Ui = {
   settingsDataOpen: false,
   lastNavKey: null,
   pendingScrollRestore: null,
+  detailOpenedAtScroll: {},
 };

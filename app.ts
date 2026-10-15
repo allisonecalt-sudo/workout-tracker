@@ -6166,10 +6166,6 @@ function showQuitConfirmPanel(): void {
   });
 }
 
-// v48 · P6: the list's scroll when a Session was opened from it, per screen,
-// and the one value render() should restore on the next screen change.
-const detailOpenedAtScroll: Partial<Record<AppScreen, number>> = {};
-
 function navigationKey(): string {
   if (state.screen === 'workout') {
     return `workout|${state.currentPhase}|${state.currentRound}|${state.currentExerciseIndex}|${state.isResting ? 'rest' : state.roundBreak ? 'break' : state.rideNumbersOpen ? 'ride-numbers' : 'go'}`;
@@ -6419,7 +6415,7 @@ function attachHandlers(): void {
   // from (Weekly review / Sessions / home), at the scroll she left it.
   bindClick('back-history', () => {
     const target = state.detailReturnTo ?? 'history';
-    ui.pendingScrollRestore = detailOpenedAtScroll[target] ?? null;
+    ui.pendingScrollRestore = ui.detailOpenedAtScroll[target] ?? null;
     state.screen = target;
     state.historyDetailId = null;
     state.detailReturnTo = null;
@@ -6502,7 +6498,7 @@ function attachHandlers(): void {
       // v48 · P6: remember where she opened it from, and how far down.
       const from = state.screen;
       state.detailReturnTo = from === 'weekly-review' || from === 'home' ? from : 'history';
-      detailOpenedAtScroll[state.detailReturnTo] = window.scrollY;
+      ui.detailOpenedAtScroll[state.detailReturnTo] = window.scrollY;
       state.historyDetailId = id;
       state.screen = 'history-detail';
       render();
