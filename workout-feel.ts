@@ -10,7 +10,14 @@
 // RULE: shared layer - never imports app.ts or a screen (tests/import-graph.test.ts, default-deny).
 
 import type { Exercise } from './program.js';
-import { state, PACE_RULE_SEEN_KEY, type ArmFeel, type ArmLoad } from './state.js';
+import {
+  state,
+  PACE_RULE_SEEN_KEY,
+  type ArmFeel,
+  type ArmLoad,
+  type ArmLoadState,
+} from './state.js';
+import type { LogEntry } from './types.js';
 import { escapeHtml } from './format.js';
 import { canonicalMoveName, MOVE_FEEL_VALUES } from './move-feel.js';
 import { ARM_FEEL_STEPS, currentSteppedMoves } from './workout-now.js';
@@ -193,4 +200,36 @@ export function renderMoveFeel(
       <span class="move-feel-label">Stepped this week — how did it feel?</span>
       <div class="arm-feel-chips">${chips}</div>
     </div>`;
+}
+
+// code-shape step 17c-2: the default arm load (moved verbatim from app.ts) - beginExercises (the workout screen)
+// and resetState (app.ts) both start a session on it.
+// v55: the LOAD half of one saved "curl=easy@2kg" part, for one step key.
+// null when that key isn't in the string, or carries no "@load" at all
+// (every row saved before v55).
+function armFeelLoad(s: string | null | undefined, key: 'curl' | 'row'): ArmLoad | null {
+  if (!s) return null;
+  for (const part of s.split(';')) {
+    const [k, rest] = part.split('=');
+    if (k !== key) continue;
+    const m = /@(1kg|2kg)$/.exec(rest ?? '');
+    return m ? (m[1] as ArmLoad) : null;
+  }
+  return null;
+}
+
+// v55 — "default = last used, initially 1 kg" (her spec): the newest past
+// log that actually recorded a load for this move, newest-first; 1 kg when
+// she's never recorded one (a fresh install, or every row predates v55).
+function lastUsedArmLoad(logs: LogEntry[], key: 'curl' | 'row'): ArmLoad {
+  const sorted = [...logs].sort((a, b) => b.date.localeCompare(a.date));
+  for (const l of sorted) {
+    const load = armFeelLoad(l.armFeel, key);
+    if (load) return load;
+  }
+  return '1kg';
+}
+
+export function defaultArmLoad(logs: LogEntry[]): ArmLoadState {
+  return { curl: lastUsedArmLoad(logs, 'curl'), row: lastUsedArmLoad(logs, 'row') };
 }

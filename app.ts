@@ -8,7 +8,7 @@ import { setsPrescribed } from './hold-sets.js';
 import { renderRides, attachRidesHandlers, ridesVsDelta } from './screens/rides.js';
 import { flattenSteps, nextUndoneStep, type WorkoutStep } from './step-list.js';
 import { isMoveFeelValue } from './move-feel.js';
-import { isArmFeel, isArmLoad, heavierArmLoad } from './workout-feel.js';
+import { isArmFeel, isArmLoad, heavierArmLoad, defaultArmLoad } from './workout-feel.js';
 import { renderPausedOverlay } from './workout-breaks.js';
 import {
   injectMarkerProgramWeek,
@@ -43,7 +43,6 @@ import {
   type AppScreen,
   type ArmFeelState,
   type MoveFeelState,
-  type ArmLoad,
   type ArmLoadState,
   type ActiveSessionSnapshot,
   ACTIVE_SESSION_KEY,
@@ -1033,36 +1032,6 @@ function sanitizeHeldSetsFor(v: unknown): Record<string, number[]> {
     if (sets.length > 0) out[k] = sets;
   }
   return out;
-}
-
-// v55: the LOAD half of one saved "curl=easy@2kg" part, for one step key.
-// null when that key isn't in the string, or carries no "@load" at all
-// (every row saved before v55).
-function armFeelLoad(s: string | null | undefined, key: 'curl' | 'row'): ArmLoad | null {
-  if (!s) return null;
-  for (const part of s.split(';')) {
-    const [k, rest] = part.split('=');
-    if (k !== key) continue;
-    const m = /@(1kg|2kg)$/.exec(rest ?? '');
-    return m ? (m[1] as ArmLoad) : null;
-  }
-  return null;
-}
-
-// v55 — "default = last used, initially 1 kg" (her spec): the newest past
-// log that actually recorded a load for this move, newest-first; 1 kg when
-// she's never recorded one (a fresh install, or every row predates v55).
-function lastUsedArmLoad(logs: LogEntry[], key: 'curl' | 'row'): ArmLoad {
-  const sorted = [...logs].sort((a, b) => b.date.localeCompare(a.date));
-  for (const l of sorted) {
-    const load = armFeelLoad(l.armFeel, key);
-    if (load) return load;
-  }
-  return '1kg';
-}
-
-function defaultArmLoad(logs: LogEntry[]): ArmLoadState {
-  return { curl: lastUsedArmLoad(logs, 'curl'), row: lastUsedArmLoad(logs, 'row') };
 }
 
 // Read + validate the in-progress snapshot against the live program (a workout
