@@ -98,7 +98,6 @@ import {
   loadWeekMoves,
   getChronologicalLogs,
   loadWalks,
-  loadCyclePeriods,
   cyclePeriodsForLogic,
 } from './state.js';
 import { escapeHtml, formatMonthDay, formatWeekRange } from './format.js';
@@ -167,6 +166,7 @@ import {
   patchMatchedARow,
   pullFromSupabase,
   mergeRemoteSessions,
+  syncIndicatorText,
 } from './sync.js';
 import { flushPendingWalks } from './sync-movement.js';
 import { pullCyclePeriodsFromSupabase, cyclePeriodPayload } from './sync-cycle.js';
@@ -2058,22 +2058,6 @@ function updateSyncIndicator(): void {
   if (!el) return;
   el.textContent = syncIndicatorText();
   el.className = `sync-indicator sync-${state.syncStatus}`;
-}
-
-function syncIndicatorText(): string {
-  // v50 · fix (Sep 25 2026): pending cycle-period rows count toward the
-  // indicator too — see flushPendingSyncs above. WK3 (Sep 27 2026): same for
-  // a pending week_moves row.
-  const pending =
-    loadLogs().filter((l) => !l.synced).length +
-    loadCyclePeriods().filter((p) => !p.synced).length +
-    loadWeekMoves().filter((m) => !m.synced).length;
-  if (state.syncStatus === 'syncing') return 'syncing…';
-  if (pending > 0) return `offline · ${pending} pending`;
-  // v48 · P4 (Sep 24 2026): "synced ✓" hides — it was a third status line above
-  // the first action (assumptions, Kill). The word shows only when something
-  // is syncing or waiting, which is exactly when it matters.
-  return '';
 }
 
 // ---------- formatting ----------

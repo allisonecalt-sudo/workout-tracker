@@ -13,7 +13,14 @@
 // The one change from the app.ts original: pullFromSupabase asks for a redraw with
 // bus.requestRender() where app.ts called render() (same function, registered at boot).
 
-import { state, loadLogs, writeLogs, PULL_LIMIT } from './state.js';
+import {
+  state,
+  loadLogs,
+  writeLogs,
+  loadCyclePeriods,
+  loadWeekMoves,
+  PULL_LIMIT,
+} from './state.js';
 import { requestRender } from './bus.js';
 import { planForLog, completionClosingSessionIds } from './week-clock.js';
 import { legacyCardioMarker } from './cardio-notes.js';
@@ -628,4 +635,22 @@ export async function pullFromSupabase(): Promise<void> {
   } catch (err) {
     console.warn('[sync] pull threw:', err);
   }
+}
+
+// code-shape step 16a: the sync pill's text, moved verbatim from app.ts so Home (screens/home.ts)
+// and app.ts's updateSyncIndicator read ONE copy. Returns a string; the DOM write stays in app.ts.
+export function syncIndicatorText(): string {
+  // v50 · fix (Sep 25 2026): pending cycle-period rows count toward the
+  // indicator too — see flushPendingSyncs above. WK3 (Sep 27 2026): same for
+  // a pending week_moves row.
+  const pending =
+    loadLogs().filter((l) => !l.synced).length +
+    loadCyclePeriods().filter((p) => !p.synced).length +
+    loadWeekMoves().filter((m) => !m.synced).length;
+  if (state.syncStatus === 'syncing') return 'syncing…';
+  if (pending > 0) return `offline · ${pending} pending`;
+  // v48 · P4 (Sep 24 2026): "synced ✓" hides — it was a third status line above
+  // the first action (assumptions, Kill). The word shows only when something
+  // is syncing or waiting, which is exactly when it matters.
+  return '';
 }
