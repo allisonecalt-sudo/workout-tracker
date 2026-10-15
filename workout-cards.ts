@@ -3,7 +3,7 @@
 //
 // WHAT: the picture / video row (renderExerciseVisual), the one-time kit setup block
 // (renderExerciseSetup), the enriched detail card (voice note + muscle target + Steps / Do & Don't /
-// Common mistakes dropdowns), the how-to card and its frames, and the "seen this week" mark the
+// Common mistakes dropdowns), the how-to card and its frames, the Tips row (renderTipsExpander), and the "seen this week" mark the
 // how-to toggle writes.
 // WHY: screens/workout.ts (17a) draws them under the exercise step, and the cool-down list (17c, still
 // in app.ts) draws renderExerciseSetup per stretch row - a screen cannot import app.ts, so they live
@@ -329,4 +329,50 @@ export function markHowToSeenThisWeek(exerciseName: string): void {
   } catch {
     // localStorage full or unavailable — non-fatal
   }
+}
+
+// v53 (Sep 26 2026): "Cue" → "Tips" — her words, "Cue in the app? It says to
+// cue something, that seems to do nothing." "Cue" read as an instruction to
+// perform, not a label for more reading, and it duplicated "Listen — how to
+// do it" + "Steps" underneath. Renamed + restyled to match the "Steps" row
+// exactly (icon + label + chevron, full-width tappable, same weight — see
+// renderDetailSection). Same toggle + openSections mechanism as before.
+//
+// tipsRedundant: every exercise notes string was hand-audited this pass to
+// strip PROGRAM bookkeeping (see the // PROGRAM comments beside each one in
+// PROGRAM/ladders.ts) down to form/feel/safety guidance only. This is the
+// runtime backstop for the rare leftover that only restates the safety line
+// or the Steps card word for word — her rule: nothing gets a Tips row that
+// has nothing left to say.
+function tipsRedundant(ex: Exercise, safety: string | undefined): boolean {
+  if (!ex.notes) return true;
+  const normalize = (s: string): string =>
+    s
+      .toLowerCase()
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const notesNorm = normalize(ex.notes);
+  if (notesNorm === '') return true;
+  if (safety && normalize(safety) === notesNorm) return true;
+  const detail = EXERCISE_DETAIL[ex.name];
+  if (detail && detail.steps.length > 0) {
+    const stepsNorm = normalize(detail.steps.join(' '));
+    if (stepsNorm.includes(notesNorm)) return true;
+  }
+  return false;
+}
+
+export function renderTipsExpander(ex: Exercise, safety: string | undefined): string {
+  if (tipsRedundant(ex, safety)) return '';
+  const key = `${ex.name}::cue`;
+  const isOpen = !!state.openSections[key];
+  return `
+    <div class="detail-section tips-section ${isOpen ? 'detail-section-open' : ''}">
+      <button class="detail-section-toggle" data-toggle-section="${escapeHtml(key)}" type="button" aria-expanded="${isOpen}">
+        <span class="detail-section-label"><span class="detail-section-icon" aria-hidden="true">💡</span> Tips</span>
+        <span class="detail-chev" aria-hidden="true">▸</span>
+      </button>
+      ${isOpen ? `<div class="detail-section-body"><p class="exercise-notes">${ex.notes}</p></div>` : ''}
+    </div>`;
 }
