@@ -170,3 +170,15 @@ each other, so the sub-views are NOT separate screens. The rule:
   attributes), so they are not "the exercise step's" alone.
 - `ui` fields: `stepListOpen` and `timerPipOpen` stay on `ui` (written outside this screen: app.ts
   jumpToStep / resume / resetState, and timer.ts). Nothing became module-local in 17a.
+
+- How `timer.ts` / `actions.ts` call INTO the state machine (17c plan). They cannot import a screen, so
+  nothing is imported: the same boot-time registration pattern as `setActionHooks()` / `setWorkoutSubviews()`
+  / `setRenderer()`. Today `timer.ts` needs no callback into the machine: `startTimerCore` and
+  `startPreCountdown` take their `onComplete` / `then` closure from the CALLER, and `startRestTimer` /
+  `skipRest` only set state and `requestRender()`. In 17c, whatever the machine must be called back for
+  (`advanceExercise` after a timer ends, `goBack`, `jumpToStep`) is handed over ONCE at boot: `app.ts`
+  passes the machine's functions (exported by `screens/workout.ts`) to a tiny setter that lives in the
+  module that needs them (`setTimerHooks()` in `timer.ts`, extra fields on `ActionHooks` in
+  `actions.ts`), in the boot block next to `setWorkoutSubviews`. The module throws if used before its
+  setter ran (as `actions.ts` does), and the calls happen at exactly the points the old inline calls
+  ran, in the same order.
