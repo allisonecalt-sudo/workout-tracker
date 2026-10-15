@@ -29,6 +29,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { lexists } from './wt-links.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const range = process.argv[2] ?? 'origin/main..HEAD';
@@ -58,17 +59,6 @@ function run(cmd, args, cwd) {
     shell: process.platform === 'win32',
     env: { ...process.env, PW_PORT: '', CI: '' },
   });
-}
-
-/** True when p exists at all (a dangling link counts) - lstat never follows a link. */
-function lexists(p) {
-  try {
-    lstatSync(p);
-    return true;
-  } catch (e) {
-    if (e && e.code === 'ENOENT') return false;
-    throw e;
-  }
 }
 
 /** Step 8-0 (Oct 14 2026). A node_modules JUNCTION points at the real node_modules.

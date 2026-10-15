@@ -62,6 +62,12 @@ ride=right@12min"`. `slug=feel@qty`, `;`-joined; slug is `move-feel.ts`'s
 - Sick/break weeks = entries in `SKIPPED_WEEKS` in `program.ts` (the week clock, `getProgramWeek` and the weekly views all read that one table); the plan row for "now" is found by week key (`planForWeekKey`), never a synthetic date.
 - Tests seed calendar marks through the `__wt` hook (`seedCalendarMarks` in `tests/helpers.ts`; `ignoreSickWeeks` = no Sick weeks); there is no app branch for tests.
 
+## Worktrees: NEVER link node_modules, NEVER `git worktree remove --force` (step 15-0, Oct 15 2026)
+
+- Never link (junction / symlink) `node_modules` into a worktree. Never run `git worktree remove --force` or `rm -rf` on a worktree yourself.
+- Always `npm run wt:add -- <path> <ref>` (real `npm ci` inside) and `npm run wt:remove -- <path>` (refuses and deletes nothing if any link sits at the worktree's top level).
+- Why: Oct 15 2026 at 18:00:44 the main checkout's `node_modules` was emptied one second after a builder removed a temp worktree; on Windows `--force` follows a node_modules junction and deletes its target (`npm ci` restored it).
+
 ## The three gates (all green before hand-off, every step)
 
 1. **Golden HTML** — `PW_PORT=<your port> npx playwright test tests/golden.spec.ts`. Byte-for-byte oracle for structure-only moves. A diff = STOP AND REPORT, never fix by regenerating. Regenerate only via `npm run golden:update`, checker-only, with a written reason. Weaker than it sounds alone — pairs with gate 2's full behavioural suite (focus/timers/ARIA aren't provable by markup) and gate 3's type/lint check; none of the three stands alone.

@@ -18,7 +18,9 @@
     "verify:commits": "node scripts/verify-commits.mjs",
     "golden:update": "node scripts/update-golden.mjs",
     "serve": "serve -l 3000 .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "wt:add": "node scripts/worktree.mjs add",
+    "wt:remove": "node scripts/worktree.mjs remove"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
