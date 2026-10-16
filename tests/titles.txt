@@ -815,6 +815,7 @@ v62.1 — planForWeekKey for a round with no PROGRAM rows › a round that HAS r
 v62.1 — planForWeekKey for a round with no PROGRAM rows › the fallback is the highest row AT OR BELOW the key: the next round falls to the end of the last written round, not the end of the table by accident
 v62.1 — planForWeekKey for a round with no PROGRAM rows › the next round, Week 1 (no rows), gets the LAST written row, never PROGRAM[0]
 v62.1 — planForWeekKey for a round with no PROGRAM rows › the next round, Week 4 (still no rows), gets the same last row
+v62.3 - the version › package.json appVersion (the one source) is v62.3
 v62.3 F1 - a per-week bar fills from the same numbers as its label › 3 / 3 fills 100%, a count past the target stays at 100%, 0 fills 0%
 v62.3 F1 - a per-week bar fills from the same numbers as its label › 3 / 4 fills 75%, not 2/3
 v62.3 F1 - per-week bar fill = its label › Week 5 labelled "3 / 4" fills 75%, not 2/3
