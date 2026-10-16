@@ -232,7 +232,12 @@ export function rideTotals(rides: RideRecord[]): RideTotals {
   let km = 0;
   let kcal = 0;
   for (const r of rides) {
+    // v62.3 F6: a ride with no console time still has the minutes she logged
+    // (her Sep 28 D ride: no time, cardio_minutes 30) - those count, once.
+    // The console time wins when both exist (never both: no double count);
+    // with neither, nothing is guessed as 0 minutes of riding.
     if (typeof r.timeSec === 'number' && r.timeSec > 0) seconds += r.timeSec;
+    else if (typeof r.minutes === 'number' && r.minutes > 0) seconds += r.minutes * 60;
     if (typeof r.km === 'number' && r.km > 0) km += r.km;
     if (typeof r.kcal === 'number' && r.kcal > 0) kcal += r.kcal;
   }

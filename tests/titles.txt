@@ -831,6 +831,11 @@ v62.3 F5 - the elliptical level shows the ride length at each end › Home: "lev
 v62.3 F5 - the elliptical level shows the ride length at each end › Progress: the same phrase, then only the latest km (no separate "in N min")
 v62.3 F5 - the elliptical level shows the ride length at each end › a ride with no time recorded shows just the level; no level, no phrase
 v62.3 F5 - the elliptical level shows the ride length at each end › her rides: level 5 for 10 min, level 3 for 12 min (minutes rounded from console seconds)
+v62.3 F6 - ride minutes count the D ride › Week 5 minutes = 10 + 30 from the D ride; the chart caption says what it counts
+v62.3 F6: ride minutes count a ride with no console time by its logged minutes › a ride with BOTH console time and minutes counts the console time only (no double count)
+v62.3 F6: ride minutes count a ride with no console time by its logged minutes › her Sep 28 D ride (no time, 30 logged minutes) adds 30 to the week
+v62.3 F6: ride minutes count a ride with no console time by its logged minutes › neither time nor minutes adds nothing (never a guessed 0 that hides a hole is invented either)
+v62.3 F6: ride minutes count a ride with no console time by its logged minutes › rates stay out: the D ride is still not rate-eligible and does not move the weekly kcal/min
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

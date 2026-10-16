@@ -540,3 +540,38 @@ test.describe("weeklyRideRows: the D fallback shares week-d.ts's own window, not
     expect(rows[0]?.rides).toBe(0); // and Week 5 never claims it either
   });
 });
+
+test.describe('v62.3 F6: ride minutes count a ride with no console time by its logged minutes', () => {
+  const D_RIDE: RideRecord = {
+    id: 'd1',
+    date: '2026-09-28',
+    workout: 'D',
+    level: null,
+    km: null,
+    kcal: null,
+    timeSec: null,
+    minutes: 30,
+  };
+
+  test('her Sep 28 D ride (no time, 30 logged minutes) adds 30 to the week', () => {
+    expect(rideTotals([RIDE_A, D_RIDE]).minutes).toBe(40); // 602 s -> 10 min, + 30
+    expect(rideTotals([D_RIDE]).minutes).toBe(30);
+  });
+
+  test('a ride with BOTH console time and minutes counts the console time only (no double count)', () => {
+    expect(rideTotals([{ ...RIDE_A, minutes: 10 }]).minutes).toBe(10);
+    expect(rideTotals([{ ...RIDE_C, minutes: 25 }]).minutes).toBe(25);
+  });
+
+  test('neither time nor minutes adds nothing (never a guessed 0 that hides a hole is invented either)', () => {
+    expect(rideTotals([{ ...D_RIDE, minutes: null }]).minutes).toBe(0);
+    expect(rideTotals([{ ...D_RIDE, minutes: undefined }]).minutes).toBe(0);
+  });
+
+  test('rates stay out: the D ride is still not rate-eligible and does not move the weekly kcal/min', () => {
+    expect(hasRideNumbers(D_RIDE)).toBe(false);
+    expect(weekRideAggregate([RIDE_A, D_RIDE]).avgKcalPerMin).toBe(
+      weekRideAggregate([RIDE_A]).avgKcalPerMin
+    );
+  });
+});

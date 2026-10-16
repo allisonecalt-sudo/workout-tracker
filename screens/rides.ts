@@ -479,7 +479,7 @@ function renderRidesChartCard(rides: RideRecord[], weekRows: WeeklyRideRow[]): s
         ${toggle}
         <div class="rides-chart-wrap" id="rides-chart">${svg}</div>
         <div class="rides-chart-readout" id="rides-chart-readout">${selectedWeek ? renderWeekReadoutLine(selectedWeek) : ''}</div>
-        <p class="rides-chart-caption">Total minutes ridden that week — the cardio-time gap, not the rate.</p>
+        <p class="rides-chart-caption">Total minutes ridden that week (rides only; walks and hikes aren't counted here).</p>
       </div>`;
   }
   const eligible = rides.filter(hasRideNumbers);

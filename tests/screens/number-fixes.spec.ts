@@ -195,3 +195,41 @@ test.describe('v62.3 F5 - the elliptical level shows the ride length at each end
     await expect(val).not.toContainText('in 12 min');
   });
 });
+
+// Rides page shapes. Week 5 (open on Wed Sep 30): a console-timed ride Sep 27
+// (10 min) and her D ride Sep 28 with NO console time but 30 logged minutes.
+const ride = (id: string, date: string, workout: 'A' | 'B' | 'C' | 'D', extra: Row): Row =>
+  log(id, date, workout, { cardioLane: 'elliptical', ...extra });
+
+const openRidesPage = async (page: Page): Promise<void> => {
+  await page.goto('/');
+  await page.locator('#open-progress-link').click();
+  await page.locator('#open-rides').click();
+  await expect(page.locator('.screen-header h2')).toHaveText('Your rides');
+};
+
+test.describe('v62.3 F6 - ride minutes count the D ride', () => {
+  test('Week 5 minutes = 10 + 30 from the D ride; the chart caption says what it counts', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      ride('wk5-a', '2026-09-27T10:00:00+03:00', 'A', {
+        ellipticalLevel: 5,
+        ellipticalKm: 0.72,
+        ellipticalKcal: 63.4,
+        ellipticalTimeSec: 600,
+        cardioMinutes: 10,
+      }),
+      ride('wk5-d', '2026-09-28T10:00:00+03:00', 'D', { cardioMinutes: 30 }),
+    ]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00');
+    await openRidesPage(page);
+    const week5 = page.locator('.rides-week-row').filter({ hasText: 'Week 5' });
+    await expect(week5).toContainText('2 rides');
+    await expect(week5).toContainText('40 min');
+    await page.locator('button[data-rides-chart-mode="perWeek"]').click();
+    await expect(page.locator('.rides-chart-caption')).toHaveText(
+      "Total minutes ridden that week (rides only; walks and hikes aren't counted here)."
+    );
+  });
+});
