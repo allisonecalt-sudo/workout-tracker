@@ -1198,7 +1198,7 @@ function renderHomeStartNowCard(logs: LogEntry[]): string {
   // honest wall sit, the first session (the card-level "since" is gone).
   const firstRide = ellipticalRideRecords(chrono)[0];
   const rows: [string, string][] = [
-    ['Elliptical level', firstRide ? `${levelVal}${sinceTag(firstRide.date)}` : levelVal],
+    ['Elliptical', firstRide ? `${levelVal}${sinceTag(firstRide.date)}` : levelVal],
   ];
 
   const wallHonest = honestWallSitLogs(chrono);

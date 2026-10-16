@@ -146,7 +146,7 @@ test.describe('v62.3 F4 - each Start -> Now row says its own "since"', () => {
         .filter({ has: page.locator(`.start-now-lbl:text-is("${label}")`) })
         .locator('.sn-since');
     await expect(since('Sessions')).toHaveText('since May 2');
-    await expect(since('Elliptical level')).toHaveText('since Sep 24');
+    await expect(since('Elliptical')).toHaveText('since Sep 24');
     await expect(since('Wall sit')).toHaveText('since Sep 24');
     await expect(card.locator('.progress-card-meta')).toHaveCount(0);
   });
@@ -176,9 +176,17 @@ test.describe('v62.3 F5 - the elliptical level shows the ride length at each end
     await page.goto('/');
     const row = page
       .locator('.home-startnow-card .start-now-row')
-      .filter({ has: page.locator('.start-now-lbl:text-is("Elliptical level")') });
+      .filter({ has: page.locator('.start-now-lbl:text-is("Elliptical")') });
     await expect(row.locator('.sn-first')).toHaveText('level 5 for 10 min');
     await expect(row.locator('.sn-last')).toHaveText('level 3 for 12 min');
+  });
+
+  test('Home: the row label is exactly "Elliptical"', async ({ page }) => {
+    await startNowShape(page);
+    await page.goto('/');
+    const labels = await page.locator('.home-startnow-card .start-now-lbl').allTextContents();
+    expect(labels).toContain('Elliptical');
+    expect(labels).not.toContain('Elliptical level');
   });
 
   test('Progress: the same phrase, then only the latest km (no separate "in N min")', async ({

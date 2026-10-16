@@ -829,6 +829,7 @@ v62.3 F4 - each Start -> Now row says its own "since" › Home: Sessions since M
 v62.3 F4 - each Start -> Now row says its own "since" › Progress: the same three, and the card-level "since May 2" line is gone
 v62.3 F4 - each Start -> Now row says its own "since" › the format is "since Sep 24" (the existing month-day form)
 v62.3 F5 - the elliptical level shows the ride length at each end › Home: "level 5 for 10 min → level 3 for 12 min", not a bare "5 → 3"
+v62.3 F5 - the elliptical level shows the ride length at each end › Home: the row label is exactly "Elliptical"
 v62.3 F5 - the elliptical level shows the ride length at each end › Progress: the same phrase, then only the latest km (no separate "in N min")
 v62.3 F5 - the elliptical level shows the ride length at each end › a ride with no time recorded shows just the level; no level, no phrase
 v62.3 F5 - the elliptical level shows the ride length at each end › her rides: level 5 for 10 min, level 3 for 12 min (minutes rounded from console seconds)
