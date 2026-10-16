@@ -233,3 +233,50 @@ test.describe('v62.3 F6 - ride minutes count the D ride', () => {
     );
   });
 });
+
+test.describe('v62.3 F7 - "no numbers" only when there really are none', () => {
+  test('a ride with km and kcal but no time shows them; one with nothing says "no numbers"; the Progress door follows the same rule', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      ride('r-readings', '2026-09-28T10:00:00+03:00', 'D', {
+        ellipticalKm: 2.1,
+        ellipticalKcal: 190.8,
+        cardioMinutes: 30,
+      }),
+      ride('r-nothing', '2026-09-29T10:00:00+03:00', 'D', { cardioMinutes: 30 }),
+    ]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00');
+    await page.goto('/');
+    await expect(page.locator('#open-progress-link')).toBeVisible();
+    await page.locator('#open-progress-link').click();
+    // The door's sub-line names the latest ride (Sep 29: nothing recorded).
+    await expect(page.locator('.rides-door-sub')).toHaveText('Sep 29 · no numbers');
+    await page.locator('#open-rides').click();
+    const rows = page.locator('.rides-list-row');
+    await expect(rows.filter({ hasText: 'Sep 28' }).locator('.rides-list-right')).toHaveText(
+      '— · 2.1 km · 190.8 kcal · —'
+    );
+    await expect(rows.filter({ hasText: 'Sep 29' }).locator('.rides-list-nonum')).toHaveText(
+      'no numbers'
+    );
+  });
+
+  test('the Progress door shows the latest ride readings when it has some but no rate', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      ride('r-readings', '2026-09-28T10:00:00+03:00', 'D', {
+        ellipticalKm: 2.1,
+        ellipticalKcal: 190.8,
+        cardioMinutes: 30,
+      }),
+    ]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00');
+    await page.goto('/');
+    await page.locator('#open-progress-link').click();
+    await expect(page.locator('.rides-door-sub')).toHaveText(
+      'Sep 28 · — · 2.1 km · 190.8 kcal · —'
+    );
+  });
+});

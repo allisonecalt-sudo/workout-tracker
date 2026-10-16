@@ -7,7 +7,7 @@
 // number, so the screens can never disagree again. Pure: values in, values
 // out; no DOM, no storage, no clock.
 
-import { formatMonthDay } from './format.js';
+import { formatMmSs, formatMonthDay } from './format.js';
 
 // F1 - a per-week bar fills from the SAME two numbers as its label
 // ("3 / 4" fills 75%, never 2/3 because the bar looked at A/B/C alone).
@@ -62,4 +62,29 @@ export function levelForLength(level: number | null, timeSec: number | null): st
   if (level === null) return null;
   const minutes = timeSec !== null && timeSec > 0 ? Math.round(timeSec / 60) : 0;
   return minutes > 0 ? `level ${level} for ${minutes} min` : `level ${level}`;
+}
+
+// F7 - "no numbers" only when a ride really has none. A ride that is out of the
+// rates (no console time, or an implausible one) can still carry readings -
+// show them, "-" for each one missing, in the list's own order:
+// "time · km · kcal · level". null = none of time, km, kcal or level, so the
+// caller says "no numbers". Shared by the All-rides list and the Progress
+// door's sub-line.
+export type RideReadings = {
+  timeSec: number | null;
+  km: number | null;
+  kcal: number | null;
+  level: number | null;
+};
+
+export function rideReadingsLine(r: RideReadings): string | null {
+  const has = (v: number | null): boolean => typeof v === 'number' && v > 0;
+  if (!has(r.timeSec) && !has(r.km) && !has(r.kcal) && !has(r.level)) return null;
+  // 0 is "not read" on the console (the rides rule: kcal 0 = unread), so a
+  // zero shows as "—" like a missing value.
+  const timeStr = has(r.timeSec) ? formatMmSs(r.timeSec as number) : '—';
+  const kmStr = has(r.km) ? `${r.km} km` : '—';
+  const kcalStr = has(r.kcal) ? `${r.kcal} kcal` : '—';
+  const levelStr = has(r.level) ? `L${r.level}` : '—';
+  return `${timeStr} · ${kmStr} · ${kcalStr} · ${levelStr}`;
 }

@@ -273,7 +273,8 @@ test.describe('the list: date · workout letter · min · km · kcal · level, n
   }) => {
     await seedLogs(page, [
       rideLog('r1', '2026-09-20', RIDE_A),
-      rideLog('r2', '2026-09-25', { level: 4, km: null, kcal: 0, timeSec: null }),
+      // v62.3 F7: level 0 (not 4) - a ride with a level reading is no longer "no numbers".
+      rideLog('r2', '2026-09-25', { level: 0, km: null, kcal: 0, timeSec: null }),
       rideLog('r3', '2026-09-26', RIDE_B),
     ]);
     await page.goto('/');

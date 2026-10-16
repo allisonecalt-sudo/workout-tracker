@@ -836,6 +836,12 @@ v62.3 F6: ride minutes count a ride with no console time by its logged minutes �
 v62.3 F6: ride minutes count a ride with no console time by its logged minutes › her Sep 28 D ride (no time, 30 logged minutes) adds 30 to the week
 v62.3 F6: ride minutes count a ride with no console time by its logged minutes › neither time nor minutes adds nothing (never a guessed 0 that hides a hole is invented either)
 v62.3 F6: ride minutes count a ride with no console time by its logged minutes › rates stay out: the D ride is still not rate-eligible and does not move the weekly kcal/min
+v62.3 F7 - "no numbers" only when there really are none › a full ride shows all four
+v62.3 F7 - "no numbers" only when there really are none › a ride out of the rates with km and kcal shows them in time · km · kcal · level order
+v62.3 F7 - "no numbers" only when there really are none › a ride with km and kcal but no time shows them; one with nothing says "no numbers"; the Progress door follows the same rule
+v62.3 F7 - "no numbers" only when there really are none › a zero reads as not read: "—", like a missing value
+v62.3 F7 - "no numbers" only when there really are none › none of time, km, kcal or level -> null (the caller says "no numbers")
+v62.3 F7 - "no numbers" only when there really are none › the Progress door shows the latest ride readings when it has some but no rate
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

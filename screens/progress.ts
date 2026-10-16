@@ -63,6 +63,7 @@ import {
   dRideTag,
   sinceTag,
   levelForLength,
+  rideReadingsLine,
 } from '../number-rules.js';
 
 function getFutureWeekPlans(date?: Date): WeekPlan[] {
@@ -708,7 +709,8 @@ function ridesDoorSub(rides: RideRecord[]): string {
   const rate = rideRate(latest);
   return rate.kcalPerMin !== null
     ? `${formatMonthDay(latest.date)} · ${rate.kcalPerMin} kcal/min`
-    : `${formatMonthDay(latest.date)} · no numbers`;
+    : // v62.3 F7: "no numbers" only when the ride has none of time, km, kcal or level.
+      `${formatMonthDay(latest.date)} · ${rideReadingsLine(latest) ?? 'no numbers'}`;
 }
 
 // The one row that opens the page — lives on Progress, both the empty and

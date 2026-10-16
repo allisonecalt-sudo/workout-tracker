@@ -14,6 +14,7 @@ import { requestRender, requestScrollRestore } from '../bus.js';
 import { bindClick } from '../dom.js';
 import { escapeHtml, formatMmSs, formatMonthDay } from '../format.js';
 import { ellipticalRideRecords } from '../cardio-notes.js';
+import { rideReadingsLine } from '../number-rules.js';
 import { localIsoDate } from '../dates.js';
 import { getProgramWeek, weekModel } from '../week-clock.js';
 import { attributeSessionsToWeeks, sessionsAttributedTo } from '../program-week.js';
@@ -515,33 +516,31 @@ function renderRidesChartCard(rides: RideRecord[], weekRows: WeeklyRideRow[]): s
 
 // The plain list — date · workout letter · min · km · kcal · level, newest
 // first. A ride excluded from rates (§4.2's rule: kcal 0 or missing time)
-// still gets its own row — "no numbers", never hidden (the archive rule:
-// don't disappear, just say honestly there's nothing to read here). v54 fix
-// r3 (Sep 27 2026), checker's nice #1: an implausible rate (e.g. a 1s ride
-// the app timer started ahead of the machine — see ride.ts's
-// isPlausibleRideRate) reads the same "no numbers" here as a genuinely
-// missing one — the row still lists (nothing hidden), it just isn't shown a
-// rate nobody would trust for best/usual either.
+// still gets its own row, never hidden (the archive rule: don't disappear).
+// v62.3 F7: it reads "no numbers" only when it has none of time, km, kcal or
+// level; a ride with some readings shows them, "—" for each missing one
+// (v54 fix r3's implausible-rate ride is the same: its row lists what the
+// console gave, it just isn't trusted for best/usual's rates).
 function renderRidesListCard(rides: RideRecord[]): string {
   const rows = [...rides]
     .reverse()
     .map((r) => {
       const left = `${formatMonthDay(r.date)} · ${r.workout}`;
-      if (!isPlausibleRideRate(r)) {
+      // v62.3 F7: "no numbers" only for a ride with none of time, km, kcal or
+      // level. A ride that is out of the rates (no console time, or an
+      // implausible one) but HAS readings shows them, "—" for each missing.
+      const readings = rideReadingsLine(r);
+      if (readings === null) {
         return `
           <div class="rides-list-row">
             <span class="rides-list-left">${escapeHtml(left)}</span>
             <span class="rides-list-nonum">no numbers</span>
           </div>`;
       }
-      const timeStr = r.timeSec !== null ? formatMmSs(r.timeSec) : '—';
-      const kmStr = r.km !== null ? `${r.km} km` : '—';
-      const kcalStr = r.kcal !== null ? `${r.kcal} kcal` : '—';
-      const levelStr = r.level !== null ? `L${r.level}` : '—';
       return `
         <div class="rides-list-row">
           <span class="rides-list-left">${escapeHtml(left)}</span>
-          <span class="rides-list-right">${escapeHtml(`${timeStr} · ${kmStr} · ${kcalStr} · ${levelStr}`)}</span>
+          <span class="rides-list-right">${escapeHtml(readings)}</span>
         </div>`;
     })
     .join('');

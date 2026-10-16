@@ -12,6 +12,7 @@ import {
   dRideTag,
   sinceText,
   levelForLength,
+  rideReadingsLine,
 } from '../number-rules';
 
 test.describe('v62.3 F1 - a per-week bar fills from the same numbers as its label', () => {
@@ -65,5 +66,25 @@ test.describe('v62.3 F5 - the elliptical level shows the ride length at each end
     expect(levelForLength(5, null)).toBe('level 5');
     expect(levelForLength(5, 0)).toBe('level 5');
     expect(levelForLength(null, 600)).toBeNull();
+  });
+});
+
+test.describe('v62.3 F7 - "no numbers" only when there really are none', () => {
+  test('a ride out of the rates with km and kcal shows them in time · km · kcal · level order', () => {
+    expect(rideReadingsLine({ timeSec: null, km: 2.1, kcal: 190.8, level: null })).toBe(
+      '— · 2.1 km · 190.8 kcal · —'
+    );
+  });
+  test('a full ride shows all four', () => {
+    expect(rideReadingsLine({ timeSec: 602, km: 0.72, kcal: 63.4, level: 5 })).toBe(
+      '10:02 · 0.72 km · 63.4 kcal · L5'
+    );
+  });
+  test('a zero reads as not read: "—", like a missing value', () => {
+    expect(rideReadingsLine({ timeSec: null, km: 0, kcal: 0, level: 4 })).toBe('— · — · — · L4');
+  });
+  test('none of time, km, kcal or level -> null (the caller says "no numbers")', () => {
+    expect(rideReadingsLine({ timeSec: null, km: null, kcal: null, level: null })).toBeNull();
+    expect(rideReadingsLine({ timeSec: 0, km: 0, kcal: 0, level: null })).toBeNull();
   });
 });
