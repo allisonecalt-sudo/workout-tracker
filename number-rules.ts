@@ -22,3 +22,19 @@ export function perWeekFillPct(shownValue: number, shownTarget: number): number 
 export function shownSessionCount(abcDone: number, countsD: boolean, dRides: number): number {
   return abcDone + (countsD && dRides > 0 ? 1 : 0);
 }
+
+// F3 - the lifetime session count, ONE rule for Home and Progress (the v55
+// "CHECK N2" decision, Sep 27 2026: A/B/C are sessions; a D ride is not a
+// fourth letter, it is its own "+N ride(s)" tag). Progress used to count every
+// row ("45 sessions") while Home said "44 +1 ride".
+export type SessionCounts = { sessions: number; dRides: number };
+
+export function sessionCounts(logs: readonly { workout: string }[]): SessionCounts {
+  const sessions = logs.filter((l) => l.workout !== 'D').length;
+  return { sessions, dRides: logs.length - sessions };
+}
+
+/** "+1 ride" / "+2 rides"; '' when there is no D ride. */
+export function dRideTag(dRides: number): string {
+  return dRides > 0 ? `+${dRides} ride${dRides === 1 ? '' : 's'}` : '';
+}

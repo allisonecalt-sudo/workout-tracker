@@ -49,6 +49,7 @@ import {
   cyclePeriodsForLogic,
 } from '../state.js';
 import { escapeHtml, formatMonthDay, formatWeekRange } from '../format.js';
+import { sessionCounts, dRideTag } from '../number-rules.js';
 import { rideLevel, rideKm, rideTimeSec } from '../cardio-notes.js';
 import { formatDate, formatWeekdayDate, localIsoDate, formatDateLong } from '../dates.js';
 import { requestRender } from '../bus.js';
@@ -1206,11 +1207,12 @@ function renderHomeStartNowCard(logs: LogEntry[]): string {
   // were a 4th letter — it never counts toward "3 of 3" (the 19:17 decision).
   // Her call (picked here, stated so): A/B/C only, with D folded in as its
   // own "+N rides" tag when she's ridden at all.
-  const abcSessionCount = logs.filter((l) => l.workout !== 'D').length;
-  const dRideCount = logs.length - abcSessionCount;
+  // v62.3 F3: the rule now lives in number-rules.ts, so Progress's hero reads
+  // the very same count.
+  const { sessions: abcSessionCount, dRides: dRideCount } = sessionCounts(logs);
   const sessionsVal =
     dRideCount > 0
-      ? `${abcSessionCount} <span class="sn-extra">+${dRideCount} ride${dRideCount === 1 ? '' : 's'}</span>`
+      ? `${abcSessionCount} <span class="sn-extra">${dRideTag(dRideCount)}</span>`
       : `${abcSessionCount}`;
   rows.push(['Sessions', `<span class="sn-last">${sessionsVal}</span>`]);
 

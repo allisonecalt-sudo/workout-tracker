@@ -84,3 +84,22 @@ test.describe('v62.3 F2 - the weekly review counts sessions one way', () => {
     await expect(sessionsRow.locator('.weekly-review-delta-vals')).toHaveText('3 → 4');
   });
 });
+
+test.describe('v62.3 F3 - Home and Progress read the same session count', () => {
+  test('3 sessions + 1 D ride: both screens say 3 with "+1 ride", never 4', async ({ page }) => {
+    await seedLogs(page, [
+      log('wk4-a', '2026-09-24T15:56:00+03:00', 'A'),
+      log('wk4-c', '2026-09-25T11:53:00+03:00', 'C'),
+      log('wk4-b', '2026-09-26T19:14:51+03:00', 'B'),
+      log('wk5-d', '2026-09-29T10:00:00+03:00', 'D'),
+    ]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00');
+    await page.goto('/');
+    const homeRow = page
+      .locator('.home-startnow-card .start-now-row')
+      .filter({ has: page.locator('.start-now-lbl:text-is("Sessions")') });
+    await expect(homeRow.locator('.start-now-val')).toHaveText('3 +1 ride');
+    await page.locator('#open-progress-link').click();
+    await expect(page.locator('.start-now-card .start-now-hero')).toHaveText('3 sessions +1 ride');
+  });
+});

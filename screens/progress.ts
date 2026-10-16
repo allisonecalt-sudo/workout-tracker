@@ -57,7 +57,7 @@ import {
 } from '../program-week.js';
 import { honestWallSitLogs } from '../viz.js';
 import { BACK_PAIN_STOP_AT } from '../session-row.js';
-import { perWeekFillPct } from '../number-rules.js';
+import { perWeekFillPct, sessionCounts, dRideTag } from '../number-rules.js';
 
 function getFutureWeekPlans(date?: Date): WeekPlan[] {
   return date ? programFutureWeekPlans(date) : programFutureWeekPlansAfter(getWeekPlan());
@@ -336,10 +336,12 @@ function renderStartNowCard(logs: LogEntry[]): string {
   // didn't, so the two disagreed on the same number — Opus check).
   const walls = honestWallSitLogs(logs).map((l) => l.wallSitSec);
   if (walls.length) rows.push(['Wall sit', pair(walls, ' s')]);
+  // v62.3 F3: the same A/B/C count + "+N ride(s)" tag Home's card shows.
+  const sessionCount = sessionCounts(logs);
   return `
     <div class="card progress-card start-now-card">
       <div class="progress-card-label">Start → Now</div>
-      <div class="progress-stat-big start-now-hero">${logs.length} <span class="start-now-unit">session${logs.length === 1 ? '' : 's'}</span></div>
+      <div class="progress-stat-big start-now-hero">${sessionCount.sessions} <span class="start-now-unit">session${sessionCount.sessions === 1 ? '' : 's'}</span>${sessionCount.dRides > 0 ? ` <span class="sn-extra">${dRideTag(sessionCount.dRides)}</span>` : ''}</div>
       ${rows
         .map(
           ([label, val]) =>

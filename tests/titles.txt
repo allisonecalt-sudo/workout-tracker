@@ -821,6 +821,9 @@ v62.3 F1 - per-week bar fill = its label › Week 5 labelled "3 / 4" fills 75%, 
 v62.3 F2 - one session count for a week › a completion-model week counts a D ride as one more session
 v62.3 F2 - one session count for a week › a legacy week (no D concept) and a week with no D count A/B/C alone
 v62.3 F2 - the weekly review counts sessions one way › a closed Week 5 with a D ride: header "4 of 4" and the "vs previous week" box says 3 -> 4, not 3 -> 3
+v62.3 F3 - Home and Progress read the same session count › 3 sessions + 1 D ride: both screens say 3 with "+1 ride", never 4
+v62.3 F3 - one session count on Home and Progress › her data: 45 rows with one D ride is 44 sessions and "+1 ride"
+v62.3 F3 - one session count on Home and Progress › the tag is plural for 2+ and empty for none
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"
