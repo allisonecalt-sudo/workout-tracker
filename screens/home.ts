@@ -48,9 +48,9 @@ import {
   loadWalks,
   cyclePeriodsForLogic,
 } from '../state.js';
-import { escapeHtml, formatMonthDay, formatWeekRange } from '../format.js';
-import { sessionCounts, dRideTag } from '../number-rules.js';
-import { rideLevel, rideKm, rideTimeSec } from '../cardio-notes.js';
+import { escapeHtml, formatWeekRange } from '../format.js';
+import { sessionCounts, dRideTag, sinceTag } from '../number-rules.js';
+import { rideLevel, rideKm, rideTimeSec, ellipticalRideRecords } from '../cardio-notes.js';
 import { formatDate, formatWeekdayDate, localIsoDate, formatDateLong } from '../dates.js';
 import { requestRender } from '../bus.js';
 import { activeWalkStart, walkLiveText, walkStepMinutes } from '../walk.js';
@@ -1189,17 +1189,25 @@ function renderHomeStartNowCard(logs: LogEntry[]): string {
           ? `<span class="sn-first">${ELLIPTICAL_START_LEVEL}</span> → <span class="sn-last">first ride tonight</span>`
           : `<span class="sn-last">level not recorded yet</span>`;
 
-  const rows: [string, string][] = [['Elliptical level', levelVal]];
+  // v62.3 F4: each row carries its own "since" - the first ride, the first
+  // honest wall sit, the first session (the card-level "since" is gone).
+  const firstRide = ellipticalRideRecords(chrono)[0];
+  const rows: [string, string][] = [
+    ['Elliptical level', firstRide ? `${levelVal}${sinceTag(firstRide.date)}` : levelVal],
+  ];
 
   const wallHonest = honestWallSitLogs(chrono);
   if (wallHonest.length === 1) {
-    rows.push(['Wall sit', `<span class="sn-last">${wallHonest[0]!.wallSitSec} s</span>`]);
+    rows.push([
+      'Wall sit',
+      `<span class="sn-last">${wallHonest[0]!.wallSitSec} s</span>${sinceTag(wallHonest[0]!.date)}`,
+    ]);
   } else if (wallHonest.length > 1) {
     const wFirst = wallHonest[0]!.wallSitSec;
     const wLast = wallHonest[wallHonest.length - 1]!.wallSitSec;
     rows.push([
       'Wall sit',
-      `<span class="sn-first">${wFirst} s</span> → <span class="sn-last">${wLast} s</span>`,
+      `<span class="sn-first">${wFirst} s</span> → <span class="sn-last">${wLast} s</span>${sinceTag(wallHonest[0]!.date)}`,
     ]);
   }
 
@@ -1214,13 +1222,12 @@ function renderHomeStartNowCard(logs: LogEntry[]): string {
     dRideCount > 0
       ? `${abcSessionCount} <span class="sn-extra">${dRideTag(dRideCount)}</span>`
       : `${abcSessionCount}`;
-  rows.push(['Sessions', `<span class="sn-last">${sessionsVal}</span>`]);
+  rows.push(['Sessions', `<span class="sn-last">${sessionsVal}</span>${sinceTag(first.date)}`]);
 
   return `
     <div class="card hero-card home-startnow-card">
       <div class="start-now-head">
         <span class="progress-card-label">📈 Start → Now</span>
-        <span class="progress-card-meta">since ${formatMonthDay(first.date)}</span>
       </div>
       ${rows
         .map(

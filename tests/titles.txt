@@ -824,6 +824,9 @@ v62.3 F2 - the weekly review counts sessions one way › a closed Week 5 with a 
 v62.3 F3 - Home and Progress read the same session count › 3 sessions + 1 D ride: both screens say 3 with "+1 ride", never 4
 v62.3 F3 - one session count on Home and Progress › her data: 45 rows with one D ride is 44 sessions and "+1 ride"
 v62.3 F3 - one session count on Home and Progress › the tag is plural for 2+ and empty for none
+v62.3 F4 - each Start -> Now row says its own "since" › Home: Sessions since May 2, Elliptical since Sep 24, Wall sit since Sep 24; no card-level "since"
+v62.3 F4 - each Start -> Now row says its own "since" › Progress: the same three, and the card-level "since May 2" line is gone
+v62.3 F4 - each Start -> Now row says its own "since" › the format is "since Sep 24" (the existing month-day form)
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

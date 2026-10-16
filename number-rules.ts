@@ -7,6 +7,8 @@
 // number, so the screens can never disagree again. Pure: values in, values
 // out; no DOM, no storage, no clock.
 
+import { formatMonthDay } from './format.js';
+
 // F1 - a per-week bar fills from the SAME two numbers as its label
 // ("3 / 4" fills 75%, never 2/3 because the bar looked at A/B/C alone).
 export function perWeekFillPct(shownValue: number, shownTarget: number): number {
@@ -37,4 +39,16 @@ export function sessionCounts(logs: readonly { workout: string }[]): SessionCoun
 /** "+1 ride" / "+2 rides"; '' when there is no D ride. */
 export function dRideTag(dRides: number): string {
   return dRides > 0 ? `+${dRides} ride${dRides === 1 ? '' : 's'}` : '';
+}
+
+// F4 - every Start -> Now row says its OWN "since": the card used to carry one
+// "since May 2" that was true of Sessions only, while Elliptical began Sep 24
+// and the honest wall-sit readings Sep 24 too.
+export function sinceText(iso: string): string {
+  return `since ${formatMonthDay(iso)}`;
+}
+
+/** The small dim "since Sep 24" that sits after a row's value. */
+export function sinceTag(iso: string): string {
+  return `<span class="sn-since">${sinceText(iso)}</span>`;
 }

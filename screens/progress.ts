@@ -57,7 +57,7 @@ import {
 } from '../program-week.js';
 import { honestWallSitLogs } from '../viz.js';
 import { BACK_PAIN_STOP_AT } from '../session-row.js';
-import { perWeekFillPct, sessionCounts, dRideTag } from '../number-rules.js';
+import { perWeekFillPct, sessionCounts, dRideTag, sinceTag } from '../number-rules.js';
 
 function getFutureWeekPlans(date?: Date): WeekPlan[] {
   return date ? programFutureWeekPlans(date) : programFutureWeekPlansAfter(getWeekPlan());
@@ -328,27 +328,31 @@ function renderStartNowCard(logs: LogEntry[]): string {
       .filter(Boolean)
       .join(' ');
     const val = [levelPart, distPart].filter(Boolean).join(' · ');
-    if (val) rows.push(['Elliptical', val]);
+    // v62.3 F4: this row's own "since" - the first ride, not the first session.
+    if (val) rows.push(['Elliptical', `${val}${sinceTag(rides[0]!.date)}`]);
   }
   // v49 · look fix (Sep 25 2026): honestWallSitLogs() — was every wallSitSec>0,
   // including pre-v45 rows that saved the week's PRESCRIBED hold, not a real
   // measurement (Home's own Start → Now card already excluded them; Progress's
   // didn't, so the two disagreed on the same number — Opus check).
-  const walls = honestWallSitLogs(logs).map((l) => l.wallSitSec);
-  if (walls.length) rows.push(['Wall sit', pair(walls, ' s')]);
+  const honestWalls = honestWallSitLogs(logs);
+  const walls = honestWalls.map((l) => l.wallSitSec);
+  // v62.3 F4: its own "since" - the first honest wall sit.
+  if (walls.length)
+    rows.push(['Wall sit', `${pair(walls, ' s')}${sinceTag(honestWalls[0]!.date)}`]);
   // v62.3 F3: the same A/B/C count + "+N ride(s)" tag Home's card shows.
   const sessionCount = sessionCounts(logs);
   return `
     <div class="card progress-card start-now-card">
       <div class="progress-card-label">Start → Now</div>
       <div class="progress-stat-big start-now-hero">${sessionCount.sessions} <span class="start-now-unit">session${sessionCount.sessions === 1 ? '' : 's'}</span>${sessionCount.dRides > 0 ? ` <span class="sn-extra">${dRideTag(sessionCount.dRides)}</span>` : ''}</div>
+      <div class="start-now-since">${sinceTag(first.date)}</div>
       ${rows
         .map(
           ([label, val]) =>
             `<div class="start-now-row"><span class="start-now-lbl">${label}</span><span class="start-now-val">${val}</span></div>`
         )
         .join('')}
-      <div class="progress-card-meta">since ${formatMonthDay(first.date)}</div>
     </div>`;
 }
 

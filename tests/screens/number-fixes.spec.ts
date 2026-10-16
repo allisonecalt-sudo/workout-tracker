@@ -98,8 +98,74 @@ test.describe('v62.3 F3 - Home and Progress read the same session count', () => 
     const homeRow = page
       .locator('.home-startnow-card .start-now-row')
       .filter({ has: page.locator('.start-now-lbl:text-is("Sessions")') });
-    await expect(homeRow.locator('.start-now-val')).toHaveText('3 +1 ride');
+    await expect(homeRow.locator('.sn-last')).toHaveText('3 +1 ride');
     await page.locator('#open-progress-link').click();
     await expect(page.locator('.start-now-card .start-now-hero')).toHaveText('3 sessions +1 ride');
+  });
+});
+
+// Her Start -> Now shape: sessions since May 2 (that first A held a PRESCRIBED
+// wall sit, not an honest one), the first elliptical ride and the first honest
+// wall sit both on Sep 24, a second ride Sep 26.
+const startNowShape = async (page: Page): Promise<void> => {
+  await seedLogs(page, [
+    log('may-a', '2026-05-02T15:00:00+03:00', 'A', { wallSitSec: 33 }),
+    log('sep24-a', '2026-09-24T15:56:00+03:00', 'A', {
+      wallSitSec: 44,
+      cardioLane: 'elliptical',
+      cardioMinutes: 10,
+      ellipticalLevel: 5,
+      ellipticalKm: 0.72,
+      ellipticalKcal: 63.4,
+      ellipticalTimeSec: 602,
+    }),
+    log('sep25-c', '2026-09-25T11:53:00+03:00', 'C'),
+    log('sep26-b', '2026-09-26T19:14:51+03:00', 'B', {
+      wallSitSec: 45,
+      cardioLane: 'elliptical',
+      cardioMinutes: 12,
+      ellipticalLevel: 3,
+      ellipticalKm: 0.83,
+      ellipticalKcal: 70.1,
+      ellipticalTimeSec: 720,
+    }),
+  ]);
+  await mockDate(page, '2026-09-30T08:00:00+03:00');
+};
+
+test.describe('v62.3 F4 - each Start -> Now row says its own "since"', () => {
+  test('Home: Sessions since May 2, Elliptical since Sep 24, Wall sit since Sep 24; no card-level "since"', async ({
+    page,
+  }) => {
+    await startNowShape(page);
+    await page.goto('/');
+    const card = page.locator('.home-startnow-card');
+    const since = (label: string) =>
+      card
+        .locator('.start-now-row')
+        .filter({ has: page.locator(`.start-now-lbl:text-is("${label}")`) })
+        .locator('.sn-since');
+    await expect(since('Sessions')).toHaveText('since May 2');
+    await expect(since('Elliptical level')).toHaveText('since Sep 24');
+    await expect(since('Wall sit')).toHaveText('since Sep 24');
+    await expect(card.locator('.progress-card-meta')).toHaveCount(0);
+  });
+
+  test('Progress: the same three, and the card-level "since May 2" line is gone', async ({
+    page,
+  }) => {
+    await startNowShape(page);
+    await page.goto('/');
+    await page.locator('#open-progress-link').click();
+    const card = page.locator('.start-now-card');
+    await expect(card.locator('.start-now-since .sn-since')).toHaveText('since May 2');
+    const since = (label: string) =>
+      card
+        .locator('.start-now-row')
+        .filter({ has: page.locator(`.start-now-lbl:text-is("${label}")`) })
+        .locator('.sn-since');
+    await expect(since('Elliptical')).toHaveText('since Sep 24');
+    await expect(since('Wall sit')).toHaveText('since Sep 24');
+    await expect(card.locator('.progress-card-meta')).toHaveCount(0);
   });
 });

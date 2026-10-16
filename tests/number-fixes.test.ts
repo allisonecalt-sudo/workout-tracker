@@ -5,7 +5,13 @@
 // The matching on-screen checks live in tests/screens/number-fixes.spec.ts.
 
 import { test, expect } from '@playwright/test';
-import { perWeekFillPct, shownSessionCount, sessionCounts, dRideTag } from '../number-rules';
+import {
+  perWeekFillPct,
+  shownSessionCount,
+  sessionCounts,
+  dRideTag,
+  sinceText,
+} from '../number-rules';
 
 test.describe('v62.3 F1 - a per-week bar fills from the same numbers as its label', () => {
   test('3 / 4 fills 75%, not 2/3', () => {
@@ -39,5 +45,12 @@ test.describe('v62.3 F3 - one session count on Home and Progress', () => {
     expect(dRideTag(2)).toBe('+2 rides');
     expect(dRideTag(0)).toBe('');
     expect(sessionCounts([{ workout: 'B' }])).toEqual({ sessions: 1, dRides: 0 });
+  });
+});
+
+test.describe('v62.3 F4 - each Start -> Now row says its own "since"', () => {
+  test('the format is "since Sep 24" (the existing month-day form)', () => {
+    expect(sinceText('2026-09-24T15:56:00+03:00')).toBe('since Sep 24');
+    expect(sinceText('2026-05-02T10:00:00+03:00')).toBe('since May 2');
   });
 });

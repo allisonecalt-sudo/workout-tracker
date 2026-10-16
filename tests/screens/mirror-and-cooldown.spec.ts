@@ -364,7 +364,8 @@ test.describe('v48 P6 mirror', () => {
     // prescribed number as measured (the exact "Progress disagrees with
     // Home" bug this fix closes).
     await expect(sn.locator('.start-now-row').filter({ hasText: 'Wall sit' })).toHaveCount(0);
-    await expect(sn.locator('.progress-card-meta')).toHaveText('since May 12');
+    // v62.3 F4: the card-level "since" moved onto the Sessions count (each row says its own date).
+    await expect(sn.locator('.start-now-since .sn-since')).toHaveText('since May 12');
     const wall = page.locator('.wall-sit-card');
     await expect(wall).toHaveCount(0);
     // Subtitle chips.
