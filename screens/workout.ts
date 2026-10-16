@@ -26,13 +26,13 @@
 // are in the shared workout-breaks.ts. app.ts is now the shell: render()'s switch,
 // attachHandlers() calling every screen's attach* in the original order, boot, and the test hooks.
 //
-// What the state machine calls back for and cannot import (the session reset, the pre-log and
-// post-log clock ticks, which belong to other screens/app.ts) comes in ONCE at boot through
+// What the state machine calls back for and cannot import (the session reset, which lives in session-resume.ts,
+// and the pre-log and post-log clock ticks, which belong to other screens) comes in ONCE at boot through
 // setWorkoutHooks(), like actions.ts' setActionHooks(). timer.ts / actions.ts / walk.ts need no
 // callback into the machine: they take the caller's closure (startTimerCore's onComplete,
 // startPreCountdown's then) and only set state + requestRender().
 //
-// ui: stepListOpen is written by app.ts (resume, resetState) and here (jumpToStep), and read by
+// ui: stepListOpen is written by session-resume.ts (applyActiveSnapshot, resetState) and here (jumpToStep), and read by
 // render(); timerPipOpen is written by timer.ts (the timer's end) - both stay on `ui`. 17c made
 // holdRedoInProgress module-local (below the state machine's header): no other file touched it.
 
@@ -146,8 +146,8 @@ import {
 import { renderRestScreen, renderRoundBreak, renderCooldownList } from '../workout-breaks.js';
 
 // What the state machine needs from the rest of the app and cannot import (a screen never imports
-// app.ts or another screen): the session reset, and the two clock ticks the pre-log and post-log
-// screens own. app.ts hands them over ONCE at boot (setWorkoutHooks), like setActionHooks; the
+// app.ts or another screen): the session reset (the code is session-resume.ts's resetState; app.ts
+// passes it through), and the two clock ticks the pre-log and post-log screens own. app.ts hands them over ONCE at boot (setWorkoutHooks), like setActionHooks; the
 // private forwarding functions below carry the moved code's own names, so its calls are unchanged.
 export type WorkoutHooks = {
   resetState: () => void;

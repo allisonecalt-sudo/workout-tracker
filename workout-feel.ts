@@ -203,7 +203,7 @@ export function renderMoveFeel(
 }
 
 // code-shape step 17c-2: the default arm load (moved verbatim from app.ts) - beginExercises (the workout screen)
-// and resetState (app.ts) both start a session on it.
+// and resetState (session-resume.ts) both start a session on it.
 // v55: the LOAD half of one saved "curl=easy@2kg" part, for one step key.
 // null when that key isn't in the string, or carries no "@load" at all
 // (every row saved before v55).

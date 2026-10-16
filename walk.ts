@@ -60,6 +60,8 @@ export function walkFeelReady(start: number | null): boolean {
   return start !== null && Date.now() - start >= WALK_FEEL_GATE_MS;
 }
 
+// The v47 counters' keys — only cleared now (a phone may still hold them).
+
 function clearLegacyWalkCounters(): void {
   for (const k of LEGACY_WALK_COUNTER_KEYS) localStorage.removeItem(k);
 }
@@ -112,6 +114,34 @@ export function endWalkTracking(): void {
     ui.walkWakeLock = null;
   }
 }
+
+// ---------- Walk credit (Jul 4 2026) ----------
+// Her Jun-18 ask: "I sometimes just walk around my apartment, the walk can be
+// pretty slow that's OK — maybe even log/credit them." Born one-tap (v8),
+// upgraded the same night to a start/stop TRACKED walk (v10-v13): tap once to
+// start, sensors run, tap Done — still two taps total, within her capture
+// budget.
+// Walks are EXTRA CREDIT — they NEVER count toward the 3/week streak, so the
+// streak math stays honest. Supabase movement_log is the source of truth
+// (tandem rule); localStorage is the offline layer, same pattern as sessions.
+// v48 · P3 (Sep 24 2026): minutes only — the meters/steps counters are
+// archived (archive/walk-sensors-2026-09-24/). Fit is asked at Save instead.
+
+// Her Jul-4 idea: "click walking and you automatically start tracking until I
+// tell you I'm done." Start/stop timer — start timestamp lives in localStorage
+// so an in-progress walk survives closing the app (same trick as
+// ACTIVE_SESSION_KEY).
+// Same night, her calls: (1) "I don't care if the screen needs to stay open —
+// it should make the screen stay open" → wake lock + GPS distance for outdoor
+// walks; (2) "it can't track my steps at least?" → motion-sensor step estimate
+// for apartment laps, where GPS physically can't see her. Both stop the moment
+// the walk ends. Screen-locked = sensors pause = numbers undercount; the
+// wake lock exists precisely so that doesn't happen.
+// v48 · P3 (Sep 24 2026): a walk is MINUTES ONLY. The GPS distance and the
+// motion-sensor step counter are archived (archive/walk-sensors-2026-09-24/):
+// saved steps never matched Fit (3 steps in 29 min on Sep 4), GPS gave 16 m in
+// 12 min, and her words Sep 7 were "walk counter not important now". Fail-loud:
+// stop showing numbers that are wrong. The wake lock stays.
 
 export function startWalk(): void {
   localStorage.setItem(WALK_ACTIVE_KEY, String(Date.now()));

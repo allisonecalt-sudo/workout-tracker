@@ -742,6 +742,21 @@ function renderCycleDoorRow(): string {
     </div>`;
 }
 
+// ---------- Ship 5: Progress screen (2026-05-15) ----------
+//
+// A read-only longitudinal view across her entire history. Reached from home's
+// Progress door. The screen reports numbers — it does NOT editorialize.
+//
+// Design rules honored (CLAUDE.md design rules + memory):
+//  - No motivational language. No "you should." No goals beyond the 3/week target.
+//  - No paternalism. The system reports state; it never tells.
+//  - Voice rule: charts show the data, not Claude's interpretation of it.
+//  - Archives untouched. Year-grid + hand-routine archives stay in archive/.
+//  - No new external libraries — every chart is hand-built inline SVG.
+//  - No new color tokens — only D-1 + cooler-look additions.
+//  - v48 · P6 (Sep 24 2026): chart ink is --accent-progress, never the sage
+//    that means "the primary action right now" (DECISIONS §5, one sage per screen).
+
 export function renderProgress(): string {
   const logs = getChronologicalLogs(); // oldest → newest, by date
   const count = logs.length;

@@ -131,93 +131,12 @@ import {
 import { renderProgress } from './screens/progress.js';
 import { renderWeeklyReview, computeWeekTotals, attachReviewHandlers } from './screens/review.js';
 
-// Hand routine retired 2026-05-15 per Allison. All hand-routine types,
-// constants, persistence, sync, state machine, render, and event handlers
-// moved to archive/hand-routine-2026-05-15/. See that folder's README.md
-// for the timeline and re-enable instructions.
-
-// Ship 6: timing defaults — overridable via Settings screen. The constants
-// remain as "defaults" only; runtime values come from getSetting().
-// Allison 2026-05-15 18:07: "i do not need the brakes anymore there doesn't
-// need the brakes in between exercises." Default rest is now 0 (skip).
-// Range allows 0-180 in Settings — bump back up if she ever wants it.
-// (DEFAULT_REST_SEC and DEFAULT_PRE_COUNT_SEC now live in state.ts, with the settings getters.)
-
-// v48 · P4 (Sep 24 2026): getAutoSuggestEnabled() retired with its toggle.
-// v48 · P6 (Sep 24 2026): its SETTING_KEYS entry went too (DECISIONS §5: "no
-// evidence you ever turned it off. It turns off the one thing that carries the
-// app"); an old phone's stored value just sits unread.
-
-// Visible build version + date+TIME (shown in the home header as "vN · Mon D, YYYY · HH:MM")
-// so she can tell at a glance whether a new build actually loaded, and when.
-// Her rule (Jul 1 2026): version tags carry the TIME too, not just the date.
-// code-shape R1b (Sep 27 2026): the "version lives in 3 places" bug (decision
-// doc, "Hand-kept lists and versions") is fixed by making package.json's
-// "appVersion" the ONE source. scripts/build.mjs reads it and injects both
-// consts below via esbuild `--define`; sw.js reads the same value at runtime
-// from the generated dist/build-info.js. Bump appVersion in package.json —
-// never here, and never in sw.js.
-// v48 (Sep 24 2026): the home + workout redesign, P1-P8 on branch redesign-v48
-// (DECISIONS-v48-2026-09-24.md). Her words: "look at home ux ui and make it
-// better i feel like its a bit all over the place".
-// v49 (Sep 25 2026): the visual pass (SPEC-v49.md) + the two more machine
-// readings, calories and time ("every time put in").
-// v50 (Sep 25 2026): capacity & cycle (cycle.ts) + the jump list — the List
-// sheet, out-of-order Done, skip-count on the log — + mood (a second 1-10
-// chip row, pre-log and post-log, and its own gated phase table on the card).
-// v51 (Sep 25 2026): the Progress page in plain words — her words "the
-// period part is so confusing" -> "show gemini get some help". "Your cycle"
-// (plain-word phases, no jargon table, no dot chart, one collapsed "how
-// these are counted" row, quiet/sage period-log button) + the rest of the
-// page's "everything presentation" (combined elliptical line, compact
-// wall-sit sparkline).
-// v52 (Sep 26 2026, main/live): swing-Saturday home — the week tonight
-// counts toward (Week 4 on top, 8 days shown, A + C done) + Up next fix
-// (getTodaysPick / homeWeekOffset).
-// v52.1/v52.2 (Sep 26 2026, main/live): after a swung Saturday the new week
-// offers A, B and C; Round 2 Week 5 (A/B ride 10 -> 12 min); the plan
-// follows the week a session counts toward.
-// v53 (Sep 26 2026): merges main's swing-week + Week 5 fixes into this
-// branch's ride numbers (Next -> "from the machine" entry screen) + Cue ->
-// Tips (no program notes in what she reads) + W0's offline-list fix. Her
-// words: "dont go to next week till i approve".
-
-// HAND_ROUTINES retired 2026-05-15 — see archive/hand-routine-2026-05-15/.
+// Retired-feature notes (hand routine, the auto-suggest toggle, the year grid) and the
+// moved version / walk-credit / Ship 3-5 history: docs/history-notes.md and the module each now sits in.
 
 // The timer engine lives in timer.ts (step 11a). Its visibility fast-forward is
 // installed here, where the old inline listener ran.
 installTimerVisibilityHandler();
-
-// ---------- persistence ----------
-
-// ---------- Walk credit (Jul 4 2026) ----------
-// Her Jun-18 ask: "I sometimes just walk around my apartment, the walk can be
-// pretty slow that's OK — maybe even log/credit them." Born one-tap (v8),
-// upgraded the same night to a start/stop TRACKED walk (v10-v13): tap once to
-// start, sensors run, tap Done — still two taps total, within her capture
-// budget.
-// Walks are EXTRA CREDIT — they NEVER count toward the 3/week streak, so the
-// streak math stays honest. Supabase movement_log is the source of truth
-// (tandem rule); localStorage is the offline layer, same pattern as sessions.
-// v48 · P3 (Sep 24 2026): minutes only — the meters/steps counters are
-// archived (archive/walk-sensors-2026-09-24/). Fit is asked at Save instead.
-
-// Her Jul-4 idea: "click walking and you automatically start tracking until I
-// tell you I'm done." Start/stop timer — start timestamp lives in localStorage
-// so an in-progress walk survives closing the app (same trick as
-// ACTIVE_SESSION_KEY).
-// Same night, her calls: (1) "I don't care if the screen needs to stay open —
-// it should make the screen stay open" → wake lock + GPS distance for outdoor
-// walks; (2) "it can't track my steps at least?" → motion-sensor step estimate
-// for apartment laps, where GPS physically can't see her. Both stop the moment
-// the walk ends. Screen-locked = sensors pause = numbers undercount; the
-// wake lock exists precisely so that doesn't happen.
-// v48 · P3 (Sep 24 2026): a walk is MINUTES ONLY. The GPS distance and the
-// motion-sensor step counter are archived (archive/walk-sensors-2026-09-24/):
-// saved steps never matched Fit (3 steps in 29 min on Sep 4), GPS gave 16 m in
-// 12 min, and her words Sep 7 were "walk counter not important now". Fail-loud:
-// stop showing numbers that are wrong. The wake lock stays.
-// The v47 counters' keys — only cleared now (a phone may still hold them).
 
 // v48 · P3 (Sep 24 2026): minutes only — "Walking · 12 min", refreshed by the
 // 30 s tick. The step/km parts are gone with the sensors (archived).
@@ -462,13 +381,6 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   if (w.__wtRoundsSeed) appendRounds(w.__wtRoundsSeed);
 }
 
-// v53 (Sep 26 2026) — the history-edit screen's draft (renderHistoryEdit,
-// openHistoryEdit, saveHistoryEdit). Transient, module-level, like the cycle
-// fields above — the screen is reached by an explicit tap (Edit, on the
-// Session she's already looking at), not something an app close needs to
-// resume mid-edit. `state.historyDetailId` still says WHICH session; this is
-// only what she's typed so far.
-
 if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   const w = window as unknown as {
     __wtCyclePeriodPayload?: typeof cyclePeriodPayload;
@@ -494,67 +406,6 @@ function updateSyncIndicator(): void {
   el.textContent = syncIndicatorText();
   el.className = `sync-indicator sync-${state.syncStatus}`;
 }
-
-// ---------- formatting ----------
-
-// ---------- visual layer (group 3) ----------
-
-// ---------- Ship 3: data viz (2026-05-15) ----------
-//
-// Two inline-SVG additions: wall-sit sparkline on history rows, year-grid
-// heatmap on home. No external libraries, no build step changes — just SVG
-// strings rendered through the same template path as everything else.
-//
-// Design rules:
-//  - Sparkline: 80×20px, stroke at 1.5px in --accent-progress, last point a
-//    filled dot in --accent. Skip render if fewer than 2 wall-sit values
-//    exist (a flat line reads broken).
-//  - Year grid: 7 rows × N weeks. Cells colored --dot-a/--dot-b/--dot-c by
-//    workout letter, empty days have a 1px --border. Sparse data → scope to
-//    PROGRAM_START_DATE forward, not a full 52-week back-look.
-
-// 3-per-week target view (replaces the 7-cells-per-week year-grid).
-// Allison's words 2026-05-15 15:13 JDT: "i think theres too many sessions"
-// + "its 3 a week" + "go back to 3 per week." The year-grid showed 7 cells
-// per week which implied a daily target — but she's only doing 3/week. This
-// view shows ONE row per week × 3 slot pills, each filled with the workout
-// letter she actually did (or empty outline).
-
-// year-grid heatmap retired 2026-05-15 — Allison's call ("its 3 a week").
-// Full extracted code at archive/year-grid-2026-05-15/year-grid.archived.ts.
-
-// ---------- renders ----------
-
-// ---------- Ship 4: weekly review (2026-05-15) ----------
-//
-// A per-week debrief screen, reached from home's week card. The screen respects
-// `viewedWeekOffset`; v48 · P6 (Sep 24 2026) moved the ‹ › week arrows here
-// from home, so looking back lives on the one screen made for it.
-//
-// Design rules honored:
-//  - No paternalism. No motivational language. The screen reports the week;
-//    it doesn't judge it. (`feedback_no_capacity_paternalism.md` + CLAUDE.md
-//    agency rule.)
-//  - Voice rule: her words appear verbatim, never edited.
-//  - All data reads from existing loadLogs(). No new Supabase queries.
-//  - D-1 visual tokens only (no new color vars).
-
-// ---------- Ship 5: Progress screen (2026-05-15) ----------
-//
-// A read-only longitudinal view across her entire history. Reached from home's
-// Progress door. The screen reports numbers — it does NOT editorialize.
-//
-// Design rules honored (CLAUDE.md design rules + memory):
-//  - No motivational language. No "you should." No goals beyond the 3/week target.
-//  - No paternalism. The system reports state; it never tells.
-//  - Voice rule: charts show the data, not Claude's interpretation of it.
-//  - Archives untouched. Year-grid + hand-routine archives stay in archive/.
-//  - No new external libraries — every chart is hand-built inline SVG.
-//  - No new color tokens — only D-1 + cooler-look additions.
-//  - v48 · P6 (Sep 24 2026): chart ink is --accent-progress, never the sage
-//    that means "the primary action right now" (DECISIONS §5, one sage per screen).
-
-// ----- Per-card render helpers -----
 
 function navigationKey(): string {
   if (state.screen === 'workout') {

@@ -202,6 +202,14 @@ export function renderHistoryDetail(): string {
   `;
 }
 
+// (Moved here from app.ts, step 18. Technical note: the draft is NOT module-level; it is ui.historyEditDraft, shared with actions.ts saveHistoryEdit.)
+// v53 (Sep 26 2026) — the history-edit screen's draft (renderHistoryEdit,
+// openHistoryEdit, saveHistoryEdit). Transient, module-level, like the cycle
+// fields above — the screen is reached by an explicit tap (Edit, on the
+// Session she's already looking at), not something an app close needs to
+// resume mid-edit. `state.historyDetailId` still says WHICH session; this is
+// only what she's typed so far.
+
 // v53 (Sep 26 2026) — fix a past session's ride numbers. Her words: "I don't
 // know how to update this information but ok workout b week 4 did on level 5,
 // 10 min, .69 distant 62.4 calories... there have to be an easy way to enter

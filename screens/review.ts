@@ -97,6 +97,13 @@ function buildWeeklyTargetRows(logsIn: LogEntry[]): WeeklyTargetRow[] {
   return rows;
 }
 
+// 3-per-week target view (replaces the 7-cells-per-week year-grid).
+// Allison's words 2026-05-15 15:13 JDT: "i think theres too many sessions"
+// + "its 3 a week" + "go back to 3 per week." The year-grid showed 7 cells
+// per week which implied a daily target — but she's only doing 3/week. This
+// view shows ONE row per week × 3 slot pills, each filled with the workout
+// letter she actually did (or empty outline).
+
 // 3-per-week target view. One row per program week × 3 slot pills.
 // v48 · P4 (Sep 24 2026): lives at the bottom of Weekly review now, collapsed
 // as "Week by week ▸" (DECISIONS Q3 — her Aug 30 "consistency should be
@@ -529,6 +536,20 @@ function reviewCanGoBack(offset: number): boolean {
     firstProgramSaturday().getTime()
   );
 }
+
+// ---------- Ship 4: weekly review (2026-05-15) ----------
+//
+// A per-week debrief screen, reached from home's week card. The screen respects
+// `viewedWeekOffset`; v48 · P6 (Sep 24 2026) moved the ‹ › week arrows here
+// from home, so looking back lives on the one screen made for it.
+//
+// Design rules honored:
+//  - No paternalism. No motivational language. The screen reports the week;
+//    it doesn't judge it. (`feedback_no_capacity_paternalism.md` + CLAUDE.md
+//    agency rule.)
+//  - Voice rule: her words appear verbatim, never edited.
+//  - All data reads from existing loadLogs(). No new Supabase queries.
+//  - D-1 visual tokens only (no new color vars).
 
 export function renderWeeklyReview(): string {
   const offset = ui.viewedWeekOffset;

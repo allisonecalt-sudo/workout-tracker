@@ -166,16 +166,16 @@ each other, so the sub-views are NOT separate screens. The rule:
   `attachWorkoutHoldHandlers` (redo / set buttons / round two / finish here) ->
   `attachWorkoutCardHandlers`. The card handlers bind document-wide (the cool-down rows use the same
   data attributes), so they are not "the exercise step's" alone.
-- How the machine calls OUT. It needs three things that live elsewhere and that a screen cannot
-  import: `resetState` (app.ts), `beginPostLogClockTick` (screens/postlog.ts) and
-  `endPreLogClockTick` (screens/prelog.ts). app.ts hands them over ONCE at boot through
+- How the machine calls OUT. It needs three things that a screen cannot import: `resetState` (the code
+  is in the shared `session-resume.ts` since 17c-3; app.ts passes it through the hook), `beginPostLogClockTick`
+  (screens/postlog.ts) and `endPreLogClockTick` (screens/prelog.ts). app.ts hands them over ONCE at boot through
   `setWorkoutHooks()` (same pattern as `setActionHooks()` / `setWalkLineUpdater()` / `setRenderer()`);
   `workout.ts` calls them through private forwarding functions with the same names, and throws if used
   before the setter ran. The calls happen at exactly the points the old inline calls ran.
 - How `timer.ts` / `actions.ts` / `walk.ts` call INTO the machine: they do not. `startTimerCore` and
   `startPreCountdown` take their `onComplete` / `then` closure from the CALLER (the machine), and
   `startRestTimer` / `skipRest` only set state and `requestRender()`. Nothing to register.
-- `ui` fields: `stepListOpen` (app.ts resume / resetState + the machine) and `timerPipOpen` (timer.ts)
+- `ui` fields: `stepListOpen` (session-resume.ts applyActiveSnapshot / resetState + the machine) and `timerPipOpen` (timer.ts)
   stay on `ui`. `holdRedoInProgress` became module-local in `workout.ts` (17c; grep proof: no other file
   read or wrote it). The lane state lives in localStorage keys (state.ts); `rideNumbersOpen` / `rideFeel`
   are on `state`.

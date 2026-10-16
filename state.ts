@@ -412,6 +412,9 @@ export const PULL_LIMIT = 200;
 
 // ---------- settings ----------
 
+// Ship 6: timing defaults — overridable via Settings screen. The constants
+// remain as "defaults" only; runtime values come from getSetting().
+
 // Timing defaults. Allison 2026-05-15 18:07: "i do not need the brakes anymore
 // there doesn't need the brakes in between exercises." Default rest is now 0
 // (skip). Range allows 0-180 in Settings.

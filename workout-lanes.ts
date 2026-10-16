@@ -4,8 +4,8 @@
 // WHAT: the cardio lane CHOICE and its progress, kept in localStorage - choose / clear the
 // apartment lane, choose / clear the elliptical lane (and her typed ride numbers), the lane's
 // started / done-minutes keys, and captureLaneMinutesIfLeaving (the minutes she actually did).
-// WHY here: BOTH app.ts (the state machine: startWorkout, beginExercises, resetState, the step
-// advance) and screens/workout.ts (the lane handlers) call them, and a screen cannot import
+// WHY here: BOTH session-resume.ts (resetState / resume) and screens/workout.ts (the state machine:
+// beginExercises, the step advance, and the lane handlers) call them, and a screen cannot import
 // app.ts - so they live in the shared layer.
 // RULE: shared layer - imports state / ui / the pure modules, never app.ts or a screen, and
 // writes no DOM (localStorage is the app's storage layer, not the page; a redraw is the

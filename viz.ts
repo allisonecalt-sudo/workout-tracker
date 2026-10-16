@@ -31,6 +31,21 @@ export function getWallSitTrend(allLogs: LogEntry[], uptoLogId: string | null, m
   return wallSits.slice(wallSits.length - max);
 }
 
+// (Moved here from app.ts, step 18. The year-grid half of this block was retired the same day; see docs/history-notes.md.)
+// ---------- Ship 3: data viz (2026-05-15) ----------
+//
+// Two inline-SVG additions: wall-sit sparkline on history rows, year-grid
+// heatmap on home. No external libraries, no build step changes — just SVG
+// strings rendered through the same template path as everything else.
+//
+// Design rules:
+//  - Sparkline: 80×20px, stroke at 1.5px in --accent-progress, last point a
+//    filled dot in --accent. Skip render if fewer than 2 wall-sit values
+//    exist (a flat line reads broken).
+//  - Year grid: 7 rows × N weeks. Cells colored --dot-a/--dot-b/--dot-c by
+//    workout letter, empty days have a 1px --border. Sparse data → scope to
+//    PROGRAM_START_DATE forward, not a full 52-week back-look.
+
 // Inline SVG sparkline. Returns '' if fewer than 2 points (flat-line reads
 // broken). The current row's value is the rightmost point and gets a filled
 // dot. v48 · P6 (Sep 24 2026): that dot is --text, not sage — sage means "the

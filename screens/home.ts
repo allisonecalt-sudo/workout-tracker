@@ -7,7 +7,7 @@
 // WHY: app.ts was one 16k-line file; Home is the screen she opens most, so a Home fix should
 // read one file. No behaviour change, no version bump.
 // DECIDED (proof in the step-16 hand-off):
-//  - ui.viewingLastClosedWeek stays in ui.ts: resetState() in app.ts clears it, so it has a
+//  - ui.viewingLastClosedWeek stays in ui.ts: resetState() in session-resume.ts clears it, so it has a
 //    writer outside Home. ui.viewedWeekOffset stays: Weekly review writes it too. ui.staleSnapshot
 //    stays: actions.ts reads it. ui.detailOpenedAtScroll stays (screens/history.ts reads it back).
 //  - The shared [data-detail] click (day dots, Sessions rows, Done card) stays in app.ts: it
