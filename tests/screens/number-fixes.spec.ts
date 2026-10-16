@@ -280,3 +280,52 @@ test.describe('v62.3 F7 - "no numbers" only when there really are none', () => {
     );
   });
 });
+
+test.describe("v62.3 F8 - Claude's notes are not shown as her words", () => {
+  const CLAUDE_TEXT = 'Claude-logged: Oct 1 hike, 40 min, from the chat';
+  const seedNotes = async (page: Page): Promise<void> => {
+    await seedLogs(page, [
+      log('wk5-a', '2026-09-27T10:00:00+03:00', 'A', { sessionNote: CLAUDE_TEXT }),
+      log('wk5-b', '2026-09-28T10:00:00+03:00', 'B', { sessionNote: 'Knee fine' }),
+    ]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00');
+  };
+
+  test("Weekly review rows: Claude's note is plain behind a label; hers stays italic", async ({
+    page,
+  }) => {
+    await seedNotes(page);
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    const rows = page.locator('.weekly-review-sessions .session-row');
+    const claude = rows.filter({ hasText: 'Claude-logged' }).locator('.history-word');
+    await expect(claude.locator('.claude-note-label')).toHaveText("Claude's note:");
+    await expect(claude).toHaveCSS('font-style', 'normal');
+    const hers = rows.filter({ hasText: 'Knee fine' }).locator('.history-word');
+    await expect(hers).toHaveText('Knee fine');
+    await expect(hers).toHaveCSS('font-style', 'italic');
+  });
+
+  test("Sessions list and Session detail: the same label on Claude's note, none on hers", async ({
+    page,
+  }) => {
+    await seedNotes(page);
+    await page.goto('/');
+    await page.locator('#view-history').click();
+    const claudeWord = page
+      .locator('.session-row')
+      .filter({ hasText: 'Claude-logged' })
+      .locator('.history-word');
+    await expect(claudeWord.locator('.claude-note-label')).toHaveText("Claude's note:");
+    await expect(claudeWord).toHaveCSS('font-style', 'normal');
+    await expect(
+      page.locator('.session-row').filter({ hasText: 'Knee fine' }).locator('.claude-note-label')
+    ).toHaveCount(0);
+    // Session detail
+    await page.locator('.session-row').filter({ hasText: 'Claude-logged' }).click();
+    await expect(page.locator('#detail-session-note .claude-note-label')).toHaveText(
+      "Claude's note:"
+    );
+    await expect(page.locator('#detail-session-note')).toContainText(CLAUDE_TEXT);
+  });
+});

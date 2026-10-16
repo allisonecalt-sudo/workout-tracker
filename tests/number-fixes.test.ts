@@ -14,6 +14,7 @@ import {
   levelForLength,
   rideReadingsLine,
 } from '../number-rules';
+import { isClaudeNote } from '../cardio-notes';
 
 test.describe('v62.3 F1 - a per-week bar fills from the same numbers as its label', () => {
   test('3 / 4 fills 75%, not 2/3', () => {
@@ -86,5 +87,17 @@ test.describe('v62.3 F7 - "no numbers" only when there really are none', () => {
   test('none of time, km, kcal or level -> null (the caller says "no numbers")', () => {
     expect(rideReadingsLine({ timeSec: null, km: null, kcal: null, level: null })).toBeNull();
     expect(rideReadingsLine({ timeSec: 0, km: 0, kcal: 0, level: null })).toBeNull();
+  });
+});
+
+test.describe("v62.3 F8 - Claude's notes are not shown as her words", () => {
+  test("a note starting 'Claude-logged' is Claude's, case-insensitive, after trimming", () => {
+    expect(isClaudeNote('Claude-logged: Oct 1 hike')).toBe(true);
+    expect(isClaudeNote('  claude-LOGGED from the chat')).toBe(true);
+  });
+  test('her own notes are not', () => {
+    expect(isClaudeNote('Knee fine')).toBe(false);
+    expect(isClaudeNote('I told Claude-logged things')).toBe(false);
+    expect(isClaudeNote('')).toBe(false);
   });
 });

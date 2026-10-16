@@ -1456,6 +1456,18 @@ textarea:focus {
   margin-top: 2px;
 }
 
+/* v62.3 F8: a note Claude wrote is plain (not her italic quote), behind a label. */
+.history-word-claude {
+  font-style: normal;
+}
+
+.claude-note-label {
+  font-style: normal;
+  font-size: var(--font-meta);
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
 .history-meta {
   font-size: var(--font-meta);
   color: var(--text-dim);

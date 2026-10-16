@@ -184,3 +184,11 @@ export function rideTimeSec(l: LogEntry): number | null {
     ? l.ellipticalTimeSec
     : null;
 }
+
+// v62.3 F8 - a session note that starts with "Claude-logged" (case-insensitive,
+// after trimming) was written by Claude, not by her. Her voice rule: her words
+// outrank Claude's, so a screen never shows it in her italic quote style - it
+// shows it plain, behind a small "Claude's note:" label.
+export function isClaudeNote(text: string): boolean {
+  return /^claude-logged/i.test(text.trim());
+}

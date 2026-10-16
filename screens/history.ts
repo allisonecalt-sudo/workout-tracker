@@ -30,7 +30,12 @@ import {
 import { formatWorkoutTime } from '../timing.js';
 import { TIMING_LAUNCH_LABEL } from '../sync.js';
 import { planForLog } from '../week-clock.js';
-import { sessionWords, renderSessionRow, logsNewestFirst } from '../session-row.js';
+import {
+  sessionWordParts,
+  renderSessionRow,
+  logsNewestFirst,
+  CLAUDE_NOTE_LABEL,
+} from '../session-row.js';
 import type { LogEntry } from '../types.js';
 
 // ---------------------------------------------------------------------------
@@ -170,9 +175,14 @@ export function renderHistoryDetail(): string {
   }
   const arms = armFeelText(log.armFeel);
   if (arms) rows.push(detailRow('Arms', escapeHtml(arms)));
-  const words = sessionWords(log);
-  if (words) {
-    rows.push(detailRow('Note', escapeHtml(words), { stack: true, id: 'detail-session-note' }));
+  // v62.3 F8: a part Claude wrote shows plain behind "Claude's note:", never
+  // as if she said it; her own parts are unchanged.
+  const wordParts = sessionWordParts(log);
+  if (wordParts.length > 0) {
+    const noteHtml = wordParts
+      .map((p) => (p.claude ? `${CLAUDE_NOTE_LABEL} ${escapeHtml(p.text)}` : escapeHtml(p.text)))
+      .join('\n');
+    rows.push(detailRow('Note', noteHtml, { stack: true, id: 'detail-session-note' }));
   }
   const system = splitNotes(log.notes).system;
   if (system.length > 0) {
