@@ -19,6 +19,7 @@ import {
   WW_ELLIPTICAL_PULSE_KEY,
   WW_ELLIPTICAL_TIME_KEY,
   WW_LANE_DONE_MIN_KEY,
+  WW_LANE_STARTED_KEY,
   loadLogs,
 } from './state.js';
 
@@ -149,6 +150,12 @@ export function parseKcalReading(raw: string): number | null {
 // there's no countdown left for a live cue to derive from; removed rather
 // than left dead (RidePhase/ridePhase/RIDE_LINE/cueRidePhase, and its one
 // call site in the tick loop below).
+// v62.3 F9: did the lane's timer ever start this session? (A started lane with no
+// stored minutes means the app does not know them - never the prescription.)
+export function laneWasStarted(): boolean {
+  return localStorage.getItem(WW_LANE_STARTED_KEY) !== null;
+}
+
 export function laneDoneMinutes(): number | null {
   const n = Number(localStorage.getItem(WW_LANE_DONE_MIN_KEY) ?? '');
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null;

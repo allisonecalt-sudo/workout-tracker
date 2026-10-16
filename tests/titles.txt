@@ -846,6 +846,11 @@ v62.3 F8 - Claude's notes are not shown as her words › Sessions list and Sessi
 v62.3 F8 - Claude's notes are not shown as her words › Weekly review rows: Claude's note is plain behind a label; hers stays italic
 v62.3 F8 - Claude's notes are not shown as her words › a note starting 'Claude-logged' is Claude's, case-insensitive, after trimming
 v62.3 F8 - Claude's notes are not shown as her words › her own notes are not
+v62.3 F9 - apartment cardio after a reload saves what she rode › "Log what I did" after a reload also saves the minutes she rode
+v62.3 F9 - apartment cardio after a reload saves what she rode › 45 s ridden, reload, finish: cardio_minutes is 1, not the full 10
+v62.3 F9 - apartment cardio after a reload saves what she rode › a block that ran past its end before the reload still saves the full block
+v62.3 F9 - apartment cardio after a reload saves what she rode › never started the timer: the prescription stands (unchanged)
+v62.3 F9 - apartment cardio after a reload saves what she rode › paused time inside the block is not counted: 150 s ridden, 300 s paused, reload, resume, finish -> 3 min
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

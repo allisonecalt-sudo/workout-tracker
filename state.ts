@@ -402,6 +402,9 @@ export const WW_ELLIPTICAL_TIME_KEY = 'workout-tracker:ww-elliptical-time-sec';
 export const WW_ELLIPTICAL_KCAL_KEY = 'workout-tracker:ww-elliptical-kcal';
 export const WW_LANE_STARTED_KEY = 'workout-tracker:ww-lane-started';
 export const WW_LANE_DONE_MIN_KEY = 'workout-tracker:ww-lane-done-min';
+// v62.3 F9: state.pausedMs at the moment the lane timer started - so a reload mid-block can
+// still tell how much of the time since then was paused.
+export const WW_LANE_PAUSE_BASE_KEY = 'workout-tracker:ww-lane-pause-base';
 export const LAST_DONE_KEY = 'workout-tracker:last-done';
 export const CYCLE_STORAGE_KEY = 'workout-tracker:cycle-periods';
 export const WEEK_MOVES_STORAGE_KEY = 'workout-tracker:week-moves';

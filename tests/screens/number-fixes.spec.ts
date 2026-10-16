@@ -6,7 +6,7 @@
 // first ride, ...). The matching pure-logic tests live in
 // tests/number-fixes.test.ts.
 import { test, expect, type Page } from '@playwright/test';
-import { setupPage, mockDate } from '../helpers';
+import { setupPage, mockDate, movableClock, advanceClock } from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -327,5 +327,126 @@ test.describe("v62.3 F8 - Claude's notes are not shown as her words", () => {
       "Claude's note:"
     );
     await expect(page.locator('#detail-session-note')).toContainText(CLAUDE_TEXT);
+  });
+});
+
+// F9 - apartment cardio, reload mid-block. She rode 45 s of the 10-minute block,
+// the app reloaded (a fresh page on the same storage, its clock 45 s on), she
+// finished the session: the saved minutes are what the timer would have shown
+// (1 min for 45 s), never the full block.
+test.describe('v62.3 F9 - apartment cardio after a reload saves what she rode', () => {
+  const START_ISO = '2026-09-08T10:00:00.000Z';
+
+  const startApartmentBlock = async (page: Page): Promise<void> => {
+    await movableClock(page, START_ISO, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await page.locator('#ww-apartment').click();
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.timer-pip-time')).toHaveText('10:00');
+  };
+
+  const finishAndRead = async (page: Page): Promise<Row> => {
+    for (let i = 0; i < 40; i++) {
+      if (await page.locator('text=Quick log').isVisible()) break;
+      const next = page.locator('#next, #start-round-2, #ww-skip');
+      if (await next.isVisible()) await next.click();
+      else break;
+    }
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await page.locator('#save-log').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    const logs = (await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]')
+    )) as Row[];
+    expect(logs.length).toBe(1);
+    return logs[0]!;
+  };
+
+  test('45 s ridden, reload, finish: cardio_minutes is 1, not the full 10', async ({
+    page,
+    context,
+  }) => {
+    await startApartmentBlock(page);
+    await advanceClock(page, 45_000);
+    await expect(page.locator('.timer-pip-time')).toHaveText('9:15');
+
+    const reopened = await context.newPage();
+    await movableClock(reopened, '2026-09-08T10:00:45.000Z', { skipPreCountdown: true });
+    await reopened.goto('/');
+    await expect(reopened.locator('.exercise-name')).toHaveText('Apartment cardio');
+    // The step does not claim the whole block is done.
+    await expect(reopened.locator('.timer-done')).not.toContainText('10 min');
+
+    const saved = await finishAndRead(reopened);
+    expect(saved['cardioLane']).toBe('apartment');
+    expect(saved['cardioMinutes']).toBe(1);
+  });
+
+  test('a block that ran past its end before the reload still saves the full block', async ({
+    page,
+    context,
+  }) => {
+    await startApartmentBlock(page);
+    await advanceClock(page, 11 * 60_000);
+    const reopened = await context.newPage();
+    await movableClock(reopened, '2026-09-08T10:11:00.000Z', { skipPreCountdown: true });
+    await reopened.goto('/');
+    await expect(reopened.locator('.exercise-name')).toHaveText('Apartment cardio');
+    const saved = await finishAndRead(reopened);
+    expect(saved['cardioMinutes']).toBe(10);
+  });
+
+  test('paused time inside the block is not counted: 150 s ridden, 300 s paused, reload, resume, finish -> 3 min', async ({
+    page,
+    context,
+  }) => {
+    await startApartmentBlock(page);
+    await advanceClock(page, 150_000);
+    await expect(page.locator('.timer-pip-time')).toHaveText('7:30');
+    await page.locator('#pause-toggle').click();
+    await expect(page.locator('#paused-overlay')).toBeVisible();
+    await advanceClock(page, 300_000);
+
+    const reopened = await context.newPage();
+    await movableClock(reopened, '2026-09-08T10:07:30.000Z', { skipPreCountdown: true });
+    await reopened.goto('/');
+    await reopened.locator('#pause-resume').click();
+    await expect(reopened.locator('.exercise-name')).toHaveText('Apartment cardio');
+    const saved = await finishAndRead(reopened);
+    // 450 s of wall clock since the start, 300 s of it paused -> 150 s -> 2.5 -> 3 min.
+    expect(saved['cardioMinutes']).toBe(3);
+  });
+
+  test('"Log what I did" after a reload also saves the minutes she rode', async ({
+    page,
+    context,
+  }) => {
+    await startApartmentBlock(page);
+    await advanceClock(page, 45_000);
+    const reopened = await context.newPage();
+    await movableClock(reopened, '2026-09-08T10:00:45.000Z', { skipPreCountdown: true });
+    await reopened.goto('/');
+    await expect(reopened.locator('.exercise-name')).toHaveText('Apartment cardio');
+    await reopened.locator('#quit').click();
+    await reopened.locator('#quit-log').click();
+    await expect(reopened.locator('text=Quick log')).toBeVisible();
+    await reopened.locator('#save-log').click();
+    await expect(reopened.locator('.home-header h1')).toBeVisible();
+    const logs = (await reopened.evaluate(() =>
+      JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]')
+    )) as Row[];
+    expect(logs[0]!['cardioMinutes']).toBe(1);
+  });
+
+  test('never started the timer: the prescription stands (unchanged)', async ({ page }) => {
+    await movableClock(page, START_ISO, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await page.locator('#ww-apartment').click();
+    const saved = await finishAndRead(page);
+    expect(saved['cardioMinutes']).toBe(10);
   });
 });

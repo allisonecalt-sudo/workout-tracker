@@ -57,6 +57,7 @@ import { pushWeekMove, deleteWeekMove, weekMoveKey } from './sync-week-moves.js'
 import { pushWalk, fetchFitSteps } from './sync-movement.js';
 import {
   laneDoneMinutes,
+  laneWasStarted,
   ellipticalMinutes,
   apartmentCardioMinutes,
   ellipticalTimeSec,
@@ -302,7 +303,9 @@ export async function saveCompletedSession(): Promise<void> {
         ? Math.round(typedEllipticalSec / 60)
         : null
       : cardioLane === 'apartment'
-        ? (laneDone ?? prescribedApartment)
+        ? // v62.3 F9: a started timer with no stored minutes means the app does not know
+          // them (a reload it could not recover): save nothing, never the full block.
+          (laneDone ?? (laneWasStarted() ? null : prescribedApartment))
         : cardioLane === 'walk' && ui.workoutWalk
           ? ui.workoutWalk.minutes
           : null;

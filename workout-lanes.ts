@@ -22,6 +22,7 @@ import {
   WW_ELLIPTICAL_KCAL_KEY,
   WW_LANE_STARTED_KEY,
   WW_LANE_DONE_MIN_KEY,
+  WW_LANE_PAUSE_BASE_KEY,
 } from './state.js';
 import { ui } from './ui.js';
 import { laneDoneMinutes } from './cardio-readings.js';
@@ -62,6 +63,45 @@ export function chooseElliptical(minutes: number): void {
 // or the full block if it ran out. Never started the timer → nothing stored,
 // and the prescription stands (she may have used the machine's own clock).
 
+// v62.3 F9: the lane timer starts. The start time is a wall-clock instant (it survives a
+// reload, unlike the countdown), and the session's paused total at that instant is kept
+// with it, so the minutes can be worked out again later without the timer.
+export function markLaneStarted(): void {
+  localStorage.setItem(WW_LANE_STARTED_KEY, String(Date.now()));
+  localStorage.setItem(WW_LANE_PAUSE_BASE_KEY, String(state.pausedMs));
+  localStorage.removeItem(WW_LANE_DONE_MIN_KEY); // a fresh ride, fresh minutes
+}
+
+// v62.3 F9: seconds the lane timer would have run by now if the app had never reloaded:
+// wall clock since it started, minus the time the session was paused since then (a pause
+// still open counts only up to the moment it began). null = the app cannot know (no start
+// time, or the lane started in an older build with a pause already on the books) - the
+// caller then stores nothing rather than the full block.
+export function laneElapsedSec(nowMs: number = Date.now()): number | null {
+  const started = Number(localStorage.getItem(WW_LANE_STARTED_KEY));
+  if (!Number.isFinite(started) || started <= 0) return null;
+  const baseRaw = localStorage.getItem(WW_LANE_PAUSE_BASE_KEY);
+  let base = 0;
+  if (baseRaw !== null) {
+    base = Number(baseRaw);
+    if (!Number.isFinite(base)) return null;
+  } else if (state.pausedMs > 0 || state.pausedAt !== null) {
+    return null;
+  }
+  const pausedInLane = state.pausedMs - base;
+  if (pausedInLane < 0) return null;
+  const end = state.pausedAt !== null ? state.pausedAt : nowMs;
+  return Math.max(0, (end - started - pausedInLane) / 1000);
+}
+
+// The minutes the lane timer shows for a `blockSec` block: elapsed, capped at the block,
+// at least 1 (the same rounding captureLaneMinutesIfLeaving always used). null = not known.
+export function laneMinutesNow(blockSec: number): number | null {
+  const elapsed = laneElapsedSec();
+  if (elapsed === null) return null;
+  return Math.max(1, Math.round(Math.min(blockSec, elapsed) / 60));
+}
+
 export function captureLaneMinutesIfLeaving(): void {
   const ex = getCurrentExercise();
   if (!ex || !isIndoorLane(ex.name) || !ex.durationSec) return;
@@ -72,13 +112,20 @@ export function captureLaneMinutesIfLeaving(): void {
   const t = ui.activeTimer;
   const running = t !== null && t.kind === 'timed-exercise';
   if (!running && laneDoneMinutes() !== null) return;
+  if (!running) {
+    // v62.3 F9: no live timer and nothing stored = the timer ran out, OR the app reloaded
+    // mid-block (the countdown is never restored). The old "0 left" arithmetic read both as
+    // a full block, so 45 s ridden + a reload saved 10 minutes. The start time is still
+    // here: the minutes are what the timer would show had it never reloaded, capped at the
+    // block (a block that really ran out still gives the whole block). Unknown -> nothing.
+    const minutes = laneMinutesNow(ex.durationSec);
+    if (minutes !== null) localStorage.setItem(WW_LANE_DONE_MIN_KEY, String(minutes));
+    return;
+  }
   // Live: read the clock itself, not the last rendered second (a tap can land
-  // before the next frame). Idle: 0 left once it ran out.
-  // Paused: the countdown is frozen at the rendered second.
+  // before the next frame). Paused: the countdown is frozen at the rendered second.
   const leftSec =
-    running && state.pausedAt === null
-      ? Math.max(0, (t.endsAt - Date.now()) / 1000)
-      : state.timerSeconds;
+    state.pausedAt === null ? Math.max(0, (t.endsAt - Date.now()) / 1000) : state.timerSeconds;
   const doneSec = Math.max(0, ex.durationSec - leftSec);
   localStorage.setItem(WW_LANE_DONE_MIN_KEY, String(Math.max(1, Math.round(doneSec / 60))));
 }
@@ -86,6 +133,7 @@ export function captureLaneMinutesIfLeaving(): void {
 export function clearLaneProgress(): void {
   localStorage.removeItem(WW_LANE_STARTED_KEY);
   localStorage.removeItem(WW_LANE_DONE_MIN_KEY);
+  localStorage.removeItem(WW_LANE_PAUSE_BASE_KEY);
 }
 
 export function clearElliptical(): void {

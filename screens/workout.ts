@@ -40,7 +40,6 @@ import {
   state,
   loadLogs,
   WW_LANE_STARTED_KEY,
-  WW_LANE_DONE_MIN_KEY,
   WW_ELLIPTICAL_LEVEL_KEY,
   WW_ELLIPTICAL_KM_KEY,
   WW_ELLIPTICAL_PULSE_KEY,
@@ -78,6 +77,8 @@ import {
   chooseElliptical,
   clearElliptical,
   captureLaneMinutesIfLeaving,
+  markLaneStarted,
+  laneMinutesNow,
 } from '../workout-lanes.js';
 import { SAFETY_LINE, type Exercise, type Workout, type Phase } from '../program.js';
 import { saveActiveSession } from '../actions.js';
@@ -1136,10 +1137,12 @@ function renderLaneTimerCard(ex: Exercise, laneRan: boolean, under = ''): string
     // instead, and Stop lives in the pip's sheet (same #stop-lane id/handler).
     return '';
   } else if (laneRan) {
-    const mins = laneDoneMinutes() ?? Math.round((ex.durationSec ?? 0) / 60);
+    // v62.3 F9: with no stored minutes (the app reloaded mid-block) it shows what the
+    // timer would show - never the whole block - or says it does not know.
+    const mins = laneDoneMinutes() ?? laneMinutesNow(ex.durationSec ?? 0);
     inner = `
       <div class="timer-label">Done</div>
-      <div class="timer-done timer-held">✓ ${mins} min done</div>`;
+      <div class="timer-done timer-held">${mins !== null ? `✓ ${mins} min done` : '✓ done · time not known'}</div>`;
   } else {
     inner = `
       <div class="timer-label">Ready</div>
@@ -2026,8 +2029,7 @@ function startTimedExercise(): void {
       state.wallSitStartedAt = Date.now();
     }
     if (isIndoorLane(exerciseName)) {
-      localStorage.setItem(WW_LANE_STARTED_KEY, String(Date.now()));
-      localStorage.removeItem(WW_LANE_DONE_MIN_KEY); // a fresh ride, fresh minutes
+      markLaneStarted(); // v62.3 F9: start time + the paused total at that instant
       // v48 · P3: the setup expander never reopens after the ride — forget any
       // before-ride open/close so the after-ride face starts it closed.
       delete state.openSections[`${ELLIPTICAL_NAME}::setup`];
