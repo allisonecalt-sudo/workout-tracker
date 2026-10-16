@@ -23,6 +23,7 @@ import { requestRender } from '../bus.js';
 import { bindClick } from '../dom.js';
 import { loadLogs } from '../state.js';
 import { escapeHtml, formatMonthDay, formatWeekRange } from '../format.js';
+import { shownSessionCount } from '../number-rules.js';
 import { formatDate, formatWeekdayDate } from '../dates.js';
 import {
   getProgramWeek,
@@ -559,6 +560,14 @@ export function renderWeeklyReview(): string {
   const sessions = view.sessions;
   const totals = computeWeekTotals(sessions);
   const prev = computeWeekTotals(view.prevSessions);
+  // v62.3 F2: the "vs previous week" box counts sessions the way the header
+  // does (D counted in on a completion-model week) - both weeks, same rule.
+  const prevView = reviewWeekViewAt(offset + 1);
+  const prevShownCount = shownSessionCount(
+    prev.count,
+    prevView.countsD,
+    prevView.extraSessions.length
+  );
 
   // The ‹ › arrows sit around the title (moved from home, DECISIONS §5). The
   // live week has nothing after it, so › is hidden — not a dead button.
@@ -579,7 +588,7 @@ export function renderWeeklyReview(): string {
   // required, exactly as the week itself closes.
   const sessionCountClass = totals.count >= 3 ? 'weekly-review-count-met' : 'weekly-review-count';
   const reviewDenom = view.countsD ? 4 : 3;
-  const reviewShownCount = totals.count + (view.countsD && view.extraSessions.length > 0 ? 1 : 0);
+  const reviewShownCount = shownSessionCount(totals.count, view.countsD, view.extraSessions.length);
   const subtitle = view.skippedLabel
     ? ''
     : `<div class="weekly-review-subtitle">
@@ -687,8 +696,8 @@ export function renderWeeklyReview(): string {
           <div class="weekly-review-delta-grid">
             <div class="weekly-review-delta-row">
               <span class="weekly-review-delta-lbl">sessions</span>
-              <span class="weekly-review-delta-vals">${prev.count} → ${totals.count}</span>
-              ${renderDelta(totals.count, prev.count, 'higher-better')}
+              <span class="weekly-review-delta-vals">${prevShownCount} → ${reviewShownCount}</span>
+              ${renderDelta(reviewShownCount, prevShownCount, 'higher-better')}
             </div>
             ${
               // T2 fix r1 (Sep 27 2026, checker's "must"): only compare

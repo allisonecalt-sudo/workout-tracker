@@ -59,3 +59,28 @@ test.describe('v62.3 F1 - per-week bar fill = its label', () => {
     await expect(wk5.locator('.spw-fill')).toHaveAttribute('style', 'width:75%');
   });
 });
+
+test.describe('v62.3 F2 - the weekly review counts sessions one way', () => {
+  test('a closed Week 5 with a D ride: header "4 of 4" and the "vs previous week" box says 3 -> 4, not 3 -> 3', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      log('wk4-a', '2026-09-24T15:56:00+03:00', 'A'),
+      log('wk4-c', '2026-09-25T11:53:00+03:00', 'C'),
+      log('wk4-b', '2026-09-26T19:14:51+03:00', 'B'),
+      log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
+      log('wk5-d', '2026-09-28T12:00:00+03:00', 'D'),
+      log('wk5-b', '2026-09-28T14:00:00+03:00', 'B'),
+      log('wk5-c', '2026-09-29T10:00:00+03:00', 'C'), // closes Week 5
+    ]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00'); // Wed, mid-gap
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await expect(page.locator('.review-title')).toContainText('Week 5');
+    await expect(page.locator('.weekly-review-subtitle')).toContainText('4 of 4');
+    const sessionsRow = page
+      .locator('.weekly-review-delta-row')
+      .filter({ has: page.locator('.weekly-review-delta-lbl:text-is("sessions")') });
+    await expect(sessionsRow.locator('.weekly-review-delta-vals')).toHaveText('3 → 4');
+  });
+});
