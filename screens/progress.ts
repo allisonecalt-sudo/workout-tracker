@@ -57,6 +57,7 @@ import {
 } from '../program-week.js';
 import { honestWallSitLogs } from '../viz.js';
 import { BACK_PAIN_STOP_AT } from '../session-row.js';
+import { perWeekFillPct } from '../number-rules.js';
 
 function getFutureWeekPlans(date?: Date): WeekPlan[] {
   return date ? programFutureWeekPlans(date) : programFutureWeekPlansAfter(getWeekPlan());
@@ -496,13 +497,14 @@ function renderPerWeekRow(r: PerWeekRow): string {
   if (r.skipped || r.held) {
     return `<div class="spw-row spw-row-skipped"><span class="spw-label">${escapeHtml(r.label)}</span><span class="spw-skip">—</span></div>`;
   }
-  const pct = Math.round(Math.min(1, r.value / SESSIONS_PER_WEEK_TARGET) * 100);
   const suffix = r.suffix ? ` · ${escapeHtml(r.suffix)}` : '';
   // v61 fix pass (must #3): displayValue/displayTarget override the shown
-  // count on a completion-model row (D counted in, "/ 4") — the bar's pct
-  // above is untouched, still r.value/SESSIONS_PER_WEEK_TARGET (A/B/C only).
+  // count on a completion-model row (D counted in, "/ 4").
+  // v62.3 F1: the bar fills from the SAME two numbers as that label (it used
+  // to stay on A/B/C over 3, so "3 / 4" drew 2/3).
   const shownValue = r.displayValue ?? r.value;
   const shownTarget = r.displayTarget ?? SESSIONS_PER_WEEK_TARGET;
+  const pct = perWeekFillPct(shownValue, shownTarget);
   return `
     <div class="spw-row${r.isCurrent ? ' spw-row-current' : ''}">
       <span class="spw-label">${escapeHtml(r.label)}</span>

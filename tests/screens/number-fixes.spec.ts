@@ -1,0 +1,61 @@
+// tests/screens/number-fixes.spec.ts - v62.3 "make every number true" (Oct 16 2026).
+//
+// One describe per fix (F1..F9): a number that two screens (or a label and its
+// bar) used to disagree about is checked on the real screens, with her real
+// shapes seeded (Week 4 legacy A/B/C, Week 5 moved on with a D ride, the Sep 24
+// first ride, ...). The matching pure-logic tests live in
+// tests/number-fixes.test.ts.
+import { test, expect, type Page } from '@playwright/test';
+import { setupPage, mockDate } from '../helpers';
+
+test.beforeEach(async ({ page, context }) => setupPage(page, context));
+
+type Row = Record<string, unknown>;
+
+const seedLogs = async (page: Page, logs: Row[]): Promise<void> => {
+  await page.addInitScript((rows) => {
+    window.localStorage.setItem('workout-tracker:logs', JSON.stringify(rows));
+  }, logs);
+};
+
+const log = (id: string, date: string, workout: 'A' | 'B' | 'C' | 'D', extra: Row = {}): Row => ({
+  id,
+  date,
+  workout,
+  capacityBefore: 6,
+  capacityAfter: 7,
+  wallSitSec: 0,
+  backPain: 0,
+  word: '',
+  synced: true,
+  ...extra,
+});
+
+// Her Week 5 shape on Wed Sep 30 (before the Oct 3 hand-over the Sick weeks
+// move): Week 4 closed legacy (A, C, B), Week 5 = A + B + a D ride ->
+// "3 / 4" with the D counted in; A/B/C alone = 2.
+const week5OpenWithD = async (page: Page): Promise<void> => {
+  await seedLogs(page, [
+    log('wk4-a', '2026-09-24T15:56:00+03:00', 'A'),
+    log('wk4-c', '2026-09-25T11:53:00+03:00', 'C'),
+    log('wk4-b', '2026-09-26T19:14:51+03:00', 'B'),
+    log('wk5-a', '2026-09-27T10:00:00+03:00', 'A'),
+    log('wk5-b', '2026-09-28T10:00:00+03:00', 'B'),
+    log('wk5-d', '2026-09-29T10:00:00+03:00', 'D'),
+  ]);
+  await mockDate(page, '2026-09-30T08:00:00+03:00');
+};
+
+test.describe('v62.3 F1 - per-week bar fill = its label', () => {
+  test('Week 5 labelled "3 / 4" fills 75%, not 2/3', async ({ page }) => {
+    await week5OpenWithD(page);
+    await page.goto('/');
+    await page.locator('#open-progress-link').click();
+    const wk5 = page
+      .locator('.spw-card')
+      .locator(':scope > .spw-rows > .spw-row')
+      .filter({ has: page.locator('.spw-label:text-is("wk 5")') });
+    await expect(wk5.locator('.spw-count')).toHaveText('3 / 4 · open');
+    await expect(wk5.locator('.spw-fill')).toHaveAttribute('style', 'width:75%');
+  });
+});
