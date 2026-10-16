@@ -52,3 +52,14 @@ export function sinceText(iso: string): string {
 export function sinceTag(iso: string): string {
   return `<span class="sn-since">${sinceText(iso)}</span>`;
 }
+
+// F5 - an elliptical level only means something next to how long the ride was:
+// "level 5 -> 3" compared a 10-minute ride with a 12-minute one and read as
+// going backwards. ONE phrase for both Start -> Now cards: "level 5 for 10 min"
+// (minutes = that ride's console time, rounded the way the card always rounded
+// it). A ride with no time recorded shows just "level 5"; no level, no phrase.
+export function levelForLength(level: number | null, timeSec: number | null): string | null {
+  if (level === null) return null;
+  const minutes = timeSec !== null && timeSec > 0 ? Math.round(timeSec / 60) : 0;
+  return minutes > 0 ? `level ${level} for ${minutes} min` : `level ${level}`;
+}

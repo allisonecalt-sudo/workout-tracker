@@ -11,6 +11,7 @@ import {
   sessionCounts,
   dRideTag,
   sinceText,
+  levelForLength,
 } from '../number-rules';
 
 test.describe('v62.3 F1 - a per-week bar fills from the same numbers as its label', () => {
@@ -52,5 +53,17 @@ test.describe('v62.3 F4 - each Start -> Now row says its own "since"', () => {
   test('the format is "since Sep 24" (the existing month-day form)', () => {
     expect(sinceText('2026-09-24T15:56:00+03:00')).toBe('since Sep 24');
     expect(sinceText('2026-05-02T10:00:00+03:00')).toBe('since May 2');
+  });
+});
+
+test.describe('v62.3 F5 - the elliptical level shows the ride length at each end', () => {
+  test('her rides: level 5 for 10 min, level 3 for 12 min (minutes rounded from console seconds)', () => {
+    expect(levelForLength(5, 602)).toBe('level 5 for 10 min');
+    expect(levelForLength(3, 720)).toBe('level 3 for 12 min');
+  });
+  test('a ride with no time recorded shows just the level; no level, no phrase', () => {
+    expect(levelForLength(5, null)).toBe('level 5');
+    expect(levelForLength(5, 0)).toBe('level 5');
+    expect(levelForLength(null, 600)).toBeNull();
   });
 });

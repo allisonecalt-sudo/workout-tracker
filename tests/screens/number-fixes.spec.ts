@@ -169,3 +169,29 @@ test.describe('v62.3 F4 - each Start -> Now row says its own "since"', () => {
     await expect(card.locator('.progress-card-meta')).toHaveCount(0);
   });
 });
+
+test.describe('v62.3 F5 - the elliptical level shows the ride length at each end', () => {
+  test('Home: "level 5 for 10 min → level 3 for 12 min", not a bare "5 → 3"', async ({ page }) => {
+    await startNowShape(page);
+    await page.goto('/');
+    const row = page
+      .locator('.home-startnow-card .start-now-row')
+      .filter({ has: page.locator('.start-now-lbl:text-is("Elliptical level")') });
+    await expect(row.locator('.sn-first')).toHaveText('level 5 for 10 min');
+    await expect(row.locator('.sn-last')).toHaveText('level 3 for 12 min');
+  });
+
+  test('Progress: the same phrase, then only the latest km (no separate "in N min")', async ({
+    page,
+  }) => {
+    await startNowShape(page);
+    await page.goto('/');
+    await page.locator('#open-progress-link').click();
+    const val = page
+      .locator('.start-now-card .start-now-row')
+      .filter({ has: page.locator('.start-now-lbl:text-is("Elliptical")') })
+      .locator('.start-now-val');
+    await expect(val).toContainText('level 5 for 10 min → level 3 for 12 min · 0.83 km');
+    await expect(val).not.toContainText('in 12 min');
+  });
+});

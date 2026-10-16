@@ -49,7 +49,7 @@ import {
   cyclePeriodsForLogic,
 } from '../state.js';
 import { escapeHtml, formatWeekRange } from '../format.js';
-import { sessionCounts, dRideTag, sinceTag } from '../number-rules.js';
+import { sessionCounts, dRideTag, sinceTag, levelForLength } from '../number-rules.js';
 import { rideLevel, rideKm, rideTimeSec, ellipticalRideRecords } from '../cardio-notes.js';
 import { formatDate, formatWeekdayDate, localIsoDate, formatDateLong } from '../dates.js';
 import { requestRender } from '../bus.js';
@@ -1170,6 +1170,11 @@ function renderHomeStartNowCard(logs: LogEntry[]): string {
   if (!first) return '';
 
   const levels = chrono.map(rideLevel).filter((v): v is number => v !== null);
+  // v62.3 F5: with two or more rides, each end names its ride length too
+  // ("level 5 for 10 min → level 3 for 12 min"), never a bare level pair.
+  const levelLogs = chrono.filter((l) => rideLevel(l) !== null);
+  const endPhrase = (l: LogEntry | undefined): string =>
+    l ? (levelForLength(rideLevel(l), rideTimeSec(l)) ?? '') : '';
   // v49 · look fix (Sep 25 2026): "first ride tonight" was shown whenever no
   // log had a level column — true even after a real ride (level null on
   // purpose), on a B day (no ride tonight at all), and in the morning. Now it
@@ -1184,7 +1189,7 @@ function renderHomeStartNowCard(logs: LogEntry[]): string {
     levels.length === 1
       ? `<span class="sn-last">${levels[0]}</span>`
       : levels.length > 1
-        ? `<span class="sn-first">${levels[0]}</span> → <span class="sn-last">${levels[levels.length - 1]}</span>`
+        ? `<span class="sn-first">${endPhrase(levelLogs[0])}</span> → <span class="sn-last">${endPhrase(levelLogs[levelLogs.length - 1])}</span>`
         : !hasRiddenBefore && picksRideToday
           ? `<span class="sn-first">${ELLIPTICAL_START_LEVEL}</span> → <span class="sn-last">first ride tonight</span>`
           : `<span class="sn-last">level not recorded yet</span>`;

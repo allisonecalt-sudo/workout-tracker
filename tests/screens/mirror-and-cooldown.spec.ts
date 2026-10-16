@@ -356,7 +356,7 @@ test.describe('v48 P6 mirror', () => {
     // v51 · the old separate "Elliptical level" / "Elliptical km" rows are
     // now one combined "Elliptical" line (level 3 -> 7; no km seeded here).
     await expect(sn.locator('.start-now-row').filter({ hasText: 'Elliptical' })).toContainText(
-      'level 3 → 7'
+      'level 3 → level 7' // v62.3 F5: each end is its own phrase (no ride time seeded, so just the level)
     );
     // v49 · look fix (Sep 25 2026): every wallSitSec here predates the v45
     // real-timing capture (Sep 24), so honestWallSitLogs() excludes all of

@@ -57,7 +57,13 @@ import {
 } from '../program-week.js';
 import { honestWallSitLogs } from '../viz.js';
 import { BACK_PAIN_STOP_AT } from '../session-row.js';
-import { perWeekFillPct, sessionCounts, dRideTag, sinceTag } from '../number-rules.js';
+import {
+  perWeekFillPct,
+  sessionCounts,
+  dRideTag,
+  sinceTag,
+  levelForLength,
+} from '../number-rules.js';
 
 function getFutureWeekPlans(date?: Date): WeekPlan[] {
   return date ? programFutureWeekPlans(date) : programFutureWeekPlansAfter(getWeekPlan());
@@ -317,13 +323,18 @@ function renderStartNowCard(logs: LogEntry[]): string {
     const lastRide = rides[rides.length - 1]!;
     const firstLevel = rideLevel(firstRide);
     const lastLevel = rideLevel(lastRide);
+    // v62.3 F5: each end names its own ride length ("level 5 for 10 min →
+    // level 3 for 12 min"), so the separate "in N min" after the km goes (it
+    // stays only when there is no level part to carry the length).
     const levelPart =
-      firstLevel !== null && lastLevel !== null ? `level ${firstLevel} → ${lastLevel}` : '';
+      firstLevel !== null && lastLevel !== null
+        ? `${levelForLength(firstLevel, rideTimeSec(firstRide))} → ${levelForLength(lastLevel, rideTimeSec(lastRide))}`
+        : '';
     const lastKm = rideKm(lastRide);
     const lastTimeSec = rideTimeSec(lastRide);
     const distPart = [
       lastKm !== null ? `${lastKm} km` : '',
-      lastTimeSec !== null ? `in ${Math.round(lastTimeSec / 60)} min` : '',
+      !levelPart && lastTimeSec !== null ? `in ${Math.round(lastTimeSec / 60)} min` : '',
     ]
       .filter(Boolean)
       .join(' ');
