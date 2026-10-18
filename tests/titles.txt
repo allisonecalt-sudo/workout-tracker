@@ -873,13 +873,17 @@ v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › histor
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "10:02" saves 602 s and reads back "= 10:02"
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "25" saves 1500 s and reads back "= 25:00"
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: G1 the hint line shows for 0:10 + 0.58 km + 60.1 kcal and goes when they fit
-v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: an unreadable time shows no readback
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: S3 "0" says "not a time", saves no time, and goes when fixed
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: S3 "abc" says "not a time", saves no time, and goes when fixed
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: an unreadable time says "not a time" (v62.4 S3; was: no readback)
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "10" reads back "= 10:00" and saves 600 s
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "10,5" reads back "= 10:30" and saves 630 s
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "10.5" reads back "= 10:30" and saves 630 s
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "1002" reads back "= 10:02" and saves 602 s
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "10:02" reads back "= 10:02" and saves 602 s
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: G1 the hint line shows for 0:10 + 0.58 km + 60.1 kcal, goes for "10", Next still works
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: S3 "0" says "not a time" and saves no time
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: S3 "abc" says "not a time" and saves no time
 v62.3 fix round 1 (item 6) - ride time parsing › bare 1-2 digits are minutes; 3-4 digits and mm:ss keep their meaning
 v62.3 fix round 1 (item 6) - ride time parsing › the readback is the console format
 v62.3 fix round 1 (item 6) - ride time parsing › v62.4 S2: a bare decimal is minutes, comma or dot
@@ -889,6 +893,7 @@ v62.4 G1 - the "can't all be true" hint on ride numbers › it agrees with the s
 v62.4 G1 - the "can't all be true" hint on ride numbers › km missing: the hint names kcal
 v62.4 G1 - the "can't all be true" hint on ride numbers › nothing to judge (no time, or no kcal): no hint
 v62.4 G1 - the "can't all be true" hint on ride numbers › the same "10" under v62.3 rules is 600 s: no hint
+v62.4 S3 - an unreadable ride time says so › text that is not a time reads "not a time"; empty says nothing; a time reads back
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

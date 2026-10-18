@@ -15,7 +15,7 @@ import {
   rideReadingsLine,
 } from '../number-rules';
 import { isClaudeNote } from '../cardio-notes';
-import { parseMmSs, rideTimeReadback, rideFitHint } from '../cardio-readings';
+import { parseMmSs, rideTimeReadback, rideTimeNote, rideFitHint } from '../cardio-readings';
 
 test.describe('v62.3 F1 - a per-week bar fills from the same numbers as its label', () => {
   test('3 / 4 fills 75%, not 2/3', () => {
@@ -169,5 +169,16 @@ test.describe('v62.4 G1 - the "can\'t all be true" hint on ride numbers', () => 
   test('it agrees with the stats rule: 3:00 at 20 kcal/min is plausible, 2:59 is not', () => {
     expect(rideFitHint(180, null, 60)).toBe('');
     expect(rideFitHint(179, null, 60)).not.toBe('');
+  });
+});
+
+test.describe('v62.4 S3 - an unreadable ride time says so', () => {
+  test('text that is not a time reads "not a time"; empty says nothing; a time reads back', () => {
+    expect(rideTimeNote('abc')).toBe('not a time');
+    expect(rideTimeNote('0')).toBe('not a time');
+    expect(rideTimeNote('1090')).toBe('not a time');
+    expect(rideTimeNote('')).toBe('');
+    expect(rideTimeNote('   ')).toBe('');
+    expect(rideTimeNote('10')).toBe('= 10:00');
   });
 });

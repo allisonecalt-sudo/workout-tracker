@@ -154,6 +154,14 @@ export function rideFitHint(
   return `These don't fit together: ${what} in ${m}:${String(s).padStart(2, '0')}. Check the time?`;
 }
 
+// v62.4 S3 (fail-loud): what shows under the Time box. A readable time gives its readback; text
+// that is not a time ("abc", "0") says so, in the same quiet style - it still saves no time, as
+// before. Empty = nothing typed = nothing to say.
+export function rideTimeNote(raw: string): string {
+  if (raw.trim() === '') return '';
+  return rideTimeReadback(raw) || 'not a time';
+}
+
 // v53 (Sep 26 2026) — the same three console-reading validators as
 // ellipticalKm()/ellipticalPulse()/ellipticalKcal() above, but pure (a plain
 // string in, never localStorage): the history-edit screen (renderHistoryEdit)

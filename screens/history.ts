@@ -26,7 +26,7 @@ import {
   ELLIPTICAL_START_LEVEL,
   clampEllipticalLevel,
   lastEllipticalLevel,
-  rideTimeReadback,
+  rideTimeNote,
   rideFitHint,
   parseMmSs,
   parseKmReading,
@@ -322,7 +322,7 @@ export function renderHistoryEdit(): string {
         ${renderHistoryEditReadingRow('hist-km', 'Distance', draft.kmStr, 'km', { step: '0.01', min: '0' })}
         ${renderHistoryEditReadingRow('hist-kcal', 'Calories', draft.kcalStr, 'kcal', { step: '0.1', min: '0' })}
       </div>
-      <p class="ell-time-readback" id="hist-time-readback"${rideTimeReadback(draft.timeStr) ? '' : ' hidden'}>${escapeHtml(rideTimeReadback(draft.timeStr))}</p>
+      <p class="ell-time-readback" id="hist-time-readback"${rideTimeNote(draft.timeStr) ? '' : ' hidden'}>${escapeHtml(rideTimeNote(draft.timeStr))}</p>
       ${fitHint ? `<p class="ell-fit-hint" id="hist-fit-hint">${escapeHtml(fitHint)}</p>` : ''}
       <div class="ell-field ell-field-level">
         <span class="ell-field-label">Level</span>
@@ -395,7 +395,7 @@ export function attachHistoryHandlers(): void {
     if (ui.historyEditDraft) ui.historyEditDraft.timeStr = histTime.value;
     const readback = document.getElementById('hist-time-readback');
     if (readback) {
-      readback.textContent = rideTimeReadback(histTime.value);
+      readback.textContent = rideTimeNote(histTime.value);
       readback.hidden = readback.textContent === '';
     }
     updateHistoryFitHint();

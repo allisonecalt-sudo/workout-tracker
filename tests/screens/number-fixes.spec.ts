@@ -689,12 +689,52 @@ test.describe('v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means min
     await expect(page.locator('text=Quick log')).toBeVisible();
   });
 
-  test('history edit: an unreadable time shows no readback', async ({ page }) => {
+  test('history edit: an unreadable time says "not a time" (v62.4 S3; was: no readback)', async ({
+    page,
+  }) => {
     await seedLogs(page, [histRide()]);
     await openEdit(page);
     await page.locator('#hist-time').fill('abc');
-    await expect(page.locator('#hist-time-readback')).toBeHidden();
+    await expect(page.locator('#hist-time-readback')).toHaveText('not a time');
   });
+
+  for (const typed of ['abc', '0']) {
+    test(`history edit: S3 "${typed}" says "not a time", saves no time, and goes when fixed`, async ({
+      page,
+    }) => {
+      await seedLogs(page, [histRide()]);
+      await openEdit(page);
+      await page.locator('#hist-time').fill(typed);
+      await expect(page.locator('#hist-time-readback')).toHaveText('not a time');
+      await page.locator('#hist-time').fill('10');
+      await expect(page.locator('#hist-time-readback')).toHaveText('= 10:00');
+      await page.locator('#hist-time').fill('');
+      await expect(page.locator('#hist-time-readback')).toBeHidden();
+      expect(await savedHistTime(page, typed)).toBeNull();
+    });
+
+    test(`ride-numbers screen: S3 "${typed}" says "not a time" and saves no time`, async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await page.locator('button[data-workout="D"]').click();
+      await page.locator('#begin').click();
+      await page.locator('#next').click();
+      await page.locator('#ell-time').fill(typed);
+      await expect(page.locator('#ell-time-readback')).toHaveText('not a time');
+      await page.locator('#ell-time').fill('');
+      await expect(page.locator('#ell-time-readback')).toBeHidden();
+      await page.locator('#ell-time').fill(typed);
+      await page.locator('#next').click();
+      await expect(page.locator('text=Quick log')).toBeVisible();
+      await page.locator('#save-log').click();
+      await expect(page.locator('.home-header h1')).toBeVisible();
+      const saved = await page.evaluate(
+        () => (JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]') as Row[])[0]
+      );
+      expect(saved!['ellipticalTimeSec'] ?? null).toBeNull();
+    });
+  }
 
   for (const [typed, sec, readback] of [
     ['10', 600, '= 10:00'],
