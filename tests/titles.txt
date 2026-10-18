@@ -52,6 +52,12 @@ Card B: the current phase (spec §2.3) › 0 workouts in the current phase: one 
 Done marks the step done and goes to the next undone one
 Done safety net: a session that comes out longer than 3h logs no duration, with a note
 ENGINE_VERSION is a non-empty string (stamped onto every progression_steps row)
+Home at 320 px does not scroll sideways (one session today)
+Home at 320 px does not scroll sideways (two sessions + a D today)
+Home at 360 px does not scroll sideways (one session today)
+Home at 360 px does not scroll sideways (two sessions + a D today)
+Home at 412 px does not scroll sideways (one session today)
+Home at 412 px does not scroll sideways (two sessions + a D today)
 List button sits beside Pause, 44px, opens and closes the sheet
 Lite day: the list shows only Main round 1
 MIN_PHASE_N is 3 (spec: "If a phase has n < 3... never an average of 1-2")

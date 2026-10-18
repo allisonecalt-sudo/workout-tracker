@@ -795,8 +795,14 @@ button:disabled {
   gap: 4px;
 }
 
+/* v62.4 S4: 34px columns only while there is room for them. The strip can hold 9 columns (7 days +
+ * a swing Saturday + a fold), which needs 338px: on a 360px phone the row is 286px wide and today's
+ * dot stuck out 19px, so Home scrolled sideways. Columns now share the row and stop growing at
+ * 34px (a wide screen is exactly as before); the bubble follows its column down to a circle. */
 #week-strip .week-dot {
-  flex: 0 0 34px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 34px;
 }
 
 #week-strip .week-dot-label {
@@ -804,8 +810,10 @@ button:disabled {
 }
 
 #week-strip .week-dot-bubble {
-  width: 32px;
-  height: 32px;
+  width: 100%;
+  max-width: 32px;
+  height: auto;
+  aspect-ratio: 1;
   font-size: 15px;
   font-weight: 700;
 }
