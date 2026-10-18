@@ -126,6 +126,16 @@ test.describe('v62.3 fix round 1 (item 6) - ride time parsing', () => {
     expect(parseMmSs('0')).toBeNull();
     expect(parseMmSs('1090')).toBeNull(); // 90 seconds is not a console reading
   });
+  test('v62.4 S2: a bare decimal is minutes, comma or dot', () => {
+    expect(parseMmSs('10.5')).toBe(630);
+    expect(parseMmSs('10,5')).toBe(630);
+    expect(parseMmSs('0.5')).toBe(30);
+    expect(parseMmSs('7.25')).toBe(435);
+    expect(rideTimeReadback('10.5')).toBe('= 10:30');
+    expect(rideTimeReadback('10,5')).toBe('= 10:30');
+    expect(parseMmSs('0.0')).toBeNull();
+    expect(parseMmSs('400.5')).toBeNull(); // past the 5-hour ceiling
+  });
   test('the readback is the console format', () => {
     expect(rideTimeReadback('10')).toBe('= 10:00');
     expect(rideTimeReadback('1002')).toBe('= 10:02');

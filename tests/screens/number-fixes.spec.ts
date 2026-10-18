@@ -627,6 +627,8 @@ test.describe('v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means min
     ['25', 1500, '= 25:00'],
     ['1002', 602, '= 10:02'],
     ['10:02', 602, '= 10:02'],
+    ['10.5', 630, '= 10:30'],
+    ['10,5', 630, '= 10:30'],
   ] as const) {
     test(`history edit: "${typed}" saves ${sec} s and reads back "${readback}"`, async ({
       page,
@@ -698,6 +700,8 @@ test.describe('v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means min
     ['10', 600, '= 10:00'],
     ['1002', 602, '= 10:02'],
     ['10:02', 602, '= 10:02'],
+    ['10.5', 630, '= 10:30'],
+    ['10,5', 630, '= 10:30'],
   ] as const) {
     test(`ride-numbers screen: "${typed}" reads back "${readback}" and saves ${sec} s`, async ({
       page,

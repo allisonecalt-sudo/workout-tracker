@@ -867,17 +867,22 @@ v62.3 fix round 1 (item 5) - the wall sit hold after a reload saves what she hel
 v62.3 fix round 1 (item 5) - the wall sit hold after a reload saves what she held › no reload: 20 s held, "Log what I did" saves 20 (unchanged)
 v62.3 fix round 1 (item 5) - the wall sit hold after a reload saves what she held › paused time is not counted: 20 s held, 60 s paused, reload, resume, log -> 20
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "10" saves 600 s and reads back "= 10:00"
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "10,5" saves 630 s and reads back "= 10:30"
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "10.5" saves 630 s and reads back "= 10:30"
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "1002" saves 602 s and reads back "= 10:02"
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "10:02" saves 602 s and reads back "= 10:02"
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "25" saves 1500 s and reads back "= 25:00"
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: G1 the hint line shows for 0:10 + 0.58 km + 60.1 kcal and goes when they fit
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: an unreadable time shows no readback
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "10" reads back "= 10:00" and saves 600 s
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "10,5" reads back "= 10:30" and saves 630 s
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "10.5" reads back "= 10:30" and saves 630 s
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "1002" reads back "= 10:02" and saves 602 s
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "10:02" reads back "= 10:02" and saves 602 s
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: G1 the hint line shows for 0:10 + 0.58 km + 60.1 kcal, goes for "10", Next still works
 v62.3 fix round 1 (item 6) - ride time parsing › bare 1-2 digits are minutes; 3-4 digits and mm:ss keep their meaning
 v62.3 fix round 1 (item 6) - ride time parsing › the readback is the console format
+v62.3 fix round 1 (item 6) - ride time parsing › v62.4 S2: a bare decimal is minutes, comma or dot
 v62.4 G1 - the "can't all be true" hint on ride numbers › a fitting ride has no hint
 v62.4 G1 - the "can't all be true" hint on ride numbers › her Oct 18 case: "10" as 10 SECONDS (the v62.2 reading) beside 0.58 km and 60.1 kcal shows the hint
 v62.4 G1 - the "can't all be true" hint on ride numbers › it agrees with the stats rule: 3:00 at 20 kcal/min is plausible, 2:59 is not

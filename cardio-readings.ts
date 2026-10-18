@@ -114,6 +114,13 @@ export function parseMmSs(raw: string): number | null {
     const sec = mm * 60 + ss;
     return sec > 0 && sec < 18000 ? sec : null;
   }
+  // v62.4 S2: a bare decimal is MINUTES too ("10.5" -> 630, "10,5" the same) - it used to fall
+  // through to the line below and save 11 SECONDS.
+  const decimalMinutes = /^(\d{1,3})[.,](\d+)$/.exec(v);
+  if (decimalMinutes) {
+    const sec = Math.round(Number(`${decimalMinutes[1]}.${decimalMinutes[2]}`) * 60);
+    return sec > 0 && sec < 18000 ? sec : null;
+  }
   const n = Number(v);
   return Number.isFinite(n) && n > 0 && n < 18000 ? Math.round(n) : null;
 }
