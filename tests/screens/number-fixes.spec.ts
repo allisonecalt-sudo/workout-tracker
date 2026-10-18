@@ -639,6 +639,54 @@ test.describe('v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means min
     });
   }
 
+  test('history edit: G1 the hint line shows for 0:10 + 0.58 km + 60.1 kcal and goes when they fit', async ({
+    page,
+  }) => {
+    await seedLogs(page, [histRide()]);
+    await openEdit(page);
+    await page.locator('#hist-km').fill('0.58');
+    await page.locator('#hist-kcal').fill('60.1');
+    await page.locator('#hist-time').fill('0:10');
+    await expect(page.locator('#hist-fit-hint')).toHaveText(
+      "These don't fit together: 0.58 km in 0:10. Check the time?"
+    );
+    await page.locator('#hist-time').fill('10');
+    await expect(page.locator('#hist-fit-hint')).toHaveCount(0);
+    await page.locator('#hist-time').fill('0:10');
+    await page.locator('#hist-km').fill('');
+    await expect(page.locator('#hist-fit-hint')).toHaveText(
+      "These don't fit together: 60.1 kcal in 0:10. Check the time?"
+    );
+    // never blocks: Save still works with the hint showing
+    await page.locator('#save-history-edit').click();
+    await expect(page.locator('.screen-header h2')).toHaveText('Session');
+  });
+
+  test('ride-numbers screen: G1 the hint line shows for 0:10 + 0.58 km + 60.1 kcal, goes for "10", Next still works', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.locator('button[data-workout="D"]').click();
+    await page.locator('#begin').click();
+    await page.locator('#next').click();
+    await page.locator('#ell-km').fill('0.58');
+    await page.locator('#ell-kcal').fill('60.1');
+    await expect(page.locator('#ell-fit-hint')).toHaveCount(0);
+    await page.locator('#ell-time').fill('0:10');
+    await expect(page.locator('#ell-fit-hint')).toHaveText(
+      "These don't fit together: 0.58 km in 0:10. Check the time?"
+    );
+    await page.locator('#ell-time').fill('10');
+    await expect(page.locator('#ell-fit-hint')).toHaveCount(0);
+    await page.locator('#ell-time').fill('0:10');
+    await page.locator('#ell-km').fill('');
+    await expect(page.locator('#ell-fit-hint')).toHaveText(
+      "These don't fit together: 60.1 kcal in 0:10. Check the time?"
+    );
+    await page.locator('#next').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+  });
+
   test('history edit: an unreadable time shows no readback', async ({ page }) => {
     await seedLogs(page, [histRide()]);
     await openEdit(page);

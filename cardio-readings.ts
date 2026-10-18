@@ -22,6 +22,7 @@ import {
   WW_LANE_STARTED_KEY,
   loadLogs,
 } from './state.js';
+import { hasRideNumbers, isPlausibleRideRate } from './ride.js';
 
 export function apartmentCardioMinutes(): number | null {
   const raw = localStorage.getItem(WW_APARTMENT_KEY);
@@ -125,6 +126,25 @@ export function rideTimeReadback(raw: string): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `= ${m}:${String(s).padStart(2, '0')}`;
+}
+
+// v62.4 G1 (Oct 18 2026): "numbers that can't all be true together get saved silently" - she typed
+// "10" meaning minutes and the app saved 10 seconds beside 0.58 km and 60.1 kcal. One quiet line
+// under the boxes when the typed time + kcal fail ride.ts's OWN plausibility rule (the one the
+// stats use, so this hint and the stats can never disagree). Never blocks a save. '' = they fit
+// (or there is nothing to judge: no time or no kcal). Names km when typed, else kcal.
+export function rideFitHint(
+  timeSec: number | null,
+  km: number | null,
+  kcal: number | null
+): string {
+  if (timeSec === null || kcal === null) return '';
+  const rec = { id: '', date: '', workout: '', level: null, km, kcal, timeSec };
+  if (!hasRideNumbers(rec) || isPlausibleRideRate(rec)) return '';
+  const m = Math.floor(timeSec / 60);
+  const s = timeSec % 60;
+  const what = km !== null ? `${km} km` : `${kcal} kcal`;
+  return `These don't fit together: ${what} in ${m}:${String(s).padStart(2, '0')}. Check the time?`;
 }
 
 // v53 (Sep 26 2026) — the same three console-reading validators as

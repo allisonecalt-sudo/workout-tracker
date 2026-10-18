@@ -65,6 +65,7 @@ import {
   ellipticalLevel,
   parseMmSs,
   rideTimeReadback,
+  rideFitHint,
   parseKmReading,
   parseKcalReading,
   clampEllipticalLevel,
@@ -968,6 +969,11 @@ function renderRideNumbersCard(ex: Exercise): string {
     timeSec: time ? parseMmSs(time) : null,
     km: km ? parseKmReading(km) : null,
   });
+  const fitHint = rideFitHint(
+    time ? parseMmSs(time) : null,
+    km ? parseKmReading(km) : null,
+    parseKcalReading(kcal)
+  );
   const liveLine =
     liveRate.kcalPerMin !== null
       ? `= ${liveRate.kcalPerMin} kcal a minute${liveRate.kmh !== null ? ` · ${liveRate.kmh} km/h` : ''}`
@@ -1017,6 +1023,7 @@ function renderRideNumbersCard(ex: Exercise): string {
         ${readingRow('ell-kcal', 'Calories', kcal, 'kcal', { step: '0.1', min: '0' })}
       </div>
       <p class="ell-time-readback" id="ell-time-readback"${time && rideTimeReadback(time) ? '' : ' hidden'}>${escapeHtml(rideTimeReadback(time))}</p>
+      ${fitHint ? `<p class="ell-fit-hint" id="ell-fit-hint">${escapeHtml(fitHint)}</p>` : ''}
       <div class="ell-live-line" id="ride-live-line"${liveLine ? '' : ' hidden'}>${escapeHtml(liveLine)}</div>
       <p class="ell-aim-compare" id="ell-aim-compare"${aimCompareLine ? '' : ' hidden'}>${escapeHtml(aimCompareLine)}</p>
       <p class="ell-last-time" id="ell-last-time"${lastTimeLine ? '' : ' hidden'}>${escapeHtml(lastTimeLine)}</p>
@@ -1263,6 +1270,7 @@ export function attachWorkoutLaneHandlers(): void {
   ellKm?.addEventListener('input', () => {
     setEllipticalReading(WW_ELLIPTICAL_KM_KEY, ellKm.value);
     updateRideLiveLine();
+    updateRideFitHint();
     updateRideAimCompare(); // v61, spec item g: keeps the aim-compare line current too
   });
   const ellPulse = document.getElementById('ell-pulse') as HTMLInputElement | null;
@@ -1274,6 +1282,7 @@ export function attachWorkoutLaneHandlers(): void {
   ellKcal?.addEventListener('input', () => {
     setEllipticalReading(WW_ELLIPTICAL_KCAL_KEY, ellKcal.value);
     updateRideLiveLine();
+    updateRideFitHint();
   });
   const ellTime = document.getElementById('ell-time') as HTMLInputElement | null;
   ellTime?.addEventListener('input', () => {
@@ -1284,6 +1293,7 @@ export function attachWorkoutLaneHandlers(): void {
       readback.hidden = readback.textContent === '';
     }
     updateRideLiveLine();
+    updateRideFitHint();
   });
 
   // v51 (Sep 25 2026): the ride-numbers screen's local Back — closes the
@@ -1328,6 +1338,32 @@ export function attachWorkoutLaneSkipHandler(): void {
 // #ride-live-line, kept current per keystroke on ell-km/ell-kcal/ell-time
 // (no re-render, same rule as every other reading there — see
 // renderRideNumbersCard's own comment on why this reads through rideRate()).
+// v62.4 G1: the "can't all be true" line under the boxes, kept current per keystroke. Made when
+// there is something to say, removed when the numbers fit (so a fitting ride renders as before).
+function updateRideFitHint(): void {
+  const val = (id: string): string =>
+    (document.getElementById(id) as HTMLInputElement | null)?.value ?? '';
+  const timeRaw = val('ell-time');
+  const kmRaw = val('ell-km');
+  const hint = rideFitHint(
+    timeRaw ? parseMmSs(timeRaw) : null,
+    kmRaw ? parseKmReading(kmRaw) : null,
+    parseKcalReading(val('ell-kcal'))
+  );
+  let el = document.getElementById('ell-fit-hint');
+  if (!hint) {
+    el?.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement('p');
+    el.id = 'ell-fit-hint';
+    el.className = 'ell-fit-hint';
+    document.getElementById('ell-time-readback')?.after(el);
+  }
+  el.textContent = hint;
+}
+
 function updateRideLiveLine(): void {
   const el = document.getElementById('ride-live-line');
   if (!el) return;

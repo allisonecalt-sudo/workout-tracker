@@ -27,6 +27,10 @@ import {
   clampEllipticalLevel,
   lastEllipticalLevel,
   rideTimeReadback,
+  rideFitHint,
+  parseMmSs,
+  parseKmReading,
+  parseKcalReading,
 } from '../cardio-readings.js';
 import { formatWorkoutTime } from '../timing.js';
 import { TIMING_LAUNCH_LABEL } from '../sync.js';
@@ -264,6 +268,36 @@ function renderHistoryEditReadingRow(
       </label>`;
 }
 
+// v62.4 G1: the "can't all be true" line for the typed time + km + kcal (same rule as the live
+// ride-numbers screen: ride.ts's plausibility, through cardio-readings.ts).
+function historyFitHint(timeStr: string, kmStr: string, kcalStr: string): string {
+  return rideFitHint(
+    timeStr.trim() ? parseMmSs(timeStr) : null,
+    kmStr.trim() ? parseKmReading(kmStr) : null,
+    parseKcalReading(kcalStr)
+  );
+}
+
+// Kept current per keystroke (no re-render): made when there is something to say, removed when
+// the numbers fit.
+function updateHistoryFitHint(): void {
+  const d = ui.historyEditDraft;
+  if (!d) return;
+  const hint = historyFitHint(d.timeStr, d.kmStr, d.kcalStr);
+  let el = document.getElementById('hist-fit-hint');
+  if (!hint) {
+    el?.remove();
+    return;
+  }
+  if (!el) {
+    el = document.createElement('p');
+    el.id = 'hist-fit-hint';
+    el.className = 'ell-fit-hint';
+    document.getElementById('hist-time-readback')?.after(el);
+  }
+  el.textContent = hint;
+}
+
 export function renderHistoryEdit(): string {
   const header = `
     <div class="screen-header">
@@ -276,6 +310,7 @@ export function renderHistoryEdit(): string {
   }
   const draft = ui.historyEditDraft;
   const level = draft.level;
+  const fitHint = historyFitHint(draft.timeStr, draft.kmStr, draft.kcalStr);
   return `
     ${header}
     <p class="detail-sub">Workout ${log.workout} · ${formatDateLong(log.date)}</p>
@@ -288,6 +323,7 @@ export function renderHistoryEdit(): string {
         ${renderHistoryEditReadingRow('hist-kcal', 'Calories', draft.kcalStr, 'kcal', { step: '0.1', min: '0' })}
       </div>
       <p class="ell-time-readback" id="hist-time-readback"${rideTimeReadback(draft.timeStr) ? '' : ' hidden'}>${escapeHtml(rideTimeReadback(draft.timeStr))}</p>
+      ${fitHint ? `<p class="ell-fit-hint" id="hist-fit-hint">${escapeHtml(fitHint)}</p>` : ''}
       <div class="ell-field ell-field-level">
         <span class="ell-field-label">Level</span>
         <div class="ell-level-controls">
@@ -362,14 +398,17 @@ export function attachHistoryHandlers(): void {
       readback.textContent = rideTimeReadback(histTime.value);
       readback.hidden = readback.textContent === '';
     }
+    updateHistoryFitHint();
   });
   const histKm = document.getElementById('hist-km') as HTMLInputElement | null;
   histKm?.addEventListener('input', () => {
     if (ui.historyEditDraft) ui.historyEditDraft.kmStr = histKm.value;
+    updateHistoryFitHint();
   });
   const histKcal = document.getElementById('hist-kcal') as HTMLInputElement | null;
   histKcal?.addEventListener('input', () => {
     if (ui.historyEditDraft) ui.historyEditDraft.kcalStr = histKcal.value;
+    updateHistoryFitHint();
   });
   const histPulse = document.getElementById('hist-pulse') as HTMLInputElement | null;
   histPulse?.addEventListener('input', () => {

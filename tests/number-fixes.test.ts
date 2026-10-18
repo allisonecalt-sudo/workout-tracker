@@ -15,7 +15,7 @@ import {
   rideReadingsLine,
 } from '../number-rules';
 import { isClaudeNote } from '../cardio-notes';
-import { parseMmSs, rideTimeReadback } from '../cardio-readings';
+import { parseMmSs, rideTimeReadback, rideFitHint } from '../cardio-readings';
 
 test.describe('v62.3 F1 - a per-week bar fills from the same numbers as its label', () => {
   test('3 / 4 fills 75%, not 2/3', () => {
@@ -132,5 +132,32 @@ test.describe('v62.3 fix round 1 (item 6) - ride time parsing', () => {
     expect(rideTimeReadback('9:05')).toBe('= 9:05');
     expect(rideTimeReadback('abc')).toBe('');
     expect(rideTimeReadback('')).toBe('');
+  });
+});
+
+test.describe('v62.4 G1 - the "can\'t all be true" hint on ride numbers', () => {
+  test('her Oct 18 case: "10" as 10 SECONDS (the v62.2 reading) beside 0.58 km and 60.1 kcal shows the hint', () => {
+    expect(rideFitHint(10, 0.58, 60.1)).toBe(
+      "These don't fit together: 0.58 km in 0:10. Check the time?"
+    );
+  });
+  test('the same "10" under v62.3 rules is 600 s: no hint', () => {
+    expect(rideFitHint(parseMmSs('10'), 0.58, 60.1)).toBe('');
+  });
+  test('a fitting ride has no hint', () => {
+    expect(rideFitHint(602, 2.1, 52)).toBe('');
+  });
+  test('km missing: the hint names kcal', () => {
+    expect(rideFitHint(10, null, 60.1)).toBe(
+      "These don't fit together: 60.1 kcal in 0:10. Check the time?"
+    );
+  });
+  test('nothing to judge (no time, or no kcal): no hint', () => {
+    expect(rideFitHint(null, 0.58, 60.1)).toBe('');
+    expect(rideFitHint(10, 0.58, null)).toBe('');
+  });
+  test('it agrees with the stats rule: 3:00 at 20 kcal/min is plausible, 2:59 is not', () => {
+    expect(rideFitHint(180, null, 60)).toBe('');
+    expect(rideFitHint(179, null, 60)).not.toBe('');
   });
 });
