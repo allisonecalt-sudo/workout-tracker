@@ -64,6 +64,7 @@ import {
   ellipticalMinutes,
   ellipticalLevel,
   parseMmSs,
+  rideTimeReadback,
   parseKmReading,
   parseKcalReading,
   clampEllipticalLevel,
@@ -1012,6 +1013,7 @@ function renderRideNumbersCard(ex: Exercise): string {
         ${readingRow('ell-km', 'Distance', km, 'km', { step: '0.01', min: '0' })}
         ${readingRow('ell-kcal', 'Calories', kcal, 'kcal', { step: '0.1', min: '0' })}
       </div>
+      <p class="ell-time-readback" id="ell-time-readback"${time && rideTimeReadback(time) ? '' : ' hidden'}>${escapeHtml(rideTimeReadback(time))}</p>
       <div class="ell-live-line" id="ride-live-line"${liveLine ? '' : ' hidden'}>${escapeHtml(liveLine)}</div>
       <p class="ell-aim-compare" id="ell-aim-compare"${aimCompareLine ? '' : ' hidden'}>${escapeHtml(aimCompareLine)}</p>
       <p class="ell-last-time" id="ell-last-time"${lastTimeLine ? '' : ' hidden'}>${escapeHtml(lastTimeLine)}</p>
@@ -1273,6 +1275,11 @@ export function attachWorkoutLaneHandlers(): void {
   const ellTime = document.getElementById('ell-time') as HTMLInputElement | null;
   ellTime?.addEventListener('input', () => {
     setEllipticalReading(WW_ELLIPTICAL_TIME_KEY, ellTime.value);
+    const readback = document.getElementById('ell-time-readback');
+    if (readback) {
+      readback.textContent = rideTimeReadback(ellTime.value);
+      readback.hidden = readback.textContent === '';
+    }
     updateRideLiveLine();
   });
 

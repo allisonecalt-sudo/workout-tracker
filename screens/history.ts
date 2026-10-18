@@ -26,6 +26,7 @@ import {
   ELLIPTICAL_START_LEVEL,
   clampEllipticalLevel,
   lastEllipticalLevel,
+  rideTimeReadback,
 } from '../cardio-readings.js';
 import { formatWorkoutTime } from '../timing.js';
 import { TIMING_LAUNCH_LABEL } from '../sync.js';
@@ -286,6 +287,7 @@ export function renderHistoryEdit(): string {
         ${renderHistoryEditReadingRow('hist-km', 'Distance', draft.kmStr, 'km', { step: '0.01', min: '0' })}
         ${renderHistoryEditReadingRow('hist-kcal', 'Calories', draft.kcalStr, 'kcal', { step: '0.1', min: '0' })}
       </div>
+      <p class="ell-time-readback" id="hist-time-readback"${rideTimeReadback(draft.timeStr) ? '' : ' hidden'}>${escapeHtml(rideTimeReadback(draft.timeStr))}</p>
       <div class="ell-field ell-field-level">
         <span class="ell-field-label">Level</span>
         <div class="ell-level-controls">
@@ -355,6 +357,11 @@ export function attachHistoryHandlers(): void {
   const histTime = document.getElementById('hist-time') as HTMLInputElement | null;
   histTime?.addEventListener('input', () => {
     if (ui.historyEditDraft) ui.historyEditDraft.timeStr = histTime.value;
+    const readback = document.getElementById('hist-time-readback');
+    if (readback) {
+      readback.textContent = rideTimeReadback(histTime.value);
+      readback.hidden = readback.textContent === '';
+    }
   });
   const histKm = document.getElementById('hist-km') as HTMLInputElement | null;
   histKm?.addEventListener('input', () => {

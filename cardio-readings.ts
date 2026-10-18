@@ -85,7 +85,9 @@ export function ellipticalKcal(): number | null {
   return Number.isFinite(n) && n > 0 && n < 5000 ? Math.round(n * 10) / 10 : null;
 }
 
-// "10:02" → 602. Bare 1-2 digits are a plain second count ("45" → 45).
+// "10:02" → 602. v62.3 fix round 1 (item 6): bare 1-2 digits are MINUTES ("10" → 600, "25" → 1500) -
+// this is a ride time typed off the console (every caller is one: the live ride-numbers box, the
+// history edit box), and "10" typed for a ten-minute ride used to save ten SECONDS.
 // v49 · look fix (Sep 25 2026): the box opens a numeric phone pad with no ':'
 // key, so she types the console's digits with nothing between them — "1002"
 // for 10:02, "958" for 9:58. Bare 3-4 digits are read as mm:ss, last two
@@ -102,7 +104,7 @@ export function parseMmSs(raw: string): number | null {
   const bareDigits = /^\d{1,4}$/.exec(v);
   if (bareDigits) {
     if (v.length <= 2) {
-      const sec = Number(v);
+      const sec = Number(v) * 60;
       return sec > 0 && sec < 18000 ? sec : null;
     }
     const ss = Number(v.slice(-2));
@@ -113,6 +115,16 @@ export function parseMmSs(raw: string): number | null {
   }
   const n = Number(v);
   return Number.isFinite(n) && n > 0 && n < 18000 ? Math.round(n) : null;
+}
+
+// v62.3 fix round 1 (item 6): what a typed ride time WILL be saved as, in the console's own
+// format ("= 10:00"), shown under the box so she sees it before Next. '' = not a reading.
+export function rideTimeReadback(raw: string): string {
+  const sec = parseMmSs(raw);
+  if (sec === null) return '';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `= ${m}:${String(s).padStart(2, '0')}`;
 }
 
 // v53 (Sep 26 2026) — the same three console-reading validators as

@@ -593,3 +593,81 @@ test.describe('v62.3 fix round 1 (item 3) - a ride whose only reading is its lev
     await expect(row.locator('.rides-list-nonum')).toHaveCount(0);
   });
 });
+
+test.describe('v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes', () => {
+  const histRide = (): Row =>
+    log('b-week4', '2026-09-20T15:00:00.000Z', 'B', {
+      cardioLane: 'elliptical',
+      cardioMinutes: 10,
+    });
+
+  const openEdit = async (page: Page): Promise<void> => {
+    await page.goto('/');
+    await page.locator('#view-history').click();
+    await page.locator('[data-detail="b-week4"]').click();
+    await page.locator('#edit-history-session').click();
+    await expect(page.locator('.screen-header h2')).toHaveText('Edit session');
+  };
+
+  const savedHistTime = async (page: Page, typed: string): Promise<unknown> => {
+    await page.locator('#hist-time').fill(typed);
+    await page.locator('#save-history-edit').click();
+    await expect(page.locator('.screen-header h2')).toHaveText('Session');
+    return page.evaluate(() => {
+      const rows = JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]') as {
+        id: string;
+        ellipticalTimeSec?: number | null;
+      }[];
+      return rows.find((r) => r.id === 'b-week4')?.ellipticalTimeSec;
+    });
+  };
+
+  for (const [typed, sec, readback] of [
+    ['10', 600, '= 10:00'],
+    ['25', 1500, '= 25:00'],
+    ['1002', 602, '= 10:02'],
+    ['10:02', 602, '= 10:02'],
+  ] as const) {
+    test(`history edit: "${typed}" saves ${sec} s and reads back "${readback}"`, async ({
+      page,
+    }) => {
+      await seedLogs(page, [histRide()]);
+      await openEdit(page);
+      await page.locator('#hist-time').fill(typed);
+      await expect(page.locator('#hist-time-readback')).toHaveText(readback);
+      expect(await savedHistTime(page, typed)).toBe(sec);
+    });
+  }
+
+  test('history edit: an unreadable time shows no readback', async ({ page }) => {
+    await seedLogs(page, [histRide()]);
+    await openEdit(page);
+    await page.locator('#hist-time').fill('abc');
+    await expect(page.locator('#hist-time-readback')).toBeHidden();
+  });
+
+  for (const [typed, sec, readback] of [
+    ['10', 600, '= 10:00'],
+    ['1002', 602, '= 10:02'],
+    ['10:02', 602, '= 10:02'],
+  ] as const) {
+    test(`ride-numbers screen: "${typed}" reads back "${readback}" and saves ${sec} s`, async ({
+      page,
+    }) => {
+      await page.goto('/');
+      await page.locator('button[data-workout="D"]').click();
+      await page.locator('#begin').click();
+      await page.locator('#next').click(); // opens the ride-numbers screen
+      await page.locator('#ell-time').fill(typed);
+      await expect(page.locator('#ell-time-readback')).toHaveText(readback);
+      await page.locator('#next').click();
+      await expect(page.locator('text=Quick log')).toBeVisible();
+      await page.locator('#save-log').click();
+      await expect(page.locator('.home-header h1')).toBeVisible();
+      const saved = await page.evaluate(
+        () => (JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]') as Row[])[0]
+      );
+      expect(saved!['ellipticalTimeSec']).toBe(sec);
+    });
+  }
+});

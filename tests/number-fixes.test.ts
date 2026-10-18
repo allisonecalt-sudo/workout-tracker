@@ -15,6 +15,7 @@ import {
   rideReadingsLine,
 } from '../number-rules';
 import { isClaudeNote } from '../cardio-notes';
+import { parseMmSs, rideTimeReadback } from '../cardio-readings';
 
 test.describe('v62.3 F1 - a per-week bar fills from the same numbers as its label', () => {
   test('3 / 4 fills 75%, not 2/3', () => {
@@ -110,5 +111,26 @@ test.describe('v62.3 - the version', () => {
       appVersion?: string;
     };
     expect(pkg.appVersion).toBe('v62.3');
+  });
+});
+
+test.describe('v62.3 fix round 1 (item 6) - ride time parsing', () => {
+  test('bare 1-2 digits are minutes; 3-4 digits and mm:ss keep their meaning', () => {
+    expect(parseMmSs('10')).toBe(600);
+    expect(parseMmSs('25')).toBe(1500);
+    expect(parseMmSs('5')).toBe(300);
+    expect(parseMmSs('1002')).toBe(602);
+    expect(parseMmSs('958')).toBe(598);
+    expect(parseMmSs('10:02')).toBe(602);
+    expect(parseMmSs('')).toBeNull();
+    expect(parseMmSs('0')).toBeNull();
+    expect(parseMmSs('1090')).toBeNull(); // 90 seconds is not a console reading
+  });
+  test('the readback is the console format', () => {
+    expect(rideTimeReadback('10')).toBe('= 10:00');
+    expect(rideTimeReadback('1002')).toBe('= 10:02');
+    expect(rideTimeReadback('9:05')).toBe('= 9:05');
+    expect(rideTimeReadback('abc')).toBe('');
+    expect(rideTimeReadback('')).toBe('');
   });
 });

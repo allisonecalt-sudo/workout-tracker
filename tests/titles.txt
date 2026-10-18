@@ -862,6 +862,16 @@ v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in eve
 v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag › Home and Progress at 360px: "+1 ride" matches the "sessions" unit's size and weight, no sideways scroll
 v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag › Home and Progress at 412px: "+1 ride" matches the "sessions" unit's size and weight, no sideways scroll
 v62.3 fix round 1 (item 3) - a ride whose only reading is its level is not "no numbers" › All rides shows "— · — · — · L4" for a level-only ride
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "10" saves 600 s and reads back "= 10:00"
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "1002" saves 602 s and reads back "= 10:02"
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "10:02" saves 602 s and reads back "= 10:02"
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "25" saves 1500 s and reads back "= 25:00"
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: an unreadable time shows no readback
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "10" reads back "= 10:00" and saves 600 s
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "1002" reads back "= 10:02" and saves 602 s
+v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-numbers screen: "10:02" reads back "= 10:02" and saves 602 s
+v62.3 fix round 1 (item 6) - ride time parsing › bare 1-2 digits are minutes; 3-4 digits and mm:ss keep their meaning
+v62.3 fix round 1 (item 6) - ride time parsing › the readback is the console format
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

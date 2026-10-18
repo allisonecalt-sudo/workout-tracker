@@ -6377,6 +6377,14 @@ textarea:focus {
  * line (PLAN-2026-09-26.md §4.3). Quiet, like every other reading caption on
  * this screen — this is a live readout of what she just typed, not a verdict.
  * ========================================================================== */
+/* v62.3 fix round 1 (item 6): what a typed ride time will be saved as ("= 10:00"). */
+.ell-time-readback {
+  margin: 2px 0 8px;
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
 .ell-live-line {
   font-size: 20px;
   color: var(--text);
