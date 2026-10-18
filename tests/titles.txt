@@ -892,7 +892,6 @@ v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › ride-n
 v62.3 fix round 1 (item 6) - ride time parsing › bare 1-2 digits are minutes; 3-4 digits and mm:ss keep their meaning
 v62.3 fix round 1 (item 6) - ride time parsing › the readback is the console format
 v62.3 fix round 1 (item 6) - ride time parsing › v62.4 S2: a bare decimal is minutes, comma or dot
-v62.4 - the version › package.json appVersion (the one source) is v62.4
 v62.4 G1 - the "can't all be true" hint on ride numbers › a fitting ride has no hint
 v62.4 G1 - the "can't all be true" hint on ride numbers › her Oct 18 case: "10" as 10 SECONDS (the v62.2 reading) beside 0.58 km and 60.1 kcal shows the hint
 v62.4 G1 - the "can't all be true" hint on ride numbers › it agrees with the stats rule: 3:00 at 20 kcal/min is plausible, 2:59 is not
@@ -905,6 +904,7 @@ v62.4 S1 - a wall sit restarted after a reload continues from what she held › 
 v62.4 S1 - a wall sit restarted after a reload continues from what she held › hold 20 s, reload, start, hold 10 s, stop: saves 30, not 10
 v62.4 S1 - a wall sit restarted after a reload continues from what she held › the carried hold is capped at the hold: running it out saves the whole hold, never more
 v62.4 S3 - an unreadable ride time says so › text that is not a time reads "not a time"; empty says nothing; a time reads back
+v62.5 - the version › package.json appVersion (the one source) is v62.5
 v62.5 G1 - the hint fires only when the numbers truly cannot fit › 0.58 km in 0:10 with kcal blank shows the km wording
 v62.5 G1 - the hint fires only when the numbers truly cannot fit › 201 kcal in 10:00 (20.1 a minute) shows the hint; 200 kcal does not
 v62.5 G1 - the hint fires only when the numbers truly cannot fit › 30 km/h shows the hint, 24 km/h does not
