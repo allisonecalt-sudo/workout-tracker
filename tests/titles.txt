@@ -905,6 +905,13 @@ v62.4 S1 - a wall sit restarted after a reload continues from what she held › 
 v62.4 S1 - a wall sit restarted after a reload continues from what she held › hold 20 s, reload, start, hold 10 s, stop: saves 30, not 10
 v62.4 S1 - a wall sit restarted after a reload continues from what she held › the carried hold is capped at the hold: running it out saves the whole hold, never more
 v62.4 S3 - an unreadable ride time says so › text that is not a time reads "not a time"; empty says nothing; a time reads back
+v62.5 S1 - a wall sit after a reload freezes at the label › a reload in the middle of the carried hold freezes it at that moment (20 + 10, reload, wait, log -> 30)
+v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, wait 0 s, hold 10: label 20, done face 30, saves 30
+v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, wait 120 s, hold 10: label 20, done face 30, saves 30
+v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, wait 15 s, hold 10: label 20, done face 30, saves 30
+v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, wait 5 s, hold 10: label 20, done face 30, saves 30
+v62.5 S1 - a wall sit after a reload freezes at the label › label = what is saved: held 20, reload, 120 s idle, "Log what I did" saves 20
+v62.5 S1 - a wall sit after a reload freezes at the label › two reloads count the hold once: 20 held, reload, 100 s, reload again -> still 20, hold 10 -> 30
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

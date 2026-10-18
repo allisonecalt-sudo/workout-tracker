@@ -173,14 +173,21 @@ export function clearHoldStart(): void {
 // Seconds held for the hold on `stepKey`, as the timer would show with no reload: wall clock since
 // the start minus paused time (a pause still open counts up to when it began), capped at the
 // hold. null = no record for this step, or the app cannot know.
+//
+// v62.5 S1: FROZEN at the first read after the page came back (the label's number). The label
+// "20 s held", "Log what I did" and Start's carried seconds all read that one frozen number, so
+// time spent idle after the reload never counts and a second reload counts it once.
 export function heldSecAfterReload(stepKey: string, durationSec: number): number | null {
-  let rec: { key?: unknown; at?: unknown; pauseBase?: unknown };
+  let rec: { key?: unknown; at?: unknown; pauseBase?: unknown; frozen?: unknown };
   try {
     rec = JSON.parse(localStorage.getItem(WW_HOLD_START_KEY) ?? 'null') ?? {};
   } catch {
     return null;
   }
   if (rec.key !== stepKey) return null;
+  if (typeof rec.frozen === 'number' && Number.isFinite(rec.frozen) && rec.frozen >= 0) {
+    return Math.round(Math.min(durationSec, rec.frozen));
+  }
   const at = Number(rec.at);
   const base = Number(rec.pauseBase);
   if (!Number.isFinite(at) || at <= 0 || !Number.isFinite(base)) return null;
@@ -188,5 +195,7 @@ export function heldSecAfterReload(stepKey: string, durationSec: number): number
   if (pausedInHold < 0) return null;
   const end = state.pausedAt !== null ? state.pausedAt : Date.now();
   const elapsed = Math.max(0, (end - at - pausedInHold) / 1000);
-  return Math.round(Math.min(durationSec, elapsed));
+  const held = Math.round(Math.min(durationSec, elapsed));
+  localStorage.setItem(WW_HOLD_START_KEY, JSON.stringify({ key: stepKey, frozen: held }));
+  return held;
 }

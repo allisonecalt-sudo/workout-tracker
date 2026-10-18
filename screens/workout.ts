@@ -2100,6 +2100,8 @@ function startTimedExercise(): void {
     if (already !== null && already > 0) {
       state.wallSitSec = Math.max(state.wallSitSec, already);
       prior = already < duration ? already : 0;
+      // a hold that already ran its whole length: the done face must say what the save says
+      if (already >= duration) recordHeld(holdStepKey(), already);
     }
   }
   const go = (): void => {

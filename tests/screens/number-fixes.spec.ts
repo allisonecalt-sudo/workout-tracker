@@ -932,3 +932,103 @@ test.describe('v62.4 S1 - a wall sit restarted after a reload continues from wha
     expect(saved).toBeLessThan(120);
   });
 });
+
+// v62.5 S1 - the label and the save agree: the seconds carried over a reload are what the timer
+// showed when the page came back ("20 s held"). Idle time after the reload never counts.
+test.describe('v62.5 S1 - a wall sit after a reload freezes at the label', () => {
+  const START_ISO = '2026-09-08T10:00:00.000Z';
+  const at = (sec: number): string => new Date(Date.parse(START_ISO) + sec * 1000).toISOString();
+
+  const startWallSit = async (page: Page): Promise<void> => {
+    await movableClock(page, START_ISO, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await advanceToExercise(page, 'Wall sit');
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.timer-pip-time')).toBeVisible();
+  };
+
+  const reopen = async (page: Page, sec: number): Promise<Page> => {
+    const reopened = await page.context().newPage();
+    await movableClock(reopened, at(sec), { skipPreCountdown: true });
+    await reopened.goto('/');
+    await expect(reopened.locator('.exercise-name')).toHaveText('Wall sit');
+    return reopened;
+  };
+
+  const logWhatIDid = async (page: Page): Promise<Row> => {
+    await page.locator('#quit').click();
+    await page.locator('#quit-log').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await page.locator('#save-log').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    const logs = (await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]')
+    )) as Row[];
+    return logs[0]!;
+  };
+
+  for (const wait of [0, 5, 15, 120]) {
+    test(`held 20, reload, wait ${wait} s, hold 10: label 20, done face 30, saves 30`, async ({
+      page,
+    }) => {
+      await startWallSit(page);
+      await advanceClock(page, 20_000);
+      const reopened = await reopen(page, 20);
+      await expect(reopened.locator('.timer-card .timer-label')).toHaveText('20 s held');
+      await advanceClock(reopened, wait * 1000);
+      await expect(reopened.locator('.timer-card .timer-label')).toHaveText('20 s held');
+      await reopened.locator('#start-timed').click();
+      await expect(reopened.locator('.timer-pip-time')).toBeVisible();
+      await advanceClock(reopened, 10_000);
+      await reopened.locator('#timer-pip').click();
+      await reopened.locator('#stop-timed').click();
+      await expect(reopened.locator('.timer-held')).toContainText('held 30 s');
+      expect((await logWhatIDid(reopened))['wallSitSec']).toBe(30);
+    });
+  }
+
+  test('label = what is saved: held 20, reload, 120 s idle, "Log what I did" saves 20', async ({
+    page,
+  }) => {
+    await startWallSit(page);
+    await advanceClock(page, 20_000);
+    const reopened = await reopen(page, 20);
+    await expect(reopened.locator('.timer-card .timer-label')).toHaveText('20 s held');
+    await advanceClock(reopened, 120_000);
+    expect((await logWhatIDid(reopened))['wallSitSec']).toBe(20);
+  });
+
+  test('two reloads count the hold once: 20 held, reload, 100 s, reload again -> still 20, hold 10 -> 30', async ({
+    page,
+  }) => {
+    await startWallSit(page);
+    await advanceClock(page, 20_000);
+    const second = await reopen(page, 20);
+    await expect(second.locator('.timer-card .timer-label')).toHaveText('20 s held');
+    const third = await reopen(second, 120);
+    await expect(third.locator('.timer-card .timer-label')).toHaveText('20 s held');
+    await third.locator('#start-timed').click();
+    await expect(third.locator('.timer-pip-time')).toBeVisible();
+    await advanceClock(third, 10_000);
+    await third.locator('#timer-pip').click();
+    await third.locator('#stop-timed').click();
+    expect((await logWhatIDid(third))['wallSitSec']).toBe(30);
+  });
+
+  test('a reload in the middle of the carried hold freezes it at that moment (20 + 10, reload, wait, log -> 30)', async ({
+    page,
+  }) => {
+    await startWallSit(page);
+    await advanceClock(page, 20_000);
+    const second = await reopen(page, 20);
+    await second.locator('#start-timed').click();
+    await expect(second.locator('.timer-pip-time')).toBeVisible();
+    await advanceClock(second, 10_000);
+    const third = await reopen(second, 30);
+    await expect(third.locator('.timer-card .timer-label')).toHaveText('30 s held');
+    await advanceClock(third, 90_000);
+    expect((await logWhatIDid(third))['wallSitSec']).toBe(30);
+  });
+});
