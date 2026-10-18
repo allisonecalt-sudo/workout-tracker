@@ -195,13 +195,29 @@ export function usualKcalPerMin(chronologicalRides: RideRecord[]): number | null
 const MIN_PLAUSIBLE_RATE_SEC = 180; // 3 min
 const MAX_PLAUSIBLE_KCAL_PER_MIN = 20;
 
+// v62.5: a speed cap too. 25 km/h is far past anything on this machine (her rides run 4-5 km/h);
+// it only catches a time typed as seconds (0.58 km in 0:10 = 209 km/h).
+const MAX_PLAUSIBLE_KMH = 25;
+
+// v62.5: the numbers that CAN'T all be true, whatever the ride length: kcal a minute past the cap, or
+// a speed past the cap. The ride-numbers hint uses exactly this; isPlausibleRideRate below is this
+// PLUS the 3-minute minimum (a stats-only rule), so everything the hint flags the stats also exclude.
+// Missing numbers never conflict (no kcal -> only speed can; no km -> only kcal can).
+export function rideNumbersConflict(r: {
+  kcal: number | null;
+  timeSec: number | null;
+  km: number | null;
+}): boolean {
+  const rate = rideRate(r);
+  return (
+    (rate.kcalPerMin !== null && rate.kcalPerMin > MAX_PLAUSIBLE_KCAL_PER_MIN) ||
+    (rate.kmh !== null && rate.kmh > MAX_PLAUSIBLE_KMH)
+  );
+}
+
 export function isPlausibleRideRate(r: RideRecord): boolean {
   if (!hasRideNumbers(r)) return false;
-  const kcalPerMin = rideRate(r).kcalPerMin;
-  if (kcalPerMin === null) return false;
-  return (
-    (r.timeSec as number) >= MIN_PLAUSIBLE_RATE_SEC && kcalPerMin <= MAX_PLAUSIBLE_KCAL_PER_MIN
-  );
+  return (r.timeSec as number) >= MIN_PLAUSIBLE_RATE_SEC && !rideNumbersConflict(r);
 }
 
 export type BestRide = { ride: RideRecord; kcalPerMin: number };

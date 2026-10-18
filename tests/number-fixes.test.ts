@@ -16,6 +16,7 @@ import {
 } from '../number-rules';
 import { isClaudeNote } from '../cardio-notes';
 import { parseMmSs, rideTimeReadback, rideTimeNote, rideFitHint } from '../cardio-readings';
+import { isPlausibleRideRate, rideNumbersConflict, type RideRecord } from '../ride';
 
 test.describe('v62.3 F1 - a per-week bar fills from the same numbers as its label', () => {
   test('3 / 4 fills 75%, not 2/3', () => {
@@ -162,9 +163,8 @@ test.describe('v62.4 G1 - the "can\'t all be true" hint on ride numbers', () => 
       "These don't fit together: 60.1 kcal in 0:10. Check the time?"
     );
   });
-  test('nothing to judge (no time, or no kcal): no hint', () => {
+  test('nothing to judge (no time): no hint', () => {
     expect(rideFitHint(null, 0.58, 60.1)).toBe('');
-    expect(rideFitHint(10, 0.58, null)).toBe('');
   });
   test('it agrees with the stats rule: 3:00 at 20 kcal/min is plausible, 2:59 is not', () => {
     expect(rideFitHint(180, null, 60)).toBe('');
@@ -180,5 +180,79 @@ test.describe('v62.4 S3 - an unreadable ride time says so', () => {
     expect(rideTimeNote('')).toBe('');
     expect(rideTimeNote('   ')).toBe('');
     expect(rideTimeNote('10')).toBe('= 10:00');
+  });
+});
+
+test.describe('v62.5 G1 - the hint fires only when the numbers truly cannot fit', () => {
+  const ride = (km: number | null, kcal: number | null, timeSec: number): RideRecord => ({
+    id: 'r',
+    date: '2026-10-18T10:00:00+03:00',
+    workout: 'D',
+    level: null,
+    km,
+    kcal,
+    timeSec,
+  });
+  test('0.58 km in 0:10 with kcal blank shows the km wording', () => {
+    expect(rideFitHint(10, 0.58, null)).toBe(
+      "These don't fit together: 0.58 km in 0:10. Check the time?"
+    );
+  });
+  test('an honest 2:59 ride (0.2 km) shows nothing, with or without kcal', () => {
+    expect(rideFitHint(179, 0.2, null)).toBe('');
+    expect(rideFitHint(179, 0.2, 20)).toBe('');
+  });
+  test('201 kcal in 10:00 (20.1 a minute) shows the hint; 200 kcal does not', () => {
+    expect(rideFitHint(600, null, 201)).toBe(
+      "These don't fit together: 201 kcal in 10:00. Check the time?"
+    );
+    expect(rideFitHint(600, null, 200)).toBe('');
+  });
+  test('30 km/h shows the hint, 24 km/h does not', () => {
+    expect(rideFitHint(600, 5, 100)).toBe(
+      "These don't fit together: 5 km in 10:00. Check the time?"
+    );
+    expect(rideFitHint(600, 4, 100)).toBe('');
+  });
+  test('nothing to judge: no time, or neither km nor kcal', () => {
+    expect(rideFitHint(null, 0.58, 60.1)).toBe('');
+    expect(rideFitHint(10, null, null)).toBe('');
+  });
+  test('the stats exclude every ride the hint flags (one rule), and also the under-3-minute ones', () => {
+    const cases: [number | null, number | null, number][] = [
+      [0.58, 60.1, 10],
+      [0.58, null, 10],
+      [null, 201, 600],
+      [5, 100, 600],
+      [4, 100, 600],
+      [0.2, 20, 179],
+      [0.72, 63.4, 602],
+      [null, 60, 179],
+    ];
+    for (const [km, kcal, t] of cases) {
+      const flagged = rideFitHint(t, km, kcal) !== '';
+      expect(rideNumbersConflict({ km, kcal, timeSec: t })).toBe(flagged);
+      if (flagged) expect(isPlausibleRideRate(ride(km, kcal, t))).toBe(false);
+    }
+    // the stats' own 3-minute minimum is still theirs alone: excluded from stats, no hint
+    expect(isPlausibleRideRate(ride(0.2, 20, 179))).toBe(false);
+    expect(rideFitHint(179, 0.2, 20)).toBe('');
+  });
+  test('the stats now cap speed too: 30 km/h out, 24 km/h in', () => {
+    expect(isPlausibleRideRate(ride(5, 100, 600))).toBe(false);
+    expect(isPlausibleRideRate(ride(4, 100, 600))).toBe(true);
+  });
+  test('her real rides (workout_sessions, read Oct 18) are all still counted and flag nothing', () => {
+    const real: [number, number, number][] = [
+      [0.72, 63.4, 602],
+      [1.87, 140.5, 1501],
+      [0.69, 62.4, 600],
+      [0.83, 76.8, 720],
+      [0.58, 60.1, 600],
+    ];
+    for (const [km, kcal, t] of real) {
+      expect(isPlausibleRideRate(ride(km, kcal, t))).toBe(true);
+      expect(rideFitHint(t, km, kcal)).toBe('');
+    }
   });
 });

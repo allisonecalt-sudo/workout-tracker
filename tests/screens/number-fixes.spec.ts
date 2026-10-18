@@ -1032,3 +1032,22 @@ test.describe('v62.5 S1 - a wall sit after a reload freezes at the label', () =>
     expect((await logWhatIDid(third))['wallSitSec']).toBe(30);
   });
 });
+
+test.describe('v62.5 G1 - the hint with kcal blank', () => {
+  test('0:10 + 0.58 km and no kcal shows the km hint; 2:59 + 0.2 km shows nothing', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.locator('button[data-workout="D"]').click();
+    await page.locator('#begin').click();
+    await page.locator('#next').click();
+    await page.locator('#ell-km').fill('0.58');
+    await page.locator('#ell-time').fill('0:10');
+    await expect(page.locator('#ell-fit-hint')).toHaveText(
+      "These don't fit together: 0.58 km in 0:10. Check the time?"
+    );
+    await page.locator('#ell-time').fill('2:59');
+    await page.locator('#ell-km').fill('0.2');
+    await expect(page.locator('#ell-fit-hint')).toHaveCount(0);
+  });
+});

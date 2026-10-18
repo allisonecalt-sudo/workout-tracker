@@ -22,7 +22,7 @@ import {
   WW_LANE_STARTED_KEY,
   loadLogs,
 } from './state.js';
-import { hasRideNumbers, isPlausibleRideRate } from './ride.js';
+import { rideNumbersConflict } from './ride.js';
 
 export function apartmentCardioMinutes(): number | null {
   const raw = localStorage.getItem(WW_APARTMENT_KEY);
@@ -137,17 +137,17 @@ export function rideTimeReadback(raw: string): string {
 
 // v62.4 G1 (Oct 18 2026): "numbers that can't all be true together get saved silently" - she typed
 // "10" meaning minutes and the app saved 10 seconds beside 0.58 km and 60.1 kcal. One quiet line
-// under the boxes when the typed time + kcal fail ride.ts's OWN plausibility rule (the one the
-// stats use, so this hint and the stats can never disagree). Never blocks a save. '' = they fit
-// (or there is nothing to judge: no time or no kcal). Names km when typed, else kcal.
+// under the boxes when the typed numbers can't all be true: ride.ts's rideNumbersConflict (kcal a
+// minute past the stats' cap, or a speed past 25 km/h - the same thresholds isPlausibleRideRate
+// uses, so the stats exclude everything this flags). v62.5: the stats' 3-minute minimum is NOT
+// part of it, so an honest short ride shows nothing. Never blocks a save. '' = they fit (or
+// nothing to judge: no time, or neither km nor kcal). Names km when typed, else kcal.
 export function rideFitHint(
   timeSec: number | null,
   km: number | null,
   kcal: number | null
 ): string {
-  if (timeSec === null || kcal === null) return '';
-  const rec = { id: '', date: '', workout: '', level: null, km, kcal, timeSec };
-  if (!hasRideNumbers(rec) || isPlausibleRideRate(rec)) return '';
+  if (timeSec === null || !rideNumbersConflict({ kcal, timeSec, km })) return '';
   const m = Math.floor(timeSec / 60);
   const s = timeSec % 60;
   const what = km !== null ? `${km} km` : `${kcal} kcal`;
