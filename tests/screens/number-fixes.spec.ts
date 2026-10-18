@@ -458,3 +458,49 @@ test.describe('v62.3 F9 - apartment cardio after a reload saves what she rode', 
     expect(saved['cardioMinutes']).toBe(10);
   });
 });
+
+test.describe('v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch', () => {
+  const eRow = (page: Page) =>
+    page
+      .locator('.home-startnow-card .start-now-row')
+      .filter({ has: page.locator('.start-now-lbl:text-is("Elliptical")') })
+      .locator('.start-now-val');
+
+  test('one ride with a level: "level 5", then its own since', async ({ page }) => {
+    await seedLogs(page, [
+      log('sep24-a', '2026-09-24T15:56:00+03:00', 'A', {
+        cardioLane: 'elliptical',
+        ellipticalLevel: 5,
+        ellipticalTimeSec: 602,
+      }),
+    ]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00');
+    await page.goto('/');
+    await expect(eRow(page)).toHaveText('level 5since Sep 24');
+    await expect(eRow(page).locator('.sn-last')).toHaveText('level 5');
+  });
+
+  test('never ridden, tonight has the ride: "level 3 → first ride tonight"', async ({ page }) => {
+    await seedLogs(page, [log('sep20-b', '2026-09-20T15:00:00+03:00', 'B')]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00');
+    await page.goto('/');
+    await expect(eRow(page).locator('.sn-first')).toHaveText('level 3');
+    await expect(eRow(page).locator('.sn-last')).toHaveText('first ride tonight');
+  });
+
+  test('ridden but no level recorded: "level not recorded yet" (unchanged)', async ({ page }) => {
+    await seedLogs(page, [
+      log('sep24-a', '2026-09-24T15:56:00+03:00', 'A', { cardioLane: 'elliptical' }),
+    ]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00');
+    await page.goto('/');
+    await expect(eRow(page).locator('.sn-last')).toHaveText('level not recorded yet');
+  });
+
+  test('two rides: both ends say "level N" (F5)', async ({ page }) => {
+    await startNowShape(page);
+    await page.goto('/');
+    await expect(eRow(page).locator('.sn-first')).toHaveText('level 5 for 10 min');
+    await expect(eRow(page).locator('.sn-last')).toHaveText('level 3 for 12 min');
+  });
+});

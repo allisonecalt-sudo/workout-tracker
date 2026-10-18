@@ -853,6 +853,10 @@ v62.3 F9 - apartment cardio after a reload saves what she rode › 45 s ridden, 
 v62.3 F9 - apartment cardio after a reload saves what she rode › a block that ran past its end before the reload still saves the full block
 v62.3 F9 - apartment cardio after a reload saves what she rode › never started the timer: the prescription stands (unchanged)
 v62.3 F9 - apartment cardio after a reload saves what she rode › paused time inside the block is not counted: 150 s ridden, 300 s paused, reload, resume, finish -> 3 min
+v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch › never ridden, tonight has the ride: "level 3 → first ride tonight"
+v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch › one ride with a level: "level 5", then its own since
+v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch › ridden but no level recorded: "level not recorded yet" (unchanged)
+v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch › two rides: both ends say "level N" (F5)
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

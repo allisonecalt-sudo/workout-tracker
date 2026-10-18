@@ -1187,11 +1187,11 @@ function renderHomeStartNowCard(logs: LogEntry[]): string {
   );
   const levelVal =
     levels.length === 1
-      ? `<span class="sn-last">${levels[0]}</span>`
+      ? `<span class="sn-last">level ${levels[0]}</span>`
       : levels.length > 1
         ? `<span class="sn-first">${endPhrase(levelLogs[0])}</span> → <span class="sn-last">${endPhrase(levelLogs[levelLogs.length - 1])}</span>`
         : !hasRiddenBefore && picksRideToday
-          ? `<span class="sn-first">${ELLIPTICAL_START_LEVEL}</span> → <span class="sn-last">first ride tonight</span>`
+          ? `<span class="sn-first">level ${ELLIPTICAL_START_LEVEL}</span> → <span class="sn-last">first ride tonight</span>`
           : `<span class="sn-last">level not recorded yet</span>`;
 
   // v62.3 F4: each row carries its own "since" - the first ride, the first
