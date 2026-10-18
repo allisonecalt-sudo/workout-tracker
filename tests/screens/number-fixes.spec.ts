@@ -504,3 +504,39 @@ test.describe('v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word
     await expect(eRow(page).locator('.sn-last')).toHaveText('level 3 for 12 min');
   });
 });
+
+test.describe('v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag', () => {
+  for (const width of [360, 412]) {
+    test(`Home and Progress at ${width}px: "+1 ride" matches the "sessions" unit's size and weight, no sideways scroll`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await startNowShape(page);
+      await seedLogs(page, [
+        log('a', '2026-05-02T15:00:00+03:00', 'A'),
+        log('b', '2026-09-24T15:56:00+03:00', 'B'),
+        log('d', '2026-09-29T10:00:00+03:00', 'D'),
+      ]);
+      await page.goto('/');
+      const noSideways = async (): Promise<void> => {
+        const over = await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+        );
+        expect(over).toBeLessThanOrEqual(0);
+      };
+      await noSideways();
+      await expect(page.locator('.home-startnow-card .sn-extra')).toHaveText('+1 ride');
+      await page.locator('#open-progress-link').click();
+      const extra = page.locator('.start-now-card .sn-extra');
+      const unit = page.locator('.start-now-card .start-now-unit');
+      await expect(extra).toHaveText('+1 ride');
+      const style = (loc: typeof extra) =>
+        loc.evaluate((el) => {
+          const c = getComputedStyle(el);
+          return { size: c.fontSize, weight: c.fontWeight, color: c.color };
+        });
+      expect(await style(extra)).toEqual(await style(unit));
+      await noSideways();
+    });
+  }
+});

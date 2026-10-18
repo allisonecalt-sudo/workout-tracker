@@ -2883,6 +2883,16 @@ textarea:focus {
   letter-spacing: 0;
 }
 
+/* v62.3 fix round 1 (item 2): "+1 ride" is a quiet tag - the same size and weight as the
+ * "sessions" unit beside it, muted, never louder than the count it follows. */
+.sn-extra {
+  font-size: var(--font-subheading);
+  font-weight: 500;
+  color: var(--text-dim);
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+
 .start-now-row {
   display: flex;
   justify-content: space-between;
