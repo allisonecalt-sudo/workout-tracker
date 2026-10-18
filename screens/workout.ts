@@ -1885,6 +1885,10 @@ function jumpToStep(key: string): void {
   if (!w) return;
   const parsed = parseStepKey(w, key);
   if (!parsed) return;
+  // v62.3 fix round 1 (item 4): jumping away from a running apartment block keeps the minutes
+  // she rode, the same way Done · Next does (captureLaneMinutesIfLeaving: elapsed, floor 1,
+  // cap at the block) - read BEFORE stopTimer() clears the clock.
+  captureLaneMinutesIfLeaving();
   stopTimer();
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;

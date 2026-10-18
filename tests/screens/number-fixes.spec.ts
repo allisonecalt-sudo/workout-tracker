@@ -448,6 +448,46 @@ test.describe('v62.3 F9 - apartment cardio after a reload saves what she rode', 
     expect(logs[0]!['cardioMinutes']).toBe(1);
   });
 
+  test('jumping to another step while the block runs saves what she rode (45 s -> 1 min)', async ({
+    page,
+  }) => {
+    await startApartmentBlock(page);
+    await advanceClock(page, 45_000);
+    await page.locator('#step-list-open').click();
+    await page.locator('.step-list-row[data-jump-key]').nth(3).click();
+    await expect(page.locator('.step-list-panel')).toHaveCount(0);
+    await expect(page.locator('.exercise-name')).toHaveText('Glute squeezes');
+    // She never comes back to the cardio step: the session is logged from where she jumped to.
+    await page.locator('#quit').click();
+    await page.locator('#quit-log').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await page.locator('#save-log').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    const logs = (await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]')
+    )) as Row[];
+    expect(logs[0]!['cardioLane']).toBe('apartment');
+    expect(logs[0]!['cardioMinutes']).toBe(1);
+  });
+
+  test('after a reload, nothing is stored only when the start time truly cannot be recovered', async ({
+    page,
+    context,
+  }) => {
+    await startApartmentBlock(page);
+    await advanceClock(page, 45_000);
+    const reopened = await context.newPage();
+    await movableClock(reopened, '2026-09-08T10:00:45.000Z', { skipPreCountdown: true });
+    await reopened.goto('/');
+    await expect(reopened.locator('.exercise-name')).toHaveText('Apartment cardio');
+    await reopened.evaluate(() =>
+      window.localStorage.setItem('workout-tracker:ww-lane-started', 'x')
+    );
+    const saved = await finishAndRead(reopened);
+    expect(saved['cardioLane']).toBe('apartment');
+    expect(saved['cardioMinutes']).toBeNull();
+  });
+
   test('never started the timer: the prescription stands (unchanged)', async ({ page }) => {
     await movableClock(page, START_ISO, { skipPreCountdown: true });
     await page.goto('/');

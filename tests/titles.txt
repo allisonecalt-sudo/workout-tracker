@@ -851,6 +851,8 @@ v62.3 F8 - Claude's notes are not shown as her words › her own notes are not
 v62.3 F9 - apartment cardio after a reload saves what she rode › "Log what I did" after a reload also saves the minutes she rode
 v62.3 F9 - apartment cardio after a reload saves what she rode › 45 s ridden, reload, finish: cardio_minutes is 1, not the full 10
 v62.3 F9 - apartment cardio after a reload saves what she rode › a block that ran past its end before the reload still saves the full block
+v62.3 F9 - apartment cardio after a reload saves what she rode › after a reload, nothing is stored only when the start time truly cannot be recovered
+v62.3 F9 - apartment cardio after a reload saves what she rode › jumping to another step while the block runs saves what she rode (45 s -> 1 min)
 v62.3 F9 - apartment cardio after a reload saves what she rode › never started the timer: the prescription stands (unchanged)
 v62.3 F9 - apartment cardio after a reload saves what she rode › paused time inside the block is not counted: 150 s ridden, 300 s paused, reload, resume, finish -> 3 min
 v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch › never ridden, tonight has the ride: "level 3 → first ride tonight"
