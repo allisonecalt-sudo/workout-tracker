@@ -859,6 +859,7 @@ v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in eve
 v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch › two rides: both ends say "level N" (F5)
 v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag › Home and Progress at 360px: "+1 ride" matches the "sessions" unit's size and weight, no sideways scroll
 v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag › Home and Progress at 412px: "+1 ride" matches the "sessions" unit's size and weight, no sideways scroll
+v62.3 fix round 1 (item 3) - a ride whose only reading is its level is not "no numbers" › All rides shows "— · — · — · L4" for a level-only ride
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

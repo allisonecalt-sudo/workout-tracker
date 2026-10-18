@@ -540,3 +540,16 @@ test.describe('v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag', () => {
     });
   }
 });
+
+test.describe('v62.3 fix round 1 (item 3) - a ride whose only reading is its level is not "no numbers"', () => {
+  test('All rides shows "— · — · — · L4" for a level-only ride', async ({ page }) => {
+    await seedLogs(page, [
+      ride('r-level-only', '2026-09-28T10:00:00+03:00', 'D', { ellipticalLevel: 4 }),
+    ]);
+    await mockDate(page, '2026-09-30T08:00:00+03:00');
+    await openRidesPage(page);
+    const row = page.locator('.rides-list-row').filter({ hasText: 'Sep 28' });
+    await expect(row.locator('.rides-list-right')).toHaveText('— · — · — · L4');
+    await expect(row.locator('.rides-list-nonum')).toHaveCount(0);
+  });
+});
