@@ -893,6 +893,11 @@ v62.4 G1 - the "can't all be true" hint on ride numbers › it agrees with the s
 v62.4 G1 - the "can't all be true" hint on ride numbers › km missing: the hint names kcal
 v62.4 G1 - the "can't all be true" hint on ride numbers › nothing to judge (no time, or no kcal): no hint
 v62.4 G1 - the "can't all be true" hint on ride numbers › the same "10" under v62.3 rules is 600 s: no hint
+v62.4 S1 - a wall sit restarted after a reload continues from what she held › 20 s held, reload: the step says "20 s held", not "Ready"
+v62.4 S1 - a wall sit restarted after a reload continues from what she held › a second reload mid-way still counts the whole hold (20 + 10, reload, log -> 30)
+v62.4 S1 - a wall sit restarted after a reload continues from what she held › a wall sit never held says "Ready" (unchanged)
+v62.4 S1 - a wall sit restarted after a reload continues from what she held › hold 20 s, reload, start, hold 10 s, stop: saves 30, not 10
+v62.4 S1 - a wall sit restarted after a reload continues from what she held › the carried hold is capped at the hold: running it out saves the whole hold, never more
 v62.4 S3 - an unreadable ride time says so › text that is not a time reads "not a time"; empty says nothing; a time reads back
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks

@@ -410,8 +410,14 @@ function renderHoldTimerCard(ex: Exercise, showTempo: boolean): string {
       <div class="timer-done timer-held">✓ held ${held} s${last ? `<span class="timer-last"> · last time ${last}</span>` : ''}</div>
       <button class="hold-redo-btn" id="redo-timed" type="button">↻ Redo</button>`;
   } else {
+    // v62.4 S1: after a reload the hold she was in is remembered - say what is already held
+    // instead of "Ready" (Start continues from it).
+    const reloadHeld =
+      ex.name === 'Wall sit' && ex.durationSec
+        ? heldSecAfterReload(holdStepKey(), ex.durationSec)
+        : null;
     inner = `
-      <div class="timer-label">Ready</div>
+      <div class="timer-label">${reloadHeld ? `${reloadHeld} s held` : 'Ready'}</div>
       <div class="timer-display timer-idle">${formatTimerDisplay(ex.durationSec ?? 0)}</div>
       <button class="btn-large btn-primary" id="start-timed" type="button">Start timer</button>`;
   }
@@ -2084,13 +2090,25 @@ function startTimedExercise(): void {
   const duration = ex.durationSec;
   const exerciseName = ex.name;
   unlockAudio(); // Group 1C: synchronous resume in user-gesture handler
+  // v62.4 S1: a wall sit started again after a RELOAD continues from the seconds already held (the
+  // same as pause -> resume with no reload: 20 held, reload, start, 10 more -> 30), capped at the
+  // hold. A hold that already ran its whole length is banked and a fresh one starts. A normal
+  // start has no stored hold for this step: prior stays 0 and nothing below changes.
+  let prior = 0;
+  if (exerciseName === 'Wall sit' && state.wallSitStartedAt === null) {
+    const already = heldSecAfterReload(holdStepKey(), duration);
+    if (already !== null && already > 0) {
+      state.wallSitSec = Math.max(state.wallSitSec, already);
+      prior = already < duration ? already : 0;
+    }
+  }
   const go = (): void => {
     // v45: the hold clock starts on GO, not on the tap. It used to start
     // before the 3-2-1, so every completed wall sit logged target + 3 s
     // (10 of 10 timed holds, May 19 → Sep 14).
     if (exerciseName === 'Wall sit') {
-      state.wallSitStartedAt = Date.now();
-      markHoldStarted(holdStepKey()); // v62.3 fix round 1 (item 5): survives a reload
+      state.wallSitStartedAt = Date.now() - prior * 1000;
+      markHoldStarted(holdStepKey(), prior); // v62.3 fix round 1 (item 5): survives a reload
     }
     if (isIndoorLane(exerciseName)) {
       markLaneStarted(); // v62.3 F9: start time + the paused total at that instant
@@ -2099,7 +2117,7 @@ function startTimedExercise(): void {
       delete state.openSections[`${ELLIPTICAL_NAME}::setup`];
     }
     const stepKey = holdStepKey(); // v48: the done-face belongs to this step
-    startTimerCore('timed-exercise', duration, () => {
+    startTimerCore('timed-exercise', duration - prior, () => {
       if (!isIndoorLane(exerciseName)) {
         // v60: a hold prescribed "N ×" (setsPrescribed > 1) records into
         // heldSetsFor instead — one array entry per set, a redo replacing the

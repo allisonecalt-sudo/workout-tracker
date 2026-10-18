@@ -836,3 +836,99 @@ test.describe('v62.3 fix round 1 (item 5) - the wall sit hold after a reload sav
     expect(saved).toBeLessThan(120); // the prescribed hold, capped - never the 300 s of wall clock
   });
 });
+
+// v62.4 S1 - the wall sit started AGAIN after a reload continues from the seconds already held
+// (the same as pause -> resume with no reload), instead of overwriting the first hold.
+test.describe('v62.4 S1 - a wall sit restarted after a reload continues from what she held', () => {
+  const START_ISO = '2026-09-08T10:00:00.000Z';
+
+  const startWallSit = async (page: Page): Promise<void> => {
+    await movableClock(page, START_ISO, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await advanceToExercise(page, 'Wall sit');
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.timer-pip-time')).toBeVisible();
+  };
+
+  const reopen = async (page: Page, iso: string): Promise<Page> => {
+    const reopened = await page.context().newPage();
+    await movableClock(reopened, iso, { skipPreCountdown: true });
+    await reopened.goto('/');
+    await expect(reopened.locator('.exercise-name')).toHaveText('Wall sit');
+    return reopened;
+  };
+
+  const stopHold = async (page: Page): Promise<void> => {
+    await page.locator('#timer-pip').click();
+    await page.locator('#stop-timed').click();
+  };
+
+  const logWhatIDid = async (page: Page): Promise<Row> => {
+    await page.locator('#quit').click();
+    await page.locator('#quit-log').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await page.locator('#save-log').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    const logs = (await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]')
+    )) as Row[];
+    return logs[0]!;
+  };
+
+  test('20 s held, reload: the step says "20 s held", not "Ready"', async ({ page }) => {
+    await startWallSit(page);
+    await advanceClock(page, 20_000);
+    const reopened = await reopen(page, '2026-09-08T10:00:20.000Z');
+    await expect(reopened.locator('.timer-card .timer-label')).toHaveText('20 s held');
+  });
+
+  test('a wall sit never held says "Ready" (unchanged)', async ({ page }) => {
+    await movableClock(page, START_ISO, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await advanceToExercise(page, 'Wall sit');
+    await expect(page.locator('.timer-card .timer-label')).toHaveText('Ready');
+  });
+
+  test('hold 20 s, reload, start, hold 10 s, stop: saves 30, not 10', async ({ page }) => {
+    await startWallSit(page);
+    await advanceClock(page, 20_000);
+    const reopened = await reopen(page, '2026-09-08T10:00:20.000Z');
+    await reopened.locator('#start-timed').click();
+    await expect(reopened.locator('.timer-pip-time')).toBeVisible();
+    await advanceClock(reopened, 10_000);
+    await stopHold(reopened);
+    expect((await logWhatIDid(reopened))['wallSitSec']).toBe(30);
+  });
+
+  test('a second reload mid-way still counts the whole hold (20 + 10, reload, log -> 30)', async ({
+    page,
+  }) => {
+    await startWallSit(page);
+    await advanceClock(page, 20_000);
+    const second = await reopen(page, '2026-09-08T10:00:20.000Z');
+    await second.locator('#start-timed').click();
+    await expect(second.locator('.timer-pip-time')).toBeVisible();
+    await advanceClock(second, 10_000);
+    const third = await reopen(second, '2026-09-08T10:00:30.000Z');
+    expect((await logWhatIDid(third))['wallSitSec']).toBe(30);
+  });
+
+  test('the carried hold is capped at the hold: running it out saves the whole hold, never more', async ({
+    page,
+  }) => {
+    await startWallSit(page);
+    await advanceClock(page, 20_000);
+    const reopened = await reopen(page, '2026-09-08T10:00:20.000Z');
+    await reopened.locator('#start-timed').click();
+    await expect(reopened.locator('.timer-pip-time')).toBeVisible();
+    await advanceClock(reopened, 5 * 60_000);
+    await expect(reopened.locator('.timer-held')).toBeVisible();
+    const saved = (await logWhatIDid(reopened))['wallSitSec'] as number;
+    expect(saved).toBeGreaterThan(30);
+    expect(saved).toBeLessThan(120);
+  });
+});

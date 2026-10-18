@@ -152,10 +152,17 @@ export function clearElliptical(): void {
 // saved 0. Like the apartment lane, the hold's START is a wall-clock instant that survives: kept
 // in localStorage with the step it belongs to and the session's paused total at that instant.
 // Only the WALL SIT saves a number (wallSitSec); every other hold is display-only.
-export function markHoldStarted(stepKey: string): void {
+// v62.4 S1: `priorHeldSec` = seconds already held before this start (a hold restarted after a
+// reload carries what she held), so the stored start is back-dated by them - a second reload then
+// still counts the whole hold. 0 (every normal start) writes exactly what it always did.
+export function markHoldStarted(stepKey: string, priorHeldSec = 0): void {
   localStorage.setItem(
     WW_HOLD_START_KEY,
-    JSON.stringify({ key: stepKey, at: Date.now(), pauseBase: state.pausedMs })
+    JSON.stringify({
+      key: stepKey,
+      at: Date.now() - priorHeldSec * 1000,
+      pauseBase: state.pausedMs,
+    })
   );
 }
 
