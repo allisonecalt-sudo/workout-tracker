@@ -404,6 +404,9 @@ export const WW_LANE_STARTED_KEY = 'workout-tracker:ww-lane-started';
 export const WW_LANE_DONE_MIN_KEY = 'workout-tracker:ww-lane-done-min';
 // v62.3 F9: state.pausedMs at the moment the lane timer started - so a reload mid-block can
 // still tell how much of the time since then was paused.
+// v62.3 fix round 1 (item 5): the wall sit hold's start (step key, start instant, the session's
+// paused total then) - so a reload mid-hold can still tell how long she held.
+export const WW_HOLD_START_KEY = 'workout-tracker:ww-hold-start';
 export const WW_LANE_PAUSE_BASE_KEY = 'workout-tracker:ww-lane-pause-base';
 export const LAST_DONE_KEY = 'workout-tracker:last-done';
 export const CYCLE_STORAGE_KEY = 'workout-tracker:cycle-periods';

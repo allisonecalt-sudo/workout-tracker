@@ -862,6 +862,10 @@ v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in eve
 v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag › Home and Progress at 360px: "+1 ride" matches the "sessions" unit's size and weight, no sideways scroll
 v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag › Home and Progress at 412px: "+1 ride" matches the "sessions" unit's size and weight, no sideways scroll
 v62.3 fix round 1 (item 3) - a ride whose only reading is its level is not "no numbers" › All rides shows "— · — · — · L4" for a level-only ride
+v62.3 fix round 1 (item 5) - the wall sit hold after a reload saves what she held › 20 s held, reload, "Log what I did": saves 20, not 0
+v62.3 fix round 1 (item 5) - the wall sit hold after a reload saves what she held › a hold that ran past its end before the reload saves the whole hold, not more
+v62.3 fix round 1 (item 5) - the wall sit hold after a reload saves what she held › no reload: 20 s held, "Log what I did" saves 20 (unchanged)
+v62.3 fix round 1 (item 5) - the wall sit hold after a reload saves what she held › paused time is not counted: 20 s held, 60 s paused, reload, resume, log -> 20
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "10" saves 600 s and reads back "= 10:00"
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "1002" saves 602 s and reads back "= 10:02"
 v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means minutes › history edit: "10:02" saves 602 s and reads back "= 10:02"

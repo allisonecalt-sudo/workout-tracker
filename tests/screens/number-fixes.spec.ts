@@ -6,7 +6,7 @@
 // first ride, ...). The matching pure-logic tests live in
 // tests/number-fixes.test.ts.
 import { test, expect, type Page } from '@playwright/test';
-import { setupPage, mockDate, movableClock, advanceClock } from '../helpers';
+import { setupPage, mockDate, movableClock, advanceClock, advanceToExercise } from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -670,4 +670,77 @@ test.describe('v62.3 fix round 1 (item 6) - a bare 1-2 digit ride time means min
       expect(saved!['ellipticalTimeSec']).toBe(sec);
     });
   }
+});
+
+// Fix round 1 item 5 - the wall sit's hold timer after a reload. She held 20 s, the app reloaded,
+// she logged what she did: the saved hold is what the timer would have shown with no reload.
+test.describe('v62.3 fix round 1 (item 5) - the wall sit hold after a reload saves what she held', () => {
+  const START_ISO = '2026-09-08T10:00:00.000Z';
+
+  const startWallSit = async (page: Page): Promise<void> => {
+    await movableClock(page, START_ISO, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('button:has-text("Start")').click();
+    await advanceToExercise(page, 'Wall sit');
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.timer-pip-time')).toBeVisible();
+  };
+
+  const logWhatIDid = async (page: Page): Promise<Row> => {
+    await page.locator('#quit').click();
+    await page.locator('#quit-log').click();
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await page.locator('#save-log').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    const logs = (await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem('workout-tracker:logs') ?? '[]')
+    )) as Row[];
+    return logs[0]!;
+  };
+
+  test('no reload: 20 s held, "Log what I did" saves 20 (unchanged)', async ({ page }) => {
+    await startWallSit(page);
+    await advanceClock(page, 20_000);
+    expect((await logWhatIDid(page))['wallSitSec']).toBe(20);
+  });
+
+  test('20 s held, reload, "Log what I did": saves 20, not 0', async ({ page, context }) => {
+    await startWallSit(page);
+    await advanceClock(page, 20_000);
+    const reopened = await context.newPage();
+    await movableClock(reopened, '2026-09-08T10:00:20.000Z', { skipPreCountdown: true });
+    await reopened.goto('/');
+    await expect(reopened.locator('.exercise-name')).toHaveText('Wall sit');
+    expect((await logWhatIDid(reopened))['wallSitSec']).toBe(20);
+  });
+
+  test('paused time is not counted: 20 s held, 60 s paused, reload, resume, log -> 20', async ({
+    page,
+    context,
+  }) => {
+    await startWallSit(page);
+    await advanceClock(page, 20_000);
+    await page.locator('#pause-toggle').click();
+    await advanceClock(page, 60_000);
+    const reopened = await context.newPage();
+    await movableClock(reopened, '2026-09-08T10:01:20.000Z', { skipPreCountdown: true });
+    await reopened.goto('/');
+    await reopened.locator('#pause-resume').click();
+    expect((await logWhatIDid(reopened))['wallSitSec']).toBe(20);
+  });
+
+  test('a hold that ran past its end before the reload saves the whole hold, not more', async ({
+    page,
+    context,
+  }) => {
+    await startWallSit(page);
+    await advanceClock(page, 5 * 60_000);
+    const reopened = await context.newPage();
+    await movableClock(reopened, '2026-09-08T10:05:00.000Z', { skipPreCountdown: true });
+    await reopened.goto('/');
+    const saved = (await logWhatIDid(reopened))['wallSitSec'] as number;
+    expect(saved).toBeGreaterThan(0);
+    expect(saved).toBeLessThan(120); // the prescribed hold, capped - never the 300 s of wall clock
+  });
 });

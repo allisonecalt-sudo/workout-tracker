@@ -17,7 +17,7 @@ import { isArmFeel, isArmLoad, heavierArmLoad, defaultArmLoad } from './workout-
 import type { Phase } from './program.js';
 import { ui } from './ui.js';
 import { ellipticalMinutes } from './cardio-readings.js';
-import { clearApartmentCardio, clearElliptical } from './workout-lanes.js';
+import { clearApartmentCardio, clearElliptical, clearHoldStart } from './workout-lanes.js';
 import { RESUMABLE_SCREENS, clearActiveSession } from './actions.js';
 import {
   type AppScreen,
@@ -490,6 +490,7 @@ export function resetState(): void {
   ui.stepListOpen = false; // v50 · jump list: a closed session closes the sheet too
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
+  clearHoldStart(); // item 5: a hold's start belongs to one session
   clearElliptical();
   localStorage.removeItem(WW_RESULT_KEY); // the saved walk's numbers are logged now
   state.historyDetailId = null;

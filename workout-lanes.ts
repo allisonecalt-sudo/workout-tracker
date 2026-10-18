@@ -23,6 +23,7 @@ import {
   WW_LANE_STARTED_KEY,
   WW_LANE_DONE_MIN_KEY,
   WW_LANE_PAUSE_BASE_KEY,
+  WW_HOLD_START_KEY,
 } from './state.js';
 import { ui } from './ui.js';
 import { laneDoneMinutes } from './cardio-readings.js';
@@ -144,4 +145,41 @@ export function clearElliptical(): void {
   localStorage.removeItem(WW_ELLIPTICAL_PULSE_KEY);
   localStorage.removeItem(WW_ELLIPTICAL_TIME_KEY);
   localStorage.removeItem(WW_ELLIPTICAL_KCAL_KEY);
+}
+
+// ---------- Hold timers (v62.3 fix round 1, item 5) ----------
+// A hold's countdown is never restored after a reload, so a wall sit held 20 s and then reloaded
+// saved 0. Like the apartment lane, the hold's START is a wall-clock instant that survives: kept
+// in localStorage with the step it belongs to and the session's paused total at that instant.
+// Only the WALL SIT saves a number (wallSitSec); every other hold is display-only.
+export function markHoldStarted(stepKey: string): void {
+  localStorage.setItem(
+    WW_HOLD_START_KEY,
+    JSON.stringify({ key: stepKey, at: Date.now(), pauseBase: state.pausedMs })
+  );
+}
+
+export function clearHoldStart(): void {
+  localStorage.removeItem(WW_HOLD_START_KEY);
+}
+
+// Seconds held for the hold on `stepKey`, as the timer would show with no reload: wall clock since
+// the start minus paused time (a pause still open counts up to when it began), capped at the
+// hold. null = no record for this step, or the app cannot know.
+export function heldSecAfterReload(stepKey: string, durationSec: number): number | null {
+  let rec: { key?: unknown; at?: unknown; pauseBase?: unknown };
+  try {
+    rec = JSON.parse(localStorage.getItem(WW_HOLD_START_KEY) ?? 'null') ?? {};
+  } catch {
+    return null;
+  }
+  if (rec.key !== stepKey) return null;
+  const at = Number(rec.at);
+  const base = Number(rec.pauseBase);
+  if (!Number.isFinite(at) || at <= 0 || !Number.isFinite(base)) return null;
+  const pausedInHold = state.pausedMs - base;
+  if (pausedInHold < 0) return null;
+  const end = state.pausedAt !== null ? state.pausedAt : Date.now();
+  const elapsed = Math.max(0, (end - at - pausedInHold) / 1000);
+  return Math.round(Math.min(durationSec, elapsed));
 }

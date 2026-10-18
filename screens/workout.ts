@@ -79,6 +79,9 @@ import {
   clearElliptical,
   captureLaneMinutesIfLeaving,
   markLaneStarted,
+  markHoldStarted,
+  clearHoldStart,
+  heldSecAfterReload,
   laneMinutesNow,
 } from '../workout-lanes.js';
 import { SAFETY_LINE, type Exercise, type Workout, type Phase } from '../program.js';
@@ -1561,6 +1564,7 @@ function beginExercises(): void {
   state.videoExpandedFor = null;
   clearWorkoutWalk(); // fresh session, fresh walk numbers
   clearApartmentCardio(); // fresh session, cardio lane unchosen again
+  clearHoldStart(); // fresh session: no hold carried over
   clearElliptical();
   // v48 · P3 (Sep 24 2026): open straight on the lane she used last time when
   // it was the elliptical or the apartment — nothing starts until she taps
@@ -1898,6 +1902,7 @@ function jumpToStep(key: string): void {
   captureLaneMinutesIfLeaving();
   stopTimer();
   state.wallSitStartedAt = null;
+  clearHoldStart(); // a jump forgets a running hold, as it always did
   state.videoExpandedFor = null;
   state.isResting = false;
   state.roundBreak = false;
@@ -2023,6 +2028,17 @@ function captureWallSitIfPending(): void {
     const heldSec = Math.max(0, Math.round((Date.now() - state.wallSitStartedAt) / 1000));
     state.wallSitSec = Math.max(state.wallSitSec, heldSec);
     state.wallSitStartedAt = null;
+    clearHoldStart();
+    return;
+  }
+  // v62.3 fix round 1 (item 5): no live start but a stored one for THIS step = the app reloaded
+  // mid-hold (the start is only forgotten on a reload; every other exit clears the record). The hold
+  // is what the timer would have shown with no reload, capped at the hold.
+  const ex = getCurrentExercise();
+  if (ex && ex.name === 'Wall sit' && ex.durationSec) {
+    const held = heldSecAfterReload(holdStepKey(), ex.durationSec);
+    if (held !== null) state.wallSitSec = Math.max(state.wallSitSec, held);
+    clearHoldStart();
   }
 }
 
@@ -2038,6 +2054,7 @@ function startTimedExercise(): void {
     // (10 of 10 timed holds, May 19 → Sep 14).
     if (exerciseName === 'Wall sit') {
       state.wallSitStartedAt = Date.now();
+      markHoldStarted(holdStepKey()); // v62.3 fix round 1 (item 5): survives a reload
     }
     if (isIndoorLane(exerciseName)) {
       markLaneStarted(); // v62.3 F9: start time + the paused total at that instant
@@ -2061,6 +2078,7 @@ function startTimedExercise(): void {
         // fired late (phone asleep → the loop resumes minutes later), and the
         // new "✓ held 45 s" face would repeat that number to her.
         state.wallSitStartedAt = null;
+        clearHoldStart();
         state.wallSitSec = Math.max(state.wallSitSec, duration);
       }
       requestRender();
