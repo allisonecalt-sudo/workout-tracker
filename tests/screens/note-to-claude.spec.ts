@@ -686,3 +686,74 @@ test.describe('v63 item 1: offline, then online', () => {
     await expect.poll(() => storedRecordings(page)).toBe(0);
   });
 });
+
+test.describe('v63 fix round: a recording is never dropped because IndexedDB failed', () => {
+  /** A recording kept in the queue: the key is there, Gemini is down, so it waits with its audio. */
+  async function keepARecording(page: Page): Promise<void> {
+    await seed(page, true);
+    net.gemini_mode = 'down';
+    await openSheet(page);
+    await record(page);
+    await page.locator('#note-send').click();
+    await expect(page.locator('#note-done')).toBeVisible();
+    expect(await queue(page)).toHaveLength(1);
+    expect(await storedRecordings(page)).toBe(1);
+  }
+
+  test('IndexedDB will not open: the note stays queued, nothing is said, and it goes once it opens', async ({
+    page,
+    context,
+  }) => {
+    await context.addInitScript(() => {
+      if (window.localStorage.getItem('test-break-idb') === '1') {
+        (window.indexedDB as unknown as { open: () => never }).open = () => {
+          throw new Error('indexedDB is broken in this test');
+        };
+      }
+    });
+    await keepARecording(page);
+    await page.evaluate(() => window.localStorage.setItem('test-break-idb', '1'));
+    net.gemini_mode = 'ok';
+    // a new page on the same phone: its IndexedDB will not open
+    const next = await context.newPage();
+    await next.goto('/');
+    await next.evaluate(() => window.dispatchEvent(new Event('online')));
+    await next.waitForTimeout(600);
+    expect(await queue(next)).toHaveLength(1); // kept: a store that would not open says nothing about the audio
+    await expect(next.locator('#wt-toast')).toHaveCount(0);
+    expect(net.captures).toHaveLength(0);
+    // IndexedDB opens again: the next try is not stuck on the failed open
+    await next.evaluate(() => {
+      window.localStorage.removeItem('test-break-idb');
+      delete (window.indexedDB as unknown as { open?: unknown }).open;
+      window.dispatchEvent(new Event('online'));
+    });
+    await expect.poll(() => net.captures.length).toBe(1);
+    expect(net.captures[0]!.body['transcript']).toBe('[Workout app · Home] hello from the mic');
+    await expect.poll(async () => (await queue(next)).length).toBe(0);
+  });
+
+  test('the audio is confirmed gone: the note is removed and she is told', async ({ page }) => {
+    await keepARecording(page);
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          const req = indexedDB.open('workout-tracker-notes', 1);
+          req.onsuccess = () => {
+            const tx = req.result.transaction('audio', 'readwrite');
+            tx.objectStore('audio').clear();
+            tx.oncomplete = () => {
+              req.result.close();
+              resolve();
+            };
+          };
+        })
+    );
+    expect(await storedRecordings(page)).toBe(0);
+    net.gemini_mode = 'ok';
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect(page.locator('#wt-toast')).toHaveText("A voice note couldn't be recovered.");
+    expect(await queue(page)).toEqual([]);
+    expect(net.captures).toHaveLength(0);
+  });
+});

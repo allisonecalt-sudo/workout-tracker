@@ -255,7 +255,8 @@ export function blobToBase64(blob: Blob): Promise<string> {
 
 /** Where a voice note's audio is kept (IndexedDB, in screens/notesheet.ts). */
 export type BlobStore = {
-  get: (id: string) => Promise<Blob | null>;
+  /** the audio; 'missing' = the store answered and it is not there; 'unavailable' = the store itself failed (IndexedDB would not open) */
+  get: (id: string) => Promise<Blob | 'missing' | 'unavailable'>;
   delete: (id: string) => Promise<void>;
 };
 
@@ -265,7 +266,9 @@ export type SendOutcome =
   /** Still in the queue: offline, or the inbox said no. Will try again. */
   | 'queued'
   /** A voice note that could not become text (no key / Gemini said no). The recording is kept. */
-  | 'no-text';
+  | 'no-text'
+  /** A voice note whose audio is confirmed gone (cleared site data): removed from the queue. */
+  | 'lost';
 
 /**
  * Take one queued note as far as it will go: transcribe it if it is a recording with no text yet,
@@ -276,11 +279,13 @@ export async function sendQueuedNote(note: QueuedNote, store: BlobStore): Promis
   if (text === null) {
     // a recording: needs its audio and a transcript first
     const blob = await store.get(note.id);
-    if (!blob) {
-      // the audio is gone (cleared site data): nothing can be done for this one, and keeping it
-      // would block the sync line for ever
+    // a store that failed to OPEN says nothing about the audio: keep the note, try again next time
+    if (blob === 'unavailable') return 'queued';
+    if (blob === 'missing') {
+      // the store answered and the audio is not in it (cleared site data): nothing can be done for this
+      // one, and keeping it would block the sync line for ever
       removeQueuedNote(note.id);
-      return 'queued';
+      return 'lost';
     }
     try {
       const spoken = await transcribeAudio(await blobToBase64(blob), 'audio/wav');
@@ -299,12 +304,14 @@ export async function sendQueuedNote(note: QueuedNote, store: BlobStore): Promis
 let flushing: Promise<number> | null = null;
 
 /** Send everything waiting (single-flight). Returns how many reached the inbox. */
-export function flushNotes(store: BlobStore): Promise<number> {
+export function flushNotes(store: BlobStore, onLost?: () => void): Promise<number> {
   if (flushing) return flushing;
   flushing = (async () => {
     let sent = 0;
     for (const note of loadNotesQueue()) {
-      if ((await sendQueuedNote(note, store)) === 'sent') sent++;
+      const outcome = await sendQueuedNote(note, store);
+      if (outcome === 'sent') sent++;
+      else if (outcome === 'lost') onLost?.();
     }
     return sent;
   })().finally(() => {

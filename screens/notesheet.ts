@@ -18,6 +18,7 @@
 import { state } from '../state.js';
 import { requestRender } from '../bus.js';
 import { escapeHtml } from '../format.js';
+import { showToast } from '../dom.js';
 import { stopVoiceNote } from '../audio.js';
 import {
   MAX_SECONDS,
@@ -46,7 +47,8 @@ const AUDIO_STORE = 'audio';
 let opened: Promise<IDBDatabase | null> | null = null;
 
 function openDb(): Promise<IDBDatabase | null> {
-  opened ??= new Promise((resolve) => {
+  if (opened) return opened;
+  const attempt: Promise<IDBDatabase | null> = new Promise((resolve) => {
     try {
       const req = indexedDB.open(DB_NAME, 1);
       req.onupgradeneeded = () => {
@@ -60,7 +62,12 @@ function openDb(): Promise<IDBDatabase | null> {
       resolve(null);
     }
   });
-  return opened;
+  // a failed open is not remembered: the next call tries again
+  opened = attempt;
+  void attempt.then((db) => {
+    if (db === null && opened === attempt) opened = null;
+  });
+  return attempt;
 }
 
 async function idb<T>(
@@ -85,7 +92,8 @@ async function idb<T>(
 const audioStore: BlobStore = {
   get: async (id) => {
     const r = await idb<unknown>('readonly', (s) => s.get(id));
-    return r && r.value instanceof Blob ? r.value : null;
+    if (r === null) return 'unavailable';
+    return r.value instanceof Blob ? r.value : 'missing';
   },
   delete: async (id) => {
     await idb('readwrite', (s) => s.delete(id));
@@ -99,7 +107,7 @@ async function keepAudio(id: string, blob: Blob): Promise<boolean> {
 
 /** Send everything waiting (boot, `online`). The Home sync line follows. */
 export function flushNotesNow(): void {
-  void flushNotes(audioStore).then(() => {
+  void flushNotes(audioStore, () => showToast(COPY.lost)).then(() => {
     if (state.screen === 'home') requestRender();
   });
 }
@@ -122,6 +130,7 @@ const COPY = {
   confirmTitle: 'Send this note?',
   discard: 'Discard',
   keep: 'Keep editing',
+  lost: "A voice note couldn't be recovered.",
   denied: "The microphone isn't available. You can write it instead.",
   tooShort: 'That was too short. Try again, or write it instead.',
   limit: 'Three minutes is the longest. That is where it stopped.',
@@ -349,6 +358,7 @@ export function openNoteSheet(): void {
       busy = false;
       if (outcome === 'sent') return finish(COPY.sent);
       if (outcome === 'queued') return finish(COPY.savedLocal);
+      if (outcome === 'lost') return finish(COPY.lost);
       heldNote = note;
       return go('failed');
     }
@@ -381,6 +391,7 @@ export function openNoteSheet(): void {
     busy = false;
     if (outcome === 'sent') return finish(COPY.sent);
     if (outcome === 'queued') return finish(COPY.savedLocal);
+    if (outcome === 'lost') return finish(COPY.lost);
     go('failed');
   };
 

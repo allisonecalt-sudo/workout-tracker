@@ -939,6 +939,8 @@ v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, w
 v62.5 S1 - a wall sit after a reload freezes at the label › label = what is saved: held 20, reload, 120 s idle, "Log what I did" saves 20
 v62.5 S1 - a wall sit after a reload freezes at the label › two reloads count the hold once: 20 held, reload, 100 s, reload again -> still 20, hold 10 -> 30
 v63 - the version › package.json appVersion (the one source) is v63
+v63 fix round: a recording is never dropped because IndexedDB failed › IndexedDB will not open: the note stays queued, nothing is said, and it goes once it opens
+v63 fix round: a recording is never dropped because IndexedDB failed › the audio is confirmed gone: the note is removed and she is told
 v63 item 1: a recording is never dropped › Gemini says no: same screen, the recording stays; Write instead keeps it and can delete it on purpose
 v63 item 1: a recording is never dropped › a kept recording is transcribed and sent on the next open once there is a key
 v63 item 1: a recording is never dropped › no Gemini key on this device: the recording is kept, with Try again / Write instead
