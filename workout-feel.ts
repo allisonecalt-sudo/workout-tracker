@@ -199,6 +199,15 @@ export function renderStretchFeel(): string {
 // v58's other waits are back too (fix round 2): a hold asks only after the hold has run (holdRan), a cardio
 // lane only after the lane has run and its timer is idle (laneRan && timerIdle) - `ready` - because a feel
 // before doing the move means nothing. Every other move is ready at once.
+// The sets count of a generic move is kept PER ROUND (fix round 3): setsDoneFor is per move NAME for the
+// whole session, and the counter now shows in every round, so round 1's two taps would have used it up and
+// round 2 would show the row at once. Key = name | phase | round (main only), so every round runs
+// Set 1 -> Set N -> the row, and a reload mid-round keeps that round's count (setsDoneFor is in the snapshot).
+// curl / row keep their own count by name (renderArmFeel, armFeelString): untouched.
+export function moveSetsKey(ex: Exercise): string {
+  return `${ex.name}|${state.currentPhase}|${state.currentPhase === 'main' ? state.currentRound : 0}`;
+}
+
 export function renderMoveFeel(
   ex: Exercise,
   opts: { hold?: boolean; ready?: boolean } = {}
@@ -206,12 +215,13 @@ export function renderMoveFeel(
   if (ARM_FEEL_STEPS[ex.name]) return ''; // curl/row keep arm_feel, unmigrated
   if (opts.ready === false) return '';
   const total = multiSetCount(ex.reps);
-  const done = Math.min(state.setsDoneFor[ex.name] ?? 0, total);
+  const setsKey = moveSetsKey(ex);
+  const done = Math.min(state.setsDoneFor[setsKey] ?? 0, total);
   if (!opts.hold && total > 1 && done < total) {
     return `
       <div class="move-feel move-feel-sets" role="group" aria-label="Sets">
         <span class="move-feel-label">Set ${done + 1} of ${total}</span>
-        <button class="arm-set-btn" type="button" data-mark-set="${escapeHtml(ex.name)}">Set ${done + 1} done</button>
+        <button class="arm-set-btn" type="button" data-mark-set="${escapeHtml(setsKey)}">Set ${done + 1} done</button>
       </div>`;
   }
   return renderFeelRow(slugFor(ex.name));

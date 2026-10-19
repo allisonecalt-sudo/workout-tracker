@@ -958,6 +958,65 @@ test.describe('v48 P5 logs', () => {
     await expect(page.locator('.move-feel .arm-chip')).toHaveText(['Easy', 'Right', 'Hard']);
   });
 
+  // v63 fix round 3 (Oct 19 2026): the "Set N done" count is per ROUND. It used to be per move name for the
+  // whole session, so round 1's two taps used it up and round 2 showed the row at once.
+  test('v58 (d4) Hip hinge: every round runs Set 1 -> Set 2 -> the feel row, and a reload mid-round keeps that round count', async ({
+    page,
+    context,
+  }) => {
+    const SEP21 = TUE_WEEK4; // Round 2 Week 4: the week Hip hinge is the stepped, two-set move
+    await mockDate(page, SEP21);
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    const toHinge = async (p: Page, round: number): Promise<void> => {
+      for (let i = 0; i < 80; i++) {
+        const name =
+          (await p
+            .locator('.exercise-name')
+            .textContent({ timeout: 1000 })
+            .catch(() => '')) ?? '';
+        const ind =
+          (await p
+            .locator('.round-indicator')
+            .textContent()
+            .catch(() => '')) ?? '';
+        if (name === 'Hip hinge' && ind.includes(`Round ${round}`)) return;
+        if (!(await tapForward(p))) break;
+      }
+      throw new Error(`never reached Hip hinge in round ${round}`);
+    };
+    const sets = (p: Page) => p.locator('.move-feel-sets');
+    const sequence = async (p: Page, from: number): Promise<void> => {
+      for (let n = from; n <= 2; n++) {
+        await expect(sets(p).locator('.move-feel-label')).toHaveText(`Set ${n} of 2`);
+        await expect(sets(p).locator('[data-mark-set]')).toHaveText(`Set ${n} done`);
+        await expect(p.locator('.move-feel .arm-chip')).toHaveCount(0);
+        await sets(p).locator('[data-mark-set]').click();
+      }
+      await expect(sets(p)).toHaveCount(0);
+      await expect(p.locator('.move-feel-label')).toHaveText('How was this one?');
+    };
+    await toHinge(page, 1);
+    await sequence(page, 1); // round 1: the full counter, then the row
+    await toHinge(page, 2);
+    // round 2 starts again at Set 1 (round 1 did not use it up), and one set in:
+    await expect(sets(page).locator('.move-feel-label')).toHaveText('Set 1 of 2');
+    await expect(page.locator('.move-feel .arm-chip')).toHaveCount(0);
+    await sets(page).locator('[data-mark-set]').click();
+    await expect(sets(page).locator('.move-feel-label')).toHaveText('Set 2 of 2');
+
+    // the app is closed and reopened mid-round-2: the session resumes with THIS round's count
+    const reopened = await context.newPage();
+    await mockDate(reopened, SEP21);
+    await reopened.goto('/');
+    await expect(reopened.locator('.exercise-name')).toHaveText('Hip hinge');
+    await expect(reopened.locator('.move-feel-sets .move-feel-label')).toHaveText('Set 2 of 2');
+    await sets(reopened).locator('[data-mark-set]').click();
+    await expect(reopened.locator('.move-feel-sets')).toHaveCount(0);
+    await expect(reopened.locator('.move-feel-label')).toHaveText('How was this one?');
+  });
+
   // v58 fix r3-style proof (Sep 28 2026), same shape as the arm_feel v55
   // push -> pull round trip above: the move_feel column round-trips through
   // the real push shape and the real pull-merge, byte for byte.

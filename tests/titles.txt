@@ -772,6 +772,7 @@ v48 P5 logs › v58 (b) the pre-log "Stepped this week" line names the real move
 v48 P5 logs › v58 (d) a hold step (Wall sit, 40s -> 45s) never shows the chip before the hold has actually run
 v48 P5 logs › v58 (d2) a hold asks "How was this one?" only once the hold has run, then a tap saves it
 v48 P5 logs › v58 (d3) the apartment lane asks "How was this one?" only after the lane has run and its timer is idle
+v48 P5 logs › v58 (d4) Hip hinge: every round runs Set 1 -> Set 2 -> the feel row, and a reload mid-round keeps that round count
 v48 P5 logs › v58 (e) push -> pull round trip: move_feel survives sessionPayload + mergeRemoteSessions untouched
 v48 P5 logs › v58 (f) a tapped feel survives an app close mid-session (the resume snapshot)
 v48 P5 logs › v63 item 2: the row shows in round 1 and in the last round; a tap saves the right slug — no qty on a reps-only move
