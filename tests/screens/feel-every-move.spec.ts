@@ -191,15 +191,27 @@ test.describe('v63 item 2: How was this one?', () => {
     expect(saved['moveFeel'] ?? null).toBeNull();
   });
 
-  test('the cool-down list has no feel rows (held: eleven more rows put the page past its 1400 px budget)', async ({
+  test('the cool-down list has ONE quiet row, "How was the stretching?", saved as stretches=<feel>, within the 1400 px budget', async ({
     page,
   }) => {
     await startA(page);
     await walkUntil(page, () => page.locator('.stretch-card').isVisible());
-    await expect(page.locator('.stretch-row').first()).toBeVisible();
-    await expect(page.locator('.stretch-row .move-feel')).toHaveCount(0);
+    await expect(page.locator('.stretch-row .move-feel')).toHaveCount(0); // none per stretch
+    await expect(page.locator('.move-feel')).toHaveCount(1);
+    await expect(page.locator('.move-feel-label')).toHaveText('How was the stretching?');
+    await expect(page.locator('.move-feel .arm-chip')).toHaveText(['Easy', 'Right', 'Hard']);
     const h = await page.evaluate(() => document.documentElement.scrollHeight);
     expect(h).toBeLessThanOrEqual(1400);
+    await chip(page, 'stretches', 'right').click();
+    await chip(page, 'stretches', 'right').click(); // cleared
+    await chip(page, 'stretches', 'easy').click();
+    await expect(chip(page, 'stretches', 'easy')).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('#next').click(); // Done stretching
+    await expect(page.locator('text=Quick log')).toBeVisible();
+    await page.locator('#save-log').click();
+    await expect(page.locator('.home-header h1')).toBeVisible();
+    const saved = (await readLogs(page))[0]!;
+    expect(saved['moveFeel']).toBe('stretches=easy');
   });
 
   test('a tapped feel survives an app close mid-workout', async ({ page, context }) => {

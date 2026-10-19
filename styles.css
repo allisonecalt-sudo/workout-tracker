@@ -6980,3 +6980,46 @@ textarea:focus {
 .move-sheet-close {
   margin-top: 6px;
 }
+
+/* v63 item 4: the quiet "Preview the moves" link under Home's Up next card, and the list sheet it opens. */
+.preview-link {
+  display: block;
+  margin: 2px auto 6px;
+  padding: 0 16px;
+  min-height: 44px;
+  background: transparent;
+  border: 0;
+  color: var(--ink-2);
+  font-size: var(--font-small);
+  font-weight: 500;
+}
+
+.move-list-group {
+  margin: 6px 0 0;
+  font-size: var(--font-meta);
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.move-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 4px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--hair);
+  border-radius: 0;
+  color: var(--ink);
+  text-align: left;
+}
+
+.move-list-reps {
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  text-align: right;
+}

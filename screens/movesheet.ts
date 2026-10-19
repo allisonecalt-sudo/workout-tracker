@@ -1,6 +1,6 @@
 // screens/movesheet.ts - the read-only move preview (v63 item 4, Oct 19 2026).
 //
-// WHAT: tap a move's name in the pre-log "What's in it" overview and a
+// WHAT: tap a move's name in the pre-log "What's in it" overview (or in Home's Preview list) and a
 // bottom sheet opens with that move's existing content, read-only: its name and amount, the picture and
 // video row (renderExerciseVisual), the Tips row, the detail card with the spoken "Listen - how to do it"
 // note (renderDetailCard) and the how-to card (renderHowToCard). The workout page shows the detail card OR the
@@ -13,10 +13,9 @@
 // instant it draws, then puts them back; it never marks a how-to "seen", never counts a voice note
 // toward a session, and never redraws #app.
 // WIRING: a name carries data-preview-move="<workout>|<phase>|<index>" (markup only: the pre-log emits it, it never
-// imports this file). attachMoveSheetHandlers() (called by app.ts after each render) binds each one directly and
-// stops the tap there. NOT DONE: Home's Up next card. Its names would sit inside the card that is itself the Start
-// button (a tap on a name would preview instead of starting, and ~60 older tests tap the card's centre), so that
-// half of the spec is held for her answer; this file already handles it (resolveMove reads Home refs too).
+// imports this file). attachMoveSheetHandlers() (called by app.ts after each render) binds each one directly. HOME:
+// the Up next card stays ONE Start button (a tap on a name inside it would preview instead of starting); a separate
+// quiet "👁 Preview the moves" link under it opens a list of the workout's moves, and a name there opens this preview.
 // RULES: a screen. Imports the shared layer only; never app.ts, never another screen.
 
 import { state } from '../state.js';
@@ -167,7 +166,75 @@ export function openMoveSheet(ex: Exercise): void {
   sheet.querySelector<HTMLButtonElement>('#move-sheet-close')?.focus({ preventScroll: true });
 }
 
-/** Bind every tappable move name on the page (Home's Up next card, the pre-log overview). */
+// ---------- Home: "👁 Preview the moves" -> the list of this workout's moves ----------
+
+const LIST_ID = 'move-list-sheet';
+const PHASES: { key: 'warmup' | 'main' | 'upperBack' | 'cooldown'; label: string }[] = [
+  { key: 'warmup', label: 'Warm-up' },
+  { key: 'main', label: 'Main' },
+  { key: 'upperBack', label: 'Upper back' },
+  { key: 'cooldown', label: 'Stretch' },
+];
+
+/** A sheet listing one workout's moves (name + amount); a tap on a name opens the read-only move preview over it. */
+export function openMoveListSheet(id: string): void {
+  if (document.getElementById(LIST_ID)) return;
+  const w = getWorkoutById(id as 'A' | 'B' | 'C') as unknown as Record<
+    string,
+    Exercise[] | undefined
+  >;
+  const scrollY = window.scrollY;
+  const groups = PHASES.map(({ key, label }) => {
+    const items = w[key] ?? [];
+    if (items.length === 0) return '';
+    const rows = items
+      .map(
+        (ex, i) =>
+          `<button type="button" class="move-list-row" data-preview-move="${escapeHtml(`${id}|${key}|${i}`)}"><span>${escapeHtml(displayName(ex))}</span><span class="move-list-reps">${escapeHtml(ex.reps ?? '')}</span></button>`
+      )
+      .join('');
+    return `<p class="move-list-group">${escapeHtml(label)}</p>${rows}`;
+  }).join('');
+  const sheet = document.createElement('div');
+  sheet.id = LIST_ID;
+  sheet.className = 'move-sheet';
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-modal', 'true');
+  sheet.setAttribute('aria-label', `Workout ${id} moves`);
+  sheet.innerHTML = `
+    <div class="move-sheet-card">
+      <div class="move-sheet-head">
+        <h2 class="move-sheet-name" id="move-list-name">Workout ${escapeHtml(id)}</h2>
+        <button type="button" class="move-sheet-x" id="move-list-x" aria-label="Close">×</button>
+      </div>
+      ${groups}
+      <button type="button" class="btn-large btn-primary move-sheet-close" id="move-list-close">Close</button>
+    </div>`;
+  document.body.appendChild(sheet);
+  const close = (): void => {
+    document.removeEventListener('keydown', onListKey);
+    sheet.remove();
+    window.scrollTo(0, scrollY); // back to Home exactly where she was
+  };
+  const onListKey = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape' && !moveSheetOpen()) close(); // a move preview open on top closes first
+  };
+  document.addEventListener('keydown', onListKey);
+  sheet.addEventListener('click', (e) => {
+    if (e.target === sheet) close();
+  });
+  sheet.querySelector('#move-list-x')?.addEventListener('click', close);
+  sheet.querySelector('#move-list-close')?.addEventListener('click', close);
+  // a name in the list opens the same preview (bound here: the list is not part of #app's redraw)
+  sheet.querySelectorAll<HTMLElement>('[data-preview-move]').forEach((el) =>
+    el.addEventListener('click', () => {
+      const ex = resolveMove(el.dataset['previewMove'] ?? '');
+      if (ex) openMoveSheet(ex);
+    })
+  );
+}
+
+/** Bind every tappable move name on the page (the pre-log overview) and Home's Preview link. */
 export function attachMoveSheetHandlers(): void {
   document.querySelectorAll<HTMLElement>('[data-preview-move]').forEach((el) => {
     const open = (e: Event): void => {
@@ -181,4 +248,10 @@ export function attachMoveSheetHandlers(): void {
       if (e.key === 'Enter' || e.key === ' ') open(e);
     });
   });
+  // Home: the quiet link under the Up next card (the card itself stays the Start button)
+  document
+    .querySelectorAll<HTMLElement>('[data-preview-list]')
+    .forEach((el) =>
+      el.addEventListener('click', () => openMoveListSheet(el.dataset['previewList'] ?? ''))
+    );
 }

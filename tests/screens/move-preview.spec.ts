@@ -1,8 +1,7 @@
 // tests/screens/move-preview.spec.ts - v63 item 4 (Oct 19 2026), pre-log half: tap a move name in the
 // pre-log "What's in it" overview to open a read-only sheet with the move's existing content.
 //
-// (Home's Up next card is NOT part of this build: its names sit inside the card that is itself the Start
-// button, and about sixty older tests tap that card's centre. See the commit message.)
+// Home: the Up next card stays ONE Start button; a separate quiet link under it opens a list of the moves.
 //
 // Read-only means: nothing about the move or the session changes. Nothing is saved, no how-to is marked
 // "seen", and the sheet keeps its own open / closed choices (it never touches the workout's).
@@ -142,5 +141,65 @@ test.describe('v63 item 4: tap a move in the pre-log overview to preview it', ()
     const name = ((await main.locator('[data-preview-move]').first().textContent()) ?? '').trim();
     await main.locator('[data-preview-move]').first().click();
     await expect(page.locator('#move-sheet-name')).toHaveText(name);
+  });
+});
+
+test.describe('v63 item 4: Home - 👁 Preview the moves', () => {
+  async function home(page: Page): Promise<void> {
+    await mockDate(page, TUE_WEEK4);
+    await page.goto('/');
+    await expect(page.locator('.home-hero')).toBeVisible();
+  }
+  const list = (page: Page) => page.locator('#move-list-sheet');
+
+  test('the card is still one Start button and the link sits under it, outside it', async ({
+    page,
+  }) => {
+    await home(page);
+    await expect(page.locator('button.home-hero')).toHaveCount(1);
+    await expect(
+      page.locator('.home-hero [data-preview-move], .home-hero #home-preview-moves')
+    ).toHaveCount(0);
+    await expect(page.locator('#home-preview-moves')).toHaveText('👁 Preview the moves');
+    const hero = (await page.locator('.home-hero').boundingBox())!;
+    const link = (await page.locator('#home-preview-moves').boundingBox())!;
+    expect(link.y).toBeGreaterThanOrEqual(hero.y + hero.height - 1);
+    expect(link.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test('the link opens the list (names + amounts), a name opens the preview, Close returns to Home at the same scroll', async ({
+    page,
+  }) => {
+    await home(page);
+    await page.evaluate(() => window.scrollTo(0, 60));
+    await page.locator('#home-preview-moves').click();
+    await expect(list(page)).toBeVisible();
+    const y = await page.evaluate(() => window.scrollY);
+    await expect(list(page).locator('.move-list-row').first()).toBeVisible();
+    expect(await list(page).locator('.move-list-row').count()).toBeGreaterThan(10);
+    await expect(
+      list(page).locator('.move-list-row').first().locator('.move-list-reps')
+    ).not.toBeEmpty();
+    const name = (
+      (await list(page).locator('.move-list-row span').first().textContent()) ?? ''
+    ).trim();
+    await list(page).locator('.move-list-row').first().click();
+    await expect(sheet(page)).toBeVisible();
+    await expect(page.locator('#move-sheet-name')).toHaveText(name);
+    await page.keyboard.press('Escape'); // closes the preview only
+    await expect(sheet(page)).toHaveCount(0);
+    await expect(list(page)).toBeVisible();
+    await list(page).locator('#move-list-close').scrollIntoViewIfNeeded();
+    await list(page).locator('#move-list-close').click();
+    await expect(list(page)).toHaveCount(0);
+    await expect(page.locator('.home-hero')).toBeVisible(); // still Home, nothing started
+    expect(await page.evaluate(() => window.scrollY)).toBe(y);
+  });
+
+  test('the card still starts the workout with a tap in its middle', async ({ page }) => {
+    await home(page);
+    await page.locator('button[data-workout="A"]').click();
+    await expect(page.locator('#begin')).toBeVisible();
+    await expect(list(page)).toHaveCount(0);
   });
 });

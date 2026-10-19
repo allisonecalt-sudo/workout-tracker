@@ -653,6 +653,12 @@ function renderWorkoutDChip(dDoneToday: boolean): string {
     </div>`;
 }
 
+// v63 item 4 (Oct 19 2026): the card stays ONE Start button; a separate quiet link under it opens a sheet that
+// lists the workout's moves (screens/movesheet.ts binds [data-preview-list]); a name there opens the move preview.
+function renderPreviewLink(id: WorkoutId): string {
+  return `<button class="preview-link" id="home-preview-moves" type="button" data-preview-list="${id}">👁 Preview the moves</button>`;
+}
+
 // The "Up next" hero — the ONE sage thing on home. The whole card is the tap
 // target (→ pre-log), so Home → working out stays 2 taps (guide §1).
 function renderUpNextHero(id: WorkoutId): string {
@@ -1131,7 +1137,7 @@ export function renderHome(): string {
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
     ${ui.staleSnapshot ? renderStaleSessionCard(ui.staleSnapshot) : ''}
 
-    ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : renderUpNextHero(pick)}
+    ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : renderUpNextHero(pick) + renderPreviewLink(pick)}
     ${chipsHtml}
     ${renderWorkoutDChip(dDoneToday)}
 

@@ -28,6 +28,7 @@ test.describe('every move has a slug of its own (v63 item 2)', () => {
           ...groupStretchPairs(w.cooldown ?? []).map((g) => g.name),
         ];
         const bySlug = new Map<string, Set<string>>();
+        names.push('Stretches'); // the cool-down's one row is saved under this slug too
         for (const n of names) {
           const slug = slugFor(n);
           expect(slug, n).toMatch(/^[a-z]+$/);

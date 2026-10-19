@@ -22,6 +22,7 @@ import {
   type StretchGroup,
 } from './workout-parts.js';
 import { renderExerciseSetup } from './workout-cards.js';
+import { renderStretchFeel } from './workout-feel.js';
 import { rawCurrentExercise, displayName } from './workout-now.js';
 
 // Group 2H: rest screen now leads with a large countdown ring/arc; Skip is a
@@ -202,6 +203,7 @@ export function renderCooldownList(w: Workout): string {
     <div class="card stretch-card">
       <ul class="stretch-list">${rows}</ul>
     </div>
+    ${renderStretchFeel()}
     <button class="back-link cooldown-skip" id="cooldown-skip" type="button">Skip</button>
 
     ${renderStepNav('Done stretching ✓')}

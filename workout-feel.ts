@@ -162,8 +162,8 @@ export function renderArmFeel(ex: Exercise): string {
 
 // v63 item 2 (Oct 19 2026) — "How was this one?  Easy · Right · Hard" on EVERY move page: warm-up, main
 // (every round), upper back and the cardio slot (walk / apartment; the elliptical keeps its own ride
-// feel). NOT the cool-down rows: eleven more rows push that list to ~1615 px, past the 1400 px budget
-// tests/screens/mirror-and-cooldown.spec.ts keeps for it; held for her call (see the v63 fix commit). One quiet row; optional; a second tap on the picked one clears it;
+// feel). NOT a row per stretch (eleven more rows push that list to ~1615 px, past the 1400 px budget
+// tests/screens/mirror-and-cooldown.spec.ts keeps for it): the cool-down gets ONE row, renderStretchFeel. One quiet row; optional; a second tap on the picked one clears it;
 // it never blocks Done. It REPLACES v58's rule (only the moves that stepped this week, only on their
 // last round, only after the last set / the hold / the walk had run), so the "Stepped this week —
 // how did it feel?" chip and its "Set N done" counter (which existed only to hold that chip back)
@@ -171,7 +171,7 @@ export function renderArmFeel(ex: Exercise): string {
 // Saved in the move_feel column exactly as before ("slug=feel@qty", move-feel.ts): the feel is kept
 // per MOVE (its slug), so with several rounds the LAST tap on that move wins, and a tap that clears
 // it clears it. curl / row keep their own arm feel + load chips (arm_feel, unmigrated).
-export function renderFeelRow(slug: string): string {
+export function renderFeelRow(slug: string, question = 'How was this one?'): string {
   const current = state.moveFeel[slug];
   const chips = MOVE_FEEL_VALUES.map((v) => {
     const on = current === v;
@@ -179,10 +179,17 @@ export function renderFeelRow(slug: string): string {
     return `<button class="arm-chip${on ? ' arm-chip-on' : ''}" type="button" data-move-feel-slug="${slug}" data-move-feel="${v}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
   }).join('');
   return `
-    <div class="move-feel" role="group" aria-label="How was this one?">
-      <span class="move-feel-label">How was this one?</span>
+    <div class="move-feel" role="group" aria-label="${question}">
+      <span class="move-feel-label">${question}</span>
       <div class="arm-feel-chips">${chips}</div>
     </div>`;
+}
+
+// The cool-down list gets ONE quiet row at its bottom (not a row per stretch: that list has a 1400 px budget),
+// saved in move_feel as `stretches=<feel>`.
+export const STRETCHES_SLUG = 'stretches';
+export function renderStretchFeel(): string {
+  return renderFeelRow(STRETCHES_SLUG, 'How was the stretching?');
 }
 
 export function renderMoveFeel(ex: Exercise): string {
@@ -209,6 +216,9 @@ export function currentFeelMoves(): SteppedMove[] {
   };
   for (const ex of [...w.warmup, ...w.main, ...(w.upperBack ?? [])]) {
     add(feelMoveFor(ex));
+  }
+  if ((w.cooldown ?? []).length > 0) {
+    add({ name: 'Stretches', slug: STRETCHES_SLUG, kind: 'reps', summary: 'stretches' });
   }
   return [...out.values()];
 }

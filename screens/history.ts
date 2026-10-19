@@ -83,6 +83,7 @@ function moveFeelText(log: LogEntry): string {
     names.set(slugFor(ex.name), displayName(ex));
   }
   for (const g of groupStretchPairs(w.cooldown ?? [])) names.set(slugFor(g.name), g.name);
+  names.set('stretches', 'Stretches');
   return moveFeelSummary(log.moveFeel, (slug) => names.get(slug) ?? null);
 }
 
