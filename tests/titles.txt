@@ -921,6 +921,40 @@ v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, w
 v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, wait 5 s, hold 10: label 20, done face 30, saves 30
 v62.5 S1 - a wall sit after a reload freezes at the label › label = what is saved: held 20, reload, 120 s idle, "Log what I did" saves 20
 v62.5 S1 - a wall sit after a reload freezes at the label › two reloads count the hold once: 20 held, reload, 100 s, reload again -> still 20, hold 10 -> 30
+v63 item 1: a recording is never dropped › Gemini says no: same screen, the recording stays; Write instead keeps it and can delete it on purpose
+v63 item 1: a recording is never dropped › a kept recording is transcribed and sent on the next open once there is a key
+v63 item 1: a recording is never dropped › no Gemini key on this device: the recording is kept, with Try again / Write instead
+v63 item 1: offline, then online › a recording made offline waits (audio kept), then is transcribed and sent when the network is back
+v63 item 1: offline, then online › a written note while the inbox is unreachable is queued, named on Home, and goes on `online`
+v63 item 1: offline, then online › the inbox saying no (a 500, or a 409 that is not our own row) leaves the note queued
+v63 item 1: offline, then online › the same note retried after a lost answer (409 / 23505) counts as sent, not twice
+v63 item 1: recording a note › Record -> timer -> Stop -> Play / Record again / Send, then it is transcribed and sent as a voice row
+v63 item 1: recording a note › Record again throws away the first clip and starts a new one
+v63 item 1: recording a note › a slip of the finger (under half a second) says so and offers Record / Write
+v63 item 1: recording a note › closing a finished recording asks "Send this note?", and Discard drops it for real
+v63 item 1: recording a note › closing while still recording stops the microphone and asks about what was recorded
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Cool-down
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Cycle
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Home
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Post-log
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Pre-log
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Progress
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Rides
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Session detail
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Sessions
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Settings
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Weekly review
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Workout: Paused
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Workout: a move
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Workout: between rounds
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Workout: rest
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Workout: the cardio choice
+v63 item 1: the 🎤 Note button › pinned top right, covering nothing: Workout: the step list
+v63 item 1: writing a note › close with a written note asks "Send this note?": Keep editing / Discard / Send
+v63 item 1: writing a note › close with nothing in it just closes; a tap outside never throws away a draft
+v63 item 1: writing a note › the note starts with where she was, down to the round and the move
+v63 item 1: writing a note › the text box is dir="auto" so Hebrew reads right
+v63 item 1: writing a note › write -> Send puts one row in the inbox, shaped exactly like voice-capture's
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

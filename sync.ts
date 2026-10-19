@@ -22,6 +22,7 @@ import {
   PULL_LIMIT,
 } from './state.js';
 import { requestRender } from './bus.js';
+import { unsentNotesCount } from './notes-queue.js';
 import { planForLog, completionClosingSessionIds } from './week-clock.js';
 import { legacyCardioMarker } from './cardio-notes.js';
 import { workoutHasWallSit } from './hold-sets.js';
@@ -647,10 +648,14 @@ export function syncIndicatorText(): string {
     loadLogs().filter((l) => !l.synced).length +
     loadCyclePeriods().filter((p) => !p.synced).length +
     loadWeekMoves().filter((m) => !m.synced).length;
+  // v63 item 1: a "Note to Claude" not yet in her inbox is named here too, in its own words; with
+  // none waiting the text is exactly what it was.
+  const notes = unsentNotesCount();
+  const unsent = notes > 0 ? `${notes} note${notes === 1 ? '' : 's'} not sent yet` : '';
   if (state.syncStatus === 'syncing') return 'syncing…';
-  if (pending > 0) return `offline · ${pending} pending`;
+  if (pending > 0) return `offline · ${pending} pending${unsent ? ` · ${unsent}` : ''}`;
   // v48 · P4 (Sep 24 2026): "synced ✓" hides — it was a third status line above
   // the first action (assumptions, Kill). The word shows only when something
   // is syncing or waiting, which is exactly when it matters.
-  return '';
+  return unsent;
 }

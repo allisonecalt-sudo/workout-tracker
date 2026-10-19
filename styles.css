@@ -6698,3 +6698,166 @@ textarea:focus {
   color: var(--text-dim-2);
   margin-top: 6px;
 }
+
+/* ----------------------------------------------------------------------------
+ * v63 item 1 (Oct 19 2026) — "Note to Claude". The 🎤 Note button is pinned in the top-right corner of
+ * EVERY screen, outside #app, so no screen's redraw touches it. #app starts 28px down (its top padding),
+ * and the button lives in that strip (top 2px, 24px tall): it never covers a header button (Pause, List,
+ * Quit, Back) and never the pinned action bar at the bottom. Above the sheets (z 1000) so it stays
+ * reachable over Paused and the List; below its own sheet.
+ * -------------------------------------------------------------------------- */
+.note-pin {
+  position: fixed;
+  top: calc(2px + env(safe-area-inset-top));
+  right: 10px;
+  z-index: 1100;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.note-pin:active {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.note-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.note-card {
+  width: 100%;
+  max-width: 520px;
+  max-height: 92vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 20px calc(18px + env(safe-area-inset-bottom));
+  background: var(--grad-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.note-title {
+  margin: 0;
+  font-size: var(--font-heading);
+  text-align: center;
+}
+
+.note-line {
+  margin: 0;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: var(--font-small);
+  overflow-wrap: anywhere;
+}
+
+.note-card .btn-back {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--edge);
+}
+
+.note-card .note-close {
+  align-self: center;
+}
+
+.note-rec-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 72px;
+}
+
+.note-rec-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: note-rec-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes note-rec-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-rec-dot {
+    animation: none;
+  }
+}
+
+.note-rec-time {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.note-text {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  box-sizing: border-box;
+  padding: 12px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--radius-sm);
+}
+
+.note-error {
+  margin: 0;
+  min-height: 0;
+  text-align: center;
+  color: var(--danger);
+  font-size: var(--font-small);
+}
+
+.note-done {
+  margin: 0;
+  padding: 24px 0;
+  text-align: center;
+  font-size: var(--font-subheading);
+  font-weight: 600;
+}
+
+.note-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}

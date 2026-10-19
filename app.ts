@@ -64,6 +64,7 @@ import {
   endPreLogClockTick,
 } from './screens/prelog.js';
 import { renderSettings, attachSettingsHandlers } from './screens/settings.js';
+import { mountNoteButton, flushNotesNow } from './screens/notesheet.js';
 import {
   renderHome,
   attachHomeHandlers,
@@ -657,6 +658,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Resume an in-progress workout if one was left open (Allison 2026-06-06).
   restoreActiveSession();
   render();
+  mountNoteButton(); // v63 item 1: the 🎤 Note button, pinned outside #app on every screen
+  flushNotesNow(); // ...and any note left unsent last time goes now
   void pullFromSupabase().then(() => {
     void flushPendingSyncs();
     void fetchStepsToday(); // v48 · P4: once, after the pull
@@ -667,6 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // v45: a session saved offline (gym basement, airplane mode) now syncs the
   // moment the signal comes back — before, only on the next app open.
   window.addEventListener('online', () => {
+    flushNotesNow();
     void flushPendingSyncs();
     void flushPendingWalks();
     void pullCyclePeriodsFromSupabase(); // v50 · cycle

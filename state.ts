@@ -412,6 +412,14 @@ export const LAST_DONE_KEY = 'workout-tracker:last-done';
 export const CYCLE_STORAGE_KEY = 'workout-tracker:cycle-periods';
 export const WEEK_MOVES_STORAGE_KEY = 'workout-tracker:week-moves';
 export const PACE_RULE_SEEN_KEY = 'workout-tracker:pace-rule-seen';
+// v63 item 1 (Oct 19 2026): the "Note to Claude" queue - the small record of every note not yet in
+// her Brain dump inbox (text notes carry their text, voice notes carry the id of the recording in
+// IndexedDB). A localStorage mirror so the Home sync line can count unsent notes without waiting
+// on IndexedDB.
+export const NOTES_QUEUE_KEY = 'workout-tracker:notes-queue';
+// The Gemini key lives in the voice-capture app's own localStorage slot (same origin, allisonecalt-sudo.github.io).
+// This app only READS it: never writes, logs or copies it anywhere else.
+export const GEMINI_KEY_STORAGE = 'voice-capture.gemini-key';
 
 // Rows kept locally / asked of Supabase per pull (see app.ts's mergeRemoteSessions).
 export const PULL_LIMIT = 200;
