@@ -706,16 +706,20 @@ test.describe('v63 item 1: offline, then online', () => {
 });
 
 test.describe('v63 fix round: a recording is never dropped because IndexedDB failed', () => {
-  /** A recording kept in the queue: the key is there, Gemini is down, so it waits with its audio. */
+  /** A recording kept in the queue: the key is there, Gemini refuses, so it waits with its audio. */
   async function keepARecording(page: Page): Promise<void> {
     await seed(page, true);
-    net.gemini_mode = 'down';
+    // Gemini says no (400): not retried, so the send ends at once. (A network that is down is retried four
+    // times with 0.6 + 1.2 + 2.4 s of waiting, which is what made a wait on the sheet flaky.)
+    net.gemini_mode = 'bad';
     await openSheet(page);
     await record(page);
     await page.locator('#note-send').click();
-    await expect(page.locator('#note-done')).toBeVisible();
-    expect(await queue(page)).toHaveLength(1);
-    expect(await storedRecordings(page)).toBe(1);
+    // wait on the work itself, not on a screen: the send has reached Gemini (and been refused, it is
+    // down), so nothing of this first send is still in flight when the test goes on
+    await expect.poll(() => net.gemini.length).toBe(1);
+    await expect.poll(async () => (await queue(page)).length).toBe(1);
+    await expect.poll(() => storedRecordings(page)).toBe(1);
   }
 
   test('IndexedDB will not open: the note stays queued, nothing is said, and it goes once it opens', async ({
@@ -731,6 +735,9 @@ test.describe('v63 fix round: a recording is never dropped because IndexedDB fai
     });
     await keepARecording(page);
     await page.evaluate(() => window.localStorage.setItem('test-break-idb', '1'));
+    // the first page is closed before Gemini comes back: a send of its own still in flight (it tries a
+    // second model after the first) must not be the one that delivers the note
+    await page.close();
     net.gemini_mode = 'ok';
     // a new page on the same phone: its IndexedDB will not open
     const next = await context.newPage();
@@ -751,9 +758,29 @@ test.describe('v63 fix round: a recording is never dropped because IndexedDB fai
     await expect.poll(async () => (await queue(next)).length).toBe(0);
   });
 
-  test('the audio is confirmed gone: the note is removed and she is told', async ({ page }) => {
+  test('the audio is confirmed gone: the note is removed and she is told', async ({
+    page,
+    context,
+  }) => {
     await keepARecording(page);
-    await page.evaluate(
+    // a page of its own for the rest (Gemini still down on its boot): nothing of the first send is in flight
+    await page.close();
+    const next = await context.newPage();
+    // the toast is short-lived: record every toast the page shows (from before its own code runs)
+    // instead of racing its 2.4 s
+    await next.addInitScript(() => {
+      const w = window as unknown as { __toasts: string[] };
+      w.__toasts = [];
+      document.addEventListener('DOMContentLoaded', () => {
+        new MutationObserver(() => {
+          const t = document.getElementById('wt-toast')?.textContent;
+          if (t && !w.__toasts.includes(t)) w.__toasts.push(t);
+        }).observe(document.body, { childList: true, subtree: true, characterData: true });
+      });
+    });
+    await next.goto('/');
+    await expect.poll(async () => (await queue(next)).length).toBe(1);
+    await next.evaluate(
       () =>
         new Promise<void>((resolve) => {
           const req = indexedDB.open('workout-tracker-notes', 1);
@@ -767,11 +794,16 @@ test.describe('v63 fix round: a recording is never dropped because IndexedDB fai
           };
         })
     );
-    expect(await storedRecordings(page)).toBe(0);
-    net.gemini_mode = 'ok';
-    await page.evaluate(() => window.dispatchEvent(new Event('online')));
-    await expect(page.locator('#wt-toast')).toHaveText("A voice note couldn't be recovered.");
-    expect(await queue(page)).toEqual([]);
+    expect(await storedRecordings(next)).toBe(0);
+    // Gemini keeps saying no: a missing recording is found before any Gemini call, so nothing can deliver it.
+    // A flush already running (single-flight) answers an early `online`, so ask again until one runs after the clear.
+    await expect
+      .poll(async () => {
+        await next.evaluate(() => window.dispatchEvent(new Event('online')));
+        return next.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts);
+      })
+      .toContain("A voice note couldn't be recovered.");
+    expect(await queue(next)).toEqual([]);
     expect(net.captures).toHaveLength(0);
   });
 });
