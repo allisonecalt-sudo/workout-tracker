@@ -70,6 +70,16 @@ async function saveAndRead(page: Page): Promise<Row> {
 }
 
 const hurt = (page: Page) => page.locator('#this-hurts');
+
+/** Tap This hurts and wait until the page has really moved on (the redraw is not synchronous: a walker that
+ *  read the old page next would tap its Done · Next and skip a second move). */
+async function tapHurt(page: Page): Promise<void> {
+  const before = `${await NAME(page)}|${await ROUND(page)}`;
+  await hurt(page).click();
+  await expect
+    .poll(async () => `${await NAME(page).catch(() => '')}|${await ROUND(page).catch(() => '')}`)
+    .not.toBe(before);
+}
 const skippedLine = (page: Page) => page.locator('.postlog-skipped');
 
 test.describe('v63 item 3: This hurts', () => {
@@ -106,7 +116,7 @@ test.describe('v63 item 3: This hurts', () => {
     await page.locator('#ww-start').click(); // Walk outside
     await expect(page.locator('#walk-live')).toBeVisible();
     await expect(hurt(page)).toHaveCount(1);
-    await hurt(page).click();
+    await tapHurt(page);
     await expect(page.locator('#wt-toast')).toHaveText('Got it, skipped.');
     expect(await NAME(page)).toBe('Belly breathing'); // on to the next move
   });
@@ -118,7 +128,7 @@ test.describe('v63 item 3: This hurts', () => {
     await page.locator('#ww-elliptical').click();
     await expect(page.locator('#ride-plan-line')).toBeVisible();
     await expect(hurt(page)).toHaveCount(1);
-    await hurt(page).click();
+    await tapHurt(page);
     expect(await NAME(page)).toBe('Belly breathing');
     await toPostLog(page);
     await expect(skippedLine(page)).toHaveText('1 move skipped (1 because it hurt)');
@@ -132,7 +142,7 @@ test.describe('v63 item 3: This hurts', () => {
   }) => {
     await startA(page);
     await goToMove(page, 'Glute bridges', 1);
-    await hurt(page).click();
+    await tapHurt(page);
     await expect(page.locator('#wt-toast')).toHaveText('Got it, skipped.');
     expect(await NAME(page)).toBe('Wall sit'); // the next move
     // the rest of the workout: Glute bridges comes round again in round 2 only, never again in round 1
@@ -153,7 +163,7 @@ test.describe('v63 item 3: This hurts', () => {
   }) => {
     await startA(page);
     await goToMove(page, 'Wall sit', 1);
-    await hurt(page).click();
+    await tapHurt(page);
     await toPostLog(page);
     await expect(skippedLine(page)).toHaveText('1 move skipped (1 because it hurt)');
     const saved = await saveAndRead(page);
@@ -173,7 +183,7 @@ test.describe('v63 item 3: This hurts', () => {
   test('back to a hurt move and Done takes the hurt off again', async ({ page }) => {
     await startA(page);
     await goToMove(page, 'Glute bridges', 1);
-    await hurt(page).click();
+    await tapHurt(page);
     expect(await NAME(page)).toBe('Wall sit');
     await page.locator('#step-back').click();
     expect(await NAME(page)).toBe('Glute bridges');
@@ -190,7 +200,7 @@ test.describe('v63 item 3: This hurts', () => {
   }) => {
     await startA(page);
     await goToMove(page, 'Glute bridges', 1);
-    await hurt(page).click();
+    await tapHurt(page);
     await goToMove(page, 'Glute bridges', 2);
     for (const f of ['easy', 'right', 'hard'] as const) {
       await expect(chip(page, 'glutebridges', f)).toHaveAttribute('aria-pressed', 'false'); // hurt is not a chip
@@ -208,9 +218,9 @@ test.describe('v63 item 3: This hurts', () => {
   }) => {
     await startA(page);
     await goToMove(page, 'Glute bridges', 1);
-    await hurt(page).click();
+    await tapHurt(page);
     await goToMove(page, 'Glute bridges', 2);
-    await hurt(page).click();
+    await tapHurt(page);
     await toPostLog(page);
     await expect(skippedLine(page)).toHaveText('2 moves skipped (2 because it hurt)');
     const saved = await saveAndRead(page);
@@ -221,7 +231,7 @@ test.describe('v63 item 3: This hurts', () => {
   test('a hurt survives an app close mid-workout', async ({ page, context }) => {
     await startA(page);
     await goToMove(page, 'Glute bridges', 1);
-    await hurt(page).click();
+    await tapHurt(page);
     const reopened = await context.newPage();
     await reopened.goto('/');
     await expect(reopened.locator('.round-indicator')).toBeVisible();
@@ -236,7 +246,7 @@ test.describe('v63 item 3: This hurts', () => {
   test('the walk lane hurt is saved under "ride"', async ({ page }) => {
     await startA(page);
     await page.locator('#ww-start').click();
-    await hurt(page).click();
+    await tapHurt(page);
     await toPostLog(page);
     const saved = await saveAndRead(page);
     expect(saved['moveFeel']).toBe('ride=hurt');
