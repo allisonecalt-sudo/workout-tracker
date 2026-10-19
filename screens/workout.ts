@@ -103,6 +103,7 @@ import {
   walkStepMinutes,
   clearWorkoutWalk,
   walkLiveText,
+  walkFeelReady,
   APARTMENT_CARDIO_NAME,
 } from '../walk.js';
 import {
@@ -486,10 +487,11 @@ export function renderWorkout(): string {
   // the GPS + step counters are archived). The phone is in her pocket: no
   // picture, no form card — the live line and Done are the whole interface.
   // v63 item 2 (Oct 19 2026): the walk lane shows the same quiet "How was this one?" row as every other
-  // move page, from the moment the page opens (v59's wait-for-elapsed-minutes gate went with v58's
-  // stepped-only rule: the row is optional and never blocks Done).
+  // move page. v59's rule stays (fix round): the row waits for 3 real minutes of walking
+  // (walkFeelReady, shown by the 30 s tick via a class toggle on its wrapper) - a feel at 0 min means nothing.
   if (ex.name === 'Outdoor walk') {
     const feelHtml = renderMoveFeel(ex);
+    const feelReady = walkFeelReady(workoutWalkStart());
     return `
       ${header}
       <div class="card">
@@ -498,7 +500,7 @@ export function renderWorkout(): string {
           <div class="exercise-reps">${walkStepMinutes(ex)} min</div>
           <p class="walk-live-line">🚶 <span id="walk-live">${walkLiveText(workoutWalkStart())}</span></p>
           <p class="gear-note">It saves with this workout. Tap Done · Next when you're back.</p>
-          ${feelHtml}
+          ${feelHtml ? `<div id="walk-move-feel-slot" class="${feelReady ? '' : 'wt-hidden'}">${feelHtml}</div>` : ''}
           ${renderThisHurts()}
         </div>
       </div>
@@ -560,7 +562,7 @@ export function renderWorkout(): string {
         </div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${renderArmFeel(ex)}
-        ${renderMoveFeel(ex)}
+        ${renderMoveFeel(ex, { hold })}
         ${renderThisHurts()}
         ${safety ? `<p class="exercise-safety">${escapeHtml(safety)}</p>` : ''}
         ${renderTipsExpander(ex, safety)}

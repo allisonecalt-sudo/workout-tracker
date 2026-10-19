@@ -165,9 +165,9 @@ export function renderArmFeel(ex: Exercise): string {
 // feel). NOT a row per stretch (eleven more rows push that list to ~1615 px, past the 1400 px budget
 // tests/screens/mirror-and-cooldown.spec.ts keeps for it): the cool-down gets ONE row, renderStretchFeel. One quiet row; optional; a second tap on the picked one clears it;
 // it never blocks Done. It REPLACES v58's rule (only the moves that stepped this week, only on their
-// last round, only after the last set / the hold / the walk had run), so the "Stepped this week —
-// how did it feel?" chip and its "Set N done" counter (which existed only to hold that chip back)
-// are gone. The stepped-move line on the pre-log and the New / Again tonight badge stay.
+// last round) with "every move"; the "Stepped this week" wording is gone. v58's "Set N done" counter (below) and
+// v59's wait-for-3-minutes on the walk lane stay. The stepped-move line on the pre-log and the New / Again
+// tonight badge stay.
 // Saved in the move_feel column exactly as before ("slug=feel@qty", move-feel.ts): the feel is kept
 // per MOVE (its slug), so with several rounds the LAST tap on that move wins, and a tap that clears
 // it clears it. curl / row keep their own arm feel + load chips (arm_feel, unmigrated).
@@ -192,8 +192,21 @@ export function renderStretchFeel(): string {
   return renderFeelRow(STRETCHES_SLUG, 'How was the stretching?');
 }
 
-export function renderMoveFeel(ex: Exercise): string {
+// v58's "Set N done" counter is back (fix round; it was dropped by mistake - the feel row ADDS to the page,
+// it does not replace it): a multi-set move (multiSetCount > 1) shows "Set N of M" + "Set N done" first
+// and the feel row waits for the LAST set, exactly the markup and the data-mark-set tap v58 had (the tap
+// handler in screens/workout.ts is keyed by exercise NAME). A hold has no set count here.
+export function renderMoveFeel(ex: Exercise, opts: { hold?: boolean } = {}): string {
   if (ARM_FEEL_STEPS[ex.name]) return ''; // curl/row keep arm_feel, unmigrated
+  const total = multiSetCount(ex.reps);
+  const done = Math.min(state.setsDoneFor[ex.name] ?? 0, total);
+  if (!opts.hold && total > 1 && done < total) {
+    return `
+      <div class="move-feel move-feel-sets" role="group" aria-label="Sets">
+        <span class="move-feel-label">Set ${done + 1} of ${total}</span>
+        <button class="arm-set-btn" type="button" data-mark-set="${escapeHtml(ex.name)}">Set ${done + 1} done</button>
+      </div>`;
+  }
   return renderFeelRow(slugFor(ex.name));
 }
 

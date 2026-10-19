@@ -1086,12 +1086,14 @@ test.describe('v48 P4 home', () => {
       await resumed.close();
     });
 
-    // v63 item 2 (Oct 19 2026): the walk-outside lane asks "How was this one?" like every other move
-    // page, from the moment the page opens. (v59's R2-N2 hid the chip until 3 minutes had really
-    // passed, because the chip itself only asked about moves that stepped; the row is quiet,
-    // optional and never blocks Done, so there is nothing left to wait for.)
-    test('v63 item 2: the walk-outside page has the feel row from the start, even at "Walking · 0 min"', async ({
+    // v59 (Sep 28 2026), CHECK-v58 round 2 nice #R2-N2: the walk-outside
+    // lane's own feel chip used to show the instant she tapped ▶ Walk
+    // outside ("Walking · 0 min · how did it feel?"). Gated on real elapsed
+    // time now (walkFeelReady, app.ts) — nothing to have an opinion about at
+    // 0 min.
+    test('v59 (R2-N2): the walk-outside feel chip waits for real elapsed time, not "Walking · 0 min"', async ({
       page,
+      context,
     }) => {
       await mockDate(page, '2026-09-27T10:00:00.000Z'); // Sun inside Week 5 — ride steps 10 -> 12 for A
       await page.goto('/');
@@ -1099,12 +1101,26 @@ test.describe('v48 P4 home', () => {
       await page.locator('#begin').click();
       await page.locator('#ww-start').click(); // the walk lane, right now — 0 min elapsed
       await expect(page.locator('#walk-live')).toHaveText('Walking · 0 min');
-      await expect(page.locator('.move-feel')).toBeVisible();
-      await expect(page.locator('.move-feel .arm-chip')).toHaveText(['Easy', 'Right', 'Hard']);
-      await page.locator('[data-move-feel-slug="ride"][data-move-feel="right"]').click();
-      await expect(
-        page.locator('[data-move-feel-slug="ride"][data-move-feel="right"]')
-      ).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('#walk-move-feel-slot')).toHaveClass(/wt-hidden/);
+      await expect(page.locator('.move-feel .arm-chip').first()).not.toBeVisible();
+
+      // Back-date the stamped start 4 minutes — a real elapsed walk. A fresh
+      // load re-renders the step off the (now backdated) stamp, standing in
+      // for the 30 s tick without a real 4-minute wait (same "app close/
+      // reopen" pattern the resume tests above use).
+      await page.evaluate(() => {
+        window.localStorage.setItem('workout-tracker:ww-start', String(Date.now() - 4 * 60_000));
+      });
+      const resumed = await context.newPage();
+      await mockDate(resumed, '2026-09-27T10:00:00.000Z');
+      await resumed.goto('/');
+      // displayName(ex) shows "Cardio" for the Outdoor-walk slot throughout
+      // (app.ts: `ex.name === 'Outdoor walk' ? 'Cardio' : ex.name`) — same on
+      // this screen before AND during the walk, not just on the choice card.
+      await expect(resumed.locator('.exercise-name')).toHaveText('Cardio');
+      await expect(resumed.locator('#walk-move-feel-slot')).not.toHaveClass(/wt-hidden/);
+      await expect(resumed.locator('.move-feel .arm-chip').first()).toBeVisible();
+      await resumed.close();
     });
 
     test('the pinned plan survives an app close — even once a background sync closes the week under it (§2.8 item 4)', async ({

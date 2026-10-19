@@ -6176,6 +6176,13 @@ textarea:focus {
   margin: 6px 0 8px;
 }
 
+/* v59 (Sep 28 2026, R2-N2): the walk-lane feel chip's wrapper — its content
+ * never changes mid-walk, only whether it's shown (walkFeelReady, app.ts),
+ * toggled by the same 30 s tick that updates #walk-live. */
+.wt-hidden {
+  display: none;
+}
+
 .move-feel-label {
   color: var(--text-dim);
   font-size: var(--font-meta);

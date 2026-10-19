@@ -36,6 +36,7 @@ import { setRenderer, setScrollRestoreSink } from './bus.js';
 import { installTimerVisibilityHandler } from './timer.js';
 import {
   setWalkLineUpdater,
+  walkFeelReady,
   activeWalkStart,
   walkLiveText,
   beginWalkTracking,
@@ -142,10 +143,17 @@ installTimerVisibilityHandler();
 
 // v48 · P3 (Sep 24 2026): minutes only — "Walking · 12 min", refreshed by the
 // 30 s tick. The step/km parts are gone with the sensors (archived).
+// v59 (Sep 28 2026, R2-N2): also the walk-lane feel chip's own reveal — the
+// chip's HTML never changes once it exists (only WHETHER it's shown does,
+// see walkFeelReady above), so a class toggle on its wrapper is enough; no
+// need for a full render() mid-walk (app.ts keeps that discipline everywhere
+// else a tick runs, see updatePreLogClockLine's own comment).
 function updateWalkLiveLine(): void {
   const start = activeWalkStart() ?? workoutWalkStart();
   const el = document.getElementById('walk-live');
   if (el) el.textContent = walkLiveText(start);
+  const feelSlot = document.getElementById('walk-move-feel-slot');
+  if (feelSlot) feelSlot.classList.toggle('wt-hidden', !walkFeelReady(workoutWalkStart()));
 }
 
 // The in-workout walk no longer auto-starts just because she lands on the step

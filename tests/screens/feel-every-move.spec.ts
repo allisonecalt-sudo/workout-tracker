@@ -92,6 +92,10 @@ test.describe('v63 item 2: How was this one?', () => {
           await expect(page.locator('.move-feel')).toHaveCount(0);
         } else {
           await expect(page.locator('.move-feel'), `${phase} · ${name}`).toHaveCount(1);
+          // a multi-set move counts its sets first (v58's "Set N done"); the row waits for the last one
+          while (await page.locator('.move-feel-sets').count()) {
+            await page.locator('[data-mark-set]').click();
+          }
           await expect(page.locator('.move-feel-label')).toHaveText('How was this one?');
           await expect(page.locator('.move-feel .arm-chip')).toHaveText(['Easy', 'Right', 'Hard']);
           seen.push(`${phase} · ${name}`);
@@ -107,6 +111,26 @@ test.describe('v63 item 2: How was this one?', () => {
     expect(seen.filter((s) => s.endsWith('Wall sit'))).toHaveLength(2); // a hold, both rounds
     expect(armNames.length).toBeGreaterThan(0);
     expect(seen.length).toBeGreaterThan(14);
+  });
+
+  test('v58 "Set N done" is back: a multi-set move counts its sets, and the row waits for the last one', async ({
+    page,
+  }) => {
+    await startA(page);
+    await page.locator('#ww-skip').click();
+    await walkUntil(page, () => page.locator('.move-feel-sets').first().isVisible());
+    const sets = page.locator('.move-feel-sets');
+    await expect(sets.locator('.move-feel-label')).toHaveText('Set 1 of 2');
+    await expect(sets.locator('[data-mark-set]')).toHaveText('Set 1 done');
+    await expect(page.locator('.move-feel .arm-chip')).toHaveCount(0); // the row is not asked after set 1
+    await expect(page.locator('#next')).toBeEnabled(); // and the counter never blocks Done
+    await sets.locator('[data-mark-set]').click();
+    await expect(sets.locator('.move-feel-label')).toHaveText('Set 2 of 2');
+    await expect(sets.locator('[data-mark-set]')).toHaveText('Set 2 done');
+    await sets.locator('[data-mark-set]').click();
+    await expect(page.locator('.move-feel-sets')).toHaveCount(0);
+    await expect(page.locator('.move-feel-label')).toHaveText('How was this one?');
+    await expect(page.locator('.move-feel .arm-chip')).toHaveText(['Easy', 'Right', 'Hard']);
   });
 
   test('the chips are real tap targets (44 px) and the row sits quietly: it never blocks Done', async ({

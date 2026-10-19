@@ -720,6 +720,7 @@ v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › post-log 
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › post-log line: a REPEAT letter (B again) still reads "1 of 4", never overcounts to "2 of 4"
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › the pinned plan survives an app close — even once a background sync closes the week under it (§2.8 item 4)
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v58 fix pass (Sep 28 2026, checker's must): a REPEAT week (no new PROGRAM row yet) never says a move stepped
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v59 (R2-N2): the walk-outside feel chip waits for real elapsed time, not "Walking · 0 min"
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v59 (a) post-launch, a real (non-repeat) week: A/B logged, C not yet — stepped is still [ride 12 min]
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v59 (b) pinned crossing: a session started at the END of Week 5 (Fri) still asks about Week 5's own stepped move after resuming past the Week-6 boundary (Sun, C logged Sat)
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61 fix pass 2 (repro 1): a D logged before ANY A/B/C still counts toward the pending week, with its own dot
@@ -732,7 +733,6 @@ v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.1 fix
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.1 fix 2 (gap + Sunday opening): the review and Home agree — Week 6 reads 2 of 4 with the Sat D line, Week 5 reads 3 of 4 with none
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.1 fix 2 (r1noD): a D on the pending week's own opening day, nothing else logged yet, reads Week 5's review at 3 of 4 with no D line
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.2: the Oct 3 week is a Sick skip and Oct 10-16 is R2 Week 6 — light, one 10-min ride, no strength
-v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v63 item 2: the walk-outside page has the feel row from the start, even at "Walking · 0 min"
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › week strip: a repeat day gets a small "2" badge, and an 11-day short week folds its empty middle
 v48 P4 home › at phone size › (a) 39 sessions, last = C: one sage thing (the A hero), the whole hero in the fold, home < 1300 px
 v48 P4 home › at phone size › (g) Sat Sep 26 morning (Week 5 now encoded, no sessions yet): the header reads Week 5 clean, still one line
@@ -988,6 +988,7 @@ v63 item 2: How was this one? › the Session screen shows every move's feel, na
 v63 item 2: How was this one? › the chips are real tap targets (44 px) and the row sits quietly: it never blocks Done
 v63 item 2: How was this one? › the cool-down list has ONE quiet row, "How was the stretching?", saved as stretches=<feel>, within the 1400 px budget
 v63 item 2: How was this one? › the row is on every kind of move page: warm-up, a hold, main in each round, upper back
+v63 item 2: How was this one? › v58 "Set N done" is back: a multi-set move counts its sets, and the row waits for the last one
 v63 item 2: How was this one? › with several rounds the LAST tap on a move wins (and a clearing tap clears it)
 v63 item 3: This hurts › a hurt survives an app close mid-workout
 v63 item 3: This hurts › a session that never taps it says nothing about hurting
