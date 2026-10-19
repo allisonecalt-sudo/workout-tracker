@@ -746,6 +746,7 @@ export function saveActiveSession(): void {
       heldSetsFor: state.heldSetsFor,
       stretchTicks: state.stretchTicks,
       completedSteps: state.completedSteps,
+      ...(Object.keys(state.hurtSteps).length > 0 ? { hurtSteps: state.hurtSteps } : {}),
       rideNumbersOpen: state.rideNumbersOpen,
       pinnedPlanDateIso: state.pinnedPlanDateIso,
       pinnedWeekKey: state.pinnedWeekKey,

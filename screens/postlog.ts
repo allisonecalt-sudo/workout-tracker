@@ -31,6 +31,7 @@ import {
   getCurrentWorkout,
   effectiveRounds,
   skippedStepsCount,
+  hurtStepsCount,
   reachedWallSit,
   liveWeekDTarget,
   getWeekCount,
@@ -289,9 +290,10 @@ export function renderPostLog(): string {
   // v50 · jump list (Sep 25 2026): plain, no verdict — "the log screen says so
   // plainly ('2 moves skipped')" per her spec. Session still saves either way.
   const skippedCount = skippedStepsCount(w);
+  const hurtCount = hurtStepsCount(w); // v63 item 3
   const skippedLine =
     skippedCount > 0
-      ? `<p class="postlog-skipped">${skippedCount} move${skippedCount === 1 ? '' : 's'} skipped</p>`
+      ? `<p class="postlog-skipped">${skippedCount} move${skippedCount === 1 ? '' : 's'} skipped${hurtCount > 0 ? ` (${hurtCount} because it hurt)` : ''}</p>`
       : '';
   // v48 · final (Sep 25 2026): the way back lives at the top now. At the
   // bottom it sat exactly where Done · Finish was tapped a moment earlier, so

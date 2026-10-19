@@ -63,3 +63,18 @@ export function wireHoldToSkip(btn: HTMLElement, onSkip: () => void): void {
   btn.addEventListener('pointercancel', up);
   btn.addEventListener('pointerleave', up);
 }
+
+// v63 item 3 (Oct 19 2026): one short line that fades by itself ("Got it, skipped."). Lives on <body>, so a
+// redraw of #app does not take it away; a new one replaces the old.
+let toastTimer: number | undefined;
+export function showToast(text: string): void {
+  document.getElementById('wt-toast')?.remove();
+  window.clearTimeout(toastTimer);
+  const el = document.createElement('div');
+  el.id = 'wt-toast';
+  el.className = 'wt-toast';
+  el.setAttribute('role', 'status');
+  el.textContent = text;
+  document.body.appendChild(el);
+  toastTimer = window.setTimeout(() => el.remove(), 2400);
+}

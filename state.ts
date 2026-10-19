@@ -21,7 +21,7 @@
 
 import type { AnyWorkoutId, Phase } from './program.js';
 import type { WeekKey } from './week.js';
-import type { MoveFeelValue } from './move-feel.js';
+import type { MoveFeelMark, MoveFeelValue } from './move-feel.js';
 import type { LogEntry, StoredWeekMove, WalkEntry, StoredCyclePeriod } from './types.js';
 import type { CyclePeriod } from './cycle.js';
 import type { WeekClockInput } from './program-week.js';
@@ -271,6 +271,13 @@ export type AppState = {
   // mid-workout doesn't lose her place. Her words (Sep 25 2026): "I dont
   // always do the workouts in [order]".
   completedSteps: Record<string, boolean>;
+  // v63 item 3 (Oct 19 2026): the steps she skipped with "This hurts", keyed by the same
+  // `phase:round:index` as completedSteps, each holding the move's slug. A hurt step is NOT done
+  // (it counts in steps_skipped, the post-log "N moves skipped" line says how many were because it
+  // hurt) but it is HANDLED: Done does not come back to it the way it does for a move she jumped
+  // past. The slug is also what move_feel records (`slug=hurt`). Empty on every session that never
+  // taps it, and then it is not even written into the resume snapshot.
+  hurtSteps: Record<string, string>;
   // v51 (Sep 25 2026) — the ride-numbers sub-screen: Done · Next on the
   // elliptical step opens it instead of advancing (her words: "I click the
   // next button and then I fill in information"). A flag on THIS step, not a
@@ -284,7 +291,7 @@ export type AppState = {
 export type ArmFeel = 'easy' | 'right' | 'hard';
 export type ArmFeelState = { curl?: ArmFeel; row?: ArmFeel };
 // v58 — one slug per stepped move (move-feel.ts's slugFor), never curl/row.
-export type MoveFeelState = Record<string, MoveFeelValue>;
+export type MoveFeelState = Record<string, MoveFeelMark>;
 // v55 (Sep 27 2026) — the two dumbbells she owns now; her pick, per set.
 export type ArmLoad = '1kg' | '2kg';
 export type ArmLoadState = { curl?: ArmLoad; row?: ArmLoad };
@@ -366,6 +373,8 @@ export type ActiveSessionSnapshot = {
   // v50 · jump list: which steps she's already done survive an app close too
   // (the List sheet's ✓ marks and the "N of 23" count both read this).
   completedSteps: Record<string, boolean>;
+  // v63 item 3: the hurt-skipped steps survive an app close too (absent = none).
+  hurtSteps?: Record<string, string>;
   // v51: an app close on the ride-numbers screen reopens on it.
   rideNumbersOpen: boolean;
   // WK2 (Sep 27 2026): the plan pinned at startWorkout() — see its comment.
@@ -564,6 +573,7 @@ export const state: AppState = {
   backSomethingOpen: false,
   stretchTicks: {},
   completedSteps: {},
+  hurtSteps: {},
   rideNumbersOpen: false,
 };
 

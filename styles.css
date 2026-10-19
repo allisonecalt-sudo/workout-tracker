@@ -6854,3 +6854,30 @@ textarea:focus {
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
+
+/* v63 item 3 (Oct 19 2026) — "This hurts": a quiet outlined button under the feel row on every move page (the
+ * .btn-quiet recipe: ink-dim text, a hair border, 48px tall). Never sage (sage is Done), never red (it only
+ * records; her pain rule is unchanged). */
+.hurt-btn {
+  display: block;
+  margin: 4px auto 8px;
+  padding: 0 20px;
+}
+
+/* The "Got it, skipped." line: above the pinned action bar, gone by itself. */
+.wt-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(112px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 1150;
+  max-width: calc(100vw - 32px);
+  padding: 10px 18px;
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: var(--font-small);
+  font-weight: 600;
+  pointer-events: none;
+}

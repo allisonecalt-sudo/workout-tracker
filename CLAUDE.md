@@ -39,7 +39,13 @@ ride=right@12min"`. `slug=feel@qty`, `;`-joined; slug is `move-feel.ts`'s
   for a hold (`s`) or the ride/walk slot (`min`) — a plain reps bump carries
   no qty (the number already lives in the PROGRAM diff). Built by
   `moveFeelString` (move-feel.ts), CHECK in
-  `migrations/2026-09-28-v58-move-feel.sql`.
+  `migrations/2026-09-28-v58-move-feel.sql`, **widened by
+  `migrations/2026-10-19-v63-move-feel-hurt.sql` (WRITTEN, NOT APPLIED —
+  a session containing `hurt` is refused by the live CHECK until it runs)**.
+  **v63 item 3: `slug=hurt`** (never a qty) is what "This hurts" records: the
+  move is skipped, not done (`state.hurtSteps`: step key → slug; counted in
+  `steps_skipped`; the post-log line says "(N because it hurt)"). curl / row
+  keep their Easy/Right/Hard in `arm_feel`, but a hurt on them lands here.
 
 ## File map (code-shape step 18, Oct 16 2026 — the screen split is finished; every module is listed once below)
 

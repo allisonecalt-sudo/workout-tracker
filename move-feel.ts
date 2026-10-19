@@ -39,6 +39,16 @@ export function isMoveFeelValue(v: unknown): v is MoveFeelValue {
   return typeof v === 'string' && (MOVE_FEEL_VALUES as readonly string[]).includes(v);
 }
 
+// v63 item 3 (Oct 19 2026): "This hurts" skips the move and records it, in the same move_feel
+// column, as `slug=hurt` (never a qty: nothing was measured). It is a MARK next to the three feels,
+// not a fourth feel she can tap on the row: only the This hurts button writes it. Her pain rule
+// (workout-rules section 0) is unchanged: this only RECORDS it.
+export type MoveFeelMark = MoveFeelValue | 'hurt';
+
+export function isMoveFeelMark(v: unknown): v is MoveFeelMark {
+  return v === 'hurt' || isMoveFeelValue(v);
+}
+
 // Structural subset of app.ts's Exercise — kept separate (not imported), the
 // same discipline step-list.ts's own StepExercise already uses, so this file
 // stays independently testable.
@@ -294,13 +304,14 @@ const UNIT_FOR_KIND: Record<SteppedMoveKind, string> = { reps: '', seconds: 's',
 // change mid-session) is silently dropped — never saved as a bare, qty-less
 // guess about a move nothing here can vouch for.
 export function moveFeelString(
-  feels: Readonly<Record<string, MoveFeelValue>>,
+  feels: Readonly<Record<string, MoveFeelMark>>,
   stepped: readonly SteppedMove[]
 ): string | null {
   const bySlug = new Map(stepped.map((s) => [s.slug, s]));
   const parts = Object.entries(feels)
-    .filter((entry): entry is [string, MoveFeelValue] => bySlug.has(entry[0]))
+    .filter((entry): entry is [string, MoveFeelMark] => bySlug.has(entry[0]))
     .map(([slug, feel]) => {
+      if (feel === 'hurt') return `${slug}=hurt`; // v63 item 3: a hurt move carries no qty
       const info = bySlug.get(slug) as SteppedMove;
       const unit = UNIT_FOR_KIND[info.kind];
       return `${slug}=${feel}${info.qty !== undefined ? `@${info.qty}${unit}` : ''}`;
@@ -337,7 +348,7 @@ export function withOverrideFeel(
   return rebuilt.join(';');
 }
 
-export type MoveFeelPart = { slug: string; feel: MoveFeelValue | null; qtyRaw: string | null };
+export type MoveFeelPart = { slug: string; feel: MoveFeelMark | null; qtyRaw: string | null };
 
 // The reverse of moveFeelString — reads a saved "slug=feel@qty" string back
 // into its parts. Tolerant of a slug with no feel ("slug=@45s", matching the
@@ -347,9 +358,9 @@ export function parseMoveFeelString(s: string | null | undefined): MoveFeelPart[
   if (!s) return [];
   const out: MoveFeelPart[] = [];
   for (const part of s.split(';')) {
-    const m = /^([a-z]+)=(easy|right|hard)?(?:@([0-9]+(?:kg|s|min)))?$/.exec(part);
+    const m = /^([a-z]+)=(easy|right|hard|hurt)?(?:@([0-9]+(?:kg|s|min)))?$/.exec(part);
     if (!m) continue;
-    out.push({ slug: m[1] as string, feel: (m[2] as MoveFeelValue) ?? null, qtyRaw: m[3] ?? null });
+    out.push({ slug: m[1] as string, feel: (m[2] as MoveFeelMark) ?? null, qtyRaw: m[3] ?? null });
   }
   return out;
 }
@@ -370,10 +381,10 @@ export function moveFeelSummary(
     .join(' · ');
 }
 
-// Mirrors migrations/2026-09-28-v58-move-feel.sql's CHECK exactly — used by
+// Mirrors migrations/2026-10-19-v63-move-feel-hurt.sql's CHECK exactly (it widened v58's with `hurt`) — used by
 // tests so the two can never quietly drift apart.
 const MOVE_FEEL_STRING_RE =
-  /^([a-z]+=(easy|right|hard)?(@[0-9]+(kg|s|min))?)(;[a-z]+=(easy|right|hard)?(@[0-9]+(kg|s|min))?)*$/;
+  /^([a-z]+=(easy|right|hard|hurt)?(@[0-9]+(kg|s|min))?)(;[a-z]+=(easy|right|hard|hurt)?(@[0-9]+(kg|s|min))?)*$/;
 
 export function isValidMoveFeelString(s: string): boolean {
   return MOVE_FEEL_STRING_RE.test(s);

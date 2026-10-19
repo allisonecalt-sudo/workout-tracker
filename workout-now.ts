@@ -245,6 +245,17 @@ export function skippedStepsCount(w: Workout): number {
   return countable.filter((s) => state.completedSteps[s.key] !== true).length;
 }
 
+// v63 item 3: how many of those skipped moves were skipped with "This hurts" (the post-log line
+// says "(1 because it hurt)"). Same countable steps as skippedStepsCount, so the two always agree.
+export function hurtStepsCount(w: Workout): number {
+  const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
+  const countable =
+    state.finishHereLitePrev !== null ? movable.filter((s) => s.phase !== 'upperBack') : movable;
+  return countable.filter(
+    (s) => state.hurtSteps[s.key] !== undefined && state.completedSteps[s.key] !== true
+  ).length;
+}
+
 // v48 · P3 (Sep 24 2026): the cardio step's name on screen. The key stays
 // 'Outdoor walk' in PROGRAM / DETAIL / HOWTO / VISUALS (and in saved data); she
 // sees "Cardio" — her Sep 24 words: "no more walk it could be walk or elliptical".

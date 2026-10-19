@@ -291,6 +291,11 @@ honest readings — the pre-v48 untouched-5 exclusion › a pre-cutoff exact 5 i
 honest readings — the pre-v48 untouched-5 exclusion › a pre-cutoff non-5 reading is trusted (only the ambiguous default is dropped)
 honest readings — the pre-v48 untouched-5 exclusion › excludedUntouchedCount counts each ambiguous 5, before and after separately
 honest readings — the pre-v48 untouched-5 exclusion › null stays null either side of the cutoff
+hurt in the move_feel string › a hurt move is saved as slug=hurt with NO qty, even a hold and the ride slot
+hurt in the move_feel string › hurt is a mark, not one of the three feels she can tap on the row
+hurt in the move_feel string › it round-trips through parse and passes the shape check
+hurt in the move_feel string › the Session line says hurt in her words
+hurt in the move_feel string › the ride override keeps a hurt segment it does not own
 import graph — no cycles, nothing imports the entry (step 4c) › a screen imports only the shared layer: never app.ts, never another screen (step 8)
 import graph — no cycles, nothing imports the entry (step 4c) › actions.ts (the save side), cardio-readings.ts and ui.ts never import a screen or app.ts, and actions.ts writes no DOM (step 10)
 import graph — no cycles, nothing imports the entry (step 4c) › every shared-layer module (not app.ts, not screens/) never imports app.ts or a screen, and writes no DOM unless allow-listed (step 13d)
@@ -342,6 +347,8 @@ logging from the page (spec §2.6) › logs today, confirms with Undo, and the d
 median › empty -> null
 median › even count: the average of the two middle values, rounded to 1dp
 median › odd count: the middle value
+migrations/2026-10-19-v63-move-feel-hurt.sql › it widens the v58 CHECK by exactly one word, and drops the old constraint first
+migrations/2026-10-19-v63-move-feel-hurt.sql › the SQL regex and isValidMoveFeelString agree on every string
 mood (spec §2.3, §2.4) › 0 mood readings: the quiet line shows once, no chip row
 mood (spec §2.3, §2.4) › mood ready in 2 phases: the chips appear, and Mood swaps the table + drops the summary
 mood chip: tap selects the number, a second tap clears it — independent of the BODY row
@@ -973,6 +980,18 @@ v63 item 2: How was this one? › the Session screen shows every move's feel, na
 v63 item 2: How was this one? › the chips are real tap targets (44 px) and the row sits quietly: it never blocks Done
 v63 item 2: How was this one? › the row is on every kind of move page: warm-up, a hold, main in each round, upper back
 v63 item 2: How was this one? › with several rounds the LAST tap on a move wins (and a clearing tap clears it)
+v63 item 3: This hurts › a hurt survives an app close mid-workout
+v63 item 3: This hurts › a session that never taps it says nothing about hurting
+v63 item 3: This hurts › back to a hurt move and Done takes the hurt off again
+v63 item 3: This hurts › hurt in both rounds counts both skipped moves, and says "2 because it hurt"
+v63 item 3: This hurts › it is saved as hurt in move_feel (no qty, even on a hold) and counted in steps_skipped; the post-log line says so
+v63 item 3: This hurts › one tap skips the move, says so, and Done does not bring her back to it
+v63 item 3: This hurts › the Session screen names a hurt move with the other feels
+v63 item 3: This hurts › the button is on every kind of move page, and on no other screen
+v63 item 3: This hurts › the ride (elliptical) page has it, and a hurt ride is saved as ride=hurt
+v63 item 3: This hurts › the same move hurt in round 1 and fine in round 2: the LAST word on the move wins, the skipped line still counts the hurt round
+v63 item 3: This hurts › the walk lane has it, and a tap skips the walk
+v63 item 3: This hurts › the walk lane hurt is saved under "ride"
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

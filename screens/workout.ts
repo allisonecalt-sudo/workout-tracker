@@ -48,13 +48,13 @@ import {
 } from '../state.js';
 import { ui } from '../ui.js';
 import { requestRender } from '../bus.js';
-import { bindClick, wireHoldToSkip } from '../dom.js';
+import { bindClick, showToast, wireHoldToSkip } from '../dom.js';
 import { escapeHtml } from '../format.js';
 import { renderActionBar } from '../action-bar.js';
 import { flattenSteps, nextUndoneStep, type WorkoutStep } from '../step-list.js';
 import { setsPrescribed, holdSetsFace, formatHeldSeconds } from '../hold-sets.js';
 import { honestWallSitLogs } from '../viz.js';
-import { isMoveFeelValue, MOVE_FEEL_VALUES } from '../move-feel.js';
+import { isMoveFeelValue, MOVE_FEEL_VALUES, slugFor } from '../move-feel.js';
 import { EXERCISE_DETAIL } from '../exercise-detail.js';
 import { rideRate } from '../ride.js';
 import { deriveRideAim, lastTimeAtSameAim } from '../ride-aim.js';
@@ -132,6 +132,7 @@ import {
   markPaceRuleSeen,
   renderArmFeel,
   renderMoveFeel,
+  renderThisHurts,
 } from '../workout-feel.js';
 import {
   formatTimerDisplay,
@@ -506,6 +507,7 @@ export function renderWorkout(): string {
           <p class="walk-live-line">🚶 <span id="walk-live">${walkLiveText(workoutWalkStart())}</span></p>
           <p class="gear-note">It saves with this workout. Tap Done · Next when you're back.</p>
           ${feelHtml}
+          ${renderThisHurts()}
         </div>
       </div>
       ${renderStepNav('Done · Next')}
@@ -567,6 +569,7 @@ export function renderWorkout(): string {
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${renderArmFeel(ex)}
         ${renderMoveFeel(ex)}
+        ${renderThisHurts()}
         ${safety ? `<p class="exercise-safety">${escapeHtml(safety)}</p>` : ''}
         ${renderTipsExpander(ex, safety)}
         ${renderExerciseSetup(ex)}
@@ -657,7 +660,21 @@ export function attachWorkoutStepListHandlers(): void {
   });
 }
 
+// v63 item 3 (Oct 19 2026): "This hurts". The move is skipped, not done: it is marked in hurtSteps (so Done
+// does not bring her back to it) and recorded as `slug=hurt` in move_feel; it counts in steps_skipped like
+// any move she did not finish. Her pain rule is unchanged: nothing here tells her to stop or to push on.
+function thisHurts(): void {
+  const ex = getCurrentExercise();
+  if (!ex || state.screen !== 'workout') return;
+  const slug = slugFor(ex.name);
+  state.moveFeel = { ...state.moveFeel, [slug]: 'hurt' };
+  if (slug === 'ride') state.rideFeel = null; // the ride's own feel: the hurt is what she just said
+  showToast('Got it, skipped.');
+  advanceExercise({ hurtSlug: slug });
+}
+
 export function attachWorkoutFeelHandlers(): void {
+  bindClick('this-hurts', thisHurts);
   // v48 · P5: arm feel on the 1 kg curl / prone row — tap selects, tap clears.
   document.querySelectorAll<HTMLButtonElement>('[data-arm-step]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1196,6 +1213,7 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
         </div>
         <p class="ride-plan-line" id="ride-plan-line">${escapeHtml(planLine)}</p>
         ${instead}
+        ${renderThisHurts()}
       </div>
     </div>
     ${guide}
@@ -1577,6 +1595,7 @@ function beginExercises(): void {
   state.setsDoneFor = {}; // v54: sets-done belongs to one session, same as armFeel
   state.stretchTicks = {}; // v48 · P7: ticks belong to one session
   state.completedSteps = {}; // v50 · jump list: done-marks belong to one session
+  state.hurtSteps = {}; // v63 item 3: same
   state.rideNumbersOpen = false; // v51: the ride-numbers sub-screen belongs to one session
   // v46: the post-log sliders haven't been seen yet (capacity-before was just
   // set on pre-log, so its flag stays as it is).
@@ -1639,8 +1658,38 @@ function enterPostLog(): void {
 }
 
 function markStepDone(key: string): void {
+  // v63 item 3: doing a move she once skipped as hurt (back to it, Done) takes the hurt mark off, and the
+  // move_feel `slug=hurt` with it when no other round of that move is still hurt.
+  const hurtSlug = state.hurtSteps[key];
+  if (hurtSlug !== undefined) {
+    const rest = { ...state.hurtSteps };
+    delete rest[key];
+    state.hurtSteps = rest;
+    if (state.moveFeel[hurtSlug] === 'hurt' && !Object.values(rest).includes(hurtSlug)) {
+      const feels = { ...state.moveFeel };
+      delete feels[hurtSlug];
+      state.moveFeel = feels;
+    }
+  }
   if (state.completedSteps[key]) return; // no-op re-render churn on a repeat
   state.completedSteps = { ...state.completedSteps, [key]: true };
+}
+
+// v63 item 3: the step she skipped with "This hurts": not done, but handled.
+function markStepHurt(key: string, slug: string): void {
+  if (state.completedSteps[key]) {
+    const done = { ...state.completedSteps };
+    delete done[key];
+    state.completedSteps = done;
+  }
+  state.hurtSteps = { ...state.hurtSteps, [key]: slug };
+}
+
+// Done-or-hurt: the steps Done must not walk back to (a move she only JUMPED past still is walked back to).
+function handledSteps(): Record<string, boolean> {
+  const handled: Record<string, boolean> = { ...state.completedSteps };
+  for (const key of Object.keys(state.hurtSteps)) handled[key] = true;
+  return handled;
 }
 
 function applyStepTarget(step: WorkoutStep): void {
@@ -1649,7 +1698,7 @@ function applyStepTarget(step: WorkoutStep): void {
   state.currentExerciseIndex = step.index;
 }
 
-function advanceExercise(): void {
+function advanceExercise(opts: { hurtSlug?: string } = {}): void {
   const w = getCurrentWorkout();
   if (!w) return;
 
@@ -1680,7 +1729,9 @@ function advanceExercise(): void {
   // walk below runs exactly as it always has. The round-1 floor is a
   // deliberate pause, never skipped over just because something else is open.
   const curKey = currentStepKey();
-  markStepDone(curKey);
+  if (opts.hurtSlug !== undefined) markStepHurt(curKey, opts.hurtSlug);
+  else markStepDone(curKey);
+  const handled = handledSteps();
   const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
   const curPos = movable.findIndex((s) => s.key === curKey);
   const structuralNextKey = curPos >= 0 ? (movable[curPos + 1]?.key ?? null) : null;
@@ -1690,7 +1741,7 @@ function advanceExercise(): void {
   // back) — was this floor firing unconditionally on the last main move of
   // round 1, with no check for whether round 2+ actually still has anything
   // undone.
-  const target = nextUndoneStep(movable, curKey, state.completedSteps);
+  const target = nextUndoneStep(movable, curKey, handled);
   // v50 · fix 2 (Sep 25 2026): `target !== null` was "anything undone
   // ANYWHERE" (nextUndoneStep wraps the whole list, warm-up included), not
   // "round 2+ still has something undone". Her repro: jump to round 2 first,
@@ -1699,9 +1750,7 @@ function advanceExercise(): void {
   // undone and threw up "Round 1 done ✓ / Start round 2" even though round 2
   // was already done, then landed the tap on an already-✓ move. The floor is
   // about round 2+, so gate it on round 2+ specifically.
-  const roundTwoOpen = movable.some(
-    (s) => s.phase === 'main' && s.round > 1 && !state.completedSteps[s.key]
-  );
+  const roundTwoOpen = movable.some((s) => s.phase === 'main' && s.round > 1 && !handled[s.key]);
   const isRoundOneFloor =
     state.currentPhase === 'main' &&
     state.currentRound === 1 &&

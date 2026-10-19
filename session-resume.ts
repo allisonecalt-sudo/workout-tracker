@@ -12,7 +12,7 @@
 // never by importing a screen.
 // RULE: shared layer - never imports app.ts or a screen (tests/import-graph.test.ts, default-deny).
 
-import { isMoveFeelValue } from './move-feel.js';
+import { isMoveFeelValue, isMoveFeelMark } from './move-feel.js';
 import { isArmFeel, isArmLoad, heavierArmLoad, defaultArmLoad } from './workout-feel.js';
 import type { Phase } from './program.js';
 import { ui } from './ui.js';
@@ -102,7 +102,17 @@ function sanitizeMoveFeel(v: unknown): MoveFeelState {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
   const out: MoveFeelState = {};
   for (const [slug, val] of Object.entries(v as Record<string, unknown>)) {
-    if (/^[a-z]+$/.test(slug) && isMoveFeelValue(val)) out[slug] = val;
+    if (/^[a-z]+$/.test(slug) && isMoveFeelMark(val)) out[slug] = val;
+  }
+  return out;
+}
+
+// v63 item 3: the hurt-skipped steps, step key -> move slug. A corrupt or absent value reads as none.
+function sanitizeHurtSteps(v: unknown): Record<string, string> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, slug] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof slug === 'string' && /^[a-z]+$/.test(slug)) out[key] = slug;
   }
   return out;
 }
@@ -286,6 +296,7 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       // v50 · jump list: a pre-v50 snapshot has no done-marks → {} (same
       // string→true shape as stretchTicks, so the same sanitizer applies).
       completedSteps: sanitizeStretchTicks(snap.completedSteps),
+      hurtSteps: sanitizeHurtSteps(snap.hurtSteps),
       // v51: only meaningful on the elliptical step itself — a pre-v51
       // snapshot has no flag → false, same as a fresh session.
       rideNumbersOpen: snap.rideNumbersOpen === true && stepIsElliptical,
@@ -369,6 +380,7 @@ export function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.setsDoneFor = snap.setsDoneFor;
   state.stretchTicks = snap.stretchTicks;
   state.completedSteps = snap.completedSteps;
+  state.hurtSteps = snap.hurtSteps ?? {};
   state.rideNumbersOpen = snap.rideNumbersOpen; // v51: a close on the screen reopens on it
   ui.stepListOpen = false; // v50 · jump list: never reopen the sheet on resume
   state.backSomethingOpen = false;
@@ -486,6 +498,7 @@ export function resetState(): void {
   state.stepFeel = null; // v49 · engine
   state.stretchTicks = {}; // v48 · P7
   state.completedSteps = {}; // v50 · jump list
+  state.hurtSteps = {}; // v63 item 3
   state.rideNumbersOpen = false; // v51
   ui.stepListOpen = false; // v50 · jump list: a closed session closes the sheet too
   stopVoiceNote();

@@ -190,10 +190,17 @@ export function renderMoveFeel(ex: Exercise): string {
   return renderFeelRow(slugFor(ex.name));
 }
 
+// v63 item 3 (Oct 19 2026): the "This hurts" button, under the feel row on every move page. One tap skips
+// the move ("Got it, skipped.") and records it as hurt: move_feel `slug=hurt`, counted in steps_skipped.
+export function renderThisHurts(): string {
+  return `<button class="btn-quiet hurt-btn" id="this-hurts" type="button">This hurts</button>`;
+}
+
 // Every move the live workout can ask about (warm-up, main, upper back, and the cool-down rows by
 // their group name), each with the slug + qty its save needs: moveFeelString turns state.moveFeel
 // into the saved string through THIS list, so a tap on any move is kept (it used to keep only the
-// moves that stepped). curl / row are left out: arm_feel owns them.
+// moves that stepped). curl / row take part too (v63 item 3): a hurt there lands in move_feel; their
+// Easy / Right / Hard still lives in arm_feel (no row writes it into state.moveFeel for them).
 export function currentFeelMoves(): SteppedMove[] {
   const w = getCurrentWorkout();
   if (!w) return [];
@@ -202,7 +209,7 @@ export function currentFeelMoves(): SteppedMove[] {
     if (!out.has(m.slug)) out.set(m.slug, m);
   };
   for (const ex of [...w.warmup, ...w.main, ...(w.upperBack ?? [])]) {
-    if (!ARM_FEEL_STEPS[ex.name]) add(feelMoveFor(ex));
+    add(feelMoveFor(ex));
   }
   for (const g of groupStretchPairs(w.cooldown ?? [])) {
     const first = g.items[0];
