@@ -35,6 +35,9 @@ import {
 import { formatWorkoutTime } from '../timing.js';
 import { TIMING_LAUNCH_LABEL } from '../sync.js';
 import { planForLog } from '../week-clock.js';
+import { moveFeelSummary, slugFor } from '../move-feel.js';
+import { groupStretchPairs } from '../workout-parts.js';
+import { displayName } from '../workout-now.js';
 import {
   sessionWordParts,
   renderSessionRow,
@@ -68,6 +71,19 @@ function cardioText(c: SessionCardio): string {
       .join(' · ');
   }
   return `${c.lane === 'apartment' ? 'Apartment' : 'Walk'}${mins}`;
+}
+
+// v63 item 2: every move's feel on the Session screen ("Supported split squat easy · Wall sit hard
+// 45 s"), the slug turned back into the name THIS session's own plan shows.
+function moveFeelText(log: LogEntry): string {
+  if (!log.moveFeel) return '';
+  const w = planForLog(log);
+  const names = new Map<string, string>();
+  for (const ex of [...w.warmup, ...w.main, ...(w.upperBack ?? [])]) {
+    names.set(slugFor(ex.name), displayName(ex));
+  }
+  for (const g of groupStretchPairs(w.cooldown ?? [])) names.set(slugFor(g.name), g.name);
+  return moveFeelSummary(log.moveFeel, (slug) => names.get(slug) ?? null);
 }
 
 // "curl=easy;row=right" → "curl easy · row right".
@@ -180,6 +196,9 @@ export function renderHistoryDetail(): string {
   }
   const arms = armFeelText(log.armFeel);
   if (arms) rows.push(detailRow('Arms', escapeHtml(arms)));
+  const feels = moveFeelText(log);
+  if (feels)
+    rows.push(detailRow('Feel', escapeHtml(feels), { stack: true, id: 'detail-move-feel' }));
   // v62.3 F8: a part Claude wrote shows plain behind "Claude's note:", never
   // as if she said it; her own parts are unchanged.
   const wordParts = sessionWordParts(log);

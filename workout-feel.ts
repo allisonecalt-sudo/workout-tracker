@@ -19,8 +19,9 @@ import {
 } from './state.js';
 import type { LogEntry } from './types.js';
 import { escapeHtml } from './format.js';
-import { canonicalMoveName, MOVE_FEEL_VALUES } from './move-feel.js';
-import { ARM_FEEL_STEPS, currentSteppedMoves } from './workout-now.js';
+import { feelMoveFor, MOVE_FEEL_VALUES, slugFor, type SteppedMove } from './move-feel.js';
+import { ARM_FEEL_STEPS, getCurrentWorkout } from './workout-now.js';
+import { groupStretchPairs } from './workout-parts.js';
 
 // ---------- v48 · P5 (Sep 24 2026): arm feel + the LOAD CHIP ----------
 // The 2 kg trigger was her Jul 3 buy-bigger ask, and the app logs no arm reps
@@ -160,46 +161,54 @@ export function renderArmFeel(ex: Exercise): string {
     </div>`;
 }
 
-// v58 (Sep 28 2026) — the SAME chip, generalized to every move that stepped
-// this week (never curl/row — renderArmFeel above still owns those). Gating
-// is the same "after the last set (or after the timer/ride ends)" rule
-// renderArmFeel already proved (CHIP AFTER THE LAST SET, v54): a hold waits
-// for holdRan, a cardio lane waits for laneRan && timerIdle, a multi-set
-// reps move reuses the exact same setsDoneFor + "Set N done" mechanism
-// (data-mark-set is already keyed by exercise NAME, not curl/row-specific —
-// no new tap handler needed for that half). A main-phase move that repeats
-// across rounds only asks on its LAST round (`isLastRoundOrNA`) — asking the
-// same question every round would be noise, and there's no per-round
-// boundary here the way curl/row's "2 sets, one screen" already has one.
-export function renderMoveFeel(
-  ex: Exercise,
-  gate: { hold: boolean; ready: boolean; isLastRoundOrNA: boolean }
-): string {
-  if (ARM_FEEL_STEPS[ex.name]) return ''; // curl/row keep arm_feel, unmigrated
-  if (!gate.isLastRoundOrNA) return '';
-  const stepped = currentSteppedMoves().find((s) => s.name === canonicalMoveName(ex.name));
-  if (!stepped) return '';
-  if (!gate.ready) return '';
-  const total = multiSetCount(ex.reps);
-  const done = Math.min(state.setsDoneFor[ex.name] ?? 0, total);
-  if (!gate.hold && total > 1 && done < total) {
-    return `
-      <div class="move-feel move-feel-sets" role="group" aria-label="Sets">
-        <span class="move-feel-label">Set ${done + 1} of ${total}</span>
-        <button class="arm-set-btn" type="button" data-mark-set="${escapeHtml(ex.name)}">Set ${done + 1} done</button>
-      </div>`;
-  }
-  const current = state.moveFeel[stepped.slug];
+// v63 item 2 (Oct 19 2026) — "How was this one?  Easy · Right · Hard" on EVERY move page: warm-up, main
+// (every round), upper back, the cardio slot (walk / apartment; the elliptical keeps its own ride
+// feel) and every cool-down row. One quiet row; optional; a second tap on the picked one clears it;
+// it never blocks Done. It REPLACES v58's rule (only the moves that stepped this week, only on their
+// last round, only after the last set / the hold / the walk had run), so the "Stepped this week —
+// how did it feel?" chip and its "Set N done" counter (which existed only to hold that chip back)
+// are gone. The stepped-move line on the pre-log and the New / Again tonight badge stay.
+// Saved in the move_feel column exactly as before ("slug=feel@qty", move-feel.ts): the feel is kept
+// per MOVE (its slug), so with several rounds the LAST tap on that move wins, and a tap that clears
+// it clears it. curl / row keep their own arm feel + load chips (arm_feel, unmigrated).
+export function renderFeelRow(slug: string): string {
+  const current = state.moveFeel[slug];
   const chips = MOVE_FEEL_VALUES.map((v) => {
     const on = current === v;
     const label = v === 'easy' ? 'Easy' : v === 'right' ? 'Right' : 'Hard';
-    return `<button class="arm-chip${on ? ' arm-chip-on' : ''}" type="button" data-move-feel-slug="${stepped.slug}" data-move-feel="${v}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
+    return `<button class="arm-chip${on ? ' arm-chip-on' : ''}" type="button" data-move-feel-slug="${slug}" data-move-feel="${v}" aria-pressed="${on ? 'true' : 'false'}">${label}</button>`;
   }).join('');
   return `
-    <div class="move-feel" role="group" aria-label="How did it feel?">
-      <span class="move-feel-label">Stepped this week — how did it feel?</span>
+    <div class="move-feel" role="group" aria-label="How was this one?">
+      <span class="move-feel-label">How was this one?</span>
       <div class="arm-feel-chips">${chips}</div>
     </div>`;
+}
+
+export function renderMoveFeel(ex: Exercise): string {
+  if (ARM_FEEL_STEPS[ex.name]) return ''; // curl/row keep arm_feel, unmigrated
+  return renderFeelRow(slugFor(ex.name));
+}
+
+// Every move the live workout can ask about (warm-up, main, upper back, and the cool-down rows by
+// their group name), each with the slug + qty its save needs: moveFeelString turns state.moveFeel
+// into the saved string through THIS list, so a tap on any move is kept (it used to keep only the
+// moves that stepped). curl / row are left out: arm_feel owns them.
+export function currentFeelMoves(): SteppedMove[] {
+  const w = getCurrentWorkout();
+  if (!w) return [];
+  const out = new Map<string, SteppedMove>();
+  const add = (m: SteppedMove): void => {
+    if (!out.has(m.slug)) out.set(m.slug, m);
+  };
+  for (const ex of [...w.warmup, ...w.main, ...(w.upperBack ?? [])]) {
+    if (!ARM_FEEL_STEPS[ex.name]) add(feelMoveFor(ex));
+  }
+  for (const g of groupStretchPairs(w.cooldown ?? [])) {
+    const first = g.items[0];
+    if (first) add(feelMoveFor({ ...first, name: g.name }));
+  }
+  return [...out.values()];
 }
 
 // code-shape step 17c-2: the default arm load (moved verbatim from app.ts) - beginExercises (the workout screen)

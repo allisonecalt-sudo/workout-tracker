@@ -28,9 +28,11 @@ row=right@1kg"`. `key=feel@load`, `;`-joined, either half optional (a load
   in `migrations/2026-09-24-v48-session-columns.sql` (widened by
   `migrations/2026-09-28-v55-arm-feel-load.sql`). Never migrated to
   `move_feel` below — it keeps its own shape on purpose (v58 spec item 1).
-- **`move_feel`** (v58, Sep 28 2026) — the SAME Easy/Right/Hard, generalized
-  to every OTHER move that stepped this week (reps/seconds/minutes up, or a
-  new variant), never curl/row: `"splitsquat=right;wallsit=easy@45s;
+- **`move_feel`** (v58, Sep 28 2026; every move since v63, Oct 19 2026) — the
+  SAME Easy/Right/Hard, generalized to every OTHER move (v58: only the moves
+  that stepped this week; **v63 item 2: every move page and every cool-down
+  row asks "How was this one?"**, and the LAST tap on a move wins across
+  rounds), never curl/row: `"splitsquat=right;wallsit=easy@45s;
 ride=right@12min"`. `slug=feel@qty`, `;`-joined; slug is `move-feel.ts`'s
   `slugFor(name)` (lowercased, letters only — the cardio slot, whichever lane
   it's in, always slugs to `ride`); `feel` is optional; `@qty` appears ONLY

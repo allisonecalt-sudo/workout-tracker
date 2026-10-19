@@ -50,16 +50,6 @@ export function updateWalkLine(): void {
   walkLineUpdater();
 }
 
-// v59 (Sep 28 2026), CHECK-v58 round 2 nice #R2-N2: the walk-outside lane's
-// Easy/Right/Hard chip (renderMoveFeel via the Outdoor-walk branch below)
-// used to show the instant she tapped ▶ Walk outside — "Walking · 0 min ·
-// how did it feel?" — before she'd walked at all. Gated on real elapsed time
-// instead: no opinion to ask about yet under 3 min.
-const WALK_FEEL_GATE_MS = 3 * 60_000;
-export function walkFeelReady(start: number | null): boolean {
-  return start !== null && Date.now() - start >= WALK_FEEL_GATE_MS;
-}
-
 // The v47 counters' keys — only cleared now (a phone may still hold them).
 
 function clearLegacyWalkCounters(): void {

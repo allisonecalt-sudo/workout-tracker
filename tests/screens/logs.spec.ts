@@ -841,7 +841,7 @@ test.describe('v48 P5 logs', () => {
     await expect(page.locator('.prelog-stepped')).toHaveCount(0);
   });
 
-  test('v58 (c) the chip waits for the LAST round, then a tap saves the right slug — no qty on a reps-only move', async ({
+  test('v63 item 2: the row shows in round 1 and in the last round; a tap saves the right slug — no qty on a reps-only move', async ({
     page,
   }) => {
     await mockDate(page, TUE_WEEK4);
@@ -858,8 +858,8 @@ test.describe('v48 P5 logs', () => {
       if (name === 'Supported split squat') {
         seenSplitSquat++;
         if (seenSplitSquat === 1) {
-          // Round 1 — not her last round on this move yet, chip stays hidden.
-          await expect(page.locator('.move-feel')).toHaveCount(0);
+          // v63 item 2: round 1 asks too (the row is on every move page, every round).
+          await expect(page.locator('.move-feel')).toHaveCount(1);
         }
         if (seenSplitSquat === 2) break; // round 2 — her last round on it
       }
@@ -867,9 +867,7 @@ test.describe('v48 P5 logs', () => {
     }
     expect(seenSplitSquat).toBe(2);
     await expect(page.locator('.exercise-name')).toHaveText('Supported split squat');
-    await expect(page.locator('.move-feel-label').first()).toHaveText(
-      'Stepped this week — how did it feel?'
-    );
+    await expect(page.locator('.move-feel-label').first()).toHaveText('How was this one?');
     await page
       .locator('[data-move-feel-slug="supportedsplitsquat"][data-move-feel="easy"]')
       .click();
@@ -883,7 +881,7 @@ test.describe('v48 P5 logs', () => {
     expect(log['moveFeel']).not.toContain('supportedsplitsquat=easy@');
   });
 
-  test('v58 (d) a hold step (Wall sit, 40s -> 45s) never shows the chip before the hold has actually run', async ({
+  test('v63 item 2: a hold step (Wall sit) shows the row even before the hold has run, and it never blocks Done', async ({
     page,
   }) => {
     // mockDate's clock is FIXED (never advances — see its own comment), so a
@@ -912,10 +910,12 @@ test.describe('v48 P5 logs', () => {
       if (!(await tapForward(page))) break;
     }
     expect(seenWallSit).toBe(2);
-    // Reached her LAST round on it, but the hold hasn't run yet this round —
-    // the chip waits for holdRan, same rule as CHIP AFTER THE LAST SET.
-    await expect(page.locator('.move-feel')).toHaveCount(0);
+    // v63 item 2: the hold hasn't run yet, and the row is there anyway: optional, quiet, and the
+    // step's own Done is not held back by it (a hold's Done is the quiet one until the timer has
+    // run, but it is always tappable: she may have used her own clock).
+    await expect(page.locator('.move-feel')).toHaveCount(1);
     await expect(page.locator('#start-timed')).toBeVisible();
+    await expect(page.locator('#next')).toBeEnabled();
   });
 
   // v58 fix r3-style proof (Sep 28 2026), same shape as the arm_feel v55

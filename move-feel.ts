@@ -213,6 +213,22 @@ export function steppedMovesForPhase(
   return out;
 }
 
+// v63 item 2 (Oct 19 2026): EVERY move page now asks "How was this one?", not only the moves that
+// stepped this week, so every move needs the slug + qty a save is built from. The same reading of
+// "what is this move" as the stepped list uses (moveKindAndQty: a hold carries its seconds, the
+// ride / walk slot its minutes, a reps move no qty), for any one move. The save is unchanged in
+// shape: "slug=feel@qty".
+export function feelMoveFor(ex: MoveFeelExercise): SteppedMove {
+  const { kind, qty } = moveKindAndQty(ex);
+  return {
+    name: ex.name,
+    slug: slugFor(ex.name),
+    kind,
+    qty,
+    summary: summaryFor(ex, kind, qty, undefined),
+  };
+}
+
 // Every stepped move across warmup -> main -> upper back, in that order —
 // never cooldown (same boundary the jump list itself keeps, step-list.ts's
 // own header comment). `prev` is undefined for the very first encoded week
@@ -336,6 +352,22 @@ export function parseMoveFeelString(s: string | null | undefined): MoveFeelPart[
     out.push({ slug: m[1] as string, feel: (m[2] as MoveFeelValue) ?? null, qtyRaw: m[3] ?? null });
   }
   return out;
+}
+
+// v63 item 2: the Session detail shows EVERY move's feel, in her words: "Supported split squat easy ·
+// Wall sit hard 45 s · Cardio right 12 min". `nameFor` turns a saved slug back into the name the
+// session's own plan shows (a slug the plan no longer has stays as saved).
+export function moveFeelSummary(
+  raw: string | null | undefined,
+  nameFor: (slug: string) => string | null
+): string {
+  return parseMoveFeelString(raw)
+    .filter((p) => p.feel !== null)
+    .map((p) => {
+      const qty = p.qtyRaw === null ? '' : ` ${p.qtyRaw.replace(/(\d)(kg|s|min)$/, '$1 $2')}`;
+      return `${nameFor(p.slug) ?? p.slug} ${p.feel}${qty}`;
+    })
+    .join(' · ');
 }
 
 // Mirrors migrations/2026-09-28-v58-move-feel.sql's CHECK exactly — used by

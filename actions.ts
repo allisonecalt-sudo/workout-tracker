@@ -84,8 +84,10 @@ export type ActionHooks = {
   endPostLogClockTick: () => void;
   /** The firsts of the session being saved ("New tonight"), worked out before the save. */
   sessionFirsts: (onElliptical: boolean) => { firsts: string[]; back: string[] };
-  /** This workout's stepped moves (feeds move_feel). */
+  /** This workout's stepped moves (the pre-log line). */
   currentSteppedMoves: () => SteppedMove[];
+  /** Every move she can tap Easy / Right / Hard on in this workout (feeds move_feel, v63 item 2). */
+  currentFeelMoves: () => SteppedMove[];
   skippedStepsCount: (w: Workout) => number;
   /** Wipe the session screen state after a save (timers, wake lock, state.ts reset). */
   resetState: () => void;
@@ -398,7 +400,7 @@ export async function saveCompletedSession(): Promise<void> {
     // valid move_feel shape (the slug's own CHECK — see move-feel.ts's
     // isValidMoveFeelString — makes `@qty` optional).
     moveFeel: (() => {
-      const base = moveFeelString(state.moveFeel, hooks().currentSteppedMoves());
+      const base = moveFeelString(state.moveFeel, hooks().currentFeelMoves());
       if (!onElliptical || !state.rideFeel) return base;
       const sec = ellipticalTimeSec();
       const minutes = sec !== null ? Math.max(1, Math.round(sec / 60)) : null;

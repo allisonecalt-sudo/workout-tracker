@@ -22,6 +22,8 @@ import {
   type StretchGroup,
 } from './workout-parts.js';
 import { renderExerciseSetup } from './workout-cards.js';
+import { renderFeelRow } from './workout-feel.js';
+import { slugFor } from './move-feel.js';
 import { rawCurrentExercise, displayName } from './workout-now.js';
 
 // Group 2H: rest screen now leads with a large countdown ring/arc; Skip is a
@@ -159,6 +161,7 @@ function renderStretchRow(g: StretchGroup): string {
           <span class="stretch-reps">${escapeHtml(stretchRowTime(g))}</span>
           ${cueToggle}
         </div>
+        ${/* v63 item 2: every cool-down row asks "How was this one?" too, kept under the row's own name */ renderFeelRow(slugFor(g.name))}
         ${cueOpen && g.cue !== null ? `<p class="stretch-cue">${escapeHtml(g.cue)}</p>` : ''}
         ${
           /* v40: cooldown is Exercise[] like every other phase, so a stretch CAN

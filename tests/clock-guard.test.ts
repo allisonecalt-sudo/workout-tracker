@@ -69,10 +69,6 @@ const DATE_NOW = new RegExp('Date' + String.raw`\.now\(\)`, 'g');
 // runs INSIDE the page (addInitScript / evaluate callbacks), where `Date` is
 // the default TEST_NOW clock — NOT Node's wall clock.
 const IN_PAGE_ALLOW: Record<string, { count: number; why: string }> = {
-  'screens/home.spec.ts': {
-    count: 1,
-    why: 'page.evaluate: back-dates the stamped walk start 4 min off the in-page TEST_NOW clock',
-  },
   'screens/timing.spec.ts': {
     count: 8,
     why: 'the default-clock proof tests read the IN-PAGE clock on purpose (7 evaluate calls + 1 in a describe title)',

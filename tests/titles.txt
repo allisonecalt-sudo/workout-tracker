@@ -221,9 +221,15 @@ empty states (spec §2.5) › no periods logged: Card A says so, and there is no
 empty states (spec §2.5) › one period logged: "Not placed yet"
 end not confirmed -> null, even with both timestamps present
 enriched detail card: face shows voice + muscle, sections are click-to-open dropdowns
+every move has a slug of its own (v63 item 2) › inside every workout of every week, no two different names (stretch groups by their group name) share a slug
 exactly 180 min is kept — the ceiling is inclusive
 exactly 5 min is kept — the floor is inclusive
 exercise visual renders for known exercises
+feelMoveFor: the slug and qty a save needs, for any one move › a hold carries its seconds
+feelMoveFor: the slug and qty a save needs, for any one move › a reps move carries no qty
+feelMoveFor: the slug and qty a save needs, for any one move › a stretch group is saved under its group name with its hold seconds
+feelMoveFor: the slug and qty a save needs, for any one move › moveFeelString saves a tap on ANY move in the list, in tap order, and still drops a slug the list cannot vouch for
+feelMoveFor: the slug and qty a save needs, for any one move › the cardio slot (any lane) is "ride" and carries its minutes, read off the reps text
 finish before start -> null, the same bounds check catches it without a special case
 finishing the last of 2 skipped moves goes straight to cool-down, not back through finished moves
 flattenSteps › a Lite (1-round) workout lists only Main round 1
@@ -346,6 +352,8 @@ moveFeelString / parseMoveFeelString — tap saves the right slug/qty › nothin
 moveFeelString / parseMoveFeelString — tap saves the right slug/qty › only the moves she actually tapped a feel on are saved, with the stepped qty attached
 moveFeelString / parseMoveFeelString — tap saves the right slug/qty › parseMoveFeelString on null/empty returns []
 moveFeelString / parseMoveFeelString — tap saves the right slug/qty › parseMoveFeelString reverses moveFeelString exactly
+moveFeelSummary: the Session screen line › a slug the plan no longer has stays as saved; nothing saved is an empty string
+moveFeelSummary: the Session screen line › every move's feel, with its seconds / minutes spaced
 multi-week: "Coming next week" preview renders in Progress with diff
 multi-week: Settings About shows Program weeks count (17) — pre-launch, unchanged
 multi-week: Week 4 content active for May 25 (Session A holds — squats 12, plank 1x15s)
@@ -698,7 +706,6 @@ v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › post-log 
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › post-log line: a REPEAT letter (B again) still reads "1 of 4", never overcounts to "2 of 4"
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › the pinned plan survives an app close — even once a background sync closes the week under it (§2.8 item 4)
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v58 fix pass (Sep 28 2026, checker's must): a REPEAT week (no new PROGRAM row yet) never says a move stepped
-v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v59 (R2-N2): the walk-outside feel chip waits for real elapsed time, not "Walking · 0 min"
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v59 (a) post-launch, a real (non-repeat) week: A/B logged, C not yet — stepped is still [ride 12 min]
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v59 (b) pinned crossing: a session started at the END of Week 5 (Fri) still asks about Week 5's own stepped move after resuming past the Week-6 boundary (Sun, C logged Sat)
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61 fix pass 2 (repro 1): a D logged before ANY A/B/C still counts toward the pending week, with its own dot
@@ -711,6 +718,7 @@ v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.1 fix
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.1 fix 2 (gap + Sunday opening): the review and Home agree — Week 6 reads 2 of 4 with the Sat D line, Week 5 reads 3 of 4 with none
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.1 fix 2 (r1noD): a D on the pending week's own opening day, nothing else logged yet, reads Week 5's review at 3 of 4 with no D line
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v61.2: the Oct 3 week is a Sick skip and Oct 10-16 is R2 Week 6 — light, one 10-min ride, no strength
+v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › v63 item 2: the walk-outside page has the feel row from the start, even at "Walking · 0 min"
 v48 P4 home › WK2 (Sep 27 2026): the completion-based week model › week strip: a repeat day gets a small "2" badge, and an 11-day short week folds its empty middle
 v48 P4 home › at phone size › (a) 39 sessions, last = C: one sage thing (the A hero), the whole hero in the fold, home < 1300 px
 v48 P4 home › at phone size › (g) Sat Sep 26 morning (Week 5 now encoded, no sessions yet): the header reads Week 5 clean, still one line
@@ -747,10 +755,10 @@ v48 P5 logs › at phone size › (d2) pre-log Start stays visible without scrol
 v48 P5 logs › at phone size › (e) one note box: no #word, the note saves verbatim, Save stays in view while typing
 v48 P5 logs › v58 (a) which moves ask: Workout A has real stepped moves this week, unchanged Workout C has none
 v48 P5 logs › v58 (b) the pre-log "Stepped this week" line names the real moves, with their real qty
-v48 P5 logs › v58 (c) the chip waits for the LAST round, then a tap saves the right slug — no qty on a reps-only move
-v48 P5 logs › v58 (d) a hold step (Wall sit, 40s -> 45s) never shows the chip before the hold has actually run
 v48 P5 logs › v58 (e) push -> pull round trip: move_feel survives sessionPayload + mergeRemoteSessions untouched
 v48 P5 logs › v58 (f) a tapped feel survives an app close mid-session (the resume snapshot)
+v48 P5 logs › v63 item 2: a hold step (Wall sit) shows the row even before the hold has run, and it never blocks Done
+v48 P5 logs › v63 item 2: the row shows in round 1 and in the last round; a tap saves the right slug — no qty on a reps-only move
 v48 P6 mirror › (a) live week: no "vs previous week", one quiet "Week still open."; ‹ to last week compares with units
 v48 P6 mirror › (b) a held (break) week: "Held the slot — doesn't count.", no "of 3"
 v48 P6 mirror › (c) back pain 2 is plain; 3 (her stop line) is amber
@@ -955,6 +963,16 @@ v63 item 1: writing a note › close with nothing in it just closes; a tap outsi
 v63 item 1: writing a note › the note starts with where she was, down to the round and the move
 v63 item 1: writing a note › the text box is dir="auto" so Hebrew reads right
 v63 item 1: writing a note › write -> Send puts one row in the inbox, shaped exactly like voice-capture's
+v63 item 2: How was this one? › a hold shows the row before it has run, and saves its seconds like the stepped moves always did
+v63 item 2: How was this one? › a move that did NOT step this week is saved too, in tap order, as slug=feel (no qty for a reps move)
+v63 item 2: How was this one? › a session with no tap at all saves no move_feel (null), exactly as before
+v63 item 2: How was this one? › a tap picks, a second tap on the same one clears, another tap changes it
+v63 item 2: How was this one? › a tapped feel survives an app close mid-workout
+v63 item 2: How was this one? › every cool-down row asks too, and a tap saves that stretch under its own name
+v63 item 2: How was this one? › the Session screen shows every move's feel, named the way that session's plan names it
+v63 item 2: How was this one? › the chips are real tap targets (44 px) and the row sits quietly: it never blocks Done
+v63 item 2: How was this one? › the row is on every kind of move page: warm-up, a hold, main in each round, upper back
+v63 item 2: How was this one? › with several rounds the LAST tap on a move wins (and a clearing tap clears it)
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

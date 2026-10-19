@@ -102,7 +102,6 @@ import {
   updateWalkLine,
   walkStepMinutes,
   clearWorkoutWalk,
-  walkFeelReady,
   walkLiveText,
   APARTMENT_CARDIO_NAME,
 } from '../walk.js';
@@ -493,27 +492,11 @@ export function renderWorkout(): string {
   // v48 · P3: the walk, once she tapped it — minutes only ("Walking · 12 min";
   // the GPS + step counters are archived). The phone is in her pocket: no
   // picture, no form card — the live line and Done are the whole interface.
-  // v58 fix pass (Sep 28 2026, checker's should #4): this branch never called
-  // renderMoveFeel, so the walk-outside lane — unlike the elliptical and
-  // apartment lanes, which both reuse the same call — never showed the
-  // Easy/Right/Hard chip on a week the ride slot stepped (0 chips after
-  // ▶ Walk outside, vs. the elliptical lane, which worked). No
-  // laneRan/timerIdle boundary exists here (the walk stays live the whole
-  // time she's on this screen, tracked in the background, not gated behind a
-  // Start/Stop timer the indoor lanes have), so `ready: true` — same as the
-  // elliptical's own post-ride branch below — lets her tap it any time on
-  // this screen, same as every other reps-based move.
-  // v59 fix pass (Sep 28 2026, CHECK-v58 round 2 nice #R2-N2): `ready: true`
-  // meant the chip appeared the instant she tapped ▶ Walk outside —
-  // "Walking · 0 min · how did it feel?", nothing to have an opinion about
-  // yet. renderMoveFeel's own `ready` gate stays true (curl/row-style — she
-  // can tap it any time once it's showing); the WHETHER-it-shows question
-  // moves to the wrapper below instead, gated on real elapsed time
-  // (walkFeelReady) and kept live by the 30 s tick (updateWalkLiveLine, a
-  // class toggle only — never a full render() mid-walk).
+  // v63 item 2 (Oct 19 2026): the walk lane shows the same quiet "How was this one?" row as every other
+  // move page, from the moment the page opens (v59's wait-for-elapsed-minutes gate went with v58's
+  // stepped-only rule: the row is optional and never blocks Done).
   if (ex.name === 'Outdoor walk') {
-    const feelHtml = renderMoveFeel(ex, { hold: false, ready: true, isLastRoundOrNA: true });
-    const feelReady = walkFeelReady(workoutWalkStart());
+    const feelHtml = renderMoveFeel(ex);
     return `
       ${header}
       <div class="card">
@@ -522,7 +505,7 @@ export function renderWorkout(): string {
           <div class="exercise-reps">${walkStepMinutes(ex)} min</div>
           <p class="walk-live-line">🚶 <span id="walk-live">${walkLiveText(workoutWalkStart())}</span></p>
           <p class="gear-note">It saves with this workout. Tap Done · Next when you're back.</p>
-          ${feelHtml ? `<div id="walk-move-feel-slot" class="${feelReady ? '' : 'wt-hidden'}">${feelHtml}</div>` : ''}
+          ${feelHtml}
         </div>
       </div>
       ${renderStepNav('Done · Next')}
@@ -583,12 +566,7 @@ export function renderWorkout(): string {
         </div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${renderArmFeel(ex)}
-        ${renderMoveFeel(ex, {
-          hold,
-          ready: hold ? holdRan : indoorLane ? laneRan && timerIdle : true,
-          isLastRoundOrNA:
-            state.currentPhase !== 'main' || state.currentRound === effectiveRounds(w),
-        })}
+        ${renderMoveFeel(ex)}
         ${safety ? `<p class="exercise-safety">${escapeHtml(safety)}</p>` : ''}
         ${renderTipsExpander(ex, safety)}
         ${renderExerciseSetup(ex)}
@@ -695,9 +673,10 @@ export function attachWorkoutFeelHandlers(): void {
       requestRender();
     });
   });
-  // v58 (Sep 28 2026) — the generalized Easy/Right/Hard on any stepped move:
-  // same tap-selects/tap-clears rule as arm feel, keyed by slug instead of a
-  // fixed curl/row pair.
+  // v58 (Sep 28 2026) — the generalized Easy/Right/Hard: same tap-selects/tap-clears rule as arm
+  // feel, keyed by slug instead of a fixed curl/row pair. v63 item 2: it is on EVERY move page and
+  // every cool-down row now, so the chips are updated in place (no redraw: eleven stretch rows
+  // must not jump under her thumb), and the LAST tap on a move wins, whichever round it is.
   document.querySelectorAll<HTMLButtonElement>('[data-move-feel-slug]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const slug = btn.dataset['moveFeelSlug'];
@@ -708,7 +687,15 @@ export function attachWorkoutFeelHandlers(): void {
       else next[slug] = feel;
       state.moveFeel = next;
       saveActiveSession();
-      requestRender();
+      const picked = next[slug];
+      btn
+        .closest('.move-feel')
+        ?.querySelectorAll<HTMLButtonElement>('[data-move-feel]')
+        .forEach((chip) => {
+          const on = chip.dataset['moveFeel'] === picked;
+          chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+          chip.classList.toggle('arm-chip-on', on);
+        });
     });
   });
 }
