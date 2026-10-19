@@ -881,7 +881,7 @@ test.describe('v48 P5 logs', () => {
     expect(log['moveFeel']).not.toContain('supportedsplitsquat=easy@');
   });
 
-  test('v63 item 2: a hold step (Wall sit) shows the row even before the hold has run, and it never blocks Done', async ({
+  test('v58 (d) a hold step (Wall sit, 40s -> 45s) never shows the chip before the hold has actually run', async ({
     page,
   }) => {
     // mockDate's clock is FIXED (never advances — see its own comment), so a
@@ -910,12 +910,52 @@ test.describe('v48 P5 logs', () => {
       if (!(await tapForward(page))) break;
     }
     expect(seenWallSit).toBe(2);
-    // v63 item 2: the hold hasn't run yet, and the row is there anyway: optional, quiet, and the
-    // step's own Done is not held back by it (a hold's Done is the quiet one until the timer has
-    // run, but it is always tappable: she may have used her own clock).
-    await expect(page.locator('.move-feel')).toHaveCount(1);
+    // Reached her LAST round on it, but the hold hasn't run yet this round —
+    // the chip waits for holdRan, same rule as CHIP AFTER THE LAST SET.
+    await expect(page.locator('.move-feel')).toHaveCount(0);
     await expect(page.locator('#start-timed')).toBeVisible();
-    await expect(page.locator('#next')).toBeEnabled();
+  });
+
+  // v63 fix round 2 (Oct 19 2026): v58's waits are back. A feel BEFORE doing the move means nothing, so a
+  // hold asks only after it has run, and a cardio lane only after the lane has run and its timer is idle.
+  test('v58 (d2) a hold asks "How was this one?" only once the hold has run, then a tap saves it', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await goToStep(page, 'Wall sit');
+    await expect(page.locator('.move-feel')).toHaveCount(0); // before the hold: no row
+    await page.locator('#start-timed').click();
+    await advanceClock(page, 30_000);
+    await page.locator('#timer-pip').click();
+    await page.locator('#stop-timed').click();
+    await expect(page.locator('.move-feel')).toHaveCount(1); // the hold has run: the row is here
+    await expect(page.locator('.move-feel-label')).toHaveText('How was this one?');
+    await page.locator('[data-move-feel-slug="wallsit"][data-move-feel="right"]').click();
+    await expect(
+      page.locator('[data-move-feel-slug="wallsit"][data-move-feel="right"]')
+    ).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('v58 (d3) the apartment lane asks "How was this one?" only after the lane has run and its timer is idle', async ({
+    page,
+  }) => {
+    await movableClock(page, TUE_WEEK4, { skipPreCountdown: true });
+    await page.goto('/');
+    await page.locator('button[data-workout="A"]').click();
+    await page.locator('#begin').click();
+    await page.locator('#ww-apartment').click();
+    await expect(page.locator('.exercise-name')).toBeVisible();
+    await expect(page.locator('.move-feel')).toHaveCount(0); // not started: no row
+    await page.locator('#start-timed').click();
+    await expect(page.locator('.move-feel')).toHaveCount(0); // running: still none
+    await advanceClock(page, 30_000);
+    await page.locator('#timer-pip').click();
+    await page.locator('#stop-lane').click();
+    await expect(page.locator('.move-feel')).toHaveCount(1); // ran and idle: the row is here
+    await expect(page.locator('.move-feel .arm-chip')).toHaveText(['Easy', 'Right', 'Hard']);
   });
 
   // v58 fix r3-style proof (Sep 28 2026), same shape as the arm_feel v55

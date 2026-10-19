@@ -769,9 +769,11 @@ v48 P5 logs › at phone size › (d2) pre-log Start stays visible without scrol
 v48 P5 logs › at phone size › (e) one note box: no #word, the note saves verbatim, Save stays in view while typing
 v48 P5 logs › v58 (a) which moves ask: Workout A has real stepped moves this week, unchanged Workout C has none
 v48 P5 logs › v58 (b) the pre-log "Stepped this week" line names the real moves, with their real qty
+v48 P5 logs › v58 (d) a hold step (Wall sit, 40s -> 45s) never shows the chip before the hold has actually run
+v48 P5 logs › v58 (d2) a hold asks "How was this one?" only once the hold has run, then a tap saves it
+v48 P5 logs › v58 (d3) the apartment lane asks "How was this one?" only after the lane has run and its timer is idle
 v48 P5 logs › v58 (e) push -> pull round trip: move_feel survives sessionPayload + mergeRemoteSessions untouched
 v48 P5 logs › v58 (f) a tapped feel survives an app close mid-session (the resume snapshot)
-v48 P5 logs › v63 item 2: a hold step (Wall sit) shows the row even before the hold has run, and it never blocks Done
 v48 P5 logs › v63 item 2: the row shows in round 1 and in the last round; a tap saves the right slug — no qty on a reps-only move
 v48 P6 mirror › (a) live week: no "vs previous week", one quiet "Week still open."; ‹ to last week compares with units
 v48 P6 mirror › (b) a held (break) week: "Held the slot — doesn't count.", no "of 3"
@@ -979,7 +981,7 @@ v63 item 1: writing a note › close with nothing in it just closes; a tap outsi
 v63 item 1: writing a note › the note starts with where she was, down to the round and the move
 v63 item 1: writing a note › the text box is dir="auto" so Hebrew reads right
 v63 item 1: writing a note › write -> Send puts one row in the inbox, shaped exactly like voice-capture's
-v63 item 2: How was this one? › a hold shows the row before it has run, and saves its seconds like the stepped moves always did
+v63 item 2: How was this one? › a hold does not ask before it has run (the v58 wait is back, so a feel is never asked about a hold not done)
 v63 item 2: How was this one? › a move that did NOT step this week is saved too, in tap order, as slug=feel (no qty for a reps move)
 v63 item 2: How was this one? › a session with no tap at all saves no move_feel (null), exactly as before
 v63 item 2: How was this one? › a tap picks, a second tap on the same one clears, another tap changes it

@@ -562,7 +562,10 @@ export function renderWorkout(): string {
         </div>
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${renderArmFeel(ex)}
-        ${renderMoveFeel(ex, { hold })}
+        ${renderMoveFeel(ex, {
+          hold,
+          ready: hold ? holdRan : indoorLane ? laneRan && timerIdle : true,
+        })}
         ${renderThisHurts()}
         ${safety ? `<p class="exercise-safety">${escapeHtml(safety)}</p>` : ''}
         ${renderTipsExpander(ex, safety)}

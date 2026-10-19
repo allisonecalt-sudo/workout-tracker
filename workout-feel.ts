@@ -196,8 +196,15 @@ export function renderStretchFeel(): string {
 // it does not replace it): a multi-set move (multiSetCount > 1) shows "Set N of M" + "Set N done" first
 // and the feel row waits for the LAST set, exactly the markup and the data-mark-set tap v58 had (the tap
 // handler in screens/workout.ts is keyed by exercise NAME). A hold has no set count here.
-export function renderMoveFeel(ex: Exercise, opts: { hold?: boolean } = {}): string {
+// v58's other waits are back too (fix round 2): a hold asks only after the hold has run (holdRan), a cardio
+// lane only after the lane has run and its timer is idle (laneRan && timerIdle) - `ready` - because a feel
+// before doing the move means nothing. Every other move is ready at once.
+export function renderMoveFeel(
+  ex: Exercise,
+  opts: { hold?: boolean; ready?: boolean } = {}
+): string {
   if (ARM_FEEL_STEPS[ex.name]) return ''; // curl/row keep arm_feel, unmigrated
+  if (opts.ready === false) return '';
   const total = multiSetCount(ex.reps);
   const done = Math.min(state.setsDoneFor[ex.name] ?? 0, total);
   if (!opts.hold && total > 1 && done < total) {

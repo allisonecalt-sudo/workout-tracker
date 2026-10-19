@@ -81,6 +81,7 @@ test.describe('v63 item 2: How was this one?', () => {
     await page.locator('#ww-skip').click();
     const seen: string[] = [];
     const armNames: string[] = [];
+    const held: string[] = [];
     for (let i = 0; i < 60; i++) {
       const name = await NAME(page);
       if (name !== '') {
@@ -90,6 +91,10 @@ test.describe('v63 item 2: How was this one?', () => {
           // curl / row keep their own arm feel (arm_feel, unmigrated): no second row
           armNames.push(name);
           await expect(page.locator('.move-feel')).toHaveCount(0);
+        } else if ((await page.locator('#start-timed').count()) > 0) {
+          // a hold waits until it has run (v58's wait is back; logs.spec pins the "after" side)
+          await expect(page.locator('.move-feel'), `${phase} · ${name}`).toHaveCount(0);
+          held.push(`${phase} · ${name}`);
         } else {
           await expect(page.locator('.move-feel'), `${phase} · ${name}`).toHaveCount(1);
           // a multi-set move counts its sets first (v58's "Set N done"); the row waits for the last one
@@ -108,9 +113,9 @@ test.describe('v63 item 2: How was this one?', () => {
     expect(seen.some((s) => s.includes('Round 1 of'))).toBe(true);
     expect(seen.some((s) => s.includes('Round 2 of'))).toBe(true);
     expect(seen.some((s) => s.startsWith('Upper back'))).toBe(true);
-    expect(seen.filter((s) => s.endsWith('Wall sit'))).toHaveLength(2); // a hold, both rounds
+    expect(held.filter((s) => s.endsWith('Wall sit'))).toHaveLength(2); // a hold, both rounds: no row until it has run
     expect(armNames.length).toBeGreaterThan(0);
-    expect(seen.length).toBeGreaterThan(14);
+    expect(seen.length + held.length).toBeGreaterThan(14); // same pages as before: the holds just wait
   });
 
   test('v58 "Set N done" is back: a multi-set move counts its sets, and the row waits for the last one', async ({
@@ -166,16 +171,16 @@ test.describe('v63 item 2: How was this one?', () => {
     expect(await page.locator('.move-feel').count()).toBe(1);
   });
 
-  test('a hold shows the row before it has run, and saves its seconds like the stepped moves always did', async ({
+  test('a hold does not ask before it has run (the v58 wait is back, so a feel is never asked about a hold not done)', async ({
     page,
   }) => {
     await startA(page);
     await goToMove(page, 'Wall sit', 1);
     await expect(page.locator('#start-timed')).toBeVisible(); // not held yet
-    await expect(page.locator('.move-feel')).toHaveCount(1);
-    await chip(page, 'wallsit', 'hard').click();
+    await expect(page.locator('.move-feel')).toHaveCount(0);
+    await expect(page.locator('#next')).toBeEnabled(); // and nothing blocks Done
     const saved = await toPostLogAndSave(page);
-    expect(saved['moveFeel']).toMatch(/^wallsit=hard@\d+s$/);
+    expect(saved['moveFeel'] ?? null).toBeNull();
   });
 
   test('a move that did NOT step this week is saved too, in tap order, as slug=feel (no qty for a reps move)', async ({
