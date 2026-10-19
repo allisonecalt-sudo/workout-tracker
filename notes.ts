@@ -11,7 +11,7 @@
 // a recording's audio in IndexedDB, handed in through the BlobStore below), then out to the inbox. Offline,
 // a failed send or a failed transcription just leaves the note in the queue for the next open / `online`.
 // DECIDED (spec v63-from-maayan-2026-10-19.md item 1):
-//   - the row: { transcript, source, id, duration_seconds? } in that key order; `source` = 'text' or
+//   - the row: { transcript, source, id, duration_seconds } in that key order (a typed note sends 0, like voice-capture); `source` = 'text' or
 //     'voice'; `category` is never sent (the column default is null, same as voice-capture's own notes);
 //     the row id is the note's own UUID, so a retry whose first answer was lost 409s (23505) and counts as sent;
 //   - the transcript starts with where she was: "[Workout app · Workout A · Round 2 · Wall sit] " + her words;
@@ -103,15 +103,18 @@ export type CaptureBody = {
   duration_seconds?: number;
 };
 
-/** The exact INSERT body voice-capture's saveCapture builds: { transcript, source }, then id, then duration_seconds. */
+/** The exact INSERT body voice-capture's saveCapture builds: { transcript, source }, then id, then duration_seconds (0 for a typed note, the length in seconds for a recording). */
 export function captureBody(note: QueuedNote, transcript: string): CaptureBody {
   return {
     transcript,
     source: note.kind,
     ...(UUID_RE.test(note.id) ? { id: note.id } : {}),
-    ...(note.kind === 'voice' && typeof note.durationSec === 'number'
-      ? { duration_seconds: Math.round(note.durationSec) }
-      : {}),
+    // voice-capture's typed note sends 0 (app.ts: addCapture(text, 0, 'text')), a recording its length
+    ...(note.kind === 'text'
+      ? { duration_seconds: 0 }
+      : typeof note.durationSec === 'number'
+        ? { duration_seconds: Math.round(note.durationSec) }
+        : {}),
   };
 }
 

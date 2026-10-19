@@ -171,6 +171,9 @@ canonicalMoveName › a plain move name passes through unchanged
 canonicalMoveName › any ride-name lane maps back to the one PROGRAM ever encodes
 capacity before (v39): a missing reading stays missing through the sync, the week average and the import
 capacity before (v39): the history row shows an em dash, never "0"
+captureBody matches voice-capture exactly › a recording with no length sends none (voice-capture omits it too); never a category
+captureBody matches voice-capture exactly › a recording: the length rounded to whole seconds, same key order
+captureBody matches voice-capture exactly › a typed note: duration_seconds 0, key order transcript, source, id, duration_seconds
 cardio either/or: finishing after the apartment option saves the lane + its minutes, and never POSTs
 cardio either/or: the walk step offers an apartment option that swaps in a same-length timer
 clock guard — no test reads the real clock (step 1b-3) › every browser spec runs on the default test clock (setupPage / installTestClock) unless listed

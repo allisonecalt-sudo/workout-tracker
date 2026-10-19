@@ -340,8 +340,9 @@ test.describe('v63 item 1: writing a note', () => {
     expect(c.headers['authorization']).toBe(`Bearer ${c.headers['apikey']}`);
     expect(c.headers['content-type']).toContain('application/json');
     expect(c.headers['prefer']).toBe('return=minimal');
-    // its body: { transcript, source }, then the row id; no category, no duration for typed text
-    expect(Object.keys(c.body)).toEqual(['transcript', 'source', 'id']);
+    // its body, exactly voice-capture's typed note (addCapture(text, 0, 'text')): duration_seconds 0, no category
+    expect(Object.keys(c.body)).toEqual(['transcript', 'source', 'id', 'duration_seconds']);
+    expect(c.body['duration_seconds']).toBe(0);
     expect(c.body['source']).toBe('text');
     expect(c.body['transcript']).toBe('[Workout app · Home] the wall sit felt long today');
     expect(c.body['id']).toMatch(UUID_RE);
