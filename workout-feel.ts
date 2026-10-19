@@ -21,7 +21,6 @@ import type { LogEntry } from './types.js';
 import { escapeHtml } from './format.js';
 import { feelMoveFor, MOVE_FEEL_VALUES, slugFor, type SteppedMove } from './move-feel.js';
 import { ARM_FEEL_STEPS, getCurrentWorkout } from './workout-now.js';
-import { groupStretchPairs } from './workout-parts.js';
 
 // ---------- v48 · P5 (Sep 24 2026): arm feel + the LOAD CHIP ----------
 // The 2 kg trigger was her Jul 3 buy-bigger ask, and the app logs no arm reps
@@ -162,8 +161,9 @@ export function renderArmFeel(ex: Exercise): string {
 }
 
 // v63 item 2 (Oct 19 2026) — "How was this one?  Easy · Right · Hard" on EVERY move page: warm-up, main
-// (every round), upper back, the cardio slot (walk / apartment; the elliptical keeps its own ride
-// feel) and every cool-down row. One quiet row; optional; a second tap on the picked one clears it;
+// (every round), upper back and the cardio slot (walk / apartment; the elliptical keeps its own ride
+// feel). NOT the cool-down rows: eleven more rows push that list to ~1615 px, past the 1400 px budget
+// tests/screens/mirror-and-cooldown.spec.ts keeps for it; held for her call (see the v63 fix commit). One quiet row; optional; a second tap on the picked one clears it;
 // it never blocks Done. It REPLACES v58's rule (only the moves that stepped this week, only on their
 // last round, only after the last set / the hold / the walk had run), so the "Stepped this week —
 // how did it feel?" chip and its "Set N done" counter (which existed only to hold that chip back)
@@ -196,8 +196,7 @@ export function renderThisHurts(): string {
   return `<button class="btn-quiet hurt-btn" id="this-hurts" type="button">This hurts</button>`;
 }
 
-// Every move the live workout can ask about (warm-up, main, upper back, and the cool-down rows by
-// their group name), each with the slug + qty its save needs: moveFeelString turns state.moveFeel
+// Every move the live workout can ask about (warm-up, main, upper back), each with the slug + qty its save needs: moveFeelString turns state.moveFeel
 // into the saved string through THIS list, so a tap on any move is kept (it used to keep only the
 // moves that stepped). curl / row take part too (v63 item 3): a hurt there lands in move_feel; their
 // Easy / Right / Hard still lives in arm_feel (no row writes it into state.moveFeel for them).
@@ -210,10 +209,6 @@ export function currentFeelMoves(): SteppedMove[] {
   };
   for (const ex of [...w.warmup, ...w.main, ...(w.upperBack ?? [])]) {
     add(feelMoveFor(ex));
-  }
-  for (const g of groupStretchPairs(w.cooldown ?? [])) {
-    const first = g.items[0];
-    if (first) add(feelMoveFor({ ...first, name: g.name }));
   }
   return [...out.values()];
 }

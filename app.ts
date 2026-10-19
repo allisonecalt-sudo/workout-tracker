@@ -64,6 +64,7 @@ import {
 } from './screens/prelog.js';
 import { renderSettings, attachSettingsHandlers } from './screens/settings.js';
 import { mountNoteButton, flushNotesNow } from './screens/notesheet.js';
+import { attachMoveSheetHandlers } from './screens/movesheet.js';
 import {
   renderHome,
   attachHomeHandlers,
@@ -525,6 +526,7 @@ function attachHandlers(): void {
   });
 
   attachHomeHandlers();
+  attachMoveSheetHandlers(); // v63 item 4: a move name on Home's Up next card / the pre-log overview opens a read-only sheet
 
   // v32: the left-open workout card on home (see STALE_SESSION_MS).
   bindClick('stale-finished', logStaleSessionAsDone);

@@ -975,9 +975,9 @@ v63 item 2: How was this one? › a move that did NOT step this week is saved to
 v63 item 2: How was this one? › a session with no tap at all saves no move_feel (null), exactly as before
 v63 item 2: How was this one? › a tap picks, a second tap on the same one clears, another tap changes it
 v63 item 2: How was this one? › a tapped feel survives an app close mid-workout
-v63 item 2: How was this one? › every cool-down row asks too, and a tap saves that stretch under its own name
 v63 item 2: How was this one? › the Session screen shows every move's feel, named the way that session's plan names it
 v63 item 2: How was this one? › the chips are real tap targets (44 px) and the row sits quietly: it never blocks Done
+v63 item 2: How was this one? › the cool-down list has no feel rows (held: eleven more rows put the page past its 1400 px budget)
 v63 item 2: How was this one? › the row is on every kind of move page: warm-up, a hold, main in each round, upper back
 v63 item 2: How was this one? › with several rounds the LAST tap on a move wins (and a clearing tap clears it)
 v63 item 3: This hurts › a hurt survives an app close mid-workout
@@ -992,6 +992,12 @@ v63 item 3: This hurts › the ride (elliptical) page has it, and a hurt ride is
 v63 item 3: This hurts › the same move hurt in round 1 and fine in round 2: the LAST word on the move wins, the skipped line still counts the hurt round
 v63 item 3: This hurts › the walk lane has it, and a tap skips the walk
 v63 item 3: This hurts › the walk lane hurt is saved under "ride"
+v63 item 4: tap a move in the pre-log overview to preview it › close returns to the same scroll position, from the corner x, the Close button, Escape and the backdrop
+v63 item 4: tap a move in the pre-log overview to preview it › every name is tappable, the text reads exactly as before, and a tap opens that move
+v63 item 4: tap a move in the pre-log overview to preview it › reading a how-to in the sheet does not mark it "seen" and changes no saved state
+v63 item 4: tap a move in the pre-log overview to preview it › the sheet is read-only: no Done, no feel row, no hurt button, nothing to type into; closing leaves the app's state as it was
+v63 item 4: tap a move in the pre-log overview to preview it › the sheet opens the move the row names, from the plan this session is pinned to
+v63 item 4: tap a move in the pre-log overview to preview it › the sheet shows the move's existing picture, voice note, detail and how-to cards, and its toggles work inside it
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

@@ -6881,3 +6881,102 @@ textarea:focus {
   font-weight: 600;
   pointer-events: none;
 }
+
+/* v63 item 4 (Oct 19 2026) — a move name you can tap to look at the move. Same words, same colour: only a
+ * dotted underline says "tap". A real 44px tap target, so the pre-log overview rows are flex lines of such
+ * targets (an inline name padded to 44px would sit on top of the name on the line below it). */
+.prelog-overview .overview-phase-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.move-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 2px;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.move-link:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+/* The read-only move sheet: a bottom sheet over the page (below the 🎤 Note button, above the sheets). */
+.move-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.move-sheet-card {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 20px calc(18px + env(safe-area-inset-bottom));
+  background: var(--grad-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* the cards are tall: they scroll, they never shrink under each other */
+.move-sheet-card > * {
+  flex-shrink: 0;
+}
+
+.move-sheet-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+}
+
+.move-sheet-name {
+  margin: 0;
+  text-align: center;
+  font-size: var(--font-heading);
+  padding: 0 44px; /* room for the corner close on both sides, so the name stays centred */
+}
+
+.move-sheet-x {
+  position: absolute;
+  right: -8px;
+  top: 0;
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 26px;
+  line-height: 1;
+  background: transparent;
+  color: var(--ink-2);
+  border: 0;
+}
+
+.move-sheet-reps {
+  margin: 0;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.move-sheet-close {
+  margin-top: 6px;
+}

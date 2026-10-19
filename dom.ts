@@ -78,3 +78,13 @@ export function showToast(text: string): void {
   document.body.appendChild(el);
   toastTimer = window.setTimeout(() => el.remove(), 2400);
 }
+
+// The voice-note button's look while it plays (v63 item 4: moved verbatim out of screens/workout.ts so the
+// read-only move sheet draws the same button the same way).
+export function setVoiceBtnPlaying(btn: HTMLElement, playing: boolean): void {
+  btn.classList.toggle('voice-note-playing', playing);
+  const icon = btn.querySelector('.voice-note-icon');
+  const label = btn.querySelector('.voice-note-label');
+  if (icon) icon.textContent = playing ? '⏸' : '▶';
+  if (label) label.textContent = playing ? 'Playing… (tap to stop)' : 'Listen — how to do it';
+}

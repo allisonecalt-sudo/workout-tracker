@@ -294,7 +294,13 @@ function renderWorkoutOverview(w: Workout): string {
       // v46: the warm-up step is a three-way pick now (her Sep 24: "no more
       // walk it could be walk or elliptical") — display only; the key stays.
       // v48 · P3: one helper for it everywhere (displayName).
-      const names = p.items.map((e) => displayName(e)).join(' · ');
+      // v63 item 4: each name opens the read-only move sheet; the text reads exactly as before.
+      const names = p.items
+        .map(
+          (e, i) =>
+            `<span class="move-link" role="button" tabindex="0" data-preview-move="${escapeHtml(`${w.id}|${p.key}|${i}`)}">${escapeHtml(displayName(e))}</span>`
+        )
+        .join(' · ');
       // v48 · P5: flat inside the one fold — a second tap per phase was a
       // second door to the same list.
       return `
@@ -304,7 +310,7 @@ function renderWorkoutOverview(w: Workout): string {
             <span class="overview-phase-label">${p.label}</span>
             <span class="overview-phase-count">${count}</span>
           </div>
-          <div class="overview-phase-items">${escapeHtml(names)}</div>
+          <div class="overview-phase-items">${names}</div>
         </div>`;
     })
     .join('');

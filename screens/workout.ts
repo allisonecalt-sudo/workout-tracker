@@ -48,7 +48,7 @@ import {
 } from '../state.js';
 import { ui } from '../ui.js';
 import { requestRender } from '../bus.js';
-import { bindClick, showToast, wireHoldToSkip } from '../dom.js';
+import { bindClick, setVoiceBtnPlaying, showToast, wireHoldToSkip } from '../dom.js';
 import { escapeHtml } from '../format.js';
 import { renderActionBar } from '../action-bar.js';
 import { flattenSteps, nextUndoneStep, type WorkoutStep } from '../step-list.js';
@@ -325,14 +325,6 @@ export function renderTimerPip(): string {
         <button class="back-link" id="timer-pip-close" type="button">Cancel</button>
       </div>
     </div>`;
-}
-
-function setVoiceBtnPlaying(btn: HTMLElement, playing: boolean): void {
-  btn.classList.toggle('voice-note-playing', playing);
-  const icon = btn.querySelector('.voice-note-icon');
-  const label = btn.querySelector('.voice-note-label');
-  if (icon) icon.textContent = playing ? '⏸' : '▶';
-  if (label) label.textContent = playing ? 'Playing… (tap to stop)' : 'Listen — how to do it';
 }
 
 // The voice-note player lives in audio.ts (step 11b); these two are the page's side of

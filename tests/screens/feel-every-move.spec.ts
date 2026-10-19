@@ -191,34 +191,15 @@ test.describe('v63 item 2: How was this one?', () => {
     expect(saved['moveFeel'] ?? null).toBeNull();
   });
 
-  test('every cool-down row asks too, and a tap saves that stretch under its own name', async ({
+  test('the cool-down list has no feel rows (held: eleven more rows put the page past its 1400 px budget)', async ({
     page,
   }) => {
     await startA(page);
     await walkUntil(page, () => page.locator('.stretch-card').isVisible());
-    const rows = page.locator('.stretch-row');
-    const n = await rows.count();
-    expect(n).toBeGreaterThan(5);
-    await expect(page.locator('.stretch-row .move-feel')).toHaveCount(n);
-    const slug = await rows
-      .nth(1)
-      .locator('[data-move-feel]')
-      .first()
-      .getAttribute('data-move-feel-slug');
-    expect(slug).toMatch(/^[a-z]+$/);
-    const y0 = await page.evaluate(() => window.scrollY);
-    await rows.nth(1).locator('[data-move-feel="right"]').click();
-    await expect(rows.nth(1).locator('[data-move-feel="right"]')).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    );
-    expect(await page.evaluate(() => window.scrollY)).toBe(y0); // the list does not jump
-    await page.locator('#next').click(); // Done stretching
-    await expect(page.locator('text=Quick log')).toBeVisible();
-    await page.locator('#save-log').click();
-    await expect(page.locator('.home-header h1')).toBeVisible();
-    const saved = (await readLogs(page))[0]!;
-    expect(saved['moveFeel']).toMatch(new RegExp(`^${slug}=right(@\\d+s)?$`));
+    await expect(page.locator('.stretch-row').first()).toBeVisible();
+    await expect(page.locator('.stretch-row .move-feel')).toHaveCount(0);
+    const h = await page.evaluate(() => document.documentElement.scrollHeight);
+    expect(h).toBeLessThanOrEqual(1400);
   });
 
   test('a tapped feel survives an app close mid-workout', async ({ page, context }) => {
