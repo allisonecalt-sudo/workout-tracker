@@ -7040,3 +7040,22 @@ textarea:focus {
   font-size: var(--font-meta);
   text-align: right;
 }
+
+/* v63 fix round: at 360px the workout header (Pause · List · × Quit workout) ran 9px past the screen edge
+ * (pre-existing since v62.5), so every workout screen scrolled sideways. Tighter side padding and gap under
+ * 380px win the room back; every button keeps its 44px height. */
+@media (max-width: 380px) {
+  .screen-header-actions {
+    gap: 4px;
+  }
+
+  .screen-header-actions .quit-link {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .screen-header-actions .pause-inline {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}

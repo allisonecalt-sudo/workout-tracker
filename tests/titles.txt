@@ -379,6 +379,10 @@ nextUndoneStep › null on an empty list
 nextUndoneStep › null when every other step is already done
 nextUndoneStep › wraps to an earlier skipped step when nothing is undone ahead
 no jargon (spec §4) › no technical phase words, no "n=", no Δ, no "est." anywhere on the page
+no sideways scroll on Paused, the step list and the ride numbers at 360px
+no sideways scroll on Paused, the step list and the ride numbers at 412px
+no sideways scroll on any workout screen at 360px
+no sideways scroll on any workout screen at 412px
 open and back (spec §2.2) › opens to "Your cycle", and back returns to Progress at the same scroll spot
 over 180 min -> null
 pain rule: every exercise-detail.ts donts entry starts with "Don't" or "Never"
