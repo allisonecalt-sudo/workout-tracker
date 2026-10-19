@@ -919,7 +919,6 @@ v62.4 S1 - a wall sit restarted after a reload continues from what she held › 
 v62.4 S1 - a wall sit restarted after a reload continues from what she held › hold 20 s, reload, start, hold 10 s, stop: saves 30, not 10
 v62.4 S1 - a wall sit restarted after a reload continues from what she held › the carried hold is capped at the hold: running it out saves the whole hold, never more
 v62.4 S3 - an unreadable ride time says so › text that is not a time reads "not a time"; empty says nothing; a time reads back
-v62.5 - the version › package.json appVersion (the one source) is v62.5
 v62.5 G1 - the hint fires only when the numbers truly cannot fit › 0.58 km in 0:10 with kcal blank shows the km wording
 v62.5 G1 - the hint fires only when the numbers truly cannot fit › 201 kcal in 10:00 (20.1 a minute) shows the hint; 200 kcal does not
 v62.5 G1 - the hint fires only when the numbers truly cannot fit › 30 km/h shows the hint, 24 km/h does not
@@ -936,6 +935,7 @@ v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, w
 v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, wait 5 s, hold 10: label 20, done face 30, saves 30
 v62.5 S1 - a wall sit after a reload freezes at the label › label = what is saved: held 20, reload, 120 s idle, "Log what I did" saves 20
 v62.5 S1 - a wall sit after a reload freezes at the label › two reloads count the hold once: 20 held, reload, 100 s, reload again -> still 20, hold 10 -> 30
+v63 - the version › package.json appVersion (the one source) is v63
 v63 item 1: a recording is never dropped › Gemini says no: same screen, the recording stays; Write instead keeps it and can delete it on purpose
 v63 item 1: a recording is never dropped › a kept recording is transcribed and sent on the next open once there is a key
 v63 item 1: a recording is never dropped › no Gemini key on this device: the recording is kept, with Try again / Write instead
