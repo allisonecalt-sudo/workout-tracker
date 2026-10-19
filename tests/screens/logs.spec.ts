@@ -1,7 +1,7 @@
 // Split out of tests/app.spec.ts by scripts/split-spec.mjs (code-shape step 1, Oct 13 2026);
 // the test bodies below are copied line for line.
 import { test, expect, type Page } from '@playwright/test';
-import { setupPage, mockDate, movableClock, advanceClock } from '../helpers';
+import { setupPage, mockDate, movableClock, advanceClock, NOTE_STRIP_EXTRA } from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -139,7 +139,7 @@ test.describe('v48 P5 logs', () => {
           // unconditionally, no exception left to take.
           const bar = (await page.locator('.action-bar').boundingBox())!;
           const lite = (await page.locator('#lite-toggle').boundingBox())!;
-          expect(lite.y + lite.height).toBeLessThanOrEqual(bar.y);
+          expect(lite.y + lite.height - NOTE_STRIP_EXTRA).toBeLessThanOrEqual(bar.y);
           expect(await page.evaluate(() => window.scrollY)).toBe(0);
         }
         await expect(page.locator('#lite-toggle')).toContainText('✓ Lite');

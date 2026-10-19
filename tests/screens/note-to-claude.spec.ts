@@ -283,40 +283,58 @@ test.describe('v63 item 1: the 🎤 Note button', () => {
     },
   ];
 
+  // v63 fix round: a 44px button in its own sticky strip, measured at both phone widths on every screen
   for (const screen of SCREENS) {
     test(`pinned top right, covering nothing: ${screen.name}`, async ({ page }) => {
-      await seed(page, false);
-      await screen.go(page);
-      const pin = page.locator('#note-pin');
-      await expect(pin).toBeVisible();
-      const box = (await pin.boundingBox())!;
-      const vw = page.viewportSize()!.width;
-      expect(box.y).toBeLessThan(8);
-      expect(vw - (box.x + box.width)).toBeLessThan(16);
-      expect(box.height).toBeLessThan(32);
-      // at the top, and again after scrolling to the bottom: it stays put and covers no button
-      for (const at of ['top', 'bottom']) {
-        await page.evaluate((where) => window.scrollTo(0, where === 'top' ? 0 : 1e6), at);
+      for (const width of [412, 360]) {
+        await page.setViewportSize({ width, height: 915 });
+        await seed(page, false);
+        await screen.go(page);
+        const pin = page.locator('#note-pin');
+        await expect(pin).toBeVisible();
+        const box = (await pin.boundingBox())!;
+        expect(box.y).toBeLessThan(8);
+        expect(width - (box.x + box.width)).toBeLessThan(16);
+        expect(box.width, `width ${width}`).toBeGreaterThanOrEqual(44);
+        expect(box.height, `width ${width}`).toBeGreaterThanOrEqual(44);
+        // at the top: no visible interactive element's box meets the button's box
+        const clashAt = (): Promise<string[]> =>
+          page.evaluate(() => {
+            const p = document.getElementById('note-pin')!.getBoundingClientRect();
+            const hits: string[] = [];
+            for (const el of document.querySelectorAll<HTMLElement>(
+              'button, a, input, textarea, select, [role=button]'
+            )) {
+              if (el.id === 'note-pin') continue;
+              const r = el.getBoundingClientRect();
+              if (r.width === 0 || r.height === 0) continue;
+              const cs = getComputedStyle(el);
+              if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+              const overlap =
+                r.right > p.left && r.left < p.right && r.bottom > p.top && r.top < p.bottom;
+              if (overlap) hits.push(el.id || el.className || el.tagName);
+            }
+            return hits;
+          });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        const clash = await clashAt();
+        expect(clash, `covers ${clash.join(', ')} (${width}, top)`).toEqual([]);
+        // the strip is the first thing in the page: #app starts below it
+        const gap = await page.evaluate(
+          () =>
+            document.getElementById('app')!.getBoundingClientRect().top -
+            document.getElementById('note-bar')!.getBoundingClientRect().bottom
+        );
+        expect(gap).toBeGreaterThanOrEqual(0);
+        // scrolled to the bottom it stays put, on an opaque strip: rows pass behind it, not behind the button
+        await page.evaluate(() => window.scrollTo(0, 1e6));
         const now = (await pin.boundingBox())!;
         expect(now.y).toBeCloseTo(box.y, 0);
-        const clash = await page.evaluate(() => {
-          const p = document.getElementById('note-pin')!.getBoundingClientRect();
-          const hits: string[] = [];
-          for (const el of document.querySelectorAll<HTMLElement>(
-            'button, a, input, textarea, select'
-          )) {
-            if (el.id === 'note-pin') continue;
-            const r = el.getBoundingClientRect();
-            if (r.width === 0 || r.height === 0) continue;
-            const cs = getComputedStyle(el);
-            if (cs.visibility === 'hidden' || cs.display === 'none') continue;
-            const overlap =
-              r.right > p.left && r.left < p.right && r.bottom > p.top && r.top < p.bottom;
-            if (overlap) hits.push(el.id || el.className || el.tagName);
-          }
-          return hits;
-        });
-        expect(clash, `covers ${clash.join(', ')} (${at})`).toEqual([]);
+        const bg = await page.evaluate(
+          () => getComputedStyle(document.getElementById('note-bar')!).backgroundColor
+        );
+        expect(bg).not.toBe('rgba(0, 0, 0, 0)');
+        await page.evaluate(() => window.scrollTo(0, 0));
       }
     });
   }

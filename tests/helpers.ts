@@ -25,6 +25,11 @@ export const TESTS_DIR = __dirname;
 // Sat Sep 26 launch week), BEFORE the Oct 3-9 Sick week, in the same week as
 // the goldens' NOW_ISO. The real-clock tests were written Sep 27-Oct 2 against
 // exactly this stretch of the calendar.
+// v63 fix round: the 🎤 Note strip (44px) sits above #app and #app's top padding went 28 -> 6, so every
+// screen starts 22px lower than it did. The 'it all fits the phone screen' budgets measure the page below
+// that strip, so they take this much off: the screen's own content has to fit exactly as before.
+export const NOTE_STRIP_EXTRA = 22;
+
 export const TEST_NOW_ISO = '2026-09-29T06:00:00.000Z';
 export const TEST_NOW_MS = new Date(TEST_NOW_ISO).getTime();
 

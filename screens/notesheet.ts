@@ -167,6 +167,11 @@ const fmt = (sec: number): string =>
 /** Make the 🎤 Note button once, outside #app. */
 export function mountNoteButton(): void {
   if (document.getElementById(PIN_ID)) return;
+  // its own sticky strip above #app (v63 fix round): the page starts below it, so the button never
+  // covers a header button or the first row, and rows scrolling up pass behind the strip
+  const bar = document.createElement('div');
+  bar.id = 'note-bar';
+  bar.className = 'note-bar';
   const btn = document.createElement('button');
   btn.id = PIN_ID;
   btn.type = 'button';
@@ -174,7 +179,8 @@ export function mountNoteButton(): void {
   btn.setAttribute('aria-label', COPY.title);
   btn.textContent = COPY.pin;
   btn.addEventListener('click', () => openNoteSheet());
-  document.body.appendChild(btn);
+  bar.appendChild(btn);
+  document.body.insertBefore(bar, document.body.firstChild);
 }
 
 // ---------- the sheet ----------

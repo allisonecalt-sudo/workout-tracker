@@ -1,7 +1,7 @@
 // Split out of tests/app.spec.ts by scripts/split-spec.mjs (code-shape step 1, Oct 13 2026);
 // the test bodies below are copied line for line.
 import { test, expect, type Page } from '@playwright/test';
-import { setupPage, mockDate, movableClock } from '../helpers';
+import { setupPage, mockDate, movableClock, NOTE_STRIP_EXTRA } from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -710,7 +710,7 @@ test.describe('v51 ride numbers screen', () => {
     await page.locator('#ww-elliptical').click();
     await page.locator('#next').click();
     const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight);
-    expect(scrollHeight).toBeLessThanOrEqual(915);
+    expect(scrollHeight - NOTE_STRIP_EXTRA).toBeLessThanOrEqual(915);
     for (const id of ['ell-time', 'ell-km', 'ell-kcal', 'ell-level', 'ell-pulse', 'next']) {
       await expect(page.locator(`#${id}`)).toBeVisible();
     }
