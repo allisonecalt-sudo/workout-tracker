@@ -58,3 +58,4 @@ week by week (v57) › re-opening the page resets the chart toggle to "Per ride"
 week by week (v57) › the chart's "per ride · per week" toggle => week by week (v57) › v64: at 5+ weeks the Weeks card is bars (not a table), the per-ride/per-week toggle is gone
 week by week (v57) › v58: tapping a per-week bar shows that week's own one-line readout => week by week (v57) › v58 (v64): tapping a per-week bar shows that week's own one-line readout
 week by week (v57) › v58: the Km Δ keeps its own 2-decimal precision (Week 6 1 km vs Week 5 3.28 km) => week by week (v57) › v64: the old vs table and its Km delta are gone; no verdict word anywhere on the Weeks card
+v63 - the version › package.json appVersion (the one source) is v63 => v64 - the version › package.json appVersion (the one source) is v64

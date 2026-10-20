@@ -947,7 +947,6 @@ v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, w
 v62.5 S1 - a wall sit after a reload freezes at the label › held 20, reload, wait 5 s, hold 10: label 20, done face 30, saves 30
 v62.5 S1 - a wall sit after a reload freezes at the label › label = what is saved: held 20, reload, 120 s idle, "Log what I did" saves 20
 v62.5 S1 - a wall sit after a reload freezes at the label › two reloads count the hold once: 20 held, reload, 100 s, reload again -> still 20, hold 10 -> 30
-v63 - the version › package.json appVersion (the one source) is v63
 v63 fix round: a recording is never dropped because IndexedDB failed › IndexedDB will not open: the note stays queued, nothing is said, and it goes once it opens
 v63 fix round: a recording is never dropped because IndexedDB failed › the audio is confirmed gone: the note is removed and she is told
 v63 item 1: a recording is never dropped › Gemini says no: same screen, the recording stays; Write instead keeps it and can delete it on purpose
@@ -1016,6 +1015,7 @@ v63 item 4: tap a move in the pre-log overview to preview it › reading a how-t
 v63 item 4: tap a move in the pre-log overview to preview it › the sheet is read-only: no Done, no feel row, no hurt button, nothing to type into; closing leaves the app's state as it was
 v63 item 4: tap a move in the pre-log overview to preview it › the sheet opens the move the row names, from the plan this session is pinned to
 v63 item 4: tap a move in the pre-log overview to preview it › the sheet shows the move's existing picture, voice note, detail and how-to cards, and its toggles work inside it
+v64 - the version › package.json appVersion (the one source) is v64
 v64 Home - one line instead of the Start -> Now card; a quiet line after a break › a normal week (no Sick/Break week before it) has no such line
 v64 Home - one line instead of the Start -> Now card; a quiet line after a break › after the Sick week, Week 6 is empty: the week card says so in one quiet line
 v64 Home - one line instead of the Start -> Now card; a quiet line after a break › after the summer break (Round 2 Week 1) it says "the break"
