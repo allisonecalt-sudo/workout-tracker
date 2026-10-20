@@ -252,8 +252,10 @@ function renderWeekCell(r: WeekRow): string {
     const full = r.value >= CELL_TARGET;
     cls += full ? ' wk-full' : ' wk-partial';
     if (r.isCurrent) cls += ' wk-now';
+    // v64.1: a partial week shows count/target ("3/4") so it never reads like a full one by its
+    // number alone; a full week keeps just its number with the filled style.
     inner =
-      `<span class="wk-n">${shown > 0 || !r.isCurrent ? shown : ''}</span>` +
+      `<span class="wk-n">${full ? shown : `${shown}/${target}`}</span>` +
       (r.isCurrent ? '<span class="wk-now-tag">now</span>' : '');
     aria = `${weekName}, ${shown} of ${target}${full ? ', a full week' : ''}${r.isCurrent ? ', this week' : ''}`;
   }
@@ -296,7 +298,7 @@ function renderWeeksHeroCard(logs: LogEntry[]): string {
       ${hero}
       <div class="weeks-hero-sub">since ${escapeHtml(formatMonthDay(first.date))} · ${escapeHtml(workoutsAndRides(sessionCounts(logs)))}</div>
       <div class="wk-grid">${grid}</div>
-      <p class="wk-legend">Filled: A, B and C done · outlined: some · number: sessions that week · S sick · Br break</p>
+      <p class="wk-legend">Filled: A, B and C done (number) · outlined: sessions so far / week · S sick · Br break</p>
     </div>`;
 }
 

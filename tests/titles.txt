@@ -1067,6 +1067,7 @@ v64 what grew (pure) › no data, no rows
 v64 what grew (pure) › one honest wall sit shows alone, no "from"
 v64 what grew (pure) › rides of the same length every time: no "got longer" words
 v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed holds never count), first -> latest, own since
+v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

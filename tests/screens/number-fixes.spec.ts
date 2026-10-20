@@ -55,7 +55,7 @@ test.describe('v62.3 F1 - per-week bar fill = its label', () => {
     await page.locator('#open-progress-link').click();
     const wk5 = page.locator('button.wk-cell[aria-label^="Week 5 (round 2)"]');
     await expect(wk5).toHaveAttribute('aria-label', 'Week 5 (round 2), 3 of 4, this week');
-    await expect(wk5).toHaveText(/^\s*3\s*now\s*$/);
+    await expect(wk5).toHaveText(/^\s*3\/4\s*now\s*$/);
     await expect(wk5).toHaveClass(/wk-partial/);
   });
 });

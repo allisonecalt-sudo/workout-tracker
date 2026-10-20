@@ -441,7 +441,7 @@ test('progress: "N full weeks" counts training weeks only — no break, sick, in
   await expect(card.locator('.wk-cell[aria-label="Week 10, 3 of 3, a full week"]')).toHaveClass(
     /wk-full/
   );
-  await expect(card.locator('.wk-cell[aria-label="Week 1, 0 of 3"]')).toHaveText('0');
+  await expect(card.locator('.wk-cell[aria-label="Week 1, 0 of 3"]')).toHaveText('0/3');
 });
 
 // The overview lists names, not reps — so the wall-sit seconds are checked inside

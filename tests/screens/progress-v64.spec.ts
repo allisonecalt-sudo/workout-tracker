@@ -189,7 +189,7 @@ test.describe('v64 Progress - weeks you showed up lead; what grew, body check, m
     expect(await full.count()).toBeGreaterThanOrEqual(2);
     const wk5 = page.locator('button.wk-cell[aria-label^="Week 5 (round 2)"]');
     await expect(wk5).toHaveClass(/wk-partial/);
-    await expect(wk5).toHaveText('2');
+    await expect(wk5).toHaveText('2/4'); // v64.1: a partial week shows count/target
     await expect(wk5).toHaveAttribute('aria-label', 'Week 5 (round 2), 2 of 4');
     const sick = page.locator('span.wk-cell.wk-skip').filter({ hasText: 'S' });
     expect(await sick.count()).toBeGreaterThanOrEqual(1);
@@ -197,7 +197,7 @@ test.describe('v64 Progress - weeks you showed up lead; what grew, body check, m
     const now = page.locator('.wk-cell.wk-now');
     await expect(now).toHaveCount(1);
     await expect(now).toContainText('now');
-    await expect(page.locator('.wk-legend')).toContainText('number: sessions that week');
+    await expect(page.locator('.wk-legend')).toContainText('sessions so far / week');
   });
 
   test('a square opens that week review, and "× Back" returns to Progress', async ({ page }) => {
@@ -639,5 +639,28 @@ test.describe('v64 fix - Progress clarity: light-restart rides, a label on the w
     const wrap = page.locator('.wrist-dots-wrap');
     await expect(wrap.locator('.wrist-dots-caption')).toHaveText('Wrist, last 6');
     await expect(page.locator('.body-card')).toContainText('0 is no pain; lower is better');
+  });
+});
+
+test.describe('v64.1 - a partial week never reads like a full one by its number alone', () => {
+  test('partial squares show count/target, full squares just the number (filled)', async ({
+    page,
+  }) => {
+    await afterSickWeek(page);
+    await openProgress(page);
+    await expect(page.locator('button.wk-cell[aria-label^="Week 5 (round 2)"]')).toHaveText('2/4');
+    const full = page.locator('button.wk-cell.wk-full').first();
+    await expect(full).toHaveText(/^\s*3\s*$/);
+    // the filled style is not the only signal: no full square has a slash, every partial one does
+    expect(
+      await page
+        .locator('.wk-cell.wk-full')
+        .evaluateAll((els) => els.filter((e) => /\//.test(e.textContent ?? '')).length)
+    ).toBe(0);
+    expect(
+      await page
+        .locator('.wk-cell.wk-partial')
+        .evaluateAll((els) => els.filter((e) => !/\//.test(e.textContent ?? '')).length)
+    ).toBe(0);
   });
 });
