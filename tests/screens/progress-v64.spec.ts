@@ -516,6 +516,8 @@ test.describe('v64 Rides - cardio minutes lead, calories a minute second, one We
     await expect(page.locator('.rides-minutes-basis')).toHaveText(
       'rides 42 min · other cardio 120 min'
     );
+    // v64.1: the hero names its week, the same wording as Home's sub-line.
+    await expect(page.locator('.rides-minutes-since')).toHaveText('since Sat Sep 26');
     await expect(page.locator('.rides-minutes-fill')).toHaveAttribute('style', 'width:65%');
     // order: minutes, then calories a minute
     await expect(page.locator('.rides-screen > .card').nth(0)).toHaveClass(/rides-minutes-card/);
@@ -562,6 +564,7 @@ test.describe('v64 Rides - cardio minutes lead, calories a minute second, one We
     );
     await expect(page.locator('.rides-minutes-n')).toHaveCount(0);
     await expect(page.locator('.rides-minutes-track')).toHaveCount(0);
+    await expect(page.locator('.rides-minutes-since')).toHaveText('since Sat Oct 10');
     await expect(page.locator('.rides-last-ride')).toHaveText('Last ride Oct 1');
     await expect(page.locator('.rides-week-empty')).toHaveCount(0);
   });

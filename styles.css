@@ -7309,6 +7309,7 @@ button.wk-cell {
   background: var(--ink);
 }
 
+.rides-minutes-since,
 .rides-minutes-basis,
 .rides-last-ride,
 .rides-same-words {

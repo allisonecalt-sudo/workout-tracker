@@ -13,6 +13,7 @@ import { state, getChronologicalLogs, loadWalks } from '../state.js';
 import { requestRender, requestScrollRestore } from '../bus.js';
 import { bindClick } from '../dom.js';
 import { escapeHtml, formatMmSs, formatMonthDay } from '../format.js';
+import { formatWeekdayDate } from '../dates.js';
 import { ellipticalRideRecords, weekCardioMinutes } from '../cardio-notes.js';
 import { rideReadingsLine } from '../number-rules.js';
 import { getProgramWeek, weekModel } from '../week-clock.js';
@@ -279,6 +280,10 @@ function renderRidesMinutesCard(logs: LogEntry[], latest: RideRecord): string {
   );
   const walks = loadWalks().filter((w) => inWindow(w.date));
   const m = weekCardioMinutes(weekSessions, walks);
+  // v64.1: the hero names its week, in Home's own words ("since Sat Oct 10").
+  const sinceLine = activeSpan
+    ? `<div class="rides-minutes-since">since ${escapeHtml(formatWeekdayDate(activeSpan.openedAt))}</div>`
+    : '';
   const pct = Math.min(100, Math.round((m.total / GOAL_HIGH) * 100));
   const goalAt = Math.round((GOAL_LOW / GOAL_HIGH) * 100);
   const basis =
@@ -297,6 +302,7 @@ function renderRidesMinutesCard(logs: LogEntry[], latest: RideRecord): string {
     <div class="card progress-card rides-minutes-card">
       <div class="progress-card-label">Cardio minutes</div>
       <p class="rides-minutes-none">No cardio yet this week · last ride ${escapeHtml(formatMonthDay(latest.date))}</p>
+      ${sinceLine}
     </div>`;
   }
   return `
@@ -304,6 +310,7 @@ function renderRidesMinutesCard(logs: LogEntry[], latest: RideRecord): string {
       <div class="progress-card-label">Cardio minutes</div>
       <div class="rides-minutes-line"><span class="progress-stat-big rides-minutes-n">${m.total}</span> <span class="rides-minutes-of">of ${GOAL_LOW}–${GOAL_HIGH} min this week</span></div>
       <div class="rides-minutes-track" role="img" aria-label="${m.total} of ${GOAL_LOW} to ${GOAL_HIGH} minutes"><span class="rides-minutes-fill" style="width:${pct}%"></span><span class="rides-minutes-goal" style="left:${goalAt}%"></span></div>
+      ${sinceLine}
       ${basis ? `<div class="rides-minutes-basis">${escapeHtml(basis)}</div>` : ''}
     </div>`;
 }
