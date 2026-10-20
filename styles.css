@@ -7316,3 +7316,8 @@ button.wk-cell {
   font-size: var(--t-small);
   color: var(--ink-2);
 }
+
+/* v64: the one Since line sits clear of the walk card below it. */
+.home-since {
+  margin-bottom: var(--s3);
+}
