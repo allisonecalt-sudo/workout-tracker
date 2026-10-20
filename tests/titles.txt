@@ -1015,7 +1015,6 @@ v63 item 4: tap a move in the pre-log overview to preview it › reading a how-t
 v63 item 4: tap a move in the pre-log overview to preview it › the sheet is read-only: no Done, no feel row, no hurt button, nothing to type into; closing leaves the app's state as it was
 v63 item 4: tap a move in the pre-log overview to preview it › the sheet opens the move the row names, from the plan this session is pinned to
 v63 item 4: tap a move in the pre-log overview to preview it › the sheet shows the move's existing picture, voice note, detail and how-to cards, and its toggles work inside it
-v64 - the version › package.json appVersion (the one source) is v64
 v64 Home - one line instead of the Start -> Now card; a quiet line after a break › a normal week (no Sick/Break week before it) has no such line
 v64 Home - one line instead of the Start -> Now card; a quiet line after a break › after the Sick week, Week 6 is empty: the week card says so in one quiet line
 v64 Home - one line instead of the Start -> Now card; a quiet line after a break › after the summer break (Round 2 Week 1) it says "the break"
@@ -1070,6 +1069,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
+v64.1 - the version › package.json appVersion (the one source) is v64.1
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

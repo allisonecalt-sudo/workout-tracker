@@ -60,3 +60,4 @@ week by week (v57) › v58: tapping a per-week bar shows that week's own one-lin
 week by week (v57) › v58: the Km Δ keeps its own 2-decimal precision (Week 6 1 km vs Week 5 3.28 km) => week by week (v57) › v64: the old vs table and its Km delta are gone; no verdict word anywhere on the Weeks card
 v63 - the version › package.json appVersion (the one source) is v63 => v64 - the version › package.json appVersion (the one source) is v64
 v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › no ride yet this week: the hero reads 0 and the empty week is one line, "Last ride Oct 1" => v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › no ride yet this week (v64.1): the hero is one gentle line, not a 0, and the empty week is one line, "Last ride Oct 1"
+v64 - the version › package.json appVersion (the one source) is v64 => v64.1 - the version › package.json appVersion (the one source) is v64.1
