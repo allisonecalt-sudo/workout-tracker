@@ -28,9 +28,10 @@ import { allSourceFiles, appSourceFiles, bundledSourceFiles, nextRoundNum } from
 
 // The ONE "how many program weeks" constant. The Settings > About "Program
 // weeks" assertion in tests/screens/program-weeks.spec.ts reads the same number
-// (17): 11 round-1 weeks + R2 W1..W5 + R2 W6 (the Oct 10 light restart).
+// (18): 11 round-1 weeks + R2 W1..W5 + R2 W6 (the Oct 10 light restart)
+// + R2 W7 (Oct 24, 35% of Week 5 — v65).
 // Adding a week = change this and that spec's text together.
-const PROGRAM_WEEK_COUNT = 17;
+const PROGRAM_WEEK_COUNT = 18;
 
 const PHASES: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
 const WORKOUT_IDS = ['A', 'B', 'C'] as const;

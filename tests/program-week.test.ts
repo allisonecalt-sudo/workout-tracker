@@ -278,7 +278,9 @@ test.describe('program-week — step 5c: the plan row is found by week key', () 
     expect(rowOf(input({ now: new Date('2026-09-29T09:00:00+03:00') }))).toBe('R2W5');
   });
 
-  test('the repeat case: Week 7 has no PROGRAM row, so it repeats the Week 6 row', () => {
+  // v65 (Oct 20 2026): Week 7 got its own row (35% of Week 5), so Week 7 now
+  // resolves exactly and the repeat case moved up to Week 8 (repeats Week 7).
+  test('Week 7 has its own row; Week 8 has none, so it repeats the Week 7 row', () => {
     const w6: LogEntry[] = [
       ...WEEK5,
       log('w6a', '2026-10-12T10:00:00+03:00', 'A'),
@@ -289,11 +291,13 @@ test.describe('program-week — step 5c: the plan row is found by week key', () 
     ] as WeekClockInput['moves'];
     const i = input({ now: new Date('2026-10-25T12:00:00+03:00'), logs: w6, moves });
     expect(shownWeek(i).key).toEqual({ round: 2, week: 7 });
-    expect(planForWeekKey({ round: 2, week: 7 }).repeatsWeek).toBe(6);
-    expect(currentWeekPlan(i)).toBe(planForWeekKey({ round: 2, week: 6 }).plan);
+    expect(planForWeekKey({ round: 2, week: 7 }).repeatsWeek).toBeNull();
+    expect(currentWeekPlan(i)).toBe(planForWeekKey({ round: 2, week: 7 }).plan);
+    expect(rowOf(i)).toBe('R2W7');
+    expect(planForWeekKey({ round: 2, week: 8 }).repeatsWeek).toBe(7);
   });
 
-  test('the gap case: Week 6 closed on a Wednesday; Thu-Fri a session counts back (Week 6 row), Sat on Week 7 (repeat of 6)', () => {
+  test('the gap case: Week 6 closed on a Wednesday; Thu-Fri a session counts back (Week 6 row), Sat on Week 7 (its own row)', () => {
     const three: LogEntry[] = [
       ...WEEK5,
       log('g1', '2026-10-12T10:00:00+03:00', 'A'),
@@ -306,7 +310,7 @@ test.describe('program-week — step 5c: the plan row is found by week key', () 
     expect(currentWeekPlan(thu)).toBe(planForWeekKey({ round: 2, week: 6 }).plan);
     const sat = input({ now: new Date('2026-10-17T09:00:00+03:00'), logs: three });
     expect(shownWeek(sat).key).toEqual({ round: 2, week: 7 });
-    expect(currentWeekPlan(sat)).toBe(planForWeekKey({ round: 2, week: 6 }).plan);
+    expect(currentWeekPlan(sat)).toBe(planForWeekKey({ round: 2, week: 7 }).plan);
   });
 
   test('a SECOND Sick week does not move the row: the key still finds the R2 W6 row', () => {

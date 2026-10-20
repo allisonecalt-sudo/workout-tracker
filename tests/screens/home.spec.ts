@@ -896,16 +896,21 @@ test.describe('v48 P4 home', () => {
       // steppedMovesForWorkoutId ignored the repeat and diffed Week 6
       // against Week 5 anyway — the ride still read as "stepped" on a week
       // that changed NOTHING.
-      await mockDate(page, '2026-10-18T10:00:00.000Z'); // Sun Oct 18 — inside the open Week 7
-      // Week 7 only exists because the Oct 3 Sick week is honoured (the default now).
+      // v65 (Oct 20 2026): moved up one more week — R2 Week 7 (35% of Week 5)
+      // got its own row, so the repeat is now Week 8 repeating Week 7.
+      await mockDate(page, '2026-10-25T10:00:00.000Z'); // Sun Oct 25 — inside the open Week 8
+      // Week 8 only exists because the Oct 3 Sick week is honoured (the default now).
       await seedLogs(page, [
         swingLog('wk6-a', '2026-10-11T15:00:00.000Z', 'A'),
         swingLog('wk6-b', '2026-10-12T15:00:00.000Z', 'B'),
         swingLog('wk6-c', '2026-10-17T15:00:00.000Z', 'C'), // Sat — closes Week 6, opens Week 7 same day
+        swingLog('wk7-a', '2026-10-18T15:00:00.000Z', 'A'),
+        swingLog('wk7-b', '2026-10-19T15:00:00.000Z', 'B'),
+        swingLog('wk7-c', '2026-10-24T15:00:00.000Z', 'C'), // Sat — closes Week 7, opens Week 8 same day
       ]);
       await page.goto('/');
       await page.locator('button[data-workout="A"]').click(); // pins state.pinnedWeekKey (startWorkout)
-      await expect(page.locator('.prelog-meta')).toContainText('Week 7 · same moves as Week 6');
+      await expect(page.locator('.prelog-meta')).toContainText('Week 8 · same moves as Week 7');
       await expect(page.locator('.prelog-stepped')).toHaveCount(0);
       const stepped = await page.evaluate(() =>
         (

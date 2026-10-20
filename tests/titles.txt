@@ -68,7 +68,7 @@ PROGRAM — names resolve where the app looks them up › move-feel slugs: every
 PROGRAM — names resolve where the app looks them up › the exceptions list holds no stale name (every listed name is still in the program)
 PROGRAM — shape › (round, weekNum) is unique and ascending; startsOn strictly ascends with it
 PROGRAM — shape › every startsOn is a Saturday (weeks are Sat-Fri throughout the app)
-PROGRAM — shape › has exactly 17 weeks (the Settings "Program weeks" number)
+PROGRAM — shape › has exactly 18 weeks (the Settings "Program weeks" number)
 PROGRAM — the Jul 8 timer rule › every sustained hold has durationSec AND isTimed (except the named Round-1 W1-W4 stretches)
 PROGRAM — the Jul 8 timer rule › isTimed and durationSec always travel together (never one without the other)
 PROGRAM — the Jul 8 timer rule › the exceptions list holds no stale name (each listed stretch still occurs in Round 1 weeks 1-4)
@@ -365,7 +365,7 @@ moveFeelString / parseMoveFeelString — tap saves the right slug/qty › parseM
 moveFeelSummary: the Session screen line › a slug the plan no longer has stays as saved; nothing saved is an empty string
 moveFeelSummary: the Session screen line › every move's feel, with its seconds / minutes spaced
 multi-week: "Coming next week" preview renders in Progress with diff
-multi-week: Settings About shows Program weeks count (17) — pre-launch, unchanged
+multi-week: Settings About shows Program weeks count (18) — pre-launch, unchanged
 multi-week: Week 4 content active for May 25 (Session A holds — squats 12, plank 1x15s)
 multi-week: home week-banner reads Week 3 for May 16-22 range
 multi-week: pre-log overview shows Week 3 badge in May 16-22 range
@@ -435,6 +435,7 @@ program-week — getProgramWeek counts Sick weeks out of the number › Round 1 
 program-week — getProgramWeek counts Sick weeks out of the number › Round 2 started Sat Aug 29: Oct 10 is calendar week 7 but program Week 6 (one Sick skip)
 program-week — getProgramWeek counts Sick weeks out of the number › the Sick week itself keeps the number it would have had, and says why
 program-week — step 5c: the plan row is found by week key › Week 6 open (Oct 13): the plan is the R2 W6 row, resolved by key
+program-week — step 5c: the plan row is found by week key › Week 7 has its own row; Week 8 has none, so it repeats the Week 7 row
 program-week — step 5c: the plan row is found by week key › a SECOND Sick week does not move the row: the key still finds the R2 W6 row
 program-week — step 5c: the plan row is found by week key › a non-swing pre-launch day pins "now" itself
 program-week — step 5c: the plan row is found by week key › before the Sick week (Sep 29) the plan is the Week 5 row
@@ -442,8 +443,7 @@ program-week — step 5c: the plan row is found by week key › getProgramWeek's
 program-week — step 5c: the plan row is found by week key › inside the Sick week (Oct 6): a session counts back, so the plan is the CLOSED Week 5 row
 program-week — step 5c: the plan row is found by week key › pre-launch keeps the calendar scan: a mocked Sep 15 finds the row whose startsOn it is past
 program-week — step 5c: the plan row is found by week key › pre-launch swing Saturday: the plan is LAST week's row, and the pinned ISO round-trips to the same row
-program-week — step 5c: the plan row is found by week key › the gap case: Week 6 closed on a Wednesday; Thu-Fri a session counts back (Week 6 row), Sat on Week 7 (repeat of 6)
-program-week — step 5c: the plan row is found by week key › the repeat case: Week 7 has no PROGRAM row, so it repeats the Week 6 row
+program-week — step 5c: the plan row is found by week key › the gap case: Week 6 closed on a Wednesday; Thu-Fri a session counts back (Week 6 row), Sat on Week 7 (its own row)
 program-week — step 5c: the plan row is found by week key › the synthetic-date round trip is gone: no completionWeekSyntheticDate, no planDateNow, no shiftPastSickWeeks
 program-week — the Sick week and the clock it pauses › completionClosingSessionIds: nothing closed by a session yet (Week 5 closed as sick); a third letter closes it
 program-week — the Sick week and the clock it pauses › inside the Sick week Week 6 is pending, and a session started now counts BACK into Week 5
@@ -1069,7 +1069,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v64.1 - the version › package.json appVersion (the one source) is v64.1
+v65 - the version › package.json appVersion (the one source) is v65
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

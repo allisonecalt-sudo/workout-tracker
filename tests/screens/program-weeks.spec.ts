@@ -104,21 +104,21 @@ test('Settings About: post-launch shows the completion model’s own Round/Week,
   ).toHaveCount(0);
 });
 
-test('multi-week: Settings About shows Program weeks count (17) — pre-launch, unchanged', async ({
+test('multi-week: Settings About shows Program weeks count (18) — pre-launch, unchanged', async ({
   page,
 }) => {
   await mockDate(page, '2026-09-22T10:00:00.000Z'); // Tue Sep 22 2026 — before the launch, Week 4
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 17" row. The 17 is written in two
+  // About section has a "Program weeks: 18" row. The 18 is written in two
   // places: here, and as PROGRAM_WEEK_COUNT in tests/program.test.ts (which pins
   // PROGRAM.length to it) — change them together; if one drifts, the other fails.
   // (11 round-1 weeks + R2 W1 + R2 W2 + R2 W3 + R2 W4 + R2 W5 (v52.2, Sep 26 2026)
   // + R2 W6 (v61.2, Oct 13 2026 — the light restart after being sick)).
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 17');
+  ).toContainText('Program weeks: 18');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {

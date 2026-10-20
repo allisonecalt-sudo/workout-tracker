@@ -2349,6 +2349,111 @@ PROGRAM.push({
   },
 });
 
+// v65 (Oct 20 2026) — R2 Week 7: 35% of Week 5, the first step back to 100%.
+// WHAT: every Week 5 move comes back, 1 round (Week 5 = 2), at about two-thirds
+// of Week 5's reps/seconds (½ × ⅔ ≈ 35%). Ride: A/B 10 min (the light week's
+// number), C 15 (Week 5 = 25). Weights at the 1 kg end.
+// WHY: her words (Oct 20 18:00-18:03): "the goal is to get back to 100 back to
+// where we left off" · "so 25% eans ading in the other stuff but 35 percent-
+// lets do 35" · "yes exactly". Road (her yes): Wk7 35% → Wk8 ~70% (2 rounds,
+// ⅔ reps) → Wk9 = Week 5 as it was; each step only if the next morning's chest
+// and back are not worse, else repeat the week.
+// A's squat: BODYWEIGHT, not the split squat — back was 3 before B on Oct 20,
+// which is Week 5's own tripwire ("back 3+ any day → A goes back to bodyweight
+// squats"). The split squat returns in Week 8 if the back is quiet.
+// Every name stays EXACTLY as Week 5 (voice notes, detail cards, move_feel and
+// the 'Outdoor walk' cardio lanes key off it); only reps/durationSec change.
+const R2W6_PLAN = PROGRAM[PROGRAM.length - 1]!;
+if (R2W6_PLAN.round !== 2 || R2W6_PLAN.weekNum !== 6) {
+  throw new Error('R2W7: expected the last PROGRAM row to be Round 2 Week 6');
+}
+// Week 7's reps per exercise name, per block. A name missing here = a Week 5
+// move that was renamed: fail loudly instead of shipping Week 5's numbers.
+const W7_REPS: Record<string, { reps: string; durationSec?: number }> = {
+  'Bodyweight hip hinge': { reps: '8 reps · 1 set · holding 1 kg' },
+  'Glute bridges': { reps: '8 reps · 2-sec hold at top' },
+  'Wall sit': { reps: '30 sec hold', durationSec: 30 },
+  'Full dead bug': { reps: '5 each side' },
+  'Forearm plank': { reps: '1 set · 15 sec hold', durationSec: 15 },
+  'Side-lying leg raises': { reps: '8 each side' },
+  'Side-lying clamshells': { reps: '7 each side · yellow band (tied into a loop)' },
+  'Single-leg glute bridges': { reps: '7 each side' },
+  'Standing calf raises': { reps: '8 reps' },
+  'Wall angels': { reps: '1 set · 7 slow reps' },
+  'IWYT raises': { reps: '1 set · 5 each (I, W, Y, T)' },
+  'Prone row (bodyweight)': { reps: '1 set · 8 reps each side · 1 kg' },
+  '1 kg biceps curl': { reps: '1 set · 8 reps · 1 kg' },
+  'Bird dog (legs only)': { reps: '1 set · 4 each side · 2-sec hold' },
+  'Wall lean (wrist on-ramp)': { reps: '1 × 15 sec', durationSec: 15 },
+};
+// C keeps its own (lighter) Week 5 numbers, so its two-thirds differ from A/B's.
+const W7_REPS_C: Record<string, { reps: string }> = {
+  'Bodyweight squats': { reps: '7 reps · 3-1-3 tempo' },
+  'Glute bridges': { reps: '10 reps · 2-sec hold' },
+  'Single-leg glute bridges': { reps: '5 each side' },
+  'Side-lying leg raises': { reps: '7 each side' },
+  'Modified dead bug': { reps: '5 each side' },
+  'Standing calf raises': { reps: '10 reps' },
+};
+const scaleW7 = (
+  items: Exercise[],
+  table: Record<string, { reps: string; durationSec?: number }>
+) =>
+  items.map((ex) => {
+    const next = table[ex.name];
+    if (!next) throw new Error(`R2W7: no Week 7 reps for '${ex.name}'`);
+    return { ...ex, ...next };
+  });
+const rideW7 = (warmup: Exercise[], minutes: number): Exercise[] =>
+  warmup.map((ex) => (ex.name === 'Outdoor walk' ? { ...ex, reps: `${minutes} min` } : ex));
+// A's squat for Week 7: Week 3's bodyweight squat object (cues + tempo), 8 reps.
+const W7_SQUAT_A: Exercise = (() => {
+  const found = R2W3_PLAN.workouts.A.main.find((ex) => ex.name === 'Bodyweight squats');
+  if (!found) throw new Error('R2W7: expected Bodyweight squats in Week 3 workout A');
+  return { ...found, reps: '8 reps · 3-1-3 tempo' };
+})();
+const W5A = R2W5_PLAN.workouts.A;
+const W5B = R2W5_PLAN.workouts.B;
+const W5C = R2W5_PLAN.workouts.C;
+
+PROGRAM.push({
+  round: 2,
+  weekNum: 7,
+  startsOn: '2026-10-24',
+  label: 'Round 2 — Week 7 · back toward 100%: every move, 1 round (35%)',
+  workouts: {
+    A: {
+      ...W5A,
+      description: 'Week 5 moves at 35% · 1 round · ride 10 min · ~22 min',
+      rounds: 1,
+      warmup: rideW7(W5A.warmup, 10),
+      main: [
+        W7_SQUAT_A,
+        ...scaleW7(
+          W5A.main.filter((ex) => ex.name !== 'Supported split squat'),
+          W7_REPS
+        ),
+      ],
+      upperBack: scaleW7(W5A.upperBack ?? [], W7_REPS),
+    },
+    B: {
+      ...W5B,
+      description: 'Week 5 moves at 35% · 1 round · ride 10 min · ~22 min',
+      rounds: 1,
+      warmup: rideW7(W5B.warmup, 10),
+      main: scaleW7(W5B.main, W7_REPS),
+      upperBack: scaleW7(W5B.upperBack ?? [], W7_REPS),
+    },
+    C: {
+      ...W5C,
+      description: '15-min cardio (elliptical or walk) + 1-round strength block · ~25 min',
+      rounds: 1,
+      warmup: rideW7(W5C.warmup, 15),
+      main: scaleW7(W5C.main, W7_REPS_C),
+    },
+  },
+});
+
 // --- Resolvers -----------------------------------------------------------
 //
 // These two resolvers are the CALENDAR lookup: a date in, the plan row whose
