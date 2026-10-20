@@ -415,30 +415,23 @@ test('progress: "N full weeks" counts training weeks only — no break, sick, in
   await mockDate(page, '2026-09-24T08:00:00.000Z'); // Thu inside R2 Week 4
   await page.goto('/');
   await page.locator('#open-progress-link').click();
-  const card = page.locator('.progress-card').filter({ hasText: 'Sessions per week' });
   // R1 wk 10 + the two 3/3 R2 weeks = 3 full weeks. No verdict words.
-  const meta = card.locator('.progress-card-meta');
-  await expect(meta).toHaveText('3 full weeks');
-  await expect(meta).not.toContainText('target');
-  await expect(meta).not.toContainText(' of ');
-  // The bars still show every week, breaks included.
-  await expect(card).toContainText('break');
-  await expect(card).toContainText('now');
-  await card.locator('.spw-older-summary').click();
-  // Round 1's rows live in its fold (R2 has its own "wk 1").
-  const row = (label: string) =>
-    card
-      .locator('details.spw-older .spw-row')
-      .filter({ has: page.locator(`.spw-label:text-is("${label}")`) });
+  const card = page.locator('.weeks-card');
+  await expect(card.locator('.weeks-hero')).toHaveText('3 full weeks');
+  await expect(card).not.toContainText('target');
+  await expect(card).not.toContainText(' of 3');
+  // The grid still shows every week, breaks included (grey, labelled, never a miss).
+  await expect(card.locator('.wk-cell.wk-skip').filter({ hasText: 'Br' }).first()).toBeVisible();
+  await expect(card.locator('.wk-cell.wk-now')).toContainText('now');
+  const cell = (label: string) => card.locator(`.wk-cell[aria-label^="${label}"]`);
   // wk 11 sits between "sick" and "break": held, not scored.
-  await expect(row('wk 11')).toHaveClass(/spw-row-skipped/);
-  await expect(row('wk 11')).toContainText('—');
-  await expect(row('wk 11').locator('.spw-track')).toHaveCount(0);
-  await expect(row('wk 11')).not.toContainText('/ 3');
-  // wk 10 is full; wk 1 (0 sessions mid-round, no break beside it) still shows.
-  await expect(row('wk 10')).toContainText('3 / 3');
-  await expect(row('wk 1').locator('.spw-track')).toHaveCount(1);
-  await expect(row('wk 1')).toContainText('0 / 3');
+  await expect(cell('Week 11, held')).toHaveClass(/wk-skip/);
+  await expect(cell('Week 11, held')).toHaveText('–');
+  // wk 10 is full; wk 1 (0 sessions mid-round, no break beside it) still shows its 0.
+  await expect(card.locator('.wk-cell[aria-label="Week 10, 3 of 3, a full week"]')).toHaveClass(
+    /wk-full/
+  );
+  await expect(card.locator('.wk-cell[aria-label="Week 1, 0 of 3"]')).toHaveText('0');
 });
 
 // The overview lists names, not reps — so the wall-sit seconds are checked inside

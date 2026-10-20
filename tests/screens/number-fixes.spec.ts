@@ -47,16 +47,16 @@ const week5OpenWithD = async (page: Page): Promise<void> => {
 };
 
 test.describe('v62.3 F1 - per-week bar fill = its label', () => {
-  test('Week 5 labelled "3 / 4" fills 75%, not 2/3', async ({ page }) => {
+  test('Week 5 reads "3 of 4" on the weeks grid (v64: the bar is gone; the square and its label agree)', async ({
+    page,
+  }) => {
     await week5OpenWithD(page);
     await page.goto('/');
     await page.locator('#open-progress-link').click();
-    const wk5 = page
-      .locator('.spw-card')
-      .locator(':scope > .spw-rows > .spw-row')
-      .filter({ has: page.locator('.spw-label:text-is("wk 5")') });
-    await expect(wk5.locator('.spw-count')).toHaveText('3 / 4 · open');
-    await expect(wk5.locator('.spw-fill')).toHaveAttribute('style', 'width:75%');
+    const wk5 = page.locator('button.wk-cell[aria-label^="Week 5 (round 2)"]');
+    await expect(wk5).toHaveAttribute('aria-label', 'Week 5 (round 2), 3 of 4, this week');
+    await expect(wk5).toHaveText(/^\s*3\s*now\s*$/);
+    await expect(wk5).toHaveClass(/wk-partial/);
   });
 });
 
@@ -99,7 +99,7 @@ test.describe('v62.3 F3 - Home and Progress read the same session count', () => 
     await expect(page.locator('.home-startnow-card')).toHaveCount(0);
     await expect(page.locator('#home-since-line')).toBeVisible();
     await page.locator('#open-progress-link').click();
-    await expect(page.locator('.start-now-card .start-now-hero')).toHaveText('3 sessions +1 ride');
+    await expect(page.locator('.weeks-hero-sub')).toContainText('3 workouts + 1 ride');
   });
 });
 
@@ -143,22 +143,21 @@ test.describe('v62.3 F4 - each Start -> Now row says its own "since"', () => {
     await expect(page.locator('#home-since-line')).toContainText('Since May');
   });
 
-  test('Progress: the same three, and the card-level "since May 2" line is gone', async ({
+  test('Progress (v64): the hero says since May 2; What grew rows say their own since (Sep 24)', async ({
     page,
   }) => {
     await startNowShape(page);
     await page.goto('/');
     await page.locator('#open-progress-link').click();
-    const card = page.locator('.start-now-card');
-    await expect(card.locator('.start-now-since .sn-since')).toHaveText('since May 2');
+    await expect(page.locator('.weeks-hero-sub')).toContainText('since May 2');
     const since = (label: string) =>
-      card
-        .locator('.start-now-row')
+      page
+        .locator('.grew-card .start-now-row')
         .filter({ has: page.locator(`.start-now-lbl:text-is("${label}")`) })
         .locator('.sn-since');
-    await expect(since('Elliptical')).toHaveText('since Sep 24');
+    await expect(since('Longest ride')).toHaveText('since Sep 24');
     await expect(since('Wall sit')).toHaveText('since Sep 24');
-    await expect(card.locator('.progress-card-meta')).toHaveCount(0);
+    await expect(page.locator('.start-now-card')).toHaveCount(0);
   });
 });
 
@@ -176,18 +175,16 @@ test.describe('v62.3 F5 - the elliptical level shows the ride length at each end
     await expect(page.locator('.start-now-lbl')).toHaveCount(0);
   });
 
-  test('Progress: the same phrase, then only the latest km (no separate "in N min")', async ({
+  test('Progress (v64): a level is never set beside a different ride length: the 10 and 12 minute rides give a length row and NO level row', async ({
     page,
   }) => {
     await startNowShape(page);
     await page.goto('/');
     await page.locator('#open-progress-link').click();
-    const val = page
-      .locator('.start-now-card .start-now-row')
-      .filter({ has: page.locator('.start-now-lbl:text-is("Elliptical")') })
-      .locator('.start-now-val');
-    await expect(val).toContainText('level 5 for 10 min → level 3 for 12 min · 0.83 km');
-    await expect(val).not.toContainText('in 12 min');
+    const rows = page.locator('.grew-card .start-now-row');
+    await expect(rows.filter({ hasText: 'Longest ride' })).toContainText('10 min → 12 min');
+    await expect(rows.filter({ hasText: 'Level at' })).toHaveCount(0);
+    await expect(page.locator('.grew-card')).not.toContainText('level 5 for 10 min');
   });
 });
 
@@ -532,7 +529,7 @@ test.describe('v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word
 
 test.describe('v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag', () => {
   for (const width of [360, 412]) {
-    test(`Home and Progress at ${width}px: "+1 ride" matches the "sessions" unit's size and weight, no sideways scroll`, async ({
+    test(`Home and Progress at ${width}px: the "+ 1 ride" tag reads on the hero's basis line, no sideways scroll`, async ({
       page,
     }) => {
       await page.setViewportSize({ width, height: 800 });
@@ -552,15 +549,7 @@ test.describe('v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag', () => {
       await noSideways();
       await expect(page.locator('#home-since-line')).toBeVisible();
       await page.locator('#open-progress-link').click();
-      const extra = page.locator('.start-now-card .sn-extra');
-      const unit = page.locator('.start-now-card .start-now-unit');
-      await expect(extra).toHaveText('+1 ride');
-      const style = (loc: typeof extra) =>
-        loc.evaluate((el) => {
-          const c = getComputedStyle(el);
-          return { size: c.fontSize, weight: c.fontWeight, color: c.color };
-        });
-      expect(await style(extra)).toEqual(await style(unit));
+      await expect(page.locator('.weeks-hero-sub')).toContainText('+ 1 ride');
       await noSideways();
     });
   }

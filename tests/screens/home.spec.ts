@@ -1273,13 +1273,13 @@ test.describe('v48 P4 home', () => {
       await page.locator('#week-nav-back').click();
       await expect(page.locator('.week-line')).toHaveText('4 of 4 ✓');
       await page.locator('#week-nav-forward').click(); // back to the live view before navigating away
-      // Progress · Sessions per week reads "4 / 4" for the same week.
+      // Progress · the weeks grid reads "4 of 4" for the same week (v64: the grid replaced
+      // the Sessions per week bars).
       await page.locator('#open-progress-link').click();
-      const wk5Row = page
-        .locator('.spw-card')
-        .locator(':scope > .spw-rows > .spw-row')
-        .filter({ has: page.locator('.spw-label:text-is("wk 5")') });
-      await expect(wk5Row.locator('.spw-count')).toHaveText('4 / 4');
+      await expect(page.locator('button.wk-cell[aria-label^="Week 5 (round 2)"]')).toHaveAttribute(
+        'aria-label',
+        'Week 5 (round 2), 4 of 4, a full week'
+      );
     });
 
     // v61 fix pass 2 (Oct 2 2026) — CHECK-v61.md round 2's should #9

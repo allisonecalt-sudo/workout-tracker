@@ -32,27 +32,20 @@ import {
   diffWorkout,
   weekPlanTitle,
   PROGRAM,
-  ROUNDS,
 } from '../program.js';
 import type { LogEntry } from '../types.js';
-import { cyclePeriodsForLogic, getChronologicalLogs } from '../state.js';
+import { state, cyclePeriodsForLogic, getChronologicalLogs } from '../state.js';
+import { ui } from '../ui.js';
+import { requestRender } from '../bus.js';
 import { escapeHtml, formatMonthDay } from '../format.js';
-import { rideLevel, rideKm, rideTimeSec, ellipticalRideRecords } from '../cardio-notes.js';
+import { ellipticalRideRecords } from '../cardio-notes.js';
 import { rideRate, type RideRecord } from '../ride.js';
 import { localIsoDate } from '../dates.js';
 import { getWeekPlan } from '../week-clock.js';
 import { SESSIONS_PER_WEEK_TARGET } from '../program-week.js';
-import { type WeekRow, buildWeekRows, fullWeeksSummary } from '../weeks-grid.js';
-import { honestWallSitLogs } from '../viz.js';
-import { BACK_PAIN_STOP_AT } from '../session-row.js';
-import {
-  perWeekFillPct,
-  sessionCounts,
-  dRideTag,
-  sinceTag,
-  levelForLength,
-  rideReadingsLine,
-} from '../number-rules.js';
+import { type WeekRow, buildWeekRows, fullWeeksSummary, shownWeekCount } from '../weeks-grid.js';
+import { sessionCounts, sinceTag, workoutsAndRides, rideReadingsLine } from '../number-rules.js';
+import { whatGrew } from '../what-grew.js';
 
 function getFutureWeekPlans(date?: Date): WeekPlan[] {
   return date ? programFutureWeekPlans(date) : programFutureWeekPlansAfter(getWeekPlan());
@@ -226,329 +219,155 @@ function renderPastWeeks(): string {
   `;
 }
 
-// Bar chart for back pain — categorical (0-10), bar per session.
-// v48 · P6 (Sep 24 2026): a pain-free session gets a faint tick instead of
-// nothing (the chart only witnessed the bad days — uxui progress 2/5), and a
-// bar is amber only at her 3/10 stop line.
-// v51 · fix (Sep 25 2026, look-check sev 3): H was 140 against a yMax of 10
-// while her real back-pain values sit mostly at 0-2 — about 100px of empty
-// dark space sat above a few short bars, uneven next to the wall-sit card's
-// compact ≤64px treatment (her "remove the big empty chart area" ask,
-// applied there in v51 already). Same cap here, same PAD as the wall-sit
-// sparkline, so both cards read at the same height.
-function renderProgressBarChart(
-  values: number[],
-  opts: { ariaLabel: string; yMax: number }
-): string {
-  if (values.length === 0) return '';
-  const W = 320;
-  const H = 64;
-  const PAD_L = 8;
-  const PAD_R = 8;
-  const PAD_T = 6;
-  const PAD_B = 6;
-  const innerW = W - PAD_L - PAD_R;
-  const innerH = H - PAD_T - PAD_B;
+// ---------- v64 (Oct 20 2026): Progress, redesigned ----------
+//
+// Top to bottom: the hero + weeks grid ("Am I keeping it up?"), What grew, Body check, More.
+// Her Q1 (Oct 20 11:24): weeks you showed up leads; what got stronger sits below it.
+// Rules (reference/progress-and-dataviz-ux.md): one number one home, every number says its
+// basis, no chart under 5 points, honest scales, no red, no streaks.
 
-  // Bar geometry: target 4px wide, 2px gap. If too many sessions, the bar
-  // shrinks but we keep at least 1px wide.
-  const slot = innerW / values.length;
-  const barW = Math.max(1, Math.min(4, slot - 2));
+const CELL_TARGET = SESSIONS_PER_WEEK_TARGET;
 
-  const bars = values
-    .map((v, i) => {
-      const x = PAD_L + i * slot + (slot - barW) / 2;
-      if (v <= 0) {
-        return `<rect class="pain-tick" x="${x.toFixed(1)}" y="${(PAD_T + innerH - 2).toFixed(1)}" width="${barW.toFixed(1)}" height="2"
-              fill="var(--text-dim-2)" opacity="0.6" rx="1" />`;
-      }
-      const ratio = Math.min(1, v / opts.yMax);
-      const h = ratio * innerH;
-      const y = PAD_T + innerH - h;
-      const fill = v >= BACK_PAIN_STOP_AT ? 'var(--accent-warn)' : 'var(--text-dim)';
-      return `<rect class="pain-bar" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}"
-              fill="${fill}" rx="1" />`;
-    })
-    .join('');
-
-  return `
-    <svg class="progress-chart progress-chart-bar" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
-         role="img" aria-label="${escapeHtml(opts.ariaLabel)}">
-      <title>${escapeHtml(opts.ariaLabel)}</title>
-      ${bars}
-    </svg>
-  `;
+// One small square per week. Full = filled, partial = outlined with its count, Sick/Break =
+// grey and labelled, this week = marked "now". The number or letter inside carries the
+// meaning, never the colour alone. A tap opens that week's review.
+function renderWeekCell(r: WeekRow): string {
+  const shown = shownWeekCount(r);
+  const target = r.displayTarget ?? CELL_TARGET;
+  const weekName =
+    r.weekNum > 0 ? `Week ${r.weekNum}${r.round > 1 ? ` (round ${r.round})` : ''}` : '';
+  let cls = 'wk-cell';
+  let inner = '';
+  let aria = '';
+  if (r.skipped) {
+    cls += ' wk-skip';
+    inner = `<span class="wk-n">${r.skipLabel === 'Sick' ? 'S' : 'Br'}</span>`;
+    aria = `${r.skipLabel ?? 'Held'} week, not counted`;
+  } else if (r.held) {
+    cls += ' wk-skip';
+    inner = '<span class="wk-n">–</span>';
+    aria = `${weekName}, held, not counted`;
+  } else {
+    const full = r.value >= CELL_TARGET;
+    cls += full ? ' wk-full' : ' wk-partial';
+    if (r.isCurrent) cls += ' wk-now';
+    inner =
+      `<span class="wk-n">${shown > 0 || !r.isCurrent ? shown : ''}</span>` +
+      (r.isCurrent ? '<span class="wk-now-tag">now</span>' : '');
+    aria = `${weekName}, ${shown} of ${target}${full ? ', a full week' : ''}${r.isCurrent ? ', this week' : ''}`;
+  }
+  if (r.offset === null) {
+    return `<span class="${cls}" role="img" aria-label="${escapeHtml(aria)}" title="${escapeHtml(aria)}">${inner}</span>`;
+  }
+  return `<button class="${cls}" type="button" data-week-offset="${r.offset}" aria-label="${escapeHtml(aria)}" title="${escapeHtml(aria)}">${inner}</button>`;
 }
 
-// v48 · P6 (Sep 24 2026): "Start → Now" — DECISIONS §2 #5 (Gemini, taken):
-// "elliptical level first → latest, km first → latest, wall sit first → latest,
-// and '40 sessions'. That's movement with no verdict (guide §2)." Rows only
-// where there's data; a latest below the first shows plainly, never coloured.
-function renderStartNowCard(logs: LogEntry[]): string {
+function renderWeeksHeroCard(logs: LogEntry[]): string {
   const first = logs[0];
   if (!first) return '';
-  const pair = (vals: number[], unit: string): string => {
-    const a = vals[0];
-    const b = vals[vals.length - 1];
-    if (a === undefined || b === undefined) return '';
-    return vals.length === 1
-      ? `<span class="sn-last">${a}</span>${unit}`
-      : `<span class="sn-first">${a}</span> → <span class="sn-last">${b}</span>${unit}`;
-  };
-  const rows: [string, string][] = [];
-  // v51 · her ask: "look at ux ui and everything presentation" — one
-  // combined elliptical line ("level 5 → 7 · 0.72 km in 10 min") replaces
-  // the old two separate "Elliptical level" / "Elliptical km" rows. Level
-  // shows the trend (first ride → latest, a setting she steps herself); km
-  // and time are the LATEST ride only (a distance/duration trend across
-  // wildly different session lengths isn't a meaningful "→"). With exactly
-  // one ride logged ever, there's nothing to compare yet — just say when it
-  // was (her literal words: "first ride Sep 24").
-  const rides = logs.filter((l) => rideLevel(l) !== null || rideKm(l) !== null);
-  if (rides.length === 1) {
-    rows.push(['Elliptical', `first ride ${formatMonthDay(rides[0]!.date)}`]);
-  } else if (rides.length > 1) {
-    const firstRide = rides[0]!;
-    const lastRide = rides[rides.length - 1]!;
-    const firstLevel = rideLevel(firstRide);
-    const lastLevel = rideLevel(lastRide);
-    // v62.3 F5: each end names its own ride length ("level 5 for 10 min →
-    // level 3 for 12 min"), so the separate "in N min" after the km goes (it
-    // stays only when there is no level part to carry the length).
-    const levelPart =
-      firstLevel !== null && lastLevel !== null
-        ? `${levelForLength(firstLevel, rideTimeSec(firstRide))} → ${levelForLength(lastLevel, rideTimeSec(lastRide))}`
-        : '';
-    const lastKm = rideKm(lastRide);
-    const lastTimeSec = rideTimeSec(lastRide);
-    const distPart = [
-      lastKm !== null ? `${lastKm} km` : '',
-      !levelPart && lastTimeSec !== null ? `in ${Math.round(lastTimeSec / 60)} min` : '',
-    ]
-      .filter(Boolean)
-      .join(' ');
-    const val = [levelPart, distPart].filter(Boolean).join(' · ');
-    // v62.3 F4: this row's own "since" - the first ride, not the first session.
-    if (val) rows.push(['Elliptical', `${val}${sinceTag(rides[0]!.date)}`]);
-  }
-  // v49 · look fix (Sep 25 2026): honestWallSitLogs() — was every wallSitSec>0,
-  // including pre-v45 rows that saved the week's PRESCRIBED hold, not a real
-  // measurement (Home's own Start → Now card already excluded them; Progress's
-  // didn't, so the two disagreed on the same number — Opus check).
-  const honestWalls = honestWallSitLogs(logs);
-  const walls = honestWalls.map((l) => l.wallSitSec);
-  // v62.3 F4: its own "since" - the first honest wall sit.
-  if (walls.length)
-    rows.push(['Wall sit', `${pair(walls, ' s')}${sinceTag(honestWalls[0]!.date)}`]);
-  // v62.3 F3: the same A/B/C count + "+N ride(s)" tag Home's card shows.
-  const sessionCount = sessionCounts(logs);
+  const rows = buildWeekRows(logs);
+  const { judged, full } = fullWeeksSummary(rows);
+  // Her words: a zero is a gentle empty state, never "0 full weeks" (guide §2).
+  const hero =
+    full > 0
+      ? `<div class="progress-stat-big weeks-hero"><span class="weeks-hero-num">${full}</span> <span class="start-now-unit">full ${full === 1 ? 'week' : 'weeks'}</span></div>`
+      : `<p class="progress-card-empty weeks-hero-empty">${
+          judged === 0
+            ? 'The first week is in progress.'
+            : 'A full week (A, B and C) will count here.'
+        }</p>`;
+  const rounds = [...new Set(rows.map((r) => r.round))];
+  const grid = rounds
+    .map(
+      (n) => `
+      <div class="wk-round">
+        <div class="wk-round-label">Round ${n}</div>
+        <div class="wk-cells">${rows
+          .filter((r) => r.round === n)
+          .map(renderWeekCell)
+          .join('')}</div>
+      </div>`
+    )
+    .join('');
   return `
-    <div class="card progress-card start-now-card">
-      <div class="progress-card-label">Start → Now</div>
-      <div class="progress-stat-big start-now-hero">${sessionCount.sessions} <span class="start-now-unit">session${sessionCount.sessions === 1 ? '' : 's'}</span>${sessionCount.dRides > 0 ? ` <span class="sn-extra">${dRideTag(sessionCount.dRides)}</span>` : ''}</div>
-      <div class="start-now-since">${sinceTag(first.date)}</div>
-      ${rows
-        .map(
-          ([label, val]) =>
-            `<div class="start-now-row"><span class="start-now-lbl">${label}</span><span class="start-now-val">${val}</span></div>`
-        )
-        .join('')}
+    <div class="card progress-card weeks-card" aria-label="Weeks you showed up: ${full} full ${full === 1 ? 'week' : 'weeks'}">
+      <div class="progress-card-label">Weeks you showed up</div>
+      ${hero}
+      <div class="weeks-hero-sub">since ${escapeHtml(formatMonthDay(first.date))} · ${escapeHtml(workoutsAndRides(sessionCounts(logs)))}</div>
+      <div class="wk-grid">${grid}</div>
+      <p class="wk-legend">Filled: A, B and C done · outlined: some · number: sessions that week · S sick · Br break</p>
     </div>`;
 }
 
-function renderWallSitTrendCard(logs: LogEntry[]): string {
-  // Wall-sit values only come from workouts that include a wall sit (A).
-  // v49 · look fix (Sep 25 2026): honestWallSitLogs() — was every wallSitSec>0,
-  // chronological, including pre-v45 rows that saved the week's PRESCRIBED
-  // hold, not a real measurement. That's why this card used to show "33 → 45"
-  // and "best 48 s" while Home's own card (already honest) said "44 → 45" for
-  // the same person — two cards, same name, different numbers (Opus check).
-  const wallLogs = honestWallSitLogs(logs);
-  const wallSits = wallLogs.map((l) => l.wallSitSec);
-
-  if (wallSits.length < 2) {
-    if (wallSits.length === 1) {
-      const only = wallSits[0] ?? 0;
-      return `
-        <div class="card progress-card">
-          <div class="progress-card-label">Wall sit · seconds held</div>
-          <div class="progress-stat-big">${only} s</div>
-          <p class="progress-card-empty">One value logged — chart appears after 2+ wall-sit sessions.</p>
-        </div>
-      `;
-    }
-    return '';
-  }
-
-  const last = wallSits[wallSits.length - 1] ?? 0;
-  const maxVal = Math.max(...wallSits);
-
-  // v51 · her ask: "remove the big empty chart area" — a compact sparkline
-  // (≤80px, was 220px) with the numbers said in words ("best 45 s · latest
-  // 43 s") replaces the old axis'd line chart + "+Ns since <date>" meta.
-  const sparkline = renderWallSitSparkline(
-    wallSits,
-    `Wall sit trend: ${wallSits.length} sessions, latest ${last}, best ${maxVal}`
-  );
-
-  // v48 · P6 (Sep 24 2026): the hero is the LATEST hold, "best" sits quiet in
-  // the meta — "a hero you're not at is a misreport" (DECISIONS §5, fail-loud).
+function renderWhatGrewCard(logs: LogEntry[]): string {
+  const grew = whatGrew(logs);
+  if (grew.rows.length === 0) return '';
+  const rows = grew.rows
+    .map(
+      (r) =>
+        `<div class="start-now-row"><span class="start-now-lbl">${escapeHtml(r.label)}</span><span class="start-now-val">${escapeHtml(r.value)}${sinceTag(r.since)}</span></div>`
+    )
+    .join('');
   return `
-    <div class="card progress-card wall-sit-card">
-      <div class="progress-card-label">Wall sit · seconds held</div>
-      <div class="progress-stat-big">${last} s</div>
-      <div class="progress-sparkline-wrap">${sparkline}</div>
-      <div class="progress-card-meta">best ${maxVal} s · latest ${last} s</div>
-    </div>
-  `;
+    <div class="card progress-card grew-card">
+      <div class="progress-card-label">What grew</div>
+      ${rows}
+      ${grew.words ? `<p class="progress-card-meta grew-words">${escapeHtml(grew.words)}</p>` : ''}
+    </div>`;
 }
 
-// v51 · Progress's Wall-sit card — a quiet, compact trend line (≤80px tall,
-// bigger than the row-level renderSparkline above): no axis, no guide, no
-// round-boundaries. The card's own words ("best X s · latest Y s") carry the
-// numbers, so the picture only needs to say "the shape of it".
-function renderWallSitSparkline(values: number[], ariaLabel: string): string {
-  if (values.length < 2) return '';
+// Wrist dots - ONLY at 5+ readings (under that the numbers say it), on a fixed 0-10 scale
+// (never stretched min-to-max), position not colour, no red.
+function renderWristDots(values: number[]): string {
   const W = 320;
-  const H = 64;
-  const PAD = 6;
-  const innerW = W - PAD * 2;
-  const innerH = H - PAD * 2;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const stepX = innerW / (values.length - 1);
-  const yFor = (v: number): number => PAD + (1 - (v - min) / span) * innerH;
-  const pts = values.map((v, i) => [PAD + i * stepX, yFor(v)] as [number, number]);
-  const path = pts
-    .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`)
-    .join(' ');
-  const lastPt = pts[pts.length - 1]!;
+  const H = 44;
+  const PAD_X = 10;
+  const PAD_Y = 6;
+  const y = (v: number): number =>
+    PAD_Y + (1 - Math.min(10, Math.max(0, v)) / 10) * (H - 2 * PAD_Y);
+  const step = values.length > 1 ? (W - 2 * PAD_X) / (values.length - 1) : 0;
+  const dots = values
+    .map(
+      (v, i) =>
+        `<circle cx="${(PAD_X + i * step).toFixed(1)}" cy="${y(v).toFixed(1)}" r="3.5" fill="var(--accent-progress)" />`
+    )
+    .join('');
+  const label = `Wrist, last ${values.length} readings: ${values.join(', ')} (0 to 10, lower is better)`;
   return `
-    <svg class="progress-sparkline" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
-         role="img" aria-label="${escapeHtml(ariaLabel)}">
-      <title>${escapeHtml(ariaLabel)}</title>
-      <path d="${path}" fill="none" stroke="var(--accent-progress)" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round" />
-      <circle cx="${lastPt[0].toFixed(1)}" cy="${lastPt[1].toFixed(1)}" r="4" fill="var(--accent-progress)" />
+    <svg class="wrist-dots" viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(label)}">
+      <title>${escapeHtml(label)}</title>
+      <line x1="0" x2="${W}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="var(--hair-strong)" stroke-width="1" />
+      ${dots}
     </svg>`;
 }
 
-function renderBackPainTrendCard(allLogs: LogEntry[]): string {
-  // Skip sessions with no back-pain reading (v32 after-the-fact logs).
-  const logs = allLogs.filter((l) => l.backPain !== null);
-  if (logs.length < 2) return '';
-
-  const values = logs.map((l) => l.backPain ?? 0); // filtered above; ?? only narrows the type
-  const positive = values.filter((v) => v > 0);
-  const painFree = values.length - positive.length;
-  const avg = positive.length ? positive.reduce((a, b) => a + b, 0) / positive.length : 0;
-
-  // Pain scale max is 10 per the post-log chips.
-  const chart = renderProgressBarChart(values, {
-    ariaLabel:
-      positive.length === 0
-        ? `Back pain: no pain logged across ${logs.length} sessions`
-        : `Back pain: ${positive.length} of ${logs.length} sessions with pain, avg ${avg.toFixed(1)}`,
-    yMax: 10,
-  });
-
-  // v48 · P6 (Sep 24 2026): the pain-free days are witnessed first
-  // ("Pain-free 24 of 30 · avg 1.8 when it hurt", DECISIONS §5).
-  const metaLine =
-    positive.length === 0
-      ? `Pain-free ${painFree} of ${values.length}`
-      : `Pain-free ${painFree} of ${values.length} · avg ${avg.toFixed(1)} when it hurt`;
-
-  return `
-    <div class="card progress-card">
-      <div class="progress-card-label">Back pain · 0–10</div>
-      <div class="progress-chart-wrap progress-chart-wrap-bar">${chart}</div>
-      <div class="progress-card-meta">${metaLine}</div>
-    </div>
-  `;
-}
-
-// One sessions-per-week row. v48 · P6 (Sep 24 2026): HTML, not SVG — the
-// "n / 3" sits OUTSIDE the track so a full bar stays readable (her wins were
-// the unreadable rows, 1.25:1), and a held week is its label + "—": no track,
-// no number (break weeks were scored "0 / 3" — uxui progress 3/5 ×2).
-function renderPerWeekRow(r: WeekRow): string {
-  if (r.skipped || r.held) {
-    return `<div class="spw-row spw-row-skipped"><span class="spw-label">${escapeHtml(r.label)}</span><span class="spw-skip">—</span></div>`;
+// Q5 (her "just go"): wrist AND back together, in words. The wrist is the live recovery; its
+// Sep 25 "scale mix-up" question is still open, so the card says the readings are as logged.
+function renderBodyCheckCard(logs: LogEntry[]): string {
+  const wrist = logs.map((l) => l.wristPain).filter((v): v is number => typeof v === 'number');
+  const back = logs.map((l) => l.backPain).filter((v): v is number => v !== null);
+  if (wrist.length === 0 && back.length === 0) return '';
+  const lines: string[] = [];
+  if (wrist.length > 0) {
+    const lastN = wrist.slice(-4);
+    const tail = lastN.length > 1 ? ` · last ${lastN.length}: ${lastN.join(' → ')}` : '';
+    lines.push(
+      `<div class="body-line"><span class="body-lbl">Wrist:</span> <span class="body-val">latest ${wrist[wrist.length - 1]}${tail} <span class="body-note">(readings as logged)</span></span></div>`
+    );
   }
-  const suffix = r.suffix ? ` · ${escapeHtml(r.suffix)}` : '';
-  // v61 fix pass (must #3): displayValue/displayTarget override the shown
-  // count on a completion-model row (D counted in, "/ 4").
-  // v62.3 F1: the bar fills from the SAME two numbers as that label (it used
-  // to stay on A/B/C over 3, so "3 / 4" drew 2/3).
-  const shownValue = r.displayValue ?? r.value;
-  const shownTarget = r.displayTarget ?? SESSIONS_PER_WEEK_TARGET;
-  const pct = perWeekFillPct(shownValue, shownTarget);
+  if (back.length > 0) {
+    const painFree = back.filter((v) => v === 0).length;
+    lines.push(
+      `<div class="body-line"><span class="body-lbl">Back:</span> <span class="body-val">pain-free ${painFree} of ${back.length}</span></div>`
+    );
+  }
   return `
-    <div class="spw-row${r.isCurrent ? ' spw-row-current' : ''}">
-      <span class="spw-label">${escapeHtml(r.label)}</span>
-      <span class="spw-track"><span class="spw-fill" style="width:${pct}%"></span></span>
-      <span class="spw-count">${shownValue} / ${shownTarget}${suffix}</span>
+    <div class="card progress-card body-card">
+      <div class="progress-card-label">Body check</div>
+      ${lines.join('')}
+      ${wrist.length >= 5 ? `<div class="wrist-dots-wrap">${renderWristDots(wrist.slice(-12))}</div>` : ''}
+      <p class="progress-card-meta">0 is no pain; lower is better.</p>
     </div>`;
-}
-
-function renderSessionsPerWeekCard(logs: LogEntry[]): string {
-  // v64: the rows are built once, in weeks-grid.ts (Home's "Since May" line and the
-  // Weekly review read the same ones). This card has no cell for a Sick week the
-  // completion clock paused for, so it leaves those out as before.
-  const rows = buildWeekRows(logs).filter((r) => !(r.skipped && r.offset === null));
-
-  if (rows.length === 0) return '';
-
-  // v46: only COMPLETED program weeks are counted. Break and sick weeks were
-  // never a target and the week in progress isn't over. v48 · fix r1: the line
-  // is a plain count of full weeks — no "target", no "of N" verdict.
-  const { judged, full: hits } = fullWeeksSummary(rows);
-  // A zero is a gentle empty state, not "0 full weeks" (guide §2: no guilt).
-  const scoreLine =
-    judged === 0
-      ? 'The first week is in progress.'
-      : hits === 0
-        ? // v61 fix pass 3 (Oct 2 2026, CHECK-v61.md round 3 nice): "full
-          // week" in THIS card still means A/B/C met (`hits` above never
-          // counts D) — a 3-of-4 week already counts as full here, so "(4 of
-          // 4)" overpromised what actually triggers it. This empty state
-          // never actually shows for her (14 full weeks).
-          'A full week (A, B and C) will count here.'
-        : `<strong>${hits}</strong> full ${hits === 1 ? 'week' : 'weeks'}`;
-
-  // v48 · P6 (Sep 24 2026): the current round's weeks open; each older round
-  // folds into one closed row — her Aug 30 words: Round 1 is "a closed
-  // chapter" (archived, still one tap away). WK4: the current round is
-  // whichever round the LAST row belongs to (chronological), so a completion
-  // row (always the true "now" once one exists) decides it the same way the
-  // old calendar walk's own last row used to.
-  const currentRound = rows[rows.length - 1]!.round;
-  const older = ROUNDS.filter((r) => r.num < currentRound)
-    .map((r) => {
-      const roundRows = rows.filter((row) => row.round === r.num);
-      if (roundRows.length === 0) return '';
-      const training = roundRows.filter((row) => !row.skipped).length;
-      return `
-        <details class="spw-older">
-          <summary class="spw-older-summary">Round ${r.num} · ${training} wks <span class="spw-older-chev" aria-hidden="true">▸</span></summary>
-          <div class="spw-rows">${roundRows.map(renderPerWeekRow).join('')}</div>
-        </details>`;
-    })
-    .join('');
-  const current = rows.filter((r) => r.round === currentRound);
-
-  return `
-    <div class="card progress-card spw-card" aria-label="Sessions per week: ${hits} full ${hits === 1 ? 'week' : 'weeks'}">
-      <div class="progress-card-label">Sessions per week</div>
-      <div class="spw-rows">${current.map(renderPerWeekRow).join('')}</div>
-      ${older}
-      <div class="progress-card-meta">
-        ${scoreLine}
-      </div>
-    </div>
-  `;
 }
 
 // (Moved here from screens/rides.ts, step 13b: it is Progress's door, drawn on Progress.)
@@ -562,20 +381,17 @@ function ridesDoorSub(rides: RideRecord[]): string {
       `${formatMonthDay(latest.date)} · ${rideReadingsLine(latest) ?? 'no numbers'}`;
 }
 
-// The one row that opens the page — lives on Progress, both the empty and
-// normal states (same placement rule as renderCycleDoorRow).
+// The one row that opens the page - a row inside the More group (v64).
 function renderRidesDoorRow(logs: LogEntry[]): string {
   const rides = ellipticalRideRecords(logs);
   return `
-    <div class="card progress-card">
       <button class="door-row rides-door" id="open-rides" type="button">
         <span class="rides-door-text">
           <span class="rides-door-title">🚴 Your rides</span>
           <span class="rides-door-sub">${escapeHtml(ridesDoorSub(rides))}</span>
         </span>
         <span class="door-chev" aria-hidden="true">›</span>
-      </button>
-    </div>`;
+      </button>`;
 }
 
 // Progress's own door row sub-line (spec §1) — checked in the order the spec
@@ -594,22 +410,18 @@ function cycleDoorSub(periods: CyclePeriod[], todayISO: string): string {
   return `${PLAIN_PHASE_HEADER_LABEL[status.plainPhase]} · day ${status.cycleDay}`;
 }
 
-// The one row that replaces the whole old card on Progress — navigation,
-// never sage (sage marks the primary action; this is a door). Same position
-// in both the empty and normal Progress states (spec §1).
+// The cycle door - a row inside the More group (v64). Navigation, never sage.
 function renderCycleDoorRow(): string {
   const periods = cyclePeriodsForLogic();
   const todayISO = localIsoDate(new Date());
   return `
-    <div class="card progress-card">
       <button class="door-row cycle-door" id="open-cycle" type="button">
         <span class="cycle-door-text">
           <span class="cycle-door-title">🌙 Your cycle</span>
           <span class="cycle-door-sub">${escapeHtml(cycleDoorSub(periods, todayISO))}</span>
         </span>
         <span class="door-chev" aria-hidden="true">›</span>
-      </button>
-    </div>`;
+      </button>`;
 }
 
 // ---------- Ship 5: Progress screen (2026-05-15) ----------
@@ -627,74 +439,76 @@ function renderCycleDoorRow(): string {
 //  - v48 · P6 (Sep 24 2026): chart ink is --accent-progress, never the sage
 //    that means "the primary action right now" (DECISIONS §5, one sage per screen).
 
+// v64: "More" - the doors, kept apart from the data (Few: navigation rows do not sit between
+// data cards). The Program archive is its last row: one tap opens Coming next week / Past weeks.
+function renderMoreGroup(logs: LogEntry[]): string {
+  const archive = renderProgramArchive();
+  return `
+    <div class="card progress-card more-card">
+      <div class="progress-card-label">More</div>
+      <div class="more-list">
+        ${renderRidesDoorRow(logs)}
+        ${renderCycleDoorRow()}
+        ${archive}
+      </div>
+    </div>`;
+}
+
 export function renderProgress(): string {
-  const logs = getChronologicalLogs(); // oldest → newest, by date
-  const count = logs.length;
-
-  // v48 · P6 (Sep 24 2026): the "Exercise breakdown" card (94 rows repeating
-  // three numbers — uxui progress 3/5) became these three chips.
-  const byWorkout: Record<WorkoutId, number> = { A: 0, B: 0, C: 0 };
-  // v54 (Sep 27 2026): D is extra, never one of the three — it counts in
-  // cardio minutes/totals (the Rides page, via ellipticalRideRecords, which
-  // reads cardioLane not workout letter) but never in this A/B/C breakdown.
-  for (const l of logs) if (l.workout !== 'D') byWorkout[l.workout] += 1;
-  const subtitle =
-    count > 0
-      ? `<div class="progress-subtitle">${(['A', 'B', 'C'] as WorkoutId[])
-          .map((id) => `<span class="progress-chip">${id} ${byWorkout[id]}</span>`)
-          .join('')}</div>`
-      : '';
-
+  const logs = getChronologicalLogs(); // oldest -> newest, by date
   const header = `
     <div class="screen-header">
       <h2>Progress</h2>
       <button class="quit-link" id="back-home" type="button">× Back</button>
     </div>`;
 
-  // Empty state — fewer than 2 sessions. v51: the door to "Your cycle" still
-  // shows (it can start from just a logged period, no sessions needed for
-  // the "Period started today" tap itself).
-  if (count < 2) {
+  // Empty state - fewer than 2 sessions. The doors still show (the cycle can start from just
+  // a logged period).
+  if (logs.length < 2) {
     return `
       ${header}
-      ${subtitle}
       <p class="progress-empty">Progress shows once you have 2+ sessions logged.</p>
-      ${renderCycleDoorRow()}
-      ${renderRidesDoorRow(logs)}
-      ${renderProgramArchive()}
+      ${renderMoreGroup(logs)}
     `;
   }
 
-  // v48 · P6: the OLD capacity chart is gone — it charted untouched defaults
-  // (6 of 8 Round-2 after-readings were the invented 5; the real mean change
-  // was 0.00 over 24 pairs). DECISIONS §2 #6. v51: "Your cycle" moved off
-  // this screen onto its own page (renderCycle) — this is just the one door
-  // row to it now (spec §1).
   return `
     ${header}
-    ${subtitle}
     <div class="progress-screen">
-      ${renderStartNowCard(logs)}
-      ${renderCycleDoorRow()}
-      ${renderRidesDoorRow(logs)}
-      ${renderWallSitTrendCard(logs)}
-      ${renderBackPainTrendCard(logs)}
-      ${renderSessionsPerWeekCard(logs)}
+      ${renderWeeksHeroCard(logs)}
+      ${renderWhatGrewCard(logs)}
+      ${renderBodyCheckCard(logs)}
+      ${renderMoreGroup(logs)}
     </div>
-    ${renderProgramArchive()}
   `;
 }
 
-// v48 · P4 (Sep 24 2026): "Coming next week" + "Past weeks" moved here from
-// home, as-is (P6 restyles) — the program's past and next stay one tap from
-// Progress (her archive rule: "just be archived nicely so i can pull when
-// needed"), off the front door.
+// A week square on the grid opens that week's review (and "× Back" there returns here).
+export function attachProgressHandlers(): void {
+  document.querySelectorAll<HTMLButtonElement>('button[data-week-offset]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const offset = Number(btn.dataset['weekOffset']);
+      if (!Number.isFinite(offset)) return;
+      ui.reviewBackScroll = window.scrollY;
+      ui.reviewBackTo = 'progress';
+      ui.viewedWeekOffset = offset;
+      state.screen = 'weekly-review';
+      requestRender();
+    });
+  });
+}
+
+// v48 · P4 (Sep 24 2026): "Coming next week" + "Past weeks" moved here from home. v64: the
+// archive is the Program row in More (her archive rule: "archived nicely so i can pull when
+// needed") - still one tap, still the last thing on the page.
 function renderProgramArchive(): string {
   const inner = `${renderComingNextWeek()}${renderPastWeeks()}`;
   if (!inner.trim()) return '';
   return `
-    <div class="program-archive">
-      <h3 class="program-archive-label">Program</h3>
-      ${inner}
-    </div>`;
+      <details class="more-program program-archive">
+        <summary class="door-row more-program-summary">
+          <span>Program</span><span class="door-chev" aria-hidden="true">›</span>
+        </summary>
+        <div class="program-archive-body">${inner}</div>
+      </details>`;
 }

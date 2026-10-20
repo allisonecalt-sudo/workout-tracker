@@ -379,7 +379,9 @@ test('ship 5: progress screen reachable from home button', async ({ page }) => {
   await expect(page.locator('.progress-empty')).toBeVisible();
 });
 
-test('ship 5: wall-sit line chart renders with 2+ wall-sit values', async ({ page }) => {
+test('ship 5 (v64): the wall sit shows as a What grew row, first -> latest, with 2+ wall-sit values', async ({
+  page,
+}) => {
   // Seed three A-workouts with rising wall-sit values across the program.
   // Progress screen should render the wall-sit chart with a 6px emphasized
   // last-point and a dashed max guideline.
@@ -426,20 +428,16 @@ test('ship 5: wall-sit line chart renders with 2+ wall-sit values', async ({ pag
   });
   await page.goto('/');
   await page.locator('#open-progress-link').click();
-  // v48 · P6: the hero is the LATEST hold (here also the best).
-  const card = page.locator('.wall-sit-card');
-  await expect(card.locator('.progress-stat-big')).toHaveText('30 s');
-  // v51 · her ask: "remove the big empty chart area" — a compact sparkline
-  // (.progress-sparkline) replaces the old axis'd .progress-chart line chart.
-  await expect(card.locator('.progress-sparkline')).toBeVisible();
-  // v51 · the numbers are said in words now ("best 30 s · latest 30 s"),
-  // not a "+Ns since <date>" delta. No motivational language allowed: must
-  // NOT contain "great", "amazing", "you", etc.
-  const meta = await card.locator('.progress-card-meta').textContent();
-  expect(meta).toContain('best 30 s');
-  expect(meta).toContain('latest 30 s');
-  expect(meta?.toLowerCase()).not.toContain('great');
-  expect(meta?.toLowerCase()).not.toContain('you got');
+  // v64: the wall sit is one What grew row, first -> latest, with its own since-date (no chart:
+  // three points is a line with no shape).
+  const row = page.locator('.grew-card .start-now-row').filter({ hasText: 'Wall sit' });
+  await expect(row).toContainText('18 s → 30 s');
+  await expect(row).toContainText('since Sep 24');
+  await expect(page.locator('.progress-sparkline')).toHaveCount(0);
+  // No motivational language allowed.
+  const text = ((await page.locator('.grew-card').textContent()) ?? '').toLowerCase();
+  expect(text).not.toContain('great');
+  expect(text).not.toContain('you got');
 });
 
 test('ship 5: empty state renders for fewer than 2 sessions', async ({ page }) => {
@@ -456,7 +454,9 @@ test('ship 5: empty state renders for fewer than 2 sessions', async ({ page }) =
   await expect(page.locator('.progress-chart')).toHaveCount(0);
 });
 
-test('ship 5: back-pain bars render only for sessions with backPain > 0', async ({ page }) => {
+test('ship 5 (v64): the back reads "pain-free N of M" in the Body check, no bars', async ({
+  page,
+}) => {
   // 4 sessions: 2 with pain (3, 1), 2 with no pain (0, 0). Bar chart should
   // render 2 visible bars (transparent fill omitted for backPain=0 rows).
   await page.addInitScript(() => {
@@ -510,24 +510,10 @@ test('ship 5: back-pain bars render only for sessions with backPain > 0', async 
   });
   await page.goto('/');
   await page.locator('#open-progress-link').click();
-  // Bar chart SVG exists. Its bars only render for backPain > 0 rows — so we
-  // expect exactly 2 bars (backPain = 1 and backPain = 3). v48 · P6: the two
-  // pain-free sessions get a faint tick each (witnessed, not blank).
-  const barChart = page.locator('.progress-chart-bar');
-  await expect(barChart).toBeVisible();
-  expect(await barChart.locator('rect.pain-bar').count()).toBe(2);
-  expect(await barChart.locator('rect.pain-tick').count()).toBe(2);
-  await expect(page.locator('.progress-card').filter({ hasText: 'Back pain' })).toContainText(
-    'Pain-free 2 of 4 · avg 2.0 when it hurt'
-  );
-  // v51 · fix (Sep 25 2026, look-check sev 3): was 140px against a yMax of
-  // 10 — mostly empty dark space above near-zero values, uneven next to the
-  // wall-sit card's compact treatment. Same ≤64px cap now.
-  // v51 · fix (Sep 25 2026): boundingBox() returns sub-pixel float heights
-  // (64.00003...px seen locally) that are real layout, not a regression —
-  // 0.5px of headroom keeps the cap honest without chasing browser rounding.
-  const wrapBox = await page.locator('.progress-chart-wrap-bar').boundingBox();
-  expect(wrapBox?.height).toBeLessThanOrEqual(64.5);
+  // v64: the Body check says it in words, pain-free days first; no bar chart.
+  const back = page.locator('.body-card .body-line').filter({ hasText: 'Back:' });
+  await expect(back).toContainText('Back: pain-free 2 of 4');
+  await expect(page.locator('.progress-chart-bar')).toHaveCount(0);
 });
 
 // ============================================================================

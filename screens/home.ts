@@ -1228,6 +1228,7 @@ export function attachHomeHandlers3(): void {
   // are buttons), so Enter/Space open it too.
   const openWeeklyReview = (): void => {
     ui.viewedWeekOffset = 0;
+    ui.reviewBackTo = 'home';
     state.screen = 'weekly-review';
     requestRender();
   };

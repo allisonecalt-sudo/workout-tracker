@@ -147,7 +147,7 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
   });
 
-  test('Progress · Sessions per week: a closed completion week reads "wk 5 · 3 / 4", never a recomputed calendar count', async ({
+  test('Progress · weeks grid (v64): a closed completion week reads "3 of 4", never a recomputed calendar count', async ({
     page,
   }) => {
     await seedLogs(page, [
@@ -158,22 +158,15 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     await mockDate(page, '2026-09-30T08:00:00+03:00'); // Wed, mid-gap (Week 6 pending until Sat Oct 3)
     await page.goto('/');
     await page.locator('#open-progress-link').click();
-    const spw = page.locator('.spw-card');
-    // Scoped to the CURRENT (unfolded) rows only — Round 1 has its own,
-    // unrelated "wk 5" folded under .spw-older, and an unscoped .spw-row
-    // filter matches both.
-    const wk5 = spw
-      .locator(':scope > .spw-rows > .spw-row')
-      .filter({ has: page.locator('.spw-label:text-is("wk 5")') });
-    // v61 fix pass (CHECK-v61 must #3): this card now counts "/ 4" the same
-    // way Home/weekCountLine already does (no D logged in this seed, so
-    // it's just the denominator that moved — the bar's own A/B/C "met" rule
-    // is unaffected, see renderPerWeekRow's pct comment).
-    await expect(wk5.locator('.spw-count')).toHaveText('3 / 4');
-    await expect(wk5.locator('.spw-track')).toHaveCount(1); // a real track, never held's "—"
+    // v64: the weeks grid; Week 5 closed at 3 of 3 with no D, so it shows "3 of 4"
+    // (the "/ 4" counting is the same as Home's) and is a full week.
+    await expect(page.locator('button.wk-cell[aria-label^="Week 5 (round 2)"]')).toHaveAttribute(
+      'aria-label',
+      'Week 5 (round 2), 3 of 4, a full week'
+    );
   });
 
-  test('Progress · Sessions per week: a moved-on week reads "moved on", the live week reads "open"', async ({
+  test('Progress · weeks grid (v64): a moved-on week shows its own count, the live week is marked "now"', async ({
     page,
   }) => {
     await ignoreSickWeeks(page, PLAIN_WEEK5_HANDOVER);
@@ -195,16 +188,15 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     await mockDate(page, '2026-10-05T08:00:00+03:00'); // Mon, Week 6 open (day 3)
     await page.goto('/');
     await page.locator('#open-progress-link').click();
-    const spw = page.locator('.spw-card');
-    const wk5 = spw
-      .locator(':scope > .spw-rows > .spw-row')
-      .filter({ has: page.locator('.spw-label:text-is("wk 5")') });
-    // v61 fix pass (must #3): "/ 4" counting now (no D in this seed).
-    await expect(wk5.locator('.spw-count')).toHaveText('2 / 4 · moved on');
-    const wk6 = spw
-      .locator(':scope > .spw-rows > .spw-row')
-      .filter({ has: page.locator('.spw-label:text-is("wk 6")') });
-    await expect(wk6.locator('.spw-count')).toHaveText('0 / 4 · open');
+    // v64: the weeks grid: the moved-on week is a partial square with its count, the live
+    // week is marked "now" (no D in this seed, so "of 4").
+    await expect(page.locator('button.wk-cell[aria-label^="Week 5 (round 2)"]')).toHaveAttribute(
+      'aria-label',
+      'Week 5 (round 2), 2 of 4'
+    );
+    const wk6 = page.locator('button.wk-cell[aria-label^="Week 6 (round 2)"]');
+    await expect(wk6).toHaveAttribute('aria-label', 'Week 6 (round 2), 0 of 4, this week');
+    await expect(wk6).toContainText('now');
   });
 
   test('planForLog: a post-launch A resolves Week 5’s own key, not the old swing/calendar model’s', async ({

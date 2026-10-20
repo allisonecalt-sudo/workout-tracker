@@ -258,7 +258,7 @@ export function currentFeelMoves(): SteppedMove[] {
 // v55: the LOAD half of one saved "curl=easy@2kg" part, for one step key.
 // null when that key isn't in the string, or carries no "@load" at all
 // (every row saved before v55).
-function armFeelLoad(s: string | null | undefined, key: 'curl' | 'row'): ArmLoad | null {
+export function armFeelLoad(s: string | null | undefined, key: 'curl' | 'row'): ArmLoad | null {
   if (!s) return null;
   for (const part of s.split(';')) {
     const [k, rest] = part.split('=');

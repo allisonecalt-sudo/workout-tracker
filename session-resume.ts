@@ -424,6 +424,7 @@ export function resetState(): void {
   state.screen = 'home';
   // Reset viewed week to current when returning to home from a session.
   ui.viewedWeekOffset = 0;
+  ui.reviewBackTo = 'home';
   // WK2 (Sep 27 2026): a "‹ Week 4" peek never survives past the session she
   // takes next — Home always opens back on the true current week.
   ui.viewingLastClosedWeek = false;

@@ -314,7 +314,7 @@ test.describe('v48 P6 mirror', () => {
     await expect(page.locator('#detail-session-note')).toHaveCount(0);
   });
 
-  test('(f) Progress: Start → Now first, no breakdown; A/B/C chips; latest by date; held weeks "—"; Round 1 folded; v51 "Your cycle" card present (no data yet)', async ({
+  test('(f) v64 Progress: the weeks grid first, no breakdown, no A/B/C chips; latest by date; held weeks grey; Round 1 and Round 2 rows; v51 "Your cycle" door present (no data yet)', async ({
     page,
   }) => {
     await mockDate(page, THU_WEEK4);
@@ -340,54 +340,39 @@ test.describe('v48 P6 mirror', () => {
     await page.locator('#open-progress-link').click();
     const app = page.locator('#app');
     await expect(app).not.toContainText('Exercise breakdown');
-    // v50 · cycle (Sep 25 2026): the OLD capacity chart (charting untouched
-    // slider defaults) is still gone — DECISIONS §2 #6 below still holds.
-    // v51 (Sep 25 2026, 11:56): "Your cycle" moved off Progress onto its own
-    // page (her words: "it should be on its own page not in this page") —
-    // Progress keeps one door row that opens it. No cycle_periods are
-    // seeded in this test, so the door's own sub-line reads the empty state.
-    const cc = page.locator('.progress-card', { hasText: 'Your cycle' });
+    // v50 · cycle: the OLD capacity chart is still gone. v51: "Your cycle" is a door to its
+    // own page; v64: the door sits in the More group. No cycle_periods are seeded here, so
+    // its sub-line reads the empty state.
+    const cc = page.locator('.more-card', { hasText: 'Your cycle' });
     await expect(cc).toContainText('No period logged yet');
     await expect(cc.locator('svg')).toHaveCount(0);
     const cards = page.locator('.progress-screen > .progress-card');
-    await expect(cards.first()).toHaveClass(/start-now-card/);
-    const sn = page.locator('.start-now-card');
-    await expect(sn.locator('.start-now-hero')).toHaveText('6 sessions');
-    // v51 · the old separate "Elliptical level" / "Elliptical km" rows are
-    // now one combined "Elliptical" line (level 3 -> 7; no km seeded here).
-    await expect(sn.locator('.start-now-row').filter({ hasText: 'Elliptical' })).toContainText(
-      'level 3 → level 7' // v62.3 F5: each end is its own phrase (no ride time seeded, so just the level)
+    await expect(cards.first()).toHaveClass(/weeks-card/);
+    // The basis under the hero: since the first session, A/B/C counted as workouts.
+    await expect(page.locator('.weeks-hero-sub')).toHaveText('since May 12 · 6 workouts');
+    // v64: no A/B/C chips (the letters are balanced anyway), no Start -> Now card.
+    await expect(page.locator('.progress-subtitle')).toHaveCount(0);
+    await expect(page.locator('.start-now-card')).toHaveCount(0);
+    // What grew: both rides were logged as 25 minutes, so the level row compares like with
+    // like (3 -> 7 at 25 min). Every wallSitSec here predates the v45 real-timing capture
+    // (Sep 24), so honestWallSitLogs() leaves the wall sit row out entirely.
+    const grew = page.locator('.grew-card .start-now-row');
+    await expect(grew.filter({ hasText: 'Level at 25 min' })).toContainText('L3 → L7');
+    await expect(grew.filter({ hasText: 'Wall sit' })).toHaveCount(0);
+    await expect(page.locator('.wall-sit-card')).toHaveCount(0);
+    // The weeks grid: Round 1 and Round 2 each get a row of squares; held weeks are grey and
+    // labelled, never an empty "0 / 3"; the last square of Round 2 is "now".
+    await expect(page.locator('.wk-round')).toHaveCount(2);
+    const r1 = page.locator('.wk-round').first();
+    await expect(r1.locator('.wk-cell.wk-skip').filter({ hasText: 'Br' }).first()).toHaveAttribute(
+      'aria-label',
+      'Break week, not counted'
     );
-    // v49 · look fix (Sep 25 2026): every wallSitSec here predates the v45
-    // real-timing capture (Sep 24), so honestWallSitLogs() excludes all of
-    // them — the row and the trend card both omit rather than show a
-    // prescribed number as measured (the exact "Progress disagrees with
-    // Home" bug this fix closes).
-    await expect(sn.locator('.start-now-row').filter({ hasText: 'Wall sit' })).toHaveCount(0);
-    // v62.3 F4: the card-level "since" moved onto the Sessions count (each row says its own date).
-    await expect(sn.locator('.start-now-since .sn-since')).toHaveText('since May 12');
-    const wall = page.locator('.wall-sit-card');
-    await expect(wall).toHaveCount(0);
-    // Subtitle chips.
-    const sub = page.locator('.progress-subtitle');
-    await expect(sub).toContainText('A 3');
-    await expect(sub).toContainText('B 1');
-    await expect(sub).toContainText('C 2');
-    // Sessions per week: held weeks are "—", never "0 / 3"; Round 1 is folded.
-    const spw = page.locator('.spw-card');
-    const older = spw.locator('details.spw-older');
-    await expect(older).toHaveJSProperty('open', false);
-    await expect(older.locator('.spw-older-summary')).toContainText('Round 1 · 11 wks');
-    const breakRow = older.locator('.spw-row-skipped').filter({ hasText: 'break' }).first();
-    await expect(breakRow).toContainText('—');
-    await expect(breakRow).not.toContainText('/ 3');
-    await expect(breakRow.locator('.spw-track')).toHaveCount(0);
-    // The open rows are this round's only (R2: 4 weeks, the last "now").
-    await expect(spw.locator(':scope > .spw-rows .spw-row')).toHaveCount(4);
-    await expect(spw.locator(':scope > .spw-rows .spw-row').last()).toContainText('now');
+    const r2 = page.locator('.wk-round').last();
+    await expect(r2.locator('.wk-cell')).toHaveCount(4);
+    await expect(r2.locator('.wk-cell').last()).toHaveClass(/wk-now/);
     // v48 · fix r1: a plain count, no "target" verdict.
-    await expect(spw.locator('.progress-card-meta')).toContainText('full week');
-    await expect(spw.locator('.progress-card-meta')).not.toContainText('target');
+    await expect(page.locator('.weeks-card')).not.toContainText('target');
     // No sage chart ink anywhere on Progress.
     const sage = await page.evaluate(
       () =>

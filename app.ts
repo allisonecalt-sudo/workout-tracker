@@ -32,7 +32,7 @@ import {
   setActionHooks,
 } from './actions.js';
 import { state, isValidLogEntry, loadLogs } from './state.js';
-import { setRenderer, setScrollRestoreSink } from './bus.js';
+import { setRenderer, setScrollRestoreSink, requestScrollRestore } from './bus.js';
 import { installTimerVisibilityHandler } from './timer.js';
 import {
   setWalkLineUpdater,
@@ -131,7 +131,7 @@ import {
   setWorkoutHooks,
 } from './screens/workout.js';
 import { currentFeelMoves } from './workout-feel.js';
-import { renderProgress } from './screens/progress.js';
+import { renderProgress, attachProgressHandlers } from './screens/progress.js';
 import { renderWeeklyReview, computeWeekTotals, attachReviewHandlers } from './screens/review.js';
 
 // Retired-feature notes (hand routine, the auto-suggest toggle, the year grid) and the
@@ -549,7 +549,11 @@ function attachHandlers(): void {
     // the week she stepped back to is kept for the review flow (resetState,
     // when a session ends, is what puts it back on this week).
     if (state.screen === 'weekly-review') {
-      state.screen = 'home';
+      // v64: a week opened from Progress's grid goes back to Progress, to where she was.
+      const backTo = ui.reviewBackTo;
+      ui.reviewBackTo = 'home';
+      state.screen = backTo;
+      if (backTo === 'progress') requestScrollRestore(ui.reviewBackScroll);
       render();
       return;
     }
@@ -559,6 +563,7 @@ function attachHandlers(): void {
 
   // v48 · P6: the Weekly review's ‹ › week arrows (screens/review.ts, step 13c).
   attachReviewHandlers();
+  attachProgressHandlers(); // v64: the weeks grid's squares open that week's review
 
   attachHomeHandlers2();
 

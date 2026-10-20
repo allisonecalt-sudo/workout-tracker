@@ -69,6 +69,11 @@ export interface Ui {
   // Which week the user is currently looking at on the home screen. 0 = this
   // (current) Sat-Fri week. 1 = one week ago. Etc. Module-level — purely UI state.
   viewedWeekOffset: number;
+  // v64: where the Weekly review's "× Back" goes. Home's week card opens it ('home', the
+  // default); a square on Progress's weeks grid opens it with 'progress' and the scroll to
+  // come back to. app.ts's back-home reads and resets both.
+  reviewBackTo: 'home' | 'progress';
+  reviewBackScroll: number;
   // Module-level UI state: is Home showing the last CLOSED week instead of the
   // current open/pending one? Set by tapping "‹ Week 4"; cleared by "Week 5 ›"
   // (§8c: "the same link becomes 'Week 5 ›' to return"). Purely a view toggle —
@@ -112,6 +117,8 @@ export const ui: Ui = {
   cycleUndoCreated: false,
   historyEditDraft: null,
   viewedWeekOffset: 0,
+  reviewBackTo: 'home',
+  reviewBackScroll: 0,
   viewingLastClosedWeek: false,
   voiceAudio: null,
   voiceAudioSrc: null,

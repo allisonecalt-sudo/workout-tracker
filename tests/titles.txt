@@ -115,8 +115,8 @@ WK3 · "Move on without it" + week_moves › tap → Week 6 opens; the moved-not
 WK3 · "Move on without it" + week_moves › the push payload + pure merge are exact (window hooks, no real network)
 WK3 · "Move on without it" + week_moves › v61.2: a week that reopened after a Sick week can be moved on from — Week 6 on day 9, "Move on to Week 7 without C"
 WK3 · "Move on without it" + week_moves › v62.2: an EMPTY week_moves pull clears a synced move - deleting the Supabase row reopens the week (empty is the normal state of this table)
-WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › Progress · Sessions per week: a closed completion week reads "wk 5 · 3 / 4", never a recomputed calendar count
-WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › Progress · Sessions per week: a moved-on week reads "moved on", the live week reads "open"
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › Progress · weeks grid (v64): a closed completion week reads "3 of 4", never a recomputed calendar count
+WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › Progress · weeks grid (v64): a moved-on week shows its own count, the live week is marked "now"
 WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › a D-only live week (no A/B/C yet) reads "None of A, B, C yet.", never the old blanket line that contradicted the D row below it
 WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › a gap-dated D ride is listed under the CLOSED week it follows, mid-gap and after the next week opens
 WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / saved-session plan › planForLog: a post-launch A resolves Week 5’s own key, not the old swing/calendar model’s
@@ -516,10 +516,10 @@ ship 4: weekly review empty state for week with no sessions
 ship 4: weekly review header shows session count for current week
 ship 4: weekly review reachable from home button
 ship 4: weekly review shows one-word verbatim including typos
-ship 5: back-pain bars render only for sessions with backPain > 0
+ship 5 (v64): the back reads "pain-free N of M" in the Body check, no bars
+ship 5 (v64): the wall sit shows as a What grew row, first -> latest, with 2+ wall-sit values
 ship 5: empty state renders for fewer than 2 sessions
 ship 5: progress screen reachable from home button
-ship 5: wall-sit line chart renders with 2+ wall-sit values
 ship 6: beep toggle persists to localStorage
 ship 6: clear-data hold-to-confirm wipes localStorage
 ship 6: export sessions downloads a JSON file
@@ -782,7 +782,7 @@ v48 P6 mirror › (c) back pain 2 is plain; 3 (her stop line) is amber
 v48 P6 mirror › (d) a session opened from the review: × Back lands on the review, on the same week
 v48 P6 mirror › (e) Session: B has no Wall sit row; a ride shows one Cardio row from columns or the old marker; Note = her words only
 v48 P6 mirror › (e2) T2: one time formatter — the once-only Sessions note, "about N min" only on a confirmed row, never the app tap-time
-v48 P6 mirror › (f) Progress: Start → Now first, no breakdown; A/B/C chips; latest by date; held weeks "—"; Round 1 folded; v51 "Your cycle" card present (no data yet)
+v48 P6 mirror › (f) v64 Progress: the weeks grid first, no breakdown, no A/B/C chips; latest by date; held weeks grey; Round 1 and Round 2 rows; v51 "Your cycle" door present (no data yet)
 v48 P6 mirror › (g) Settings: no auto-suggest, Gear chips + Neck release, Data folded, honest captions, 44 px steppers
 v48 P6 mirror › at phone size › (e) Sessions: header × Back, no bottom slab, "Sat …" rows; Back from a Session keeps the scroll
 v48 P7 cool-down › (a) A has 11 rows, the chip reads "Stretch · 11", pairs read "~45 s each side"
@@ -848,7 +848,7 @@ v62.1 — planForWeekKey for a round with no PROGRAM rows › the next round, We
 v62.1 — planForWeekKey for a round with no PROGRAM rows › the next round, Week 4 (still no rows), gets the same last row
 v62.3 F1 - a per-week bar fills from the same numbers as its label › 3 / 3 fills 100%, a count past the target stays at 100%, 0 fills 0%
 v62.3 F1 - a per-week bar fills from the same numbers as its label › 3 / 4 fills 75%, not 2/3
-v62.3 F1 - per-week bar fill = its label › Week 5 labelled "3 / 4" fills 75%, not 2/3
+v62.3 F1 - per-week bar fill = its label › Week 5 reads "3 of 4" on the weeks grid (v64: the bar is gone; the square and its label agree)
 v62.3 F2 - one session count for a week › a completion-model week counts a D ride as one more session
 v62.3 F2 - one session count for a week › a legacy week (no D concept) and a week with no D count A/B/C alone
 v62.3 F2 - the weekly review counts sessions one way › a closed Week 5 with a D ride: header "4 of 4" and the "vs previous week" box says 3 -> 4, not 3 -> 3
@@ -856,11 +856,11 @@ v62.3 F3 - Home and Progress read the same session count › 3 sessions + 1 D ri
 v62.3 F3 - one session count on Home and Progress › her data: 45 rows with one D ride is 44 sessions and "+1 ride"
 v62.3 F3 - one session count on Home and Progress › the tag is plural for 2+ and empty for none
 v62.3 F4 - each Start -> Now row says its own "since" › Home (v64): the Start → Now card is gone, so no "since" rows there; the one line says "Since May"
-v62.3 F4 - each Start -> Now row says its own "since" › Progress: the same three, and the card-level "since May 2" line is gone
+v62.3 F4 - each Start -> Now row says its own "since" › Progress (v64): the hero says since May 2; What grew rows say their own since (Sep 24)
 v62.3 F4 - each Start -> Now row says its own "since" › the format is "since Sep 24" (the existing month-day form)
 v62.3 F5 - the elliptical level shows the ride length at each end › Home (v64): no Start → Now row labels at all
 v62.3 F5 - the elliptical level shows the ride length at each end › Home (v64): no level pair of any kind on Home (never a bare "5 → 3")
-v62.3 F5 - the elliptical level shows the ride length at each end › Progress: the same phrase, then only the latest km (no separate "in N min")
+v62.3 F5 - the elliptical level shows the ride length at each end › Progress (v64): a level is never set beside a different ride length: the 10 and 12 minute rides give a length row and NO level row
 v62.3 F5 - the elliptical level shows the ride length at each end › a ride with no time recorded shows just the level; no level, no phrase
 v62.3 F5 - the elliptical level shows the ride length at each end › her rides: level 5 for 10 min, level 3 for 12 min (minutes rounded from console seconds)
 v62.3 F6 - ride minutes count the D ride › Week 5 minutes = 10 + 30 from the D ride; the chart caption says what it counts
@@ -889,8 +889,8 @@ v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in eve
 v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch › one ride with a level: "level 5", then its own since
 v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch › ridden but no level recorded: "level not recorded yet" (unchanged)
 v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch › two rides: both ends say "level N" (F5)
-v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag › Home and Progress at 360px: "+1 ride" matches the "sessions" unit's size and weight, no sideways scroll
-v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag › Home and Progress at 412px: "+1 ride" matches the "sessions" unit's size and weight, no sideways scroll
+v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag › Home and Progress at 360px: the "+ 1 ride" tag reads on the hero's basis line, no sideways scroll
+v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag › Home and Progress at 412px: the "+ 1 ride" tag reads on the hero's basis line, no sideways scroll
 v62.3 fix round 1 (item 3) - a ride whose only reading is its level is not "no numbers" › All rides shows "— · — · — · L4" for a level-only ride
 v62.3 fix round 1 (item 5) - the wall sit hold after a reload saves what she held › 20 s held, reload, "Log what I did": saves 20, not 0
 v62.3 fix round 1 (item 5) - the wall sit hold after a reload saves what she held › a hold that ran past its end before the reload saves the whole hold, not more
@@ -1020,6 +1020,26 @@ v64 Home - one line instead of the Start -> Now card; a quiet line after a break
 v64 Home - one line instead of the Start -> Now card; a quiet line after a break › no sideways scroll at 360 and 412
 v64 Home - one line instead of the Start -> Now card; a quiet line after a break › once Week 6 has a session the line is gone
 v64 Home - one line instead of the Start -> Now card; a quiet line after a break › the one line says "Since <month>: N full weeks" and opens Progress
+v64 Progress - weeks you showed up lead; what grew, body check, more › Body check: at 5+ wrist readings the dots appear, on a fixed 0-10 scale
+v64 Progress - weeks you showed up lead; what grew, body check, more › Body check: wrist and back together in words, readings as logged; dots only at 5+ readings
+v64 Progress - weeks you showed up lead; what grew, body check, more › More: Your rides, Your cycle, Program sit together at the bottom; the Program row opens the archive
+v64 Progress - weeks you showed up lead; what grew, body check, more › What grew: each row first -> now with its own since; like with like
+v64 Progress - weeks you showed up lead; what grew, body check, more › What grew: with no two rides of the same length there is no level row
+v64 Progress - weeks you showed up lead; what grew, body check, more › a square opens that week review, and "× Back" returns to Progress
+v64 Progress - weeks you showed up lead; what grew, body check, more › no sideways scroll at 360px
+v64 Progress - weeks you showed up lead; what grew, body check, more › no sideways scroll at 412px
+v64 Progress - weeks you showed up lead; what grew, body check, more › the grid: full = filled with its count, partial = outlined with its count, the Sick week is grey and labelled and not tappable, this week says now
+v64 Progress - weeks you showed up lead; what grew, body check, more › the hero is "N full weeks" with its basis, and the old A/B/C chips and per-week bars are gone
+v64 Progress - weeks you showed up lead; what grew, body check, more › under 2 sessions: the calm line and the More group
+v64 number words (pure) › full weeks words and the Home line
+v64 number words (pure) › workouts and rides: the F3 counts, "+ 1 ride" as its own tag
+v64 what grew (pure) › a level row only across rides of the SAME length; none otherwise
+v64 what grew (pure) › arm curl: the load chip readings, one reading alone, a change as first -> latest
+v64 what grew (pure) › longest ride: first ride length -> longest; the console time wins, else the minutes logged
+v64 what grew (pure) › no data, no rows
+v64 what grew (pure) › one honest wall sit shows alone, no "from"
+v64 what grew (pure) › rides of the same length every time: no "got longer" words
+v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed holds never count), first -> latest, own since
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

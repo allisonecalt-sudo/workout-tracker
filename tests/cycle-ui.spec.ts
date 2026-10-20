@@ -128,8 +128,11 @@ test.describe('Progress: one door row, nothing else (spec §1)', () => {
     // mid-text) used to drop `.progress-card:has(.cycle-door) { padding: 0 }`
     // entirely, double-padding and misaligning the door card. Pin the
     // computed value so a regression here fails loud, not just visually.
+    // v64: the door is a row inside the More card now (which has the normal card padding);
+    // pin that computed value the same way.
     const doorCard = page.locator('.progress-card:has(#open-cycle)');
-    await expect(doorCard).toHaveCSS('padding-top', '0px');
+    await expect(doorCard).toHaveClass(/more-card/);
+    await expect(doorCard).toHaveCSS('padding-top', '18px');
 
     // Nothing else cycle-related stays on Progress.
     await expect(page.locator('.cc2-card')).toHaveCount(0);

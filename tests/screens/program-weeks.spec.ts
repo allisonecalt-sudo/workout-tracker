@@ -64,7 +64,9 @@ test('multi-week: "Coming next week" preview renders in Progress with diff', asy
   await mockDate(page, '2026-05-18T10:00:00.000Z'); // Week 3 — next is Week 4
   await page.goto('/');
   await page.locator('#open-progress-link').click();
-  await expect(page.locator('.program-archive-label')).toHaveText('Program');
+  // v64: the archive is the Program row in More; one tap opens it.
+  await expect(page.locator('.more-program > summary')).toContainText('Program');
+  await page.locator('.more-program > summary').click();
   // First preview is the immediate-next week. Multiple may render for future weeks.
   const preview = page.locator('.next-week-preview').first();
   await expect(preview).toBeVisible();
