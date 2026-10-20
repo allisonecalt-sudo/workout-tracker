@@ -98,7 +98,7 @@ test.describe('v64 what grew (pure)', () => {
   });
 
   test('no data, no rows', () => {
-    expect(whatGrew([])).toEqual({ rows: [], words: '' });
+    expect(whatGrew([])).toEqual({ rows: [], words: '', restartNote: '' });
   });
 });
 
@@ -152,5 +152,33 @@ test.describe('v64 cardio minutes for the Rides hero (pure)', () => {
       other: 0,
       total: 0,
     });
+  });
+});
+
+test.describe('v64 fix: a light-restart latest ride is said quietly (pure)', () => {
+  const rides = [
+    ride('r1', '2026-09-24T10:00:00Z', 10, 5),
+    ride('r2', '2026-09-26T10:00:00Z', 10, 5),
+    ride('r3', '2026-10-18T10:00:00Z', 10, 3),
+  ];
+
+  test('the level row whose latest ride was in a light week is flagged, with the one-line note; numbers stay', () => {
+    const g = whatGrew(rides, (l) => l.id === 'r3');
+    const lvl = g.rows.find((r) => r.label === 'Level at 10 min');
+    expect(lvl?.value).toBe('L5 → L3');
+    expect(lvl?.lightLatest).toBe(true);
+    expect(g.restartNote).toBe("Light-restart rides aren't a step back; they're the restart.");
+  });
+
+  test('no light week: no flag and no note', () => {
+    const g = whatGrew(rides);
+    expect(g.rows.some((r) => r.lightLatest)).toBe(false);
+    expect(g.restartNote).toBe('');
+  });
+
+  test('only the row whose latest ride was light is flagged (the longest ride was not)', () => {
+    const g = whatGrew([...rides, ride('d', '2026-09-28T10:00:00Z', 30, 3)], (l) => l.id === 'r3');
+    expect(g.rows.find((r) => r.label === 'Longest ride')?.lightLatest).toBe(false);
+    expect(g.rows.find((r) => r.label.startsWith('Level'))?.lightLatest).toBe(true);
   });
 });

@@ -32,6 +32,7 @@ import {
   diffWorkout,
   weekPlanTitle,
   PROGRAM,
+  planForWeekKey,
 } from '../program.js';
 import type { LogEntry } from '../types.js';
 import { state, cyclePeriodsForLogic, getChronologicalLogs } from '../state.js';
@@ -41,11 +42,11 @@ import { escapeHtml, formatMonthDay } from '../format.js';
 import { ellipticalRideRecords } from '../cardio-notes.js';
 import { rideRate, type RideRecord } from '../ride.js';
 import { localIsoDate } from '../dates.js';
-import { getWeekPlan } from '../week-clock.js';
+import { getWeekPlan, planKeyForLog, weekModel } from '../week-clock.js';
 import { SESSIONS_PER_WEEK_TARGET } from '../program-week.js';
 import { type WeekRow, buildWeekRows, fullWeeksSummary, shownWeekCount } from '../weeks-grid.js';
 import { sessionCounts, sinceTag, workoutsAndRides, rideReadingsLine } from '../number-rules.js';
-import { whatGrew } from '../what-grew.js';
+import { whatGrew, LIGHT_SUFFIX } from '../what-grew.js';
 
 function getFutureWeekPlans(date?: Date): WeekPlan[] {
   return date ? programFutureWeekPlans(date) : programFutureWeekPlansAfter(getWeekPlan());
@@ -299,13 +300,25 @@ function renderWeeksHeroCard(logs: LogEntry[]): string {
     </div>`;
 }
 
+// v64 fix: a ride in a light-restart program week (the plan's own label says "light") or in
+// the first week back after a Sick week is not a step back; Progress says so quietly.
+function isLightWeekLog(l: LogEntry): boolean {
+  const key = planKeyForLog(l);
+  if (key === null) return false;
+  if (/light/i.test(planForWeekKey(key).plan.label ?? '')) return true;
+  const { spans, open } = weekModel();
+  const all = open ? [...spans, open] : spans;
+  const i = all.findIndex((s) => s.key.round === key.round && s.key.week === key.week);
+  return i > 0 && all[i - 1]!.how === 'sick';
+}
+
 function renderWhatGrewCard(logs: LogEntry[]): string {
-  const grew = whatGrew(logs);
+  const grew = whatGrew(logs, isLightWeekLog);
   if (grew.rows.length === 0) return '';
   const rows = grew.rows
     .map(
       (r) =>
-        `<div class="start-now-row"><span class="start-now-lbl">${escapeHtml(r.label)}</span><span class="start-now-val">${escapeHtml(r.value)}${sinceTag(r.since)}</span></div>`
+        `<div class="start-now-row"><span class="start-now-lbl">${escapeHtml(r.label)}</span><span class="start-now-val">${escapeHtml(r.value)}${sinceTag(r.since)}${r.lightLatest ? `<span class="grew-light">· ${LIGHT_SUFFIX}</span>` : ''}</span></div>`
     )
     .join('');
   return `
@@ -313,6 +326,7 @@ function renderWhatGrewCard(logs: LogEntry[]): string {
       <div class="progress-card-label">What grew</div>
       ${rows}
       ${grew.words ? `<p class="progress-card-meta grew-words">${escapeHtml(grew.words)}</p>` : ''}
+      ${grew.restartNote ? `<p class="progress-card-meta grew-restart">${escapeHtml(grew.restartNote)}</p>` : ''}
     </div>`;
 }
 
@@ -365,7 +379,11 @@ function renderBodyCheckCard(logs: LogEntry[]): string {
     <div class="card progress-card body-card">
       <div class="progress-card-label">Body check</div>
       ${lines.join('')}
-      ${wrist.length >= 5 ? `<div class="wrist-dots-wrap">${renderWristDots(wrist.slice(-12))}</div>` : ''}
+      ${
+        wrist.length >= 5
+          ? `<div class="wrist-dots-wrap"><div class="wrist-dots-caption">Wrist, last ${Math.min(12, wrist.length)}</div>${renderWristDots(wrist.slice(-12))}</div>`
+          : ''
+      }
       <p class="progress-card-meta">0 is no pain; lower is better.</p>
     </div>`;
 }

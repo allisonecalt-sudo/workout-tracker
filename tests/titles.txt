@@ -1052,6 +1052,12 @@ v64 Weekly review - one counting rule, the D ride in the list, your usual, words
 v64 cardio minutes for the Rides hero (pure) › a walk-lane session (a hike) and standalone walks are "other cardio"
 v64 cardio minutes for the Rides hero (pure) › nothing this week is 0, and a session with no cardio adds nothing
 v64 cardio minutes for the Rides hero (pure) › rides count their console time; the logged minutes only when there is no console time; never both
+v64 fix - Progress clarity: light-restart rides, a label on the wrist dots › an ordinary week: no suffix, no note
+v64 fix - Progress clarity: light-restart rides, a label on the wrist dots › the latest 10-min ride was in the light restart week: the level row says so and the note shows; the numbers stay
+v64 fix - Progress clarity: light-restart rides, a label on the wrist dots › the wrist dots carry a "Wrist, last N" caption above them, the 0-is-no-pain line below
+v64 fix: a light-restart latest ride is said quietly (pure) › no light week: no flag and no note
+v64 fix: a light-restart latest ride is said quietly (pure) › only the row whose latest ride was light is flagged (the longest ride was not)
+v64 fix: a light-restart latest ride is said quietly (pure) › the level row whose latest ride was in a light week is flagged, with the one-line note; numbers stay
 v64 number words (pure) › full weeks words and the Home line
 v64 number words (pure) › workouts and rides: the F3 counts, "+ 1 ride" as its own tag
 v64 what grew (pure) › a level row only across rides of the SAME length; none otherwise

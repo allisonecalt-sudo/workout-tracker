@@ -583,3 +583,53 @@ test.describe('v64 Rides - cardio minutes lead, calories a minute second, one We
     });
   }
 });
+
+test.describe('v64 fix - Progress clarity: light-restart rides, a label on the wrist dots', () => {
+  const rideRow = (id: string, date: string, min: number, level: number, w: 'A' | 'B' = 'A'): Row =>
+    log(id, date, w, {
+      cardioLane: 'elliptical',
+      ellipticalLevel: level,
+      ellipticalTimeSec: min * 60,
+    });
+
+  test('the latest 10-min ride was in the light restart week: the level row says so and the note shows; the numbers stay', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      rideRow('a', '2026-09-24T15:56:00+03:00', 10, 5),
+      rideRow('b', '2026-09-26T19:14:00+03:00', 10, 5, 'B'),
+      log('w5a', '2026-09-28T13:34:00+03:00', 'A'),
+      rideRow('w6', '2026-10-13T06:42:00+03:00', 10, 3),
+    ]);
+    await mockDate(page, '2026-10-14T08:00:00+03:00');
+    await openProgress(page);
+    const lvl = page.locator('.grew-card .start-now-row').filter({ hasText: 'Level at 10 min' });
+    await expect(lvl).toContainText('L5 → L3');
+    await expect(lvl).toContainText('latest was a light week');
+    await expect(page.locator('.grew-restart')).toHaveText(
+      "Light-restart rides aren't a step back; they're the restart."
+    );
+  });
+
+  test('an ordinary week: no suffix, no note', async ({ page }) => {
+    await seedLogs(page, [
+      rideRow('a', '2026-09-24T15:56:00+03:00', 10, 5),
+      rideRow('b', '2026-09-26T19:14:00+03:00', 10, 3, 'B'),
+    ]);
+    await mockDate(page, '2026-09-29T08:00:00+03:00');
+    await openProgress(page);
+    await expect(page.locator('.grew-card')).toContainText('L5 → L3');
+    await expect(page.locator('.grew-light')).toHaveCount(0);
+    await expect(page.locator('.grew-restart')).toHaveCount(0);
+  });
+
+  test('the wrist dots carry a "Wrist, last N" caption above them, the 0-is-no-pain line below', async ({
+    page,
+  }) => {
+    await progressShape(page, 6);
+    await openProgress(page);
+    const wrap = page.locator('.wrist-dots-wrap');
+    await expect(wrap.locator('.wrist-dots-caption')).toHaveText('Wrist, last 6');
+    await expect(page.locator('.body-card')).toContainText('0 is no pain; lower is better');
+  });
+});

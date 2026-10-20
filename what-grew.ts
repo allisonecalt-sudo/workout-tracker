@@ -18,11 +18,16 @@ export type GrewRow = {
   value: string;
   /** ISO date this row's series starts. */
   since: string;
+  /** The row's latest ride was in a light-restart week (v64 fix): the screen says so, quietly. */
+  lightLatest?: boolean;
 };
 
-export type WhatGrew = { rows: GrewRow[]; words: string };
+export type WhatGrew = { rows: GrewRow[]; words: string; restartNote: string };
 
-type RideLen = { date: string; minutes: number; level: number | null };
+export const LIGHT_SUFFIX = 'latest was a light week';
+export const RESTART_NOTE = "Light-restart rides aren't a step back; they're the restart.";
+
+type RideLen = { id: string; date: string; minutes: number; level: number | null };
 
 /** A ride's length in whole minutes: the console time, else the minutes she logged. */
 function rideMinutes(r: { timeSec: number | null; minutes?: number | null }): number | null {
@@ -34,7 +39,15 @@ function rideMinutes(r: { timeSec: number | null; minutes?: number | null }): nu
 const kg = (load: '1kg' | '2kg'): string => (load === '2kg' ? '2 kg' : '1 kg');
 
 /** `chrono` = every session, oldest -> newest. */
-export function whatGrew(chrono: LogEntry[]): WhatGrew {
+export function whatGrew(
+  chrono: LogEntry[],
+  isLight: (l: LogEntry) => boolean = () => false
+): WhatGrew {
+  const byId = new Map(chrono.map((l) => [l.id, l] as const));
+  const lightRide = (r: RideLen): boolean => {
+    const l = byId.get(r.id);
+    return l !== undefined && isLight(l);
+  };
   const rows: GrewRow[] = [];
 
   // Wall sit: only real measurements (viz.ts honestWallSitLogs), first -> latest.
@@ -68,7 +81,7 @@ export function whatGrew(chrono: LogEntry[]): WhatGrew {
 
   // Rides: the first ride's length -> the longest ride so far.
   const rides: RideLen[] = ellipticalRideRecords(chrono)
-    .map((r) => ({ date: r.date, minutes: rideMinutes(r), level: r.level }))
+    .map((r) => ({ id: r.id, date: r.date, minutes: rideMinutes(r), level: r.level }))
     .filter((r): r is RideLen => r.minutes !== null);
   let words = '';
   if (rides.length > 0) {
@@ -82,6 +95,7 @@ export function whatGrew(chrono: LogEntry[]): WhatGrew {
           ? `${first.minutes} min → ${longest.minutes} min`
           : `${longest.minutes} min`,
       since: first.date,
+      lightLatest: lightRide(longest),
     });
     if (longest.minutes > first.minutes) {
       words =
@@ -115,8 +129,9 @@ export function whatGrew(chrono: LogEntry[]): WhatGrew {
         label: `Level at ${a.minutes} min`,
         value: a.level === b.level ? `L${a.level}, the same` : `L${a.level} → L${b.level}`,
         since: a.date,
+        lightLatest: lightRide(b),
       });
     }
   }
-  return { rows, words };
+  return { rows, words, restartNote: rows.some((r) => r.lightLatest) ? RESTART_NOTE : '' };
 }
