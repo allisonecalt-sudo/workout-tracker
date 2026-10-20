@@ -7269,3 +7269,50 @@ button.wk-cell {
   color: var(--ink-3);
   margin-right: 6px;
 }
+
+/* v64 Rides: the cardio-minutes hero (toward 225-250 a week), the one Weeks card, the words-first
+ * per-ride card. Tokens only; a length bar with the 225 mark, no colour carrying the meaning. */
+.rides-minutes-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.rides-minutes-of {
+  font-size: var(--t-lead);
+  color: var(--ink-2);
+}
+
+.rides-minutes-track {
+  position: relative;
+  height: 8px;
+  margin-top: var(--s3);
+  border-radius: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--hair-strong);
+}
+
+.rides-minutes-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 4px;
+  background: var(--accent-progress);
+}
+
+.rides-minutes-goal {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--ink);
+}
+
+.rides-minutes-basis,
+.rides-last-ride,
+.rides-same-words {
+  margin: var(--s2) 0 0;
+  font-size: var(--t-small);
+  color: var(--ink-2);
+}

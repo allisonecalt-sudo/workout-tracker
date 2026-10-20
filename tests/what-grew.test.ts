@@ -116,3 +116,41 @@ test.describe('v64 number words (pure)', () => {
     expect(sinceFullWeeksLine('2026-05-02T15:00:00+03:00', 0)).toBe('Your weeks since May');
   });
 });
+
+import { weekCardioMinutes } from '../cardio-notes';
+
+test.describe('v64 cardio minutes for the Rides hero (pure)', () => {
+  const ride = (min: number, x: Partial<LogEntry> = {}) =>
+    log('r', '2026-09-28T10:00:00Z', 'A', {
+      cardioLane: 'elliptical',
+      ellipticalTimeSec: min * 60,
+      ...x,
+    });
+
+  test('rides count their console time; the logged minutes only when there is no console time; never both', () => {
+    const withTime = ride(12, { cardioMinutes: 10 });
+    const noTime = log('d', '2026-09-28T10:00:00Z', 'D', {
+      cardioLane: 'elliptical',
+      cardioMinutes: 30,
+    });
+    expect(weekCardioMinutes([withTime, noTime], [])).toEqual({ rides: 42, other: 0, total: 42 });
+  });
+
+  test('a walk-lane session (a hike) and standalone walks are "other cardio"', () => {
+    const hike = log('h', '2026-10-01T10:00:00Z', 'B', { cardioLane: 'walk', walkMinutes: 120 });
+    const apt = log('p', '2026-10-01T11:00:00Z', 'C', {
+      cardioLane: 'apartment',
+      cardioMinutes: 25,
+    });
+    const out = weekCardioMinutes([ride(12), hike, apt], [{ minutes: 20 }, { minutes: null }, {}]);
+    expect(out).toEqual({ rides: 12, other: 165, total: 177 });
+  });
+
+  test('nothing this week is 0, and a session with no cardio adds nothing', () => {
+    expect(weekCardioMinutes([log('a', '2026-09-28T10:00:00Z', 'A')], [])).toEqual({
+      rides: 0,
+      other: 0,
+      total: 0,
+    });
+  });
+});

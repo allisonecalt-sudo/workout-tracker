@@ -533,8 +533,11 @@ test('Workout D survives a second read: Done card, Sessions, the rides page and 
   // extra, never one of the three) — so this exact D ride, saved inside Week
   // 5, read "This week 0 rides · 0 min · 0 km · 0 kcal" while "This month"
   // already said 1. Now it counts by date against the week's own start.
-  const weekRow = reopened.locator('.rides-totals-row').filter({ hasText: 'This week' });
-  await expect(weekRow).toContainText('1 ride · 30 min · 3 km · 180 kcal');
+  // v64: the hero counts the D ride's 30 minutes (this week), and the Weeks card has its row.
+  await expect(reopened.locator('.rides-minutes-n')).toHaveText('30');
+  await expect(reopened.locator('.rides-week-row').first()).toContainText(
+    '1 ride · 30 min · 3 km · 180 kcal'
+  );
 });
 
 test("rides \"This week\": the Saturday-closing ride doesn't leak into the new week (membership, not date); Sunday's D still counts (v54 fix r3, checker's must)", async ({
@@ -601,8 +604,10 @@ test("rides \"This week\": the Saturday-closing ride doesn't leak into the new w
   await page.goto('/');
   await page.locator('#open-progress-link').click();
   await page.locator('#open-rides').click();
-  const satWeekRow = page.locator('.rides-totals-row').filter({ hasText: 'This week' });
-  await expect(satWeekRow).toContainText('0 rides');
+  // v64: the new week (opened at B's own instant) has no ride yet: the hero reads 0 and the
+  // Weeks card collapses the empty week to one "Last ride" line (never the closing B counted twice).
+  await expect(page.locator('.rides-minutes-n')).toHaveText('0');
+  await expect(page.locator('.rides-last-ride')).toContainText('Last ride Oct 17');
 
   // Sunday, a fresh context page — no beforeEach clear script, so the three
   // rows above survive (same storage, same origin); this init script just
@@ -630,8 +635,7 @@ test("rides \"This week\": the Saturday-closing ride doesn't leak into the new w
   await sunday.goto('/');
   await sunday.locator('#open-progress-link').click();
   await sunday.locator('#open-rides').click();
-  const sunWeekRow = sunday.locator('.rides-totals-row').filter({ hasText: 'This week' });
-  await expect(sunWeekRow).toContainText('1 ride');
+  await expect(sunday.locator('.rides-minutes-n')).toHaveText('30'); // Sunday's 30-minute D counts
 });
 
 // v55 fix r2 (Sep 27 2026, checker's should #5): renderRidesTotalsCard reads
@@ -641,7 +645,7 @@ test("rides \"This week\": the Saturday-closing ride doesn't leak into the new w
 // UTC+3 in Oct 2026), so a UTC-prefix reading would put it in the wrong,
 // earlier month. "Now" is mocked well into October so the assertion can only
 // pass if the ride's own month is read locally.
-test('rides "This month" reads the LOCAL date: a ride at local Oct 1 00:30 (+03:00) counts in October, not September', async ({
+test('rides list (v64, was "This month") reads the LOCAL date: a ride at local Oct 1 00:30 (+03:00) is Oct 1, not September', async ({
   page,
 }) => {
   await movableClock(page, '2026-10-15T10:00:00+03:00'); // "now" — safely inside October, local and UTC
@@ -667,8 +671,10 @@ test('rides "This month" reads the LOCAL date: a ride at local Oct 1 00:30 (+03:
   await page.goto('/');
   await page.locator('#open-progress-link').click();
   await page.locator('#open-rides').click();
-  const monthRow = page.locator('.rides-totals-row').filter({ hasText: 'This month' });
-  await expect(monthRow).toContainText('1 ride');
+  // v64: "This month" is gone (one Weeks card). The ride's date is still read LOCALLY: the list says
+  // Oct 1, not Sep 30.
+  await expect(page.locator('.rides-list-row')).toContainText('Oct 1');
+  await expect(page.locator('.rides-list-row')).not.toContainText('Sep 30');
 });
 
 test('elliptical: the next ride opens on the elliptical and offers the last level again', async ({

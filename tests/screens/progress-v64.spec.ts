@@ -478,3 +478,108 @@ test.describe('v64 Weekly review - one counting rule, the D ride in the list, yo
     });
   }
 });
+
+// Her Week 5 (Sep 27 - Oct 2): a 12-minute ride, the 30-minute D ride (no console time) and the
+// two-hour hike (a walk-lane session): about 162 cardio minutes.
+const week5Cardio = (): Row[] => [
+  log('w5a', '2026-09-28T13:34:00+03:00', 'A', {
+    cardioLane: 'elliptical',
+    ellipticalLevel: 3,
+    ellipticalKm: 0.83,
+    ellipticalKcal: 76.8,
+    ellipticalTimeSec: 720,
+  }),
+  log('w5d', '2026-09-28T12:33:00+03:00', 'D', {
+    cardioLane: 'elliptical',
+    cardioMinutes: 30,
+    ellipticalLevel: 3,
+    ellipticalKm: 2.1,
+    ellipticalKcal: 190.8,
+  }),
+  log('w5b', '2026-10-01T09:00:00+03:00', 'B', { cardioLane: 'walk', walkMinutes: 120 }),
+];
+
+const openRides = async (page: Page): Promise<void> => {
+  await page.goto('/');
+  await page.locator('#open-progress-link').click();
+  await page.locator('#open-rides').click();
+};
+
+test.describe('v64 Rides - cardio minutes lead, calories a minute second, one Weeks card', () => {
+  test("the hero is this week's cardio minutes toward 225-250: rides + the hike, with the basis", async ({
+    page,
+  }) => {
+    await seedLogs(page, week5Cardio());
+    await mockDate(page, '2026-10-02T09:00:00+03:00');
+    await openRides(page);
+    await expect(page.locator('.rides-minutes-line')).toHaveText('162 of 225–250 min this week');
+    await expect(page.locator('.rides-minutes-basis')).toHaveText(
+      'rides 42 min · other cardio 120 min'
+    );
+    await expect(page.locator('.rides-minutes-fill')).toHaveAttribute('style', 'width:65%');
+    // order: minutes, then calories a minute
+    await expect(page.locator('.rides-screen > .card').nth(0)).toHaveClass(/rides-minutes-card/);
+    await expect(page.locator('.rides-screen > .card').nth(1)).toHaveClass(/rides-hero-card/);
+    await expect(page.locator('.rides-screen > .card').nth(1)).toContainText('Calories a minute');
+  });
+
+  test('a standalone logged walk this week counts too, as other cardio', async ({ page }) => {
+    await seedLogs(page, week5Cardio());
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        'workout-tracker:walks',
+        JSON.stringify([
+          { id: 'w1', date: '2026-09-30T08:00:00+03:00', minutes: 20, synced: true },
+          { id: 'w0', date: '2026-09-20T08:00:00+03:00', minutes: 50, synced: true }, // another week
+        ])
+      );
+    });
+    await mockDate(page, '2026-10-02T09:00:00+03:00');
+    await openRides(page);
+    await expect(page.locator('.rides-minutes-n')).toHaveText('182');
+    await expect(page.locator('.rides-minutes-basis')).toHaveText(
+      'rides 42 min · other cardio 140 min'
+    );
+  });
+
+  test('no ride yet this week: the hero reads 0 and the empty week is one line, "Last ride Oct 1"', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      ...week5Cardio().slice(0, 2),
+      log('w5c', '2026-10-01T10:00:00+03:00', 'C', {
+        cardioLane: 'elliptical',
+        ellipticalTimeSec: 600,
+        ellipticalKcal: 60,
+      }),
+    ]);
+    // after Week 5 closes (A, C + ... closes only with 3 letters), so use the Sick-week gap: Week 6 open
+    await mockDate(page, '2026-10-14T09:00:00+03:00');
+    await openRides(page);
+    await expect(page.locator('.rides-minutes-n')).toHaveText('0');
+    await expect(page.locator('.rides-last-ride')).toHaveText('Last ride Oct 1');
+    await expect(page.locator('.rides-week-empty')).toHaveCount(0);
+  });
+
+  test('"Your usual" and "Your best" stay as plain numbers under the calories card', async ({
+    page,
+  }) => {
+    await seedLogs(page, week5Cardio());
+    await mockDate(page, '2026-10-02T09:00:00+03:00');
+    await openRides(page);
+    await expect(page.locator('.rides-screen > .card').nth(2)).toHaveClass(/rides-usual-best-card/);
+  });
+
+  for (const width of [360, 412]) {
+    test(`no sideways scroll at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await seedLogs(page, week5Cardio());
+      await mockDate(page, '2026-10-02T09:00:00+03:00');
+      await openRides(page);
+      const over = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+      );
+      expect(over).toBeLessThanOrEqual(0);
+    });
+  }
+});

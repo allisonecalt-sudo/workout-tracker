@@ -411,7 +411,8 @@ phaseForDate — the current/open cycle (estimated) › a whole-number median es
 phaseForDate — the current/open cycle (estimated) › an overdue open cycle (past the estimated next start) still reads as luteal, not a crash
 phaseForDate — the current/open cycle (estimated) › estimates the next start from the median of the last 6 cycle lengths
 phaseForDate — the current/open cycle (estimated) › null when there is only one period ever logged (nothing to estimate from)
-phone width › no horizontal scroll with a full page (hero, usual/best, totals, week-by-week, chart, list)
+phone width › no horizontal scroll with a full page (minutes, calories, usual/best, weeks, per-ride, list)
+phone width › v64: no horizontal scroll with the 5-week bar chart showing
 pickStep walks the WHOLE queue: CARDIO capped and UPPER frozen still lets CORE/LEGS step
 plainPhaseFor › an overdue open cycle still reads as week-before, not a crash
 plainPhaseFor › early luteal (not yet within 7 days of the next start) -> mid-cycle, not week-before
@@ -490,8 +491,8 @@ rideRate: her three real rides › v55 fix — pace never rolls to ":60" seconds
 rideTotals: rides · minutes · km · kcal › a "no numbers" ride still counts toward `rides`, contributes nothing else
 rideTotals: rides · minutes · km · kcal › empty list -> all zero, never a crash
 rideTotals: rides · minutes · km · kcal › her three real rides sum plainly
-rides "This month" reads the LOCAL date: a ride at local Oct 1 00:30 (+03:00) counts in October, not September
 rides "This week": the Saturday-closing ride doesn't leak into the new week (membership, not date); Sunday's D still counts (v54 fix r3, checker's must)
+rides list (v64, was "This month") reads the LOCAL date: a ride at local Oct 1 00:30 (+03:00) is Oct 1, not September
 round 2 + upper back done first: finishing round 1 skips the floor and returns to the skipped warm-up move
 round 2: banner reads Round 2 · Week 1 from Aug 29 2026 and restart numbers are live
 round 2: break weeks Jul 25–Aug 28 hold blank labeled rows, round-1 weeks keep plain labels
@@ -599,6 +600,7 @@ the 4-exposure backstop: a V rung with 4 clean-but-never-"fine" exposures is sti
 the chart + tap readout › each bar carries its level ("L5"/"L3") under the date, from ChartBar.sublabel
 the chart + tap readout › fewer than 2 rides with numbers: an honest gap line, no chart
 the chart + tap readout › renders one bar per ride with numbers, latest highlighted, and a tap opens a one-line readout
+the chart + tap readout › v64: rides about the same say so in words, and the bars wait until they really differ
 the default test clock vs hold-to-skip (measures Date.now() - holdStart) › a 700 ms hold on the rest card skips it on the default running clock
 the default test clock: a fixed start that keeps RUNNING › a reload and a fresh context page continue the SAME clock; mockDate still overrides it
 the default test clock: a fixed start that keeps RUNNING › starts at TEST_NOW, advances in real time, and is not frozen (hold-to-skip needs that)
@@ -863,7 +865,7 @@ v62.3 F5 - the elliptical level shows the ride length at each end › Home (v64)
 v62.3 F5 - the elliptical level shows the ride length at each end › Progress (v64): a level is never set beside a different ride length: the 10 and 12 minute rides give a length row and NO level row
 v62.3 F5 - the elliptical level shows the ride length at each end › a ride with no time recorded shows just the level; no level, no phrase
 v62.3 F5 - the elliptical level shows the ride length at each end › her rides: level 5 for 10 min, level 3 for 12 min (minutes rounded from console seconds)
-v62.3 F6 - ride minutes count the D ride › Week 5 minutes = 10 + 30 from the D ride; the chart caption says what it counts
+v62.3 F6 - ride minutes count the D ride › Week 5 minutes = 10 + 30 from the D ride (v64: the hero and the Weeks card); the card says what it counts
 v62.3 F6: ride minutes count a ride with no console time by its logged minutes › a ride with BOTH console time and minutes counts the console time only (no double count)
 v62.3 F6: ride minutes count a ride with no console time by its logged minutes › her Sep 28 D ride (no time, 30 logged minutes) adds 30 to the week
 v62.3 F6: ride minutes count a ride with no console time by its logged minutes › neither time nor minutes adds nothing (never a guessed 0 that hides a hole is invented either)
@@ -1031,6 +1033,12 @@ v64 Progress - weeks you showed up lead; what grew, body check, more › no side
 v64 Progress - weeks you showed up lead; what grew, body check, more › the grid: full = filled with its count, partial = outlined with its count, the Sick week is grey and labelled and not tappable, this week says now
 v64 Progress - weeks you showed up lead; what grew, body check, more › the hero is "N full weeks" with its basis, and the old A/B/C chips and per-week bars are gone
 v64 Progress - weeks you showed up lead; what grew, body check, more › under 2 sessions: the calm line and the More group
+v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › "Your usual" and "Your best" stay as plain numbers under the calories card
+v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › a standalone logged walk this week counts too, as other cardio
+v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › no ride yet this week: the hero reads 0 and the empty week is one line, "Last ride Oct 1"
+v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › no sideways scroll at 360px
+v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › no sideways scroll at 412px
+v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › the hero is this week's cardio minutes toward 225-250: rides + the hike, with the basis
 v64 Weekly review - one counting rule, the D ride in the list, your usual, words › "What was measured" in words: wall sit, pain-free, wrist; capacity is not shown
 v64 Weekly review - one counting rule, the D ride in the list, your usual, words › "Your usual: 3 a week · that week: 3" on a past page, once 4 normal weeks exist
 v64 Weekly review - one counting rule, the D ride in the list, your usual, words › Sessions rows no longer show capacity (it stays in Session detail)
@@ -1041,6 +1049,9 @@ v64 Weekly review - one counting rule, the D ride in the list, your usual, words
 v64 Weekly review - one counting rule, the D ride in the list, your usual, words › no sideways scroll at 412px on a review page
 v64 Weekly review - one counting rule, the D ride in the list, your usual, words › the D ride is a normal row in date order; the old "D · extra ride" line is gone
 v64 Weekly review - one counting rule, the D ride in the list, your usual, words › the live week says "this week", and the Sick-cut Week 5 is not a normal week in the median
+v64 cardio minutes for the Rides hero (pure) › a walk-lane session (a hike) and standalone walks are "other cardio"
+v64 cardio minutes for the Rides hero (pure) › nothing this week is 0, and a session with no cardio adds nothing
+v64 cardio minutes for the Rides hero (pure) › rides count their console time; the logged minutes only when there is no console time; never both
 v64 number words (pure) › full weeks words and the Home line
 v64 number words (pure) › workouts and rides: the F3 counts, "+ 1 ride" as its own tag
 v64 what grew (pure) › a level row only across rides of the SAME length; none otherwise
@@ -1058,17 +1069,18 @@ walk credit: start/stop timer logs a walk, bumps week count, streak untouched
 walk distance (GPS granted) › v48 · P3: a walk is minutes only — GPS movement shows no km and saves no meters
 walk step: shows no form card — Start walk is the whole interface
 walk: Cancel discards an opened walk without logging it
-week by week (v57) › "This week vs last week": the same 7 numbers side by side, plain Δ, never a verdict word
-week by week (v57) › S1: the per-week chart runs oldest to newest, left to right, same as the per-ride chart
-week by week (v57) › S2: every bar in per-week mode shows its own minutes, not just the open one
-week by week (v57) › S3: the vs-card header carries short column labels; full week names sit on their own line
-week by week (v57) › a week with 0 rides shows a plain "—", nothing hidden
-week by week (v57) › re-opening the page resets the chart toggle to "Per ride"
-week by week (v57) › the chart's "per ride · per week" toggle
+week by week (v57) › a week with 0 rides collapses to one line, "Last ride Oct 3", nothing hidden
 week by week (v57) › the table: last weeks newest first, real numbers, the open week marked "so far"
+week by week (v57) › v58 (v64): tapping a per-week bar shows that week's own one-line readout
 week by week (v57) › v58: ridesVsDelta — "0" not "+0" on a real tie, at each metric's own precision
-week by week (v57) › v58: tapping a per-week bar shows that week's own one-line readout
-week by week (v57) › v58: the Km Δ keeps its own 2-decimal precision (Week 6 1 km vs Week 5 3.28 km)
+week by week (v57) › v64 S1: the Weeks bars run oldest to newest, left to right
+week by week (v57) › v64 S2: every Weeks bar shows its own minutes, not just the open one
+week by week (v57) › v64: ONE Weeks card says "rides only"; the totals, the vs table and the per-ride/per-week toggle are gone
+week by week (v57) › v64: at 5+ weeks the Weeks card is bars (not a table), the per-ride/per-week toggle is gone
+week by week (v57) › v64: the Weeks card names each week in full ("Week 6 · so far") on its own row, under 5 weeks
+week by week (v57) › v64: the hero is this week's cardio minutes toward 225-250, with its basis
+week by week (v57) › v64: the old vs table and its Km delta are gone; no verdict word anywhere on the Weeks card
+week by week (v57) › v64: the readout keeps km at its own 2-decimal precision (3.28 km), and re-opening the page clears the tapped bar
 week-clock replay — a future round takes effect on its date (v62.1) › every instant before the round start is identical to a run without the round
 week-clock replay — a future round takes effect on its date (v62.1) › from its own date it is the next round, Week 1, whenever it was added
 week-clock replay — synthetic golden (step 5a) › every instant and field equals the golden

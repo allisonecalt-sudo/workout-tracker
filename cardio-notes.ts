@@ -192,3 +192,33 @@ export function rideTimeSec(l: LogEntry): number | null {
 export function isClaudeNote(text: string): boolean {
   return /^claude-logged/i.test(text.trim());
 }
+
+// v64 (Oct 20 2026, her Q3) - cardio minutes for the Rides page's hero, toward her 225-250 a
+// week (Sep 29: "my goal really seems to be between 225 and 250"). `sessions` are the week's
+// sessions, `walks` its standalone logged walks. A ride counts its console time, else the
+// minutes she logged (the same rule ride.ts rideTotals uses, never both); a walk / apartment
+// session counts its logged minutes (a hike is a walk session); standalone walks count their
+// minutes. Each part is rounded once and the total is their sum, so the numbers add up.
+export type WeekCardioMinutes = { rides: number; other: number; total: number };
+
+export function weekCardioMinutes(
+  sessions: readonly LogEntry[],
+  walks: readonly { minutes?: number | null }[]
+): WeekCardioMinutes {
+  let rideSec = 0;
+  let otherMin = 0;
+  for (const l of sessions) {
+    const c = sessionCardio(l);
+    if (!c) continue;
+    if (c.lane === 'elliptical') {
+      if (typeof c.timeSec === 'number' && c.timeSec > 0) rideSec += c.timeSec;
+      else if (typeof c.minutes === 'number' && c.minutes > 0) rideSec += c.minutes * 60;
+    } else if (typeof c.minutes === 'number' && c.minutes > 0) {
+      otherMin += c.minutes;
+    }
+  }
+  for (const w of walks) if (typeof w.minutes === 'number' && w.minutes > 0) otherMin += w.minutes;
+  const rides = Math.round(rideSec / 60);
+  const other = Math.round(otherMin);
+  return { rides, other, total: rides + other };
+}

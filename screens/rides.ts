@@ -9,13 +9,12 @@
 // (Progress's one door row to this page, renderRidesDoorRow + ridesDoorSub, moved into
 // screens/progress.ts in step 13b: a screen never imports another screen.)
 
-import { state, getChronologicalLogs } from '../state.js';
+import { state, getChronologicalLogs, loadWalks } from '../state.js';
 import { requestRender, requestScrollRestore } from '../bus.js';
 import { bindClick } from '../dom.js';
 import { escapeHtml, formatMmSs, formatMonthDay } from '../format.js';
-import { ellipticalRideRecords } from '../cardio-notes.js';
+import { ellipticalRideRecords, weekCardioMinutes } from '../cardio-notes.js';
 import { rideReadingsLine } from '../number-rules.js';
-import { localIsoDate } from '../dates.js';
 import { getProgramWeek, weekModel } from '../week-clock.js';
 import { attributeSessionsToWeeks, sessionsAttributedTo } from '../program-week.js';
 import { COMPLETION_WEEKS_FROM, LEGACY_LAST_CLOSED_WEEK_INSTANT, type WeekKey } from '../week.js';
@@ -28,7 +27,6 @@ import {
   projectedKm,
   usualKcalPerMin,
   bestRide,
-  rideTotals,
   weekRideAggregate,
   weeklyRideRows,
   hasRideNumbers,
@@ -36,7 +34,6 @@ import {
   type RideRecord,
   type RideRate,
   type BestRide,
-  type RideTotals,
   type ProjectionWindow,
   type WeeklyRideRow,
 } from '../ride.js';
@@ -51,10 +48,6 @@ import type { LogEntry } from '../types.js';
 let ridesWindow: ProjectionWindow = 'tenMin';
 let ridesSelectedChartId: string | null = null;
 let progressScrollForRides = 0;
-// v57 (Sep 28 2026) — the chart's "per ride · per week" toggle (task spec
-// item 3). Same reset-on-open rule as ridesWindow above — always 'perRide'
-// the moment the page opens.
-let ridesChartMode: 'perRide' | 'perWeek' = 'perRide';
 // v58 fix pass (Sep 28 2026), nice-items list item 3: "per-week bar tap
 // shows that week's readout" — the per-week chart's own tapped bar, keyed
 // the same way chart.ts's `id` already keys a per-week bar
@@ -158,88 +151,6 @@ function renderRidesUsualBestCard(
     </div>`;
 }
 
-// Week + month totals — "week" is the SAME open completion week every other
-// screen in the app now uses (week.ts's weekModel(), her own rule "once all
-// three are done then it can go to the next week"), never a second, new
-// meaning of "week" the plan's whole §2 fought to remove. "Month" is the
-// plain calendar month to date — the app has no other "month" concept yet
-// to collide with.
-function renderRidesTotalsCard(rides: RideRecord[]): string {
-  // v54 fix r3 (Sep 27 2026), checker's must #1 (round 3 — r2's own fix
-  // above introduced this): a date-only filter double-counts the CLOSING
-  // session itself whenever a week closes on a Sat/Sun (her normal swing
-  // rhythm) — week.ts opens the next span at the closing session's own
-  // timestamp (weekendAnchorDay branch of closeOpen()), and `date >= since`
-  // then matches that same session's own date, so Saturday's B reads as
-  // "This week" for the week it just closed OUT of, on top of counting
-  // (correctly) toward the week it closed. Fix: A/B/C are counted by
-  // MEMBERSHIP in the open span's own `sessions` (a brand-new span starts
-  // with sessions: [], so the closing ride isn't in it) — only D (never one
-  // of the three, so it has no membership to check; see r2's comment below)
-  // stays date-based. In a gap (no span open yet), membership/since both
-  // fall back to the last CLOSED span, same source r2 already used for
-  // `since` alone.
-  const model = weekModel();
-  const { open, spans } = model;
-  const activeSpan = open ?? (spans.length ? spans[spans.length - 1]! : null);
-  // v61.1 fix 2 (Oct 2 2026, CHECK-v61.1.md must #1's grep sweep): `since`
-  // used to be JUST `activeSpan.openedAt`, unbounded — the same event-to-
-  // event window week-d.ts replaced everywhere else in the v61 fix passes
-  // (see its own header). Two of the same gap bugs applied here: a D logged
-  // before `openedAt` (her real Sep 28 order, D first then A) dropped out of
-  // "This week" even though the other D-counting screens already moved it
-  // in, and — with no upper bound at all — a D logged after a weekday close
-  // would have stayed counted in "This week" forever instead of moving to
-  // the next week once one opens. Route through the SAME window
-  // weekHasDFor/getExtraDSessionsForTarget use: `open` when a week is live,
-  // else the last CLOSED span (mid-gap — matches the membership fallback
-  // already below), else the pre-model edge `since` already fell back to.
-  const activeTarget: DWeekTarget | null = open
-    ? { kind: 'open' }
-    : activeSpan
-      ? { kind: 'span', key: activeSpan.key }
-      : null;
-  const activeWindow = activeTarget ? weekWindowFor(activeTarget, model) : null;
-  const since = activeWindow ? activeWindow.start : new Date(COMPLETION_WEEKS_FROM.at).getTime();
-  const until = activeWindow ? activeWindow.end : null;
-  const openIds = new Set((activeSpan?.sessions ?? []).map((s) => s.id));
-  // v54 fix r2 (Sep 27 2026), checker's must #2: "This week" was filtered by
-  // weekModel().open.sessions — but week.ts excludes 'D' from the completion
-  // model ON PURPOSE (D is extra, never one of the three; see
-  // buildWeeklyTargetRows above). That made a D ride real Sun Sep 27 2026 —
-  // her own data, 42 rows -> 43 after saving it — read "This week 0 rides"
-  // while "This month" already said 4. D still isn't session-membership
-  // eligible (it never joins a span's `sessions`), so it stays on the
-  // window-based date rule above; A/B/C use the r3 membership rule above
-  // instead.
-  const weekRides = rides.filter((r) => {
-    if (openIds.has(r.id)) return true;
-    if (r.workout !== 'D') return false;
-    const t = new Date(r.date).getTime();
-    return t >= since && (until === null || t < until);
-  });
-  const monthPrefix = localIsoDate(new Date()).slice(0, 7);
-  // v55 (Sep 27 2026) — CHECK N4 (round 2): `r.date` is a UTC ISO timestamp;
-  // slicing it straight gave the UTC month, one off from the local one for a
-  // ride logged after local midnight but before UTC midnight (or the reverse
-  // near local midnight in Israel, UTC+2/+3). Read the month off the LOCAL
-  // date, same as monthPrefix itself.
-  const monthRides = rides.filter(
-    (r) => localIsoDate(new Date(r.date)).slice(0, 7) === monthPrefix
-  );
-  const row = (label: string, t: RideTotals): string => `
-    <div class="rides-totals-row">
-      <span class="rides-totals-lbl">${escapeHtml(label)}</span>
-      <span class="rides-totals-val">${t.rides} ${t.rides === 1 ? 'ride' : 'rides'} · ${t.minutes} min · ${t.km} km · ${t.kcal} kcal</span>
-    </div>`;
-  return `
-    <div class="card progress-card rides-totals-card">
-      <div class="progress-card-label">Totals</div>
-      ${row('This week', rideTotals(weekRides))}
-      ${row('This month', rideTotals(monthRides))}
-    </div>`;
-}
-
 // v57 (Sep 28 2026) — "Week by week" (her words, Sun Sep 27 22:45): "I want
 // week on week comparison with elliptical" · "Also how much time total" ·
 // "Also kph". `week` here is ALWAYS week.ts's own model (weekModel(), same
@@ -274,73 +185,6 @@ export function ridesVsDelta(a: number, b: number, decimals: number): string {
   return rounded > 0 ? `+${rounded.toFixed(decimals)}` : rounded.toFixed(decimals);
 }
 
-function renderRidesWeekVsCard(rows: WeeklyRideRow[]): string {
-  if (rows.length === 0) {
-    return `
-      <div class="card progress-card rides-vs-card">
-        <div class="progress-card-label">This week vs last week</div>
-        <p class="progress-card-empty">Shows once your first week's worth of rides has run.</p>
-      </div>`;
-  }
-  const thisWeek = rows[0] as WeeklyRideRow;
-  const lastWeek = rows[1] ?? null;
-  // v58 fix pass, same list item: "one empty-week style for both cards" — a
-  // week with 0 rides reads as a single "—" here too, the exact rule
-  // renderWeekTableRow already applies to the table right below this card,
-  // rather than a real 0 sitting next to a dash on the very next metric row
-  // (minutes/km/kcal are genuinely 0 for a no-ride week; the avgs are
-  // already null there — the two used to disagree inside one card).
-  const thisEmpty = thisWeek.rides === 0;
-  const lastEmpty = lastWeek === null || lastWeek.rides === 0;
-  const numRow = (
-    label: string,
-    a: number | null,
-    b: number | null | undefined,
-    decimals: number,
-    suffix = ''
-  ): string => {
-    const aStr = !thisEmpty && a !== null ? `${a}${suffix}` : '—';
-    const bStr = !lastEmpty && b !== null && b !== undefined ? `${b}${suffix}` : '—';
-    const delta =
-      !thisEmpty && !lastEmpty && a !== null && b !== null && b !== undefined
-        ? ridesVsDelta(a, b, decimals)
-        : '—';
-    return `
-    <div class="rides-vs-row">
-      <span class="rides-vs-lbl">${escapeHtml(label)}</span>
-      <span class="rides-vs-val">${aStr}</span>
-      <span class="rides-vs-val">${bStr}</span>
-      <span class="rides-vs-delta">${delta}</span>
-    </div>`;
-  };
-  // v57 fix pass (Sep 28 2026), CHECK-v57 S3: the full week names ("R2 ·
-  // Week 6 (so far)") don't fit a 52px grid column — they used to sit
-  // straight in the header row and either overlapped the metric-name column
-  // or wrapped to 3 lines. Now they get their own full-width line, and the
-  // header row underneath carries only short column labels aligned to the
-  // same 4 columns every data row uses (styles.css .rides-vs-header).
-  const thisLabel = `${weekRowLabel(thisWeek.key)}${thisWeek.isOpen ? ' (so far)' : ''}`;
-  const lastLabel = lastWeek ? weekRowLabel(lastWeek.key) : null;
-  return `
-    <div class="card progress-card rides-vs-card">
-      <div class="progress-card-label">This week vs last week</div>
-      <div class="rides-vs-names">${escapeHtml(thisLabel)}${lastLabel ? ` vs ${escapeHtml(lastLabel)}` : ''}</div>
-      <div class="rides-vs-header">
-        <span class="rides-vs-lbl"></span>
-        <span class="rides-vs-val">This</span>
-        <span class="rides-vs-val">Last</span>
-        <span class="rides-vs-delta">Δ</span>
-      </div>
-      ${numRow('Rides', thisWeek.rides, lastWeek?.rides, 0)}
-      ${numRow('Minutes', thisWeek.minutes, lastWeek?.minutes, 0)}
-      ${numRow('Km', thisWeek.km, lastWeek?.km, 2)}
-      ${numRow('Kcal', thisWeek.kcal, lastWeek?.kcal, 1)}
-      ${numRow('Kcal/min', thisWeek.avgKcalPerMin, lastWeek?.avgKcalPerMin, 1)}
-      ${numRow('Km/h', thisWeek.avgKmh, lastWeek?.avgKmh, 1)}
-      ${numRow('Level', thisWeek.avgLevel, lastWeek?.avgLevel, 1)}
-    </div>`;
-}
-
 // The compact table — last 6 weeks, newest first, the open week marked
 // "so far". A week with 0 rides shows a plain "—" (her rule: nothing
 // hidden, nothing dressed up).
@@ -366,21 +210,6 @@ function renderWeekTableRow(row: WeeklyRideRow): string {
       <div class="rides-week-lbl">${escapeHtml(label)}</div>
       <div class="rides-week-totals">${escapeHtml(totals)}</div>
       ${avgs ? `<div class="rides-week-avgs">${escapeHtml(avgs)}</div>` : ''}
-    </div>`;
-}
-
-function renderRidesWeekTableCard(rows: WeeklyRideRow[]): string {
-  if (rows.length === 0) {
-    return `
-      <div class="card progress-card rides-week-table-card">
-        <div class="progress-card-label">Week by week</div>
-        <p class="progress-card-empty">Shows once a week's worth of rides has run.</p>
-      </div>`;
-  }
-  return `
-    <div class="card progress-card rides-week-table-card">
-      <div class="progress-card-label">Week by week</div>
-      <div class="rides-week-table">${rows.map(renderWeekTableRow).join('')}</div>
     </div>`;
 }
 
@@ -420,95 +249,150 @@ function renderWeekReadoutLine(row: WeeklyRideRow): string {
   return escapeHtml(parts.join(' · '));
 }
 
-// v57 (Sep 28 2026) — the "per ride · per week" toggle (task spec item 3).
-// Shared chip markup so both chart modes render the same on/off look as
-// every other toggle on this page (.rides-toggle-chip).
-function renderRidesChartModeToggle(): string {
-  const chip = (mode: 'perRide' | 'perWeek', label: string): string =>
-    `<button class="rides-toggle-chip${ridesChartMode === mode ? ' is-on' : ''}" data-rides-chart-mode="${mode}" type="button" aria-pressed="${ridesChartMode === mode}">${label}</button>`;
-  return `<div class="rides-toggle-row" id="rides-chart-mode-row">${chip('perRide', 'Per ride')}${chip('perWeek', 'Per week')}</div>`;
+// v64 (her Q3, Oct 20 "just go"): THIS week's cardio minutes lead the Rides page, toward her
+// 225-250 (Sep 29: "my goal really seems to be between 225 and 250"). It counts the rides, the
+// walk / apartment lane sessions (a hike is one) and her standalone logged walks, and says so.
+// "This week" is the SAME open completion week every other screen uses (week.ts), never a new
+// meaning of week: A/B/C by membership in the open span, D by week-d.ts's own window.
+const GOAL_LOW = 225;
+const GOAL_HIGH = 250;
+
+function renderRidesMinutesCard(logs: LogEntry[]): string {
+  const model = weekModel();
+  const { open, spans } = model;
+  const activeSpan = open ?? (spans.length ? spans[spans.length - 1]! : null);
+  const activeTarget: DWeekTarget | null = open
+    ? { kind: 'open' }
+    : activeSpan
+      ? { kind: 'span', key: activeSpan.key }
+      : null;
+  const activeWindow = activeTarget ? weekWindowFor(activeTarget, model) : null;
+  const since = activeWindow ? activeWindow.start : new Date(COMPLETION_WEEKS_FROM.at).getTime();
+  const until = activeWindow ? activeWindow.end : null;
+  const inWindow = (iso: string): boolean => {
+    const t = new Date(iso).getTime();
+    return t >= since && (until === null || t < until);
+  };
+  const openIds = new Set((activeSpan?.sessions ?? []).map((x) => x.id));
+  const weekSessions = logs.filter(
+    (l) => (l.id !== undefined && openIds.has(l.id)) || (l.workout === 'D' && inWindow(l.date))
+  );
+  const walks = loadWalks().filter((w) => inWindow(w.date));
+  const m = weekCardioMinutes(weekSessions, walks);
+  const pct = Math.min(100, Math.round((m.total / GOAL_HIGH) * 100));
+  const goalAt = Math.round((GOAL_LOW / GOAL_HIGH) * 100);
+  const basis =
+    m.total === 0
+      ? ''
+      : [
+          m.rides > 0 ? `rides ${m.rides} min` : '',
+          m.other > 0 ? `other cardio ${m.other} min` : '',
+        ]
+          .filter((p) => p !== '')
+          .join(' · ');
+  return `
+    <div class="card progress-card rides-minutes-card">
+      <div class="progress-card-label">Cardio minutes</div>
+      <div class="rides-minutes-line"><span class="progress-stat-big rides-minutes-n">${m.total}</span> <span class="rides-minutes-of">of ${GOAL_LOW}–${GOAL_HIGH} min this week</span></div>
+      <div class="rides-minutes-track" role="img" aria-label="${m.total} of ${GOAL_LOW} to ${GOAL_HIGH} minutes"><span class="rides-minutes-fill" style="width:${pct}%"></span><span class="rides-minutes-goal" style="left:${goalAt}%"></span></div>
+      ${basis ? `<div class="rides-minutes-basis">${escapeHtml(basis)}</div>` : ''}
+    </div>`;
 }
 
-// ONE big bar chart (chart.ts, no library). "Per ride" — up to the last 10
-// rides that have numbers, the latest highlighted, short dates under every
-// bar, a tap opens the one-line readout above. Rides with no numbers aren't
-// charted (§4.2/§4.5: nothing to plot). "Per week" (v57, task spec item 3) —
-// one bar per week from the SAME `weekRows` the table above uses, plotting
-// TOTAL MINUTES (her own cardio-gap number, not kcal/min — see the caption).
-// v58 fix pass (Sep 28 2026): a tap now opens that week's own one-line
-// readout too, same mechanism as "per ride" — she asked for the numbers
-// "so that I can like really see the data", and per-week bars were the one
-// place on this page a tap read out nothing at all.
-function renderRidesChartCard(rides: RideRecord[], weekRows: WeeklyRideRow[]): string {
-  const toggle = renderRidesChartModeToggle();
-  if (ridesChartMode === 'perWeek') {
-    if (weekRows.length === 0) {
-      return `
-        <div class="card progress-card rides-chart-card">
-          <div class="progress-card-label">Rides</div>
-          ${toggle}
-          <p class="progress-card-empty">Shows once a week's worth of rides has run.</p>
-        </div>`;
-    }
-    // v57 fix pass (CHECK-v57 S1): the table/vs-card read `weekRows`
-    // newest-first (row 0 = the latest week — that's what "this week vs
-    // last week" needs), but a chart reads oldest -> newest, left to right,
-    // same as the per-ride chart just below — pass the newest-first rows
-    // through unchanged and this bar chart draws right-to-left in time.
-    // Reverse ONLY for the chart's own bar order.
-    const chartWeekRows = [...weekRows].reverse();
-    const bars: ChartBar[] = chartWeekRows.map((row) => ({
-      id: `${row.key.round}-${row.key.week}`,
-      value: row.minutes,
-      label: `W${row.key.week}`,
-      highlighted: row.isOpen,
-      sublabel: row.rides > 0 ? `${row.rides}x` : undefined,
-    }));
-    // v57 fix pass (CHECK-v57 S2): every bar gets its own minutes label, not
-    // just the highlighted/open one — she shouldn't have to cross-reference
-    // the table below to read W5's total off the chart.
-    const svg = barChartSvg(bars, {
-      ariaLabel: 'Total minutes ridden, by week',
-      labelAllBars: true,
-    });
-    const selectedWeek = ridesSelectedWeekChartKey
-      ? weekRows.find((row) => `${row.key.round}-${row.key.week}` === ridesSelectedWeekChartKey)
-      : null;
+// v64: ONE Weeks card (was This week / This month totals, This week vs last week, Week by week
+// and the per-week chart - the same weekly numbers four ways). Per-week minutes, rides ONLY (the
+// walks and hikes are counted in the number at the top, so this card says which). At 5+ weeks
+// it is bars you can tap for that week's numbers; under 5 the numbers themselves (no chart
+// under 5 points). A week with no rides yet collapses to one line, "Last ride Sep 28".
+function renderRidesWeeksCard(rows: WeeklyRideRow[], latest: RideRecord): string {
+  const emptyOpen = rows[0] !== undefined && rows[0].isOpen && rows[0].rides === 0;
+  const shown = emptyOpen ? rows.slice(1) : rows;
+  const lastRide = emptyOpen
+    ? `<p class="rides-last-ride">Last ride ${escapeHtml(formatMonthDay(latest.date))}</p>`
+    : '';
+  const caption = `<p class="rides-chart-caption">Rides only. Walks and hikes count in the number at the top, not here.</p>`;
+  if (shown.length === 0) {
     return `
-      <div class="card progress-card rides-chart-card">
-        <div class="progress-card-label">Rides</div>
-        ${toggle}
-        <div class="rides-chart-wrap" id="rides-chart">${svg}</div>
-        <div class="rides-chart-readout" id="rides-chart-readout">${selectedWeek ? renderWeekReadoutLine(selectedWeek) : ''}</div>
-        <p class="rides-chart-caption">Total minutes ridden that week (rides only; walks and hikes aren't counted here).</p>
+      <div class="card progress-card rides-weeks-card">
+        <div class="progress-card-label">Weeks · rides only</div>
+        ${lastRide || '<p class="progress-card-empty">Shows once a week\'s worth of rides has run.</p>'}
       </div>`;
   }
+  if (shown.length < 5) {
+    return `
+      <div class="card progress-card rides-weeks-card">
+        <div class="progress-card-label">Weeks · rides only</div>
+        ${lastRide}
+        <div class="rides-week-table">${shown.map(renderWeekTableRow).join('')}</div>
+        ${caption}
+      </div>`;
+  }
+  // A chart reads oldest -> newest, left to right.
+  const chartRows = [...shown].reverse();
+  const bars: ChartBar[] = chartRows.map((row) => ({
+    id: `${row.key.round}-${row.key.week}`,
+    value: row.minutes,
+    label: `W${row.key.week}`,
+    highlighted: row.isOpen,
+    sublabel: row.rides > 0 ? `${row.rides}x` : undefined,
+  }));
+  const svg = barChartSvg(bars, { ariaLabel: 'Ride minutes, by week', labelAllBars: true });
+  const selected = ridesSelectedWeekChartKey
+    ? shown.find((row) => `${row.key.round}-${row.key.week}` === ridesSelectedWeekChartKey)
+    : null;
+  return `
+    <div class="card progress-card rides-weeks-card">
+      <div class="progress-card-label">Weeks · rides only</div>
+      ${lastRide}
+      <div class="rides-chart-wrap" id="rides-weeks-chart">${svg}</div>
+      <div class="rides-chart-readout" id="rides-weeks-readout">${selected ? renderWeekReadoutLine(selected) : ''}</div>
+      ${caption}
+    </div>`;
+}
+
+// v64: the per-ride kcal/min chart. Words first: while the rides are about the same the bars
+// would tell no story (four bars between 5.9 and 6.4), so one plain line says it. The bars come
+// once they really differ (a spread of more than 15% of the highest).
+const RIDE_BARS_DIFFER = 0.15;
+
+function trimNum(n: number): string {
+  return String(Math.round(n * 10) / 10);
+}
+
+function renderRidesPerRideCard(rides: RideRecord[]): string {
   const eligible = rides.filter(hasRideNumbers);
   if (eligible.length < 2) {
     return `
       <div class="card progress-card rides-chart-card">
-        <div class="progress-card-label">Rides</div>
-        ${toggle}
+        <div class="progress-card-label">Calories a minute, by ride</div>
         <p class="progress-card-empty">The chart starts at your 2nd ride with numbers.</p>
       </div>`;
   }
   const last10 = eligible.slice(-10);
+  const rates = last10.map((r) => rideRate(r).kcalPerMin ?? 0);
+  const lo = Math.min(...rates);
+  const hi = Math.max(...rates);
+  if (hi <= 0 || (hi - lo) / hi <= RIDE_BARS_DIFFER) {
+    const range = lo === hi ? `${trimNum(lo)}` : `${trimNum(lo)}–${trimNum(hi)}`;
+    return `
+      <div class="card progress-card rides-chart-card">
+        <div class="progress-card-label">Calories a minute, by ride</div>
+        <p class="rides-same-words">about the same each ride: ${range} kcal/min</p>
+      </div>`;
+  }
   const bars: ChartBar[] = last10.map((r, i) => ({
     id: r.id,
     value: rideRate(r).kcalPerMin ?? 0,
     label: shortChartDate(r.date),
     highlighted: i === last10.length - 1,
-    // v54 fix r1 (Sep 27 2026), checker's should #3: "L5" under the bar — the
-    // level trend, without a second chart. null level (no reading that ride)
-    // just leaves the bar with no sublabel, same as any other missing field.
+    // v54 fix r1: "L5" under the bar - the level trend, without a second chart.
     sublabel: r.level !== null ? `L${r.level}` : undefined,
   }));
   const svg = barChartSvg(bars, { ariaLabel: 'Calories a minute, by ride' });
   const selected = ridesSelectedChartId ? rides.find((r) => r.id === ridesSelectedChartId) : null;
   return `
     <div class="card progress-card rides-chart-card">
-      <div class="progress-card-label">Rides</div>
-      ${toggle}
+      <div class="progress-card-label">Calories a minute, by ride</div>
       <div class="rides-chart-wrap" id="rides-chart">${svg}</div>
       <div class="rides-chart-readout" id="rides-chart-readout">${selected ? renderRideReadoutLine(selected) : ''}</div>
     </div>`;
@@ -639,12 +523,11 @@ export function renderRides(): string {
   return `
     ${header}
     <div class="progress-screen rides-screen">
+      ${renderRidesMinutesCard(logs)}
       ${renderRidesHeroCard(latest, latestRate)}
       ${renderRidesUsualBestCard(usualKcalPerMin(rides), bestRide(rides), eligibleCount)}
-      ${renderRidesTotalsCard(rides)}
-      ${renderRidesWeekVsCard(combinedWeekRows)}
-      ${renderRidesWeekTableCard(combinedWeekRows)}
-      ${renderRidesChartCard(rides, combinedWeekRows)}
+      ${renderRidesWeeksCard(combinedWeekRows, latest)}
+      ${renderRidesPerRideCard(rides)}
       ${renderRidesListCard(rides)}
     </div>`;
 }
@@ -657,7 +540,6 @@ export function attachRidesHandlers(): void {
     ridesWindow = 'tenMin';
     ridesSelectedChartId = null;
     ridesSelectedWeekChartKey = null;
-    ridesChartMode = 'perRide';
     state.screen = 'rides';
     requestRender();
   });
@@ -675,18 +557,6 @@ export function attachRidesHandlers(): void {
       }
     });
   });
-  // v57 (Sep 28 2026) — the chart's "per ride · per week" toggle.
-  document.querySelectorAll<HTMLButtonElement>('button[data-rides-chart-mode]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const mode = btn.dataset['ridesChartMode'] as 'perRide' | 'perWeek' | undefined;
-      if (mode) {
-        ridesChartMode = mode;
-        ridesSelectedChartId = null;
-        ridesSelectedWeekChartKey = null;
-        requestRender();
-      }
-    });
-  });
   // The chart's bars (chart.ts's <g data-ride-id>, one per ride) — a tap or
   // Enter/Space opens the one-line readout under the chart (spec: "tap a bar
   // -> a one-line readout of that ride under the chart"). v58 fix pass (Sep
@@ -695,41 +565,27 @@ export function attachRidesHandlers(): void {
   // generic `data-ride-id`, which weeklyRideRows' own `${round}-${week}`
   // shape already fills for a per-week bar) — she doesn't have to
   // cross-reference the table below just to read one week's own numbers.
-  if (ridesChartMode === 'perRide') {
-    document
-      .querySelectorAll<SVGGElement>('#rides-chart [data-ride-id]')
-      .forEach((el: SVGGElement) => {
-        const open = (): void => {
-          const id = el.dataset['rideId'];
-          if (!id) return;
-          ridesSelectedChartId = id;
-          requestRender();
-        };
-        el.addEventListener('click', open);
-        el.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            open();
-          }
-        });
+  const bindBars = (selector: string, pick: (id: string) => void): void => {
+    document.querySelectorAll<SVGGElement>(`${selector} [data-ride-id]`).forEach((el) => {
+      const open = (): void => {
+        const id = el.dataset['rideId'];
+        if (!id) return;
+        pick(id);
+        requestRender();
+      };
+      el.addEventListener('click', open);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open();
+        }
       });
-  } else {
-    document
-      .querySelectorAll<SVGGElement>('#rides-chart [data-ride-id]')
-      .forEach((el: SVGGElement) => {
-        const open = (): void => {
-          const key = el.dataset['rideId'];
-          if (!key) return;
-          ridesSelectedWeekChartKey = key;
-          requestRender();
-        };
-        el.addEventListener('click', open);
-        el.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            open();
-          }
-        });
-      });
-  }
+    });
+  };
+  bindBars('#rides-chart', (id) => {
+    ridesSelectedChartId = id;
+  });
+  bindBars('#rides-weeks-chart', (id) => {
+    ridesSelectedWeekChartKey = id;
+  });
 }

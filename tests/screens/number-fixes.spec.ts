@@ -204,7 +204,7 @@ const openRidesPage = async (page: Page): Promise<void> => {
 };
 
 test.describe('v62.3 F6 - ride minutes count the D ride', () => {
-  test('Week 5 minutes = 10 + 30 from the D ride; the chart caption says what it counts', async ({
+  test('Week 5 minutes = 10 + 30 from the D ride (v64: the hero and the Weeks card); the card says what it counts', async ({
     page,
   }) => {
     await seedLogs(page, [
@@ -222,9 +222,10 @@ test.describe('v62.3 F6 - ride minutes count the D ride', () => {
     const week5 = page.locator('.rides-week-row').filter({ hasText: 'Week 5' });
     await expect(week5).toContainText('2 rides');
     await expect(week5).toContainText('40 min');
-    await page.locator('button[data-rides-chart-mode="perWeek"]').click();
+    // v64: the hero counts both (40 min), and the Weeks card says plainly what it counts.
+    await expect(page.locator('.rides-minutes-n')).toHaveText('40');
     await expect(page.locator('.rides-chart-caption')).toHaveText(
-      "Total minutes ridden that week (rides only; walks and hikes aren't counted here)."
+      'Rides only. Walks and hikes count in the number at the top, not here.'
     );
   });
 });
