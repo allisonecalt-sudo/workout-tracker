@@ -542,7 +542,7 @@ test.describe('v64 Rides - cardio minutes lead, calories a minute second, one We
     );
   });
 
-  test('no ride yet this week: the hero reads 0 and the empty week is one line, "Last ride Oct 1"', async ({
+  test('no ride yet this week (v64.1): the hero is one gentle line, not a 0, and the empty week is one line, "Last ride Oct 1"', async ({
     page,
   }) => {
     await seedLogs(page, [
@@ -556,7 +556,12 @@ test.describe('v64 Rides - cardio minutes lead, calories a minute second, one We
     // after Week 5 closes (A, C + ... closes only with 3 letters), so use the Sick-week gap: Week 6 open
     await mockDate(page, '2026-10-14T09:00:00+03:00');
     await openRides(page);
-    await expect(page.locator('.rides-minutes-n')).toHaveText('0');
+    // v64.1: never a big 0; one gentle line, no goal bar until there are minutes.
+    await expect(page.locator('.rides-minutes-none')).toHaveText(
+      'No cardio yet this week · last ride Oct 1'
+    );
+    await expect(page.locator('.rides-minutes-n')).toHaveCount(0);
+    await expect(page.locator('.rides-minutes-track')).toHaveCount(0);
     await expect(page.locator('.rides-last-ride')).toHaveText('Last ride Oct 1');
     await expect(page.locator('.rides-week-empty')).toHaveCount(0);
   });

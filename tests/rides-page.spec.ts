@@ -637,8 +637,10 @@ test.describe('v57 fix pass: legacy Week 4 (Sep 28 2026)', () => {
     await expect(rows.nth(0)).toContainText('4.4 km/h');
     await expect(rows.nth(0)).toContainText('avg L4.3');
     // The Sat Sep 26 B is Week 4's own closing ride (the swing rule): it must not ALSO land in
-    // Week 5 (membership-first bucketing). The hero reads 0 for the open Week 5.
-    await expect(page.locator('.rides-minutes-n')).toHaveText('0');
+    // Week 5 (membership-first bucketing). The hero is one gentle line for the open Week 5.
+    await expect(page.locator('.rides-minutes-none')).toHaveText(
+      'No cardio yet this week · last ride Sep 26'
+    );
   });
 });
 

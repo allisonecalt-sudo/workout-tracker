@@ -1035,7 +1035,7 @@ v64 Progress - weeks you showed up lead; what grew, body check, more › the her
 v64 Progress - weeks you showed up lead; what grew, body check, more › under 2 sessions: the calm line and the More group
 v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › "Your usual" and "Your best" stay as plain numbers under the calories card
 v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › a standalone logged walk this week counts too, as other cardio
-v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › no ride yet this week: the hero reads 0 and the empty week is one line, "Last ride Oct 1"
+v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › no ride yet this week (v64.1): the hero is one gentle line, not a 0, and the empty week is one line, "Last ride Oct 1"
 v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › no sideways scroll at 360px
 v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › no sideways scroll at 412px
 v64 Rides - cardio minutes lead, calories a minute second, one Weeks card › the hero is this week's cardio minutes toward 225-250: rides + the hike, with the basis

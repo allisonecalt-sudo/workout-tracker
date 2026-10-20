@@ -7335,3 +7335,10 @@ button.wk-cell {
   color: var(--ink-3);
   margin-bottom: 2px;
 }
+
+/* v64.1: a week with no cardio yet is one gentle line, not a big 0. */
+.rides-minutes-none {
+  margin: var(--s2) 0 0;
+  font-size: var(--t-lead);
+  color: var(--ink-2);
+}

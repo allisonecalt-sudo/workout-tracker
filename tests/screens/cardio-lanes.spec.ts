@@ -606,7 +606,9 @@ test("rides \"This week\": the Saturday-closing ride doesn't leak into the new w
   await page.locator('#open-rides').click();
   // v64: the new week (opened at B's own instant) has no ride yet: the hero reads 0 and the
   // Weeks card collapses the empty week to one "Last ride" line (never the closing B counted twice).
-  await expect(page.locator('.rides-minutes-n')).toHaveText('0');
+  await expect(page.locator('.rides-minutes-none')).toHaveText(
+    'No cardio yet this week · last ride Oct 17'
+  );
   await expect(page.locator('.rides-last-ride')).toContainText('Last ride Oct 17');
 
   // Sunday, a fresh context page — no beforeEach clear script, so the three

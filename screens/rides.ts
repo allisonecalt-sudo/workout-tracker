@@ -257,7 +257,7 @@ function renderWeekReadoutLine(row: WeeklyRideRow): string {
 const GOAL_LOW = 225;
 const GOAL_HIGH = 250;
 
-function renderRidesMinutesCard(logs: LogEntry[]): string {
+function renderRidesMinutesCard(logs: LogEntry[], latest: RideRecord): string {
   const model = weekModel();
   const { open, spans } = model;
   const activeSpan = open ?? (spans.length ? spans[spans.length - 1]! : null);
@@ -290,6 +290,15 @@ function renderRidesMinutesCard(logs: LogEntry[]): string {
         ]
           .filter((p) => p !== '')
           .join(' · ');
+  // v64.1: no cardio yet this week (a new week after a break) is never a big "0": one gentle
+  // line with the real date of the last ride; the goal line returns once there are minutes.
+  if (m.total === 0) {
+    return `
+    <div class="card progress-card rides-minutes-card">
+      <div class="progress-card-label">Cardio minutes</div>
+      <p class="rides-minutes-none">No cardio yet this week · last ride ${escapeHtml(formatMonthDay(latest.date))}</p>
+    </div>`;
+  }
   return `
     <div class="card progress-card rides-minutes-card">
       <div class="progress-card-label">Cardio minutes</div>
@@ -523,7 +532,7 @@ export function renderRides(): string {
   return `
     ${header}
     <div class="progress-screen rides-screen">
-      ${renderRidesMinutesCard(logs)}
+      ${renderRidesMinutesCard(logs, latest)}
       ${renderRidesHeroCard(latest, latestRate)}
       ${renderRidesUsualBestCard(usualKcalPerMin(rides), bestRide(rides), eligibleCount)}
       ${renderRidesWeeksCard(combinedWeekRows, latest)}
