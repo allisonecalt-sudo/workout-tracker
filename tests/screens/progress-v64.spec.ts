@@ -688,3 +688,29 @@ test.describe('v64.1 - the non-tappable Sick square is the same box as the butto
     expect(new Set(rowMates).size).toBe(1);
   });
 });
+
+test.describe('v64.1 - at 360px a value never breaks mid-value', () => {
+  test('"10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await progressShape(page, 6);
+    await openProgress(page);
+    const broken = await page
+      .locator('.grew-card .nw, .body-card .nw')
+      .evaluateAll((els) =>
+        els.filter((e) => e.getClientRects().length !== 1).map((e) => e.textContent)
+      );
+    expect(broken).toEqual([]);
+    await expect(page.locator('.grew-card .nw').filter({ hasText: '10 min → 30 min' })).toHaveCount(
+      1
+    );
+    await expect(
+      page.locator('.body-card .nw').filter({ hasText: 'last 4: 1 → 1 → 2 → 1' })
+    ).toHaveCount(1);
+    const over = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+    );
+    expect(over).toBeLessThanOrEqual(0);
+  });
+});

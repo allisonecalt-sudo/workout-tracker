@@ -320,7 +320,7 @@ function renderWhatGrewCard(logs: LogEntry[]): string {
   const rows = grew.rows
     .map(
       (r) =>
-        `<div class="start-now-row"><span class="start-now-lbl">${escapeHtml(r.label)}</span><span class="start-now-val">${escapeHtml(r.value)}${sinceTag(r.since)}${r.lightLatest ? `<span class="grew-light">· ${LIGHT_SUFFIX}</span>` : ''}</span></div>`
+        `<div class="start-now-row"><span class="start-now-lbl">${escapeHtml(r.label)}</span><span class="start-now-val"><span class="nw">${escapeHtml(r.value)}</span>${sinceTag(r.since)}${r.lightLatest ? `<span class="grew-light">· ${LIGHT_SUFFIX}</span>` : ''}</span></div>`
     )
     .join('');
   return `
@@ -366,15 +366,19 @@ function renderBodyCheckCard(logs: LogEntry[]): string {
   const lines: string[] = [];
   if (wrist.length > 0) {
     const lastN = wrist.slice(-4);
-    const tail = lastN.length > 1 ? ` · last ${lastN.length}: ${lastN.join(' → ')}` : '';
+    // v64.1: each value part never breaks mid-value (nowrap); the line wraps BETWEEN parts.
+    const tail =
+      lastN.length > 1
+        ? ` · <span class="nw">last ${lastN.length}: ${lastN.join(' → ')}</span>`
+        : '';
     lines.push(
-      `<div class="body-line"><span class="body-lbl">Wrist:</span> <span class="body-val">latest ${wrist[wrist.length - 1]}${tail} <span class="body-note">(readings as logged)</span></span></div>`
+      `<div class="body-line"><span class="body-lbl">Wrist:</span> <span class="body-val"><span class="nw">latest ${wrist[wrist.length - 1]}</span>${tail} <span class="body-note">(readings as logged)</span></span></div>`
     );
   }
   if (back.length > 0) {
     const painFree = back.filter((v) => v === 0).length;
     lines.push(
-      `<div class="body-line"><span class="body-lbl">Back:</span> <span class="body-val">pain-free ${painFree} of ${back.length}</span></div>`
+      `<div class="body-line"><span class="body-lbl">Back:</span> <span class="body-val"><span class="nw">pain-free ${painFree} of ${back.length}</span></span></div>`
     );
   }
   return `

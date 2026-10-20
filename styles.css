@@ -7355,3 +7355,21 @@ button.wk-cell {
 .wk-cells {
   align-items: center;
 }
+
+/* v64.1: at 360px a value never breaks mid-value ("10 min → 30 min", the wrist sequence); the
+ * row wraps between its label and its value instead. */
+.nw {
+  white-space: nowrap;
+}
+
+.grew-card .start-now-row {
+  flex-wrap: wrap;
+}
+
+.grew-card .start-now-val {
+  margin-left: auto;
+}
+
+.body-line {
+  flex-wrap: wrap;
+}
