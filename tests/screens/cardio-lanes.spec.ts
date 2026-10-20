@@ -513,9 +513,10 @@ test('Workout D survives a second read: Done card, Sessions, the rides page and 
   // v55 (Sep 27 2026) — CHECK N2 (round 1/2): the Home "Sessions" count used
   // to read "1" here as if D were a 4th A/B/C session. Her call: A/B/C only
   // (0, none yet), D folded in as its own "+1 ride".
-  const sessionsRow = reopened.locator('.home-startnow-card .start-now-row').last();
-  await expect(sessionsRow).toContainText('0');
-  await expect(sessionsRow).toContainText('+1 ride');
+  // v64: Home's count is now the one "Since ..." line (full weeks); the "0 + 1 ride"
+  // split lives on Progress's hero sub-line.
+  await expect(reopened.locator('.home-startnow-card')).toHaveCount(0);
+  await expect(reopened.locator('#home-since-line')).toBeVisible();
 
   await reopened.locator('#view-history').click();
   await expect(reopened.locator('.session-list .history-workout-badge')).toHaveText('D');

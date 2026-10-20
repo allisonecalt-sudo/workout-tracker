@@ -2,7 +2,7 @@
 //
 // WHAT: renderHome and everything only Home uses: the week card + its day dots (legacy and
 // completion model), the closed-week peek ("‹ Week 4"), the Done card, the Up-next hero and the
-// chips, the Start -> Now card, the left-open workout card (markup only), the header's week title
+// chips, the "Since May: N full weeks" line (v64; was the Start -> Now card), the left-open workout card (markup only), the header's week title
 // and version tag, and the Home door/week-card handlers.
 // WHY: app.ts was one 16k-line file; Home is the screen she opens most, so a Home fix should
 // read one file. No behaviour change, no version bump.
@@ -38,7 +38,6 @@ import type { ActiveSessionSnapshot } from '../state.js';
 import type { LogEntry, StoredWeekMove, LastDone } from '../types.js';
 import { ui } from '../ui.js';
 import { moveOnWithoutIt, undoWeekMove } from '../actions.js';
-import { ELLIPTICAL_START_LEVEL } from '../cardio-readings.js';
 import {
   LAST_DONE_KEY,
   state,
@@ -49,8 +48,9 @@ import {
   cyclePeriodsForLogic,
 } from '../state.js';
 import { escapeHtml, formatWeekRange } from '../format.js';
-import { sessionCounts, dRideTag, sinceTag, levelForLength } from '../number-rules.js';
-import { rideLevel, rideKm, rideTimeSec, ellipticalRideRecords } from '../cardio-notes.js';
+import { sinceFullWeeksLine } from '../number-rules.js';
+import { rideLevel, rideKm, rideTimeSec } from '../cardio-notes.js';
+import { buildWeekRows, fullWeeksSummary } from '../weeks-grid.js';
 import { formatDate, formatWeekdayDate, localIsoDate, formatDateLong } from '../dates.js';
 import { requestRender } from '../bus.js';
 import { activeWalkStart, walkLiveText, walkStepMinutes } from '../walk.js';
@@ -77,7 +77,6 @@ import {
   attributeSessionsToWeeks,
   sessionsAttributedTo,
 } from '../program-week.js';
-import { honestWallSitLogs } from '../viz.js';
 import {
   getWorkoutById,
   getWorkoutD,
@@ -748,6 +747,14 @@ function renderDoneTodayCard(log: LogEntry, weekLines: string[]): string {
 // WK2 (Sep 27 2026), §2.4 Done card + post-log's missing-letters phrasing:
 // "B and C left" / "C left" / "" (nothing missing). Shared by weekCountLine
 // and the Done-card lines below so the join rule (comma + "and") lives once.
+// v64 (Q2): "After the sick week · Week 6 opens with whichever you do first". '' when the
+// week before was not a held (Sick / Break) one.
+function afterBreakLine(weekNum: number, held: string | null): string {
+  if (held === null) return '';
+  const words = held === 'Break' ? 'the break' : `the ${held.toLowerCase()} week`;
+  return `<div class="week-after-break" id="week-after-break">After ${words} · Week ${weekNum} opens with whichever you do first</div>`;
+}
+
 function joinMissingLetters(missing: readonly string[]): string {
   if (missing.length === 0) return '';
   if (missing.length === 1) return missing[0] as string;
@@ -801,6 +808,9 @@ export function renderHome(): string {
   // completion week to move on FROM.
   let moveOnHtml = '';
   let movedNoteHtml = '';
+  // v64 (Oct 20 2026, her Q2 via "just go"): after a Sick/Break week, ONE quiet line on
+  // the week card - the fresh start named, no empty-circle judging. '' otherwise.
+  let afterBreakHtml = '';
 
   if (!isNowAfterCompletionLaunch()) {
     // ---- PRE-LAUNCH: the original calendar + Saturday-swing model, untouched ----
@@ -856,6 +866,9 @@ export function renderHome(): string {
         ? `<p class="swing-note">Last week's at ${lastWeekCount} — today's session will count for it.</p>`
         : '';
     subLineHtml = '';
+    if (homeOffset === 0 && weekCount === 0) {
+      afterBreakHtml = afterBreakLine(week.num, getViewedProgramWeek(1).skippedLabel);
+    }
     weekCardHeadText = escapeHtml(
       `${homeOffset === 1 ? `Week ${week.num}` : 'This week'} · ${weekRange}`
     );
@@ -941,7 +954,14 @@ export function renderHome(): string {
               )
             )
           : '';
-      weekLineText = weekCountLine(shown, weekHasDFor(liveWeekDTarget(shown), model, dLogs));
+      const openHasD = weekHasDFor(liveWeekDTarget(shown), model, dLogs);
+      weekLineText = weekCountLine(shown, openHasD);
+      if (shown.span && shown.span.done.length === 0 && !openHasD) {
+        // The week before the one that opened (a calendar week back from its start).
+        const before = new Date(shown.span.openedAt);
+        before.setDate(before.getDate() - 7);
+        afterBreakHtml = afterBreakLine(shown.key.week, getProgramWeek(before).skippedLabel);
+      }
     }
     saturdayNote = '';
 
@@ -1148,12 +1168,13 @@ export function renderHome(): string {
       </div>
       <div class="week-dots" id="week-strip">${dotsHtml}</div>
       <div class="week-line" id="week-count">${weekLineText}</div>
+      ${afterBreakHtml}
       ${moveOnHtml}
       ${saturdayNote}
       ${weekNavLinkHtml}
     </div>
 
-    ${renderHomeStartNowCard(logs)}
+    ${renderHomeSinceLine(logs)}
 
     <div class="card walk-card">${walkRow}</div>
 
@@ -1169,83 +1190,18 @@ export function renderHome(): string {
   `;
 }
 
-function renderHomeStartNowCard(logs: LogEntry[]): string {
-  if (logs.length === 0) return '';
-  const chrono = getChronologicalLogs();
-  const first = chrono[0];
-  if (!first) return '';
-
-  const levels = chrono.map(rideLevel).filter((v): v is number => v !== null);
-  // v62.3 F5: with two or more rides, each end names its ride length too
-  // ("level 5 for 10 min → level 3 for 12 min"), never a bare level pair.
-  const levelLogs = chrono.filter((l) => rideLevel(l) !== null);
-  const endPhrase = (l: LogEntry | undefined): string =>
-    l ? (levelForLength(rideLevel(l), rideTimeSec(l)) ?? '') : '';
-  // v49 · look fix (Sep 25 2026): "first ride tonight" was shown whenever no
-  // log had a level column — true even after a real ride (level null on
-  // purpose), on a B day (no ride tonight at all), and in the morning. Now it
-  // only fires when she has genuinely never ridden AND tonight's pick has the
-  // ride step; a ridden-but-unrecorded level says so plainly instead (Opus
-  // check).
-  const hasRiddenBefore = chrono.some((l) => l.cardioLane === 'elliptical');
-  const picksRideToday = getWorkoutById(getTodaysPick()).warmup.some(
-    (e) => e.name === 'Outdoor walk'
-  );
-  const levelVal =
-    levels.length === 1
-      ? `<span class="sn-last">level ${levels[0]}</span>`
-      : levels.length > 1
-        ? `<span class="sn-first">${endPhrase(levelLogs[0])}</span> → <span class="sn-last">${endPhrase(levelLogs[levelLogs.length - 1])}</span>`
-        : !hasRiddenBefore && picksRideToday
-          ? `<span class="sn-first">level ${ELLIPTICAL_START_LEVEL}</span> → <span class="sn-last">first ride tonight</span>`
-          : `<span class="sn-last">level not recorded yet</span>`;
-
-  // v62.3 F4: each row carries its own "since" - the first ride, the first
-  // honest wall sit, the first session (the card-level "since" is gone).
-  const firstRide = ellipticalRideRecords(chrono)[0];
-  const rows: [string, string][] = [
-    ['Elliptical', firstRide ? `${levelVal}${sinceTag(firstRide.date)}` : levelVal],
-  ];
-
-  const wallHonest = honestWallSitLogs(chrono);
-  if (wallHonest.length === 1) {
-    rows.push([
-      'Wall sit',
-      `<span class="sn-last">${wallHonest[0]!.wallSitSec} s</span>${sinceTag(wallHonest[0]!.date)}`,
-    ]);
-  } else if (wallHonest.length > 1) {
-    const wFirst = wallHonest[0]!.wallSitSec;
-    const wLast = wallHonest[wallHonest.length - 1]!.wallSitSec;
-    rows.push([
-      'Wall sit',
-      `<span class="sn-first">${wFirst} s</span> → <span class="sn-last">${wLast} s</span>${sinceTag(wallHonest[0]!.date)}`,
-    ]);
-  }
-
-  // v55 (Sep 27 2026) — CHECK N2: "43 sessions" after one D ride read as if D
-  // were a 4th letter — it never counts toward "3 of 3" (the 19:17 decision).
-  // Her call (picked here, stated so): A/B/C only, with D folded in as its
-  // own "+N rides" tag when she's ridden at all.
-  // v62.3 F3: the rule now lives in number-rules.ts, so Progress's hero reads
-  // the very same count.
-  const { sessions: abcSessionCount, dRides: dRideCount } = sessionCounts(logs);
-  const sessionsVal =
-    dRideCount > 0
-      ? `${abcSessionCount} <span class="sn-extra">${dRideTag(dRideCount)}</span>`
-      : `${abcSessionCount}`;
-  rows.push(['Sessions', `<span class="sn-last">${sessionsVal}</span>${sinceTag(first.date)}`]);
-
+// v64 (Oct 20 2026, her Q4 via "just go"): Home's job is the one next action, so the full
+// Start -> Now card is gone. ONE line in its place; it opens Progress, where "What grew"
+// holds the first -> now rows. The count is the very one Progress leads with (weeks-grid.ts).
+function renderHomeSinceLine(logs: LogEntry[]): string {
+  const first = getChronologicalLogs()[0];
+  if (logs.length === 0 || !first) return '';
+  const { full } = fullWeeksSummary(buildWeekRows(logs));
   return `
-    <div class="card hero-card home-startnow-card">
-      <div class="start-now-head">
-        <span class="progress-card-label">📈 Start → Now</span>
-      </div>
-      ${rows
-        .map(
-          ([label, val]) =>
-            `<div class="start-now-row"><span class="start-now-lbl">${escapeHtml(label)}</span><span class="start-now-val">${val}</span></div>`
-        )
-        .join('')}
+    <div class="home-since">
+      <button class="door-row" id="home-since-line" type="button">
+        <span>${escapeHtml(sinceFullWeeksLine(first.date, full))}</span><span class="door-chev" aria-hidden="true">›</span>
+      </button>
     </div>`;
 }
 
@@ -1322,6 +1278,11 @@ export function attachHomeHandlers3(): void {
   // (v48 · P6: the Session screen's "📈 View progress" link and the Exercise
   // breakdown toggle are gone with what they opened.)
   bindClick('open-progress-link', () => {
+    state.screen = 'progress';
+    requestRender();
+  });
+  // v64: the one "Since May: N full weeks" line opens the same Progress.
+  bindClick('home-since-line', () => {
     state.screen = 'progress';
     requestRender();
   });

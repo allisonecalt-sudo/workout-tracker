@@ -5614,6 +5614,15 @@ textarea:focus {
   text-align: center;
 }
 
+/* v64 (Q2): the one quiet line after a Sick/Break week. Same register as the sub-line:
+ * 15px, ink-3, no colour, no instruction. */
+.week-after-break {
+  margin-top: 6px;
+  font-size: 15px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
 .week-card .swing-note {
   margin: 6px 0 0;
   font-size: var(--font-meta);
@@ -5730,7 +5739,8 @@ textarea:focus {
 }
 
 /* The doors: one component, two stacked rows, same height/chevron/weight. */
-.home-doors {
+.home-doors,
+.home-since {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;

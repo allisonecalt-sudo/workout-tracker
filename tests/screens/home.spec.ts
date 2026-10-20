@@ -120,9 +120,9 @@ test.describe('v48 P4 home', () => {
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(1300);
       // The one week line.
       await expect(page.locator('.week-line')).toContainText('of 3 this week');
-      // v49 · look (Sep 25 2026): the lifetime count moved to the Start → Now
-      // card's own Sessions row.
-      await expect(page.locator('.home-startnow-card .start-now-row').last()).toContainText('39');
+      // v64: the Start → Now card is gone; Home's one line says "Since ..." and opens Progress.
+      await expect(page.locator('.home-startnow-card')).toHaveCount(0);
+      await expect(page.locator('#home-since-line')).toContainText('Since');
     });
 
     // v52.2 (Sep 26 2026): R2W5 shipped, so Sat Sep 26 morning (no sessions

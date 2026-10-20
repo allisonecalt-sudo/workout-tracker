@@ -335,7 +335,8 @@ test('swing (v46): on the Saturday itself the week card carries the week it clos
   await mockDate(page, '2026-09-19T19:30:00.000Z'); // Sat Sep 19, 22:30 Jerusalem — right after the C
   await page.goto('/');
   await expect(page.locator('.week-line')).toHaveText("0 of 3 this week · Sat's C went to Week 3");
-  await expect(page.locator('.home-startnow-card .start-now-row').last()).toContainText('3');
+  await expect(page.locator('.home-startnow-card')).toHaveCount(0); // v64: one line instead
+  await expect(page.locator('#home-since-line')).toBeVisible();
   await expect(page.locator('.swing-note')).toHaveCount(0);
   // The next morning (Sunday) the words stay — the swing is worked out every day.
   await mockDate(page, '2026-09-20T10:00:00.000Z');

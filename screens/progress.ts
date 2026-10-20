@@ -22,7 +22,6 @@ import {
   periodLogUrgency,
   PLAIN_PHASE_HEADER_LABEL,
 } from '../cycle.js';
-import { LEGACY_LAST_CLOSED_WEEK_INSTANT } from '../week.js';
 import {
   type WeekPlan,
   programFutureWeekPlans,
@@ -33,7 +32,6 @@ import {
   diffWorkout,
   weekPlanTitle,
   PROGRAM,
-  getRoundFor,
   ROUNDS,
 } from '../program.js';
 import type { LogEntry } from '../types.js';
@@ -42,19 +40,9 @@ import { escapeHtml, formatMonthDay } from '../format.js';
 import { rideLevel, rideKm, rideTimeSec, ellipticalRideRecords } from '../cardio-notes.js';
 import { rideRate, type RideRecord } from '../ride.js';
 import { localIsoDate } from '../dates.js';
-import {
-  getWeekPlan,
-  firstProgramSaturday,
-  isNowAfterCompletionLaunch,
-  getProgramWeek,
-  weekModel,
-  weekHasDFor,
-} from '../week-clock.js';
-import {
-  SESSIONS_PER_WEEK_TARGET,
-  attributeSessionsToWeeks,
-  sessionsAttributedTo,
-} from '../program-week.js';
+import { getWeekPlan } from '../week-clock.js';
+import { SESSIONS_PER_WEEK_TARGET } from '../program-week.js';
+import { type WeekRow, buildWeekRows, fullWeeksSummary } from '../weeks-grid.js';
 import { honestWallSitLogs } from '../viz.js';
 import { BACK_PAIN_STOP_AT } from '../session-row.js';
 import {
@@ -481,37 +469,11 @@ function renderBackPainTrendCard(allLogs: LogEntry[]): string {
   `;
 }
 
-type PerWeekRow = {
-  label: string;
-  value: number;
-  round: number;
-  isCurrent: boolean;
-  skipped: boolean;
-  // v48 · fix r1: a 0-session week inside a sick/break stretch or after a
-  // closed round's last session — shown as "—", not scored.
-  held?: boolean;
-  // WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.4: a completion-model row's own
-  // "how" — "wk 6 · 2/3 · moved on" (never held's "—"; a moved-on week has a
-  // real count) and "wk 7 · 1/3 · open" (the live span, in place of the old
-  // "now" label).
-  suffix?: string;
-  // v61 fix pass (Sep 28 2026, CHECK-v61 must #3) — her words 15:35: "she
-  // did not say one of four." A completion-model row counts D into what's
-  // SHOWN ("N / 4"), same widening weekCountLine (the Home/weekly-review
-  // line) already does — this card used to stay hard-coded at "N / 3" for
-  // EVERY row, legacy weeks included, so Home read "2 of 4" one card above
-  // the exact same week reading "1 / 3" here. `value`/pct (the bar's own
-  // "met" rule) stay on A/B/C alone (undefined on a legacy row, which keeps
-  // plain "N / 3" with no override).
-  displayValue?: number;
-  displayTarget?: number;
-};
-
 // One sessions-per-week row. v48 · P6 (Sep 24 2026): HTML, not SVG — the
 // "n / 3" sits OUTSIDE the track so a full bar stays readable (her wins were
 // the unreadable rows, 1.25:1), and a held week is its label + "—": no track,
 // no number (break weeks were scored "0 / 3" — uxui progress 3/5 ×2).
-function renderPerWeekRow(r: PerWeekRow): string {
+function renderPerWeekRow(r: WeekRow): string {
   if (r.skipped || r.held) {
     return `<div class="spw-row spw-row-skipped"><span class="spw-label">${escapeHtml(r.label)}</span><span class="spw-skip">—</span></div>`;
   }
@@ -532,133 +494,20 @@ function renderPerWeekRow(r: PerWeekRow): string {
 }
 
 function renderSessionsPerWeekCard(logs: LogEntry[]): string {
-  // One entry per program week from PROGRAM_START_DATE forward through the
-  // current week.
-  const firstSat = firstProgramSaturday();
-
-  // WK4 (Sep 27 2026), PLAN-2026-09-26.md §2.4 "Progress · weeks card": the
-  // legacy calendar walk stops at the last week the OLD swing model ever
-  // closed (Week 4, the FIXED LEGACY_LAST_CLOSED_WEEK_INSTANT anchor) once
-  // "now" is past the real launch — never "today", which the completion
-  // model has already replaced for "now" (isNowAfterCompletionLaunch). Before
-  // the launch, unchanged: the walk still runs all the way to today's own
-  // calendar Saturday.
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayDow = today.getDay();
-  const daysSinceSat = (todayDow + 1) % 7;
-  const thisSat = new Date(today);
-  thisSat.setDate(today.getDate() - daysSinceSat);
-  thisSat.setHours(0, 0, 0, 0);
-  const legacyWalkEnd = isNowAfterCompletionLaunch()
-    ? (() => {
-        const d = new Date(LEGACY_LAST_CLOSED_WEEK_INSTANT);
-        d.setHours(0, 0, 0, 0);
-        return d;
-      })()
-    : thisSat;
-
-  const rows: PerWeekRow[] = [];
-  const cursor = new Date(firstSat);
-  // Swing-aware (v42): same attribution as the 3-slot rows and the week card.
-  const attribution = attributeSessionsToWeeks(logs);
-  while (cursor.getTime() <= legacyWalkEnd.getTime()) {
-    const weekStart = new Date(cursor);
-    const count = sessionsAttributedTo(logs, weekStart, attribution).length;
-    const pw = getProgramWeek(weekStart);
-    // Pre-launch, the walk's own last iteration IS "now" — post-launch, the
-    // walk never reaches a live week at all (the completion rows below own
-    // "now" instead), so isCurrent is only ever true in the untouched
-    // pre-launch path.
-    const isCurrent =
-      !isNowAfterCompletionLaunch() && weekStart.getTime() === legacyWalkEnd.getTime();
-    rows.push({
-      label: isCurrent ? 'now' : pw.skippedLabel ? pw.skippedLabel.toLowerCase() : `wk ${pw.num}`,
-      value: count,
-      round: pw.round,
-      isCurrent,
-      skipped: pw.skippedLabel !== null,
-    });
-    cursor.setDate(cursor.getDate() + 7);
-  }
-
-  // v48 · fix r1 (Sep 24 2026): a 0-session week that sits next to a sick/break
-  // week, or after a closed round's last session, is part of that stretch —
-  // "—" with no track, never an empty "0 / 3" (her real Round 1: wk 11 sat
-  // between "sick" and "break" scored 0/3; DECISIONS §5: "Skipped weeks show
-  // '—' with no track"; her Jul 19 rule: a break is not a miss). The flag is
-  // worked out from the original rows, so it never chains across a run. This
-  // inference is scoped to the legacy rows only — a completion row already
-  // carries its own honest state (a real count + suffix), never inferred.
-  const legacyRoundNum = getRoundFor(legacyWalkEnd).num;
-  const lastActiveIdx = new Map<number, number>();
-  rows.forEach((r, i) => {
-    if (r.value > 0) lastActiveIdx.set(r.round, i);
-  });
-  const held = rows.map((r, i) => {
-    if (r.skipped || r.isCurrent || r.value > 0) return false;
-    if (rows[i - 1]?.skipped || rows[i + 1]?.skipped) return true;
-    const last = lastActiveIdx.get(r.round);
-    return r.round < legacyRoundNum && last !== undefined && i > last;
-  });
-  held.forEach((h, i) => {
-    const r = rows[i];
-    if (h && r) r.held = true;
-  });
-
-  // WK4 (Sep 27 2026): the completion-model rows, Week 5 on — one row per
-  // CLOSED span (numbered by its OWN key, never a recomputed calendar count),
-  // plus the live OPEN span if one exists ("wk 7 · 1/3 · open" — §2.4's own
-  // string, replacing the old "now" label; a mid-gap "now" is already
-  // honestly covered by the last closed span above it, so nothing extra is
-  // added then).
-  if (isNowAfterCompletionLaunch()) {
-    // v61 fix pass 2 (Oct 2 2026): the full model, not just `spans`/`open` —
-    // the LAST closed span's own D-window (week-d.ts) needs to know where
-    // the NEXT week starts, which during a gap is `pending`, not `open`.
-    const model = weekModel();
-    const { spans, open } = model;
-    // v61 fix pass (must #3): same D read weekLineText/Home already use —
-    // week.ts drops D from its own model, so this reads the raw logs instead.
-    const dLogs = logs.filter((l) => l.workout === 'D');
-    for (const span of spans) {
-      const hasD = weekHasDFor({ span }, model, dLogs);
-      rows.push({
-        label: `wk ${span.key.week}`,
-        value: span.done.length,
-        round: span.key.round,
-        isCurrent: false,
-        skipped: false,
-        suffix: span.how === 'moved_on' ? 'moved on' : undefined,
-        displayValue: span.done.length + (hasD ? 1 : 0),
-        displayTarget: 4,
-      });
-    }
-    if (open) {
-      const openHasD = weekHasDFor({ open }, model, dLogs);
-      rows.push({
-        label: `wk ${open.key.week}`,
-        value: open.done.length,
-        round: open.key.round,
-        isCurrent: true,
-        skipped: false,
-        suffix: 'open',
-        displayValue: open.done.length + (openHasD ? 1 : 0),
-        displayTarget: 4,
-      });
-    }
-  }
+  // v64: the rows are built once, in weeks-grid.ts (Home's "Since May" line and the
+  // Weekly review read the same ones). This card has no cell for a Sick week the
+  // completion clock paused for, so it leaves those out as before.
+  const rows = buildWeekRows(logs).filter((r) => !(r.skipped && r.offset === null));
 
   if (rows.length === 0) return '';
 
   // v46: only COMPLETED program weeks are counted. Break and sick weeks were
   // never a target and the week in progress isn't over. v48 · fix r1: the line
   // is a plain count of full weeks — no "target", no "of N" verdict.
-  const judged = rows.filter((r) => !r.isCurrent && !r.skipped && !r.held);
-  const hits = judged.filter((r) => r.value >= SESSIONS_PER_WEEK_TARGET).length;
+  const { judged, full: hits } = fullWeeksSummary(rows);
   // A zero is a gentle empty state, not "0 full weeks" (guide §2: no guilt).
   const scoreLine =
-    judged.length === 0
+    judged === 0
       ? 'The first week is in progress.'
       : hits === 0
         ? // v61 fix pass 3 (Oct 2 2026, CHECK-v61.md round 3 nice): "full

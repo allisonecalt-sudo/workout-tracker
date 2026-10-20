@@ -32,6 +32,7 @@ test('home screen shows three workout options and zero sessions', async ({ page 
   // once there's at least one session (spec: "Only one count on Home").
   await expect(page.locator('.week-line')).not.toContainText('total');
   await expect(page.locator('.home-startnow-card')).toHaveCount(0);
+  await expect(page.locator('#home-since-line')).toHaveCount(0); // v64: nothing saved yet, no line
 });
 
 test("today's pick highlights A when no history exists", async ({ page }) => {
@@ -139,8 +140,9 @@ test('full workout C flow: pre-log → exercises → post-log → save → home 
   await expect(page.locator('.home-header h1')).toBeVisible();
   // v49 · look (Sep 25 2026): the lifetime count lives in the Start → Now
   // card's "Sessions" row, not the week line (spec: "Only one count on Home").
-  await expect(page.locator('.home-startnow-card .start-now-row').last()).toContainText('Sessions');
-  await expect(page.locator('.home-startnow-card .start-now-row').last()).toContainText('1');
+  // v64: the one "Your weeks since ..." line (no full week yet), not a Start → Now card.
+  await expect(page.locator('.home-startnow-card')).toHaveCount(0);
+  await expect(page.locator('#home-since-line')).toContainText('Your weeks since');
   await page.locator('#view-history').click();
   await expect(page.locator('.history-word').first()).toContainText('proud');
 });

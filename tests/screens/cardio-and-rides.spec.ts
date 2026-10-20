@@ -478,7 +478,7 @@ test.describe('v48 P3 cardio', () => {
   // log had a level COLUMN — true even after a real ride where the level was
   // left null on purpose (Decision Q5). Now it only fires when she has never
   // ridden at all.
-  test('(h) v49 · look fix: Home says "level not recorded yet" after a real ride with no level — not "first ride tonight"', async ({
+  test('(h) v64: Home has no Start → Now card any more, so neither "level not recorded yet" nor "first ride tonight" shows there; its one line does', async ({
     page,
   }) => {
     await mockDate(page, TUE_WEEK4);
@@ -491,8 +491,10 @@ test.describe('v48 P3 cardio', () => {
       }),
     ]);
     await page.goto('/');
-    await expect(page.locator('.home-startnow-card')).toContainText('level not recorded yet');
-    await expect(page.locator('.home-startnow-card')).not.toContainText('first ride tonight');
+    await expect(page.locator('.home-startnow-card')).toHaveCount(0);
+    await expect(page.locator('#app')).not.toContainText('level not recorded yet');
+    await expect(page.locator('#app')).not.toContainText('first ride tonight');
+    await expect(page.locator('#home-since-line')).toBeVisible();
   });
 
   // v49 · look fix (Sep 25 2026): lastEllipticalLevel() used to fall back to

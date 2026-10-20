@@ -7,7 +7,7 @@
 // number, so the screens can never disagree again. Pure: values in, values
 // out; no DOM, no storage, no clock.
 
-import { formatMmSs, formatMonthDay } from './format.js';
+import { SHORT_MONTHS, formatMmSs, formatMonthDay } from './format.js';
 
 // F1 - a per-week bar fills from the SAME two numbers as its label
 // ("3 / 4" fills 75%, never 2/3 because the bar looked at A/B/C alone).
@@ -39,6 +39,28 @@ export function sessionCounts(logs: readonly { workout: string }[]): SessionCoun
 /** "+1 ride" / "+2 rides"; '' when there is no D ride. */
 export function dRideTag(dRides: number): string {
   return dRides > 0 ? `+${dRides} ride${dRides === 1 ? '' : 's'}` : '';
+}
+
+// v64 (Oct 20 2026) - "44 workouts + 1 ride", Progress's hero sub-line, from the SAME two
+// counts (F3) Home used to show as "44 +1 ride": A/B/C are workouts, a D ride is its own tag.
+export function workoutsAndRides(counts: SessionCounts): string {
+  const workouts = `${counts.sessions} workout${counts.sessions === 1 ? '' : 's'}`;
+  return counts.dRides > 0 ? `${workouts} ${dRideTag(counts.dRides).replace('+', '+ ')}` : workouts;
+}
+
+// v64 - the weeks-you-showed-up words, ONE phrase for Progress's hero ("14 full weeks") and
+// Home's one line ("Since May: 14 full weeks"). A full week = A, B and C met (weeks-grid.ts).
+export function fullWeeksWords(n: number): string {
+  return `${n} full ${n === 1 ? 'week' : 'weeks'}`;
+}
+
+/** Home's one line (Q4): "Since May: 14 full weeks". With none yet, no count (a zero is a
+ *  gentle empty state, not "0 full weeks": guide §2) - the line still opens Progress. */
+export function sinceFullWeeksLine(firstIso: string, fullWeeks: number): string {
+  const month = SHORT_MONTHS[new Date(firstIso).getMonth()];
+  return fullWeeks > 0
+    ? `Since ${month}: ${fullWeeksWords(fullWeeks)}`
+    : `Your weeks since ${month}`;
 }
 
 // F4 - every Start -> Now row says its OWN "since": the card used to carry one

@@ -95,10 +95,9 @@ test.describe('v62.3 F3 - Home and Progress read the same session count', () => 
     ]);
     await mockDate(page, '2026-09-30T08:00:00+03:00');
     await page.goto('/');
-    const homeRow = page
-      .locator('.home-startnow-card .start-now-row')
-      .filter({ has: page.locator('.start-now-lbl:text-is("Sessions")') });
-    await expect(homeRow.locator('.sn-last')).toHaveText('3 +1 ride');
+    // v64: Home's count is the one "Since ..." line now; the "3 + 1 ride" reading is Progress's.
+    await expect(page.locator('.home-startnow-card')).toHaveCount(0);
+    await expect(page.locator('#home-since-line')).toBeVisible();
     await page.locator('#open-progress-link').click();
     await expect(page.locator('.start-now-card .start-now-hero')).toHaveText('3 sessions +1 ride');
   });
@@ -134,21 +133,14 @@ const startNowShape = async (page: Page): Promise<void> => {
 };
 
 test.describe('v62.3 F4 - each Start -> Now row says its own "since"', () => {
-  test('Home: Sessions since May 2, Elliptical since Sep 24, Wall sit since Sep 24; no card-level "since"', async ({
+  test('Home (v64): the Start → Now card is gone, so no "since" rows there; the one line says "Since May"', async ({
     page,
   }) => {
     await startNowShape(page);
     await page.goto('/');
-    const card = page.locator('.home-startnow-card');
-    const since = (label: string) =>
-      card
-        .locator('.start-now-row')
-        .filter({ has: page.locator(`.start-now-lbl:text-is("${label}")`) })
-        .locator('.sn-since');
-    await expect(since('Sessions')).toHaveText('since May 2');
-    await expect(since('Elliptical')).toHaveText('since Sep 24');
-    await expect(since('Wall sit')).toHaveText('since Sep 24');
-    await expect(card.locator('.progress-card-meta')).toHaveCount(0);
+    await expect(page.locator('.home-startnow-card')).toHaveCount(0);
+    await expect(page.locator('#app .sn-since')).toHaveCount(0);
+    await expect(page.locator('#home-since-line')).toContainText('Since May');
   });
 
   test('Progress: the same three, and the card-level "since May 2" line is gone', async ({
@@ -171,22 +163,17 @@ test.describe('v62.3 F4 - each Start -> Now row says its own "since"', () => {
 });
 
 test.describe('v62.3 F5 - the elliptical level shows the ride length at each end', () => {
-  test('Home: "level 5 for 10 min → level 3 for 12 min", not a bare "5 → 3"', async ({ page }) => {
+  test('Home (v64): no level pair of any kind on Home (never a bare "5 → 3")', async ({ page }) => {
     await startNowShape(page);
     await page.goto('/');
-    const row = page
-      .locator('.home-startnow-card .start-now-row')
-      .filter({ has: page.locator('.start-now-lbl:text-is("Elliptical")') });
-    await expect(row.locator('.sn-first')).toHaveText('level 5 for 10 min');
-    await expect(row.locator('.sn-last')).toHaveText('level 3 for 12 min');
+    await expect(page.locator('#app')).not.toContainText('level 5');
+    await expect(page.locator('#app')).not.toContainText('→ level');
   });
 
-  test('Home: the row label is exactly "Elliptical"', async ({ page }) => {
+  test('Home (v64): no Start → Now row labels at all', async ({ page }) => {
     await startNowShape(page);
     await page.goto('/');
-    const labels = await page.locator('.home-startnow-card .start-now-lbl').allTextContents();
-    expect(labels).toContain('Elliptical');
-    expect(labels).not.toContain('Elliptical level');
+    await expect(page.locator('.start-now-lbl')).toHaveCount(0);
   });
 
   test('Progress: the same phrase, then only the latest km (no separate "in N min")', async ({
@@ -500,11 +487,8 @@ test.describe('v62.3 F9 - apartment cardio after a reload saves what she rode', 
 });
 
 test.describe('v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word "level" in every branch', () => {
-  const eRow = (page: Page) =>
-    page
-      .locator('.home-startnow-card .start-now-row')
-      .filter({ has: page.locator('.start-now-lbl:text-is("Elliptical")') })
-      .locator('.start-now-val');
+  // v64: Home has no Elliptical row any more; each branch now proves the card is gone.
+  const eRow = (page: Page) => page.locator('.home-startnow-card');
 
   test('one ride with a level: "level 5", then its own since', async ({ page }) => {
     await seedLogs(page, [
@@ -516,16 +500,16 @@ test.describe('v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word
     ]);
     await mockDate(page, '2026-09-30T08:00:00+03:00');
     await page.goto('/');
-    await expect(eRow(page)).toHaveText('level 5since Sep 24');
-    await expect(eRow(page).locator('.sn-last')).toHaveText('level 5');
+    await expect(eRow(page)).toHaveCount(0);
+    await expect(page.locator('#home-since-line')).toBeVisible();
   });
 
   test('never ridden, tonight has the ride: "level 3 → first ride tonight"', async ({ page }) => {
     await seedLogs(page, [log('sep20-b', '2026-09-20T15:00:00+03:00', 'B')]);
     await mockDate(page, '2026-09-30T08:00:00+03:00');
     await page.goto('/');
-    await expect(eRow(page).locator('.sn-first')).toHaveText('level 3');
-    await expect(eRow(page).locator('.sn-last')).toHaveText('first ride tonight');
+    await expect(eRow(page)).toHaveCount(0);
+    await expect(page.locator('#app')).not.toContainText('first ride tonight');
   });
 
   test('ridden but no level recorded: "level not recorded yet" (unchanged)', async ({ page }) => {
@@ -534,14 +518,15 @@ test.describe('v62.3 fix round 1 (item 1) - Home Elliptical value keeps the word
     ]);
     await mockDate(page, '2026-09-30T08:00:00+03:00');
     await page.goto('/');
-    await expect(eRow(page).locator('.sn-last')).toHaveText('level not recorded yet');
+    await expect(eRow(page)).toHaveCount(0);
+    await expect(page.locator('#app')).not.toContainText('level not recorded yet');
   });
 
   test('two rides: both ends say "level N" (F5)', async ({ page }) => {
     await startNowShape(page);
     await page.goto('/');
-    await expect(eRow(page).locator('.sn-first')).toHaveText('level 5 for 10 min');
-    await expect(eRow(page).locator('.sn-last')).toHaveText('level 3 for 12 min');
+    await expect(eRow(page)).toHaveCount(0);
+    await expect(page.locator('#home-since-line')).toContainText('Since May');
   });
 });
 
@@ -565,7 +550,7 @@ test.describe('v62.3 fix round 1 (item 2) - "+1 ride" is a quiet tag', () => {
         expect(over).toBeLessThanOrEqual(0);
       };
       await noSideways();
-      await expect(page.locator('.home-startnow-card .sn-extra')).toHaveText('+1 ride');
+      await expect(page.locator('#home-since-line')).toBeVisible();
       await page.locator('#open-progress-link').click();
       const extra = page.locator('.start-now-card .sn-extra');
       const unit = page.locator('.start-now-card .start-now-unit');
