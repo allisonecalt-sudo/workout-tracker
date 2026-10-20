@@ -664,3 +664,27 @@ test.describe('v64.1 - a partial week never reads like a full one by its number 
     ).toBe(0);
   });
 });
+
+test.describe('v64.1 - the non-tappable Sick square is the same box as the buttons', () => {
+  test('same height and width floor, same baseline row, as a tappable square', async ({ page }) => {
+    await afterSickWeek(page);
+    await openProgress(page);
+    const box = async (sel: string) => (await page.locator(sel).first().boundingBox())!;
+    const btn = await box('button.wk-cell.wk-partial');
+    const sick = await box('span.wk-cell.wk-skip[aria-label="Sick week, not counted"]');
+    expect(Math.round(sick.height)).toBe(Math.round(btn.height));
+    const full = await box('button.wk-cell.wk-full');
+    expect(Math.round(sick.width)).toBe(Math.round(full.width)); // a one-character square
+    // the Sick square sits in the same row as the squares around it: its vertical centre matches
+    const rowMates = await page
+      .locator('.wk-round')
+      .last()
+      .locator('.wk-cell')
+      .evaluateAll((els) =>
+        els.map((e) =>
+          Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2)
+        )
+      );
+    expect(new Set(rowMates).size).toBe(1);
+  });
+});

@@ -7343,3 +7343,15 @@ button.wk-cell {
   font-size: var(--t-lead);
   color: var(--ink-2);
 }
+
+/* v64.1: the non-tappable Sick/Break squares are the same box as the buttons (a global
+ * button rule gave buttons a 48px minimum height; the spans were 34px and sat smaller). */
+.wk-cell {
+  height: 48px;
+  min-height: 48px;
+  min-width: 40px;
+}
+
+.wk-cells {
+  align-items: center;
+}
