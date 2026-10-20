@@ -52,13 +52,17 @@ export const CLAUDE_NOTE_LABEL = `<span class="claude-note-label">Claude's note:
 // 3/10 → stop that exercise". A 1/10 lit up like a verdict (uxui weekly 2/5).
 export const BACK_PAIN_STOP_AT = 3;
 
+// v64: under this many honest readings the numbers say it, not a line (progress-and-dataviz rule).
+export const SPARKLINE_MIN_POINTS = 5;
+
 // ONE row, everywhere a session is listed (Sessions, Weekly review):
 // badge · "Sat Sep 19 · 40 min" · the wall-sit sparkline (A only) · a dim meta
 // line · her words, verbatim. `logs` = newest-first by date (for the sparkline).
 export function renderSessionRow(l: LogEntry, logs: LogEntry[]): string {
   const idAttr = l.id ? `data-detail="${escapeHtml(l.id)}"` : '';
   const trend = l.workout === 'A' && l.wallSitSec > 0 ? getWallSitTrend(logs, l.id ?? null) : [];
-  const spark = renderSparkline(trend);
+  // v64: a sparkline only at 5+ honest points (two points draw a diagonal that says nothing).
+  const spark = trend.length >= SPARKLINE_MIN_POINTS ? renderSparkline(trend) : '';
   // v53 (Sep 26 2026): "back pain" (was "back") — labeled, not converted. The
   // stored number here is still PAIN (higher = worse); only the live 1-10
   // TAP on the pre/post-log screens flipped to "feel" (10 = fine). Naming
@@ -70,7 +74,7 @@ export function renderSessionRow(l: LogEntry, logs: LogEntry[]): string {
       : `back pain <span class="session-back${l.backPain >= BACK_PAIN_STOP_AT ? ' session-back-warn' : ''}">${l.backPain}</span>`;
   const wall =
     // v46: B and C have no wall sit — "wall 0s" there read as a zero.
-    l.wallSitSec > 0 || l.workout === 'A' ? ` · wall ${l.wallSitSec}s` : '';
+    l.wallSitSec > 0 || l.workout === 'A' ? `wall ${l.wallSitSec}s` : '';
   const words = sessionWords(l).split('\n')[0] ?? '';
   // v62.3 F8: the row quotes the first part's first line; if Claude wrote that
   // part, it is shown plain behind its label, never in her italic quote style.
@@ -87,7 +91,7 @@ export function renderSessionRow(l: LogEntry, logs: LogEntry[]): string {
       <span class="history-workout-badge">${l.workout}</span>
       <div class="session-row-body">
         <div class="history-date">${formatRowDate(l.date)}${workoutTime ? ` · ${workoutTime}` : ''}${spark ? ` <span class="history-sparkline-wrap">${spark}</span>` : ''}</div>
-        <div class="history-meta">cap ${l.capacityBefore ?? '—'}→${l.capacityAfter ?? '—'}${wall} · ${back}</div>
+        <div class="history-meta">${[wall, back].filter((p) => p !== '').join(' · ')}</div>
         ${words ? (wordsByClaude ? `<div class="history-word history-word-claude" dir="auto">${CLAUDE_NOTE_LABEL} ${escapeHtml(words)}</div>` : `<div class="history-word" dir="auto">${escapeHtml(words)}</div>`) : ''}
       </div>
       <span class="session-chev" aria-hidden="true">›</span>

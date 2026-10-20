@@ -317,3 +317,164 @@ test.describe('v64 Progress - weeks you showed up lead; what grew, body check, m
     });
   }
 });
+
+// Round 2 Weeks 1-4 full (three letters each), then Week 5 = A, B and a D ride (3 of 4),
+// closed by the Oct 3 Sick week; Week 6 open on Wed Oct 14.
+const fourNormalWeeks = (): Row[] => [
+  log('w1a', '2026-08-30T10:00:00+03:00', 'A'),
+  log('w1b', '2026-09-01T10:00:00+03:00', 'B'),
+  log('w1c', '2026-09-03T10:00:00+03:00', 'C'),
+  log('w2a', '2026-09-06T10:00:00+03:00', 'A'),
+  log('w2b', '2026-09-08T10:00:00+03:00', 'B'),
+  log('w2c', '2026-09-10T10:00:00+03:00', 'C'),
+  log('w3a', '2026-09-13T10:00:00+03:00', 'A'),
+  log('w3b', '2026-09-15T10:00:00+03:00', 'B'),
+  log('w3c', '2026-09-17T10:00:00+03:00', 'C'),
+  log('w4a', '2026-09-20T10:00:00+03:00', 'A'),
+  log('w4b', '2026-09-22T10:00:00+03:00', 'B'),
+  log('w4c', '2026-09-24T10:00:00+03:00', 'C'),
+];
+
+const week5Rows = (): Row[] => [
+  log('w5a', '2026-09-28T10:00:00+03:00', 'A', { wallSitSec: 45, wristPain: 1 }),
+  log('w5d', '2026-09-28T12:00:00+03:00', 'D', {
+    wristPain: 1,
+    backPain: 2,
+    cardioLane: 'elliptical',
+    cardioMinutes: 30,
+  }),
+  log('w5b', '2026-09-29T10:00:00+03:00', 'B'),
+];
+
+const openWeekFromProgress = async (page: Page, label: string): Promise<void> => {
+  await page.goto('/');
+  await page.locator('#open-progress-link').click();
+  await page.locator(`button.wk-cell[aria-label^="${label}"]`).click();
+};
+
+test.describe('v64 Weekly review - one counting rule, the D ride in the list, your usual, words', () => {
+  test('the D ride is a normal row in date order; the old "D · extra ride" line is gone', async ({
+    page,
+  }) => {
+    await seedLogs(page, [...fourNormalWeeks(), ...week5Rows()]);
+    await mockDate(page, '2026-10-14T08:00:00+03:00');
+    await openWeekFromProgress(page, 'Week 5 (round 2)');
+    await expect(page.locator('.review-title')).toContainText('Week 5');
+    await expect(page.locator('.weekly-review-subtitle')).toContainText('3 of 4');
+    const badges = page.locator('.weekly-review-sessions .history-workout-badge');
+    await expect(badges).toHaveText(['A', 'D', 'B']);
+    await expect(page.locator('.weekly-review-extra-row')).toHaveCount(0);
+  });
+
+  test('"Your usual: 3 a week · that week: 3" on a past page, once 4 normal weeks exist', async ({
+    page,
+  }) => {
+    await seedLogs(page, [...fourNormalWeeks(), ...week5Rows()]);
+    await mockDate(page, '2026-10-14T08:00:00+03:00');
+    await openWeekFromProgress(page, 'Week 5 (round 2)');
+    await expect(page.locator('.review-usual')).toHaveText('Your usual: 3 a week · that week: 3');
+    // the old "vs previous week" box (arrows, deltas) is gone
+    await expect(page.locator('.weekly-review-delta')).toHaveCount(0);
+    await expect(page.locator('#app')).not.toContainText('vs previous week');
+  });
+
+  test('the live week says "this week", and the Sick-cut Week 5 is not a normal week in the median', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      ...fourNormalWeeks(),
+      ...week5Rows(),
+      log('w6a', '2026-10-13T06:42:00+03:00', 'A'),
+    ]);
+    await mockDate(page, '2026-10-14T08:00:00+03:00');
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await expect(page.locator('.review-title')).toContainText('Week 6');
+    await expect(page.locator('.review-usual')).toHaveText('Your usual: 3 a week · this week: 1');
+    await expect(page.locator('.weekly-review-open')).toHaveText('Week still open.');
+  });
+
+  test('before 4 normal weeks exist there is no usual line', async ({ page }) => {
+    // Round 1, Week 3 is open; Weeks 1 and 2 are full. Viewing Week 2 has only ONE week before it.
+    await seedLogs(page, [
+      log('a1', '2026-05-03T10:00:00+03:00', 'A'),
+      log('b1', '2026-05-05T10:00:00+03:00', 'B'),
+      log('c1', '2026-05-07T10:00:00+03:00', 'C'),
+      log('a2', '2026-05-10T10:00:00+03:00', 'A'),
+      log('b2', '2026-05-12T10:00:00+03:00', 'B'),
+      log('c2', '2026-05-14T10:00:00+03:00', 'C'),
+    ]);
+    await mockDate(page, '2026-05-20T10:00:00+03:00');
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await page.locator('#prev-week').click();
+    await expect(page.locator('.review-title')).toContainText('Week 2');
+    await expect(page.locator('.review-usual')).toHaveCount(0);
+  });
+
+  test('"What was measured" in words: wall sit, pain-free, wrist; capacity is not shown', async ({
+    page,
+  }) => {
+    await seedLogs(page, [...fourNormalWeeks(), ...week5Rows()]);
+    await mockDate(page, '2026-10-14T08:00:00+03:00');
+    await openWeekFromProgress(page, 'Week 5 (round 2)');
+    await expect(page.locator('.review-measured')).toContainText(
+      'wall sit 45 s · pain-free 2 of 3 · wrist 1'
+    );
+    await expect(page.locator('.weekly-review-totals')).toHaveCount(0);
+    await expect(page.locator('#app')).not.toContainText('capacity');
+    await expect(page.locator('#app')).not.toContainText('cap ');
+  });
+
+  test('no 2-point wall-sit sparkline on the review rows; no week-by-week grid at the bottom', async ({
+    page,
+  }) => {
+    await seedLogs(page, [
+      log('a1', '2026-09-24T10:00:00+03:00', 'A', { wallSitSec: 44 }),
+      log('a2', '2026-09-28T10:00:00+03:00', 'A', { wallSitSec: 45 }),
+    ]);
+    await mockDate(page, '2026-09-29T08:00:00+03:00');
+    await page.goto('/');
+    await page.locator('#open-weekly-review .week-card-head').click();
+    await expect(page.locator('.weekly-review-sessions .session-row')).not.toHaveCount(0);
+    await expect(page.locator('.history-sparkline-wrap')).toHaveCount(0);
+    await expect(page.locator('.consistency-wrap')).toHaveCount(0);
+    await expect(page.locator('#app')).not.toContainText('Week by week');
+  });
+
+  test('a wall-sit sparkline needs 5 honest points (shown on the Sessions row at 5)', async ({
+    page,
+  }) => {
+    const rows = [24, 25, 26, 27, 28].map((d, i) =>
+      log(`s${i}`, `2026-09-${d}T10:00:00+03:00`, 'A', { wallSitSec: 40 + i })
+    );
+    await seedLogs(page, rows);
+    await mockDate(page, '2026-09-29T08:00:00+03:00');
+    await page.goto('/');
+    await page.locator('#view-history').click();
+    await expect(page.locator('.history-sparkline-wrap')).toHaveCount(1);
+  });
+
+  test('Sessions rows no longer show capacity (it stays in Session detail)', async ({ page }) => {
+    await seedLogs(page, [log('a1', '2026-09-24T10:00:00+03:00', 'A', { wallSitSec: 44 })]);
+    await mockDate(page, '2026-09-29T08:00:00+03:00');
+    await page.goto('/');
+    await page.locator('#view-history').click();
+    await expect(page.locator('.session-row .history-meta').first()).not.toContainText('cap');
+    await page.locator('.session-row').first().click();
+    await expect(page.locator('#app')).toContainText('Capacity');
+  });
+
+  for (const width of [360, 412]) {
+    test(`no sideways scroll at ${width}px on a review page`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await seedLogs(page, [...fourNormalWeeks(), ...week5Rows()]);
+      await mockDate(page, '2026-10-14T08:00:00+03:00');
+      await openWeekFromProgress(page, 'Week 5 (round 2)');
+      const over = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+      );
+      expect(over).toBeLessThanOrEqual(0);
+    });
+  }
+});

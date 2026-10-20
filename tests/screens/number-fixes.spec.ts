@@ -61,7 +61,7 @@ test.describe('v62.3 F1 - per-week bar fill = its label', () => {
 });
 
 test.describe('v62.3 F2 - the weekly review counts sessions one way', () => {
-  test('a closed Week 5 with a D ride: header "4 of 4" and the "vs previous week" box says 3 -> 4, not 3 -> 3', async ({
+  test('a closed Week 5 with a D ride (v64): header "4 of 4" is the page\'s only count; the D ride is a row in the list, no "vs previous week" box', async ({
     page,
   }) => {
     await seedLogs(page, [
@@ -78,10 +78,13 @@ test.describe('v62.3 F2 - the weekly review counts sessions one way', () => {
     await page.locator('#open-weekly-review .week-card-head').click();
     await expect(page.locator('.review-title')).toContainText('Week 5');
     await expect(page.locator('.weekly-review-subtitle')).toContainText('4 of 4');
-    const sessionsRow = page
-      .locator('.weekly-review-delta-row')
-      .filter({ has: page.locator('.weekly-review-delta-lbl:text-is("sessions")') });
-    await expect(sessionsRow.locator('.weekly-review-delta-vals')).toHaveText('3 → 4');
+    // v64: the "vs previous week" box is gone, so the page has ONE count (the header's), and the
+    // D ride is a row in the list it counts.
+    await expect(page.locator('#app')).not.toContainText('vs previous week');
+    await expect(page.locator('.weekly-review-delta')).toHaveCount(0);
+    await expect(
+      page.locator('.weekly-review-sessions .history-workout-badge', { hasText: 'D' })
+    ).toHaveCount(1);
   });
 });
 

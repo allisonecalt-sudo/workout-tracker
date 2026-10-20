@@ -163,7 +163,7 @@ test.describe('v48 P8 sweep', () => {
     await expectClean(page, 'Settings');
   });
 
-  test('(b) label tier (timer label, session meta, review tile label) >= 4.5:1 on its card', async ({
+  test('(b) label tier (timer label, session meta, review measured label) >= 4.5:1 on its card', async ({
     page,
   }) => {
     await seed(page);
@@ -223,9 +223,9 @@ test.describe('v48 P8 sweep', () => {
     await page.locator('#view-history').click();
     expect(await ratio('.history-meta')).toBeGreaterThanOrEqual(4.5);
     await page.locator('#back-home').click();
-    // Weekly review: a totals tile label.
+    // Weekly review: the "What was measured" label (v64; was a totals tile label).
     await page.locator('#open-weekly-review .week-card-head').click();
-    expect(await ratio('.weekly-review-total-lbl')).toBeGreaterThanOrEqual(4.5);
+    expect(await ratio('.review-measured-lbl')).toBeGreaterThanOrEqual(4.5);
     await page.locator('#back-home').click();
     // A hold: the timer card's label (the wall sit on A).
     await page.locator('button[data-workout="A"]').first().click();

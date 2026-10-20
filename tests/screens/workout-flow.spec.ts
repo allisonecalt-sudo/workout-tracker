@@ -423,7 +423,8 @@ test('untouched sliders (v46): a workout with no slider moved saves null, not 5/
   // And the row reads "—", never an invented number. (v48 · P4: the "Last: …
   // capacity" line left home; the same row reads it in Sessions.)
   await page.locator('#view-history').click();
-  await expect(page.locator('.history-row .history-meta').first()).toContainText('cap —→—');
+  // v64: the Sessions row carries no capacity (it stays in Session detail); nothing invented.
+  await expect(page.locator('.history-row .history-meta').first()).not.toContainText('cap');
 });
 
 test('untouched sliders (v46): a slider she DID move saves her number; the others stay null', async ({

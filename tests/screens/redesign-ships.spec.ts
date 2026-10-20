@@ -1,7 +1,7 @@
 // Split out of tests/app.spec.ts by scripts/split-spec.mjs (code-shape step 1, Oct 13 2026);
 // the test bodies below are copied line for line.
 import { test, expect } from '@playwright/test';
-import { setupPage, openWeekByWeek } from '../helpers';
+import { setupPage } from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -77,25 +77,19 @@ test('redesign: cards use border-elevation, not drop shadow', async ({ page }) =
 //  - sparkline renders when a history row has ≥2 wall-sit values
 //  - sparkline is skipped when a row has 0 or 1 wall-sit value (flat line
 //    reads as broken; better to render nothing)
-test('ship 3 (replaced): weekly-target grid renders with 3 slots per row', async ({ page }) => {
-  // The year-grid was replaced 2026-05-15 with a 3-per-week target view
-  // per Allison's "its 3 a week" call. Each row now shows 3 slot pills.
-  // With empty history, the current week renders one row with 3 empty slots.
-  // v48 · P4: the grid lives in Weekly review › "Week by week".
-  await openWeekByWeek(page);
-  await expect(page.locator('.consistency-wrap .next-week-summary-label')).toHaveText(
-    'Week by week'
-  );
-  const slots = page.locator('.weekly-row').first().locator('.weekly-slot');
-  await expect(slots).toHaveCount(3);
-  // The card heading still calls out Consistency, now with "3 per week".
-  await expect(page.locator('.weekly-target-title')).toContainText('Consistency');
-  await expect(page.locator('.weekly-target-sub')).toContainText('3 per week');
-  // The current week is labeled.
-  await expect(page.locator('.weekly-row-current .weekly-row-label')).toHaveText('This week');
+test('ship 3 (v64): the 3-per-week grid is off the Weekly review (it is the weeks grid on Progress now)', async ({
+  page,
+}) => {
+  // The year-grid was replaced 2026-05-15 with a 3-per-week target view; v64 moved it to
+  // Progress as one small square per week (tests/screens/progress-v64.spec.ts covers the grid).
+  await page.locator('#open-weekly-review').click();
+  await expect(page.locator('.consistency-wrap')).toHaveCount(0);
+  await expect(page.locator('.weekly-row')).toHaveCount(0);
 });
 
-test('ship 3: sparkline renders for history row with >=2 wall-sit values', async ({ page }) => {
+test('ship 3 (v64): two wall-sit values draw no sparkline (it needs 5+ honest points)', async ({
+  page,
+}) => {
   // Seed two B-workouts with wall-sit values, then visit history.
   // localStorage shape is the JSON-stringified array of LogEntry rows.
   // v49 · look fix (Sep 25 2026): dates moved to on/after Sep 24 2026 — the
@@ -133,11 +127,9 @@ test('ship 3: sparkline renders for history row with >=2 wall-sit values', async
   // trend includes itself + the older value = 2 points). v48 · P4: Recent
   // workouts left home — the same rows live one tap away in Sessions.
   await page.locator('#view-history').click();
-  const sparks = page.locator('.history-row .sparkline');
-  expect(await sparks.count()).toBeGreaterThanOrEqual(1);
-  // Aria label encodes the trend direction.
-  const firstSpark = sparks.first();
-  await expect(firstSpark).toHaveAttribute('aria-label', /wall sit/);
+  // v64: two honest points are two numbers, not a line (progress-and-dataviz rule 6).
+  await expect(page.locator('.history-row')).toHaveCount(2);
+  await expect(page.locator('.history-row .sparkline')).toHaveCount(0);
 });
 
 test('ship 3: sparkline NOT rendered for row with 0 or 1 wall-sit value', async ({ page }) => {

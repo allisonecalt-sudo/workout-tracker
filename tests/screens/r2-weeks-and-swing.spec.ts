@@ -11,7 +11,6 @@ import {
   SWING_WEEK3_A,
   SWING_WEEK3_B,
   SWING_SAT_C,
-  openWeekByWeek,
   mockDate,
   appSourceFiles,
   TESTS_DIR as __dirname,
@@ -266,13 +265,17 @@ test('swing: a Saturday session completes a 2-session week — last week shows 3
   await expect(line).toContainText('0 of 3 this week');
   await expect(line).toContainText("Sat's C went to Week 3");
 
-  await openWeekByWeek(page);
-  // This week: three open slots.
-  await expect(page.locator('.weekly-row-current .weekly-slot-empty')).toHaveCount(3);
-  // Last week (R2 · Wk 3): A, B, C — the Saturday C is its third pill.
-  const wk3 = page.locator('.weekly-row').filter({ hasText: 'R2 · Wk 3' }).first();
-  await expect(wk3.locator('button.weekly-slot')).toHaveCount(3);
-  await expect(wk3.locator('button.weekly-slot').nth(2)).toHaveText('C');
+  // v64: the weeks grid on Progress. This week: nothing yet. Last week (R2 Week 3): 3 of 3, the
+  // Saturday C is its third session.
+  await page.locator('#open-progress-link').click();
+  await expect(page.locator('.wk-cell.wk-now')).toHaveAttribute(
+    'aria-label',
+    'Week 4 (round 2), 0 of 3, this week'
+  );
+  await expect(page.locator('.wk-cell[aria-label^="Week 3 (round 2)"]')).toHaveAttribute(
+    'aria-label',
+    'Week 3 (round 2), 3 of 3, a full week'
+  );
 });
 
 test('swing: a Saturday session does NOT swing when last week already has 3 — it opens the new week', async ({
@@ -292,10 +295,15 @@ test('swing: a Saturday session does NOT swing when last week already has 3 — 
   const line = page.locator('.week-line');
   await expect(line).toContainText('1 of 3 this week');
   await expect(line).not.toContainText("Sat's");
-  await openWeekByWeek(page);
-  await expect(page.locator('.weekly-row-current button.weekly-slot')).toHaveCount(1);
-  const wk3 = page.locator('.weekly-row').filter({ hasText: 'R2 · Wk 3' }).first();
-  await expect(wk3.locator('button.weekly-slot')).toHaveCount(3);
+  await page.locator('#open-progress-link').click();
+  await expect(page.locator('.wk-cell.wk-now')).toHaveAttribute(
+    'aria-label',
+    'Week 4 (round 2), 1 of 3, this week'
+  );
+  await expect(page.locator('.wk-cell[aria-label^="Week 3 (round 2)"]')).toHaveAttribute(
+    'aria-label',
+    'Week 3 (round 2), 3 of 3, a full week'
+  );
 });
 
 test('swing: a SUNDAY session never swings, even when last week is short', async ({ page }) => {
@@ -311,9 +319,11 @@ test('swing: a SUNDAY session never swings, even when last week is short', async
   const line = page.locator('.week-line');
   await expect(line).toContainText('1 of 3 this week');
   await expect(line).not.toContainText("Sat's");
-  await openWeekByWeek(page);
-  const wk3 = page.locator('.weekly-row').filter({ hasText: 'R2 · Wk 3' }).first();
-  await expect(wk3.locator('button.weekly-slot')).toHaveCount(2);
+  await page.locator('#open-progress-link').click();
+  await expect(page.locator('.wk-cell[aria-label^="Week 3 (round 2)"]')).toHaveAttribute(
+    'aria-label',
+    'Week 3 (round 2), 2 of 3'
+  );
 });
 
 // v46: the swing must show where the big number is. On the Saturday night she
@@ -587,7 +597,7 @@ test('capacity before (v39): a missing reading stays missing through the sync, t
   expect(out.importRejectsJunk).toBe(false);
 });
 
-test('capacity before (v39): the history row shows an em dash, never "0"', async ({
+test('capacity before (v39, v64): the history row carries no capacity, so never an invented "0"', async ({
   page,
   context,
 }) => {
@@ -616,8 +626,11 @@ test('capacity before (v39): the history row shows an em dash, never "0"', async
   await reopened.goto('/');
   await reopened.locator('#view-history').click();
   const meta = reopened.locator('.history-meta').first();
-  await expect(meta).toContainText('cap —→—');
-  await expect(meta).not.toContainText('cap 0');
+  // v64: the row carries no capacity at all now (it stays in Session detail), so a row with no
+  // reading can never show an invented 0 there either.
+  await expect(meta).not.toContainText('cap');
+  await reopened.locator('.session-row').first().click();
+  await expect(reopened.locator('.detail-row').filter({ hasText: 'Capacity' })).toHaveCount(0);
   await reopened.close();
 });
 

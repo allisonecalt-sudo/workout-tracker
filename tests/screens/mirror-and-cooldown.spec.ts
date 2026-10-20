@@ -47,7 +47,7 @@ test.describe('v48 P6 mirror', () => {
     log('w2b', '2026-09-08T15:00:00.000Z', 'B', { durationSec: 2400 }),
   ];
 
-  test('(a) live week: no "vs previous week", one quiet "Week still open."; ‹ to last week compares with units', async ({
+  test('(a) v64 live week: no "vs previous week", no totals card, one quiet "Week still open."; ‹ to last week says what was measured in words', async ({
     page,
   }) => {
     await mockDate(page, THU_WEEK4);
@@ -58,30 +58,22 @@ test.describe('v48 P6 mirror', () => {
     await expect(page.locator('.weekly-review-sessions .session-row')).toHaveCount(2);
     await expect(page.locator('.weekly-review-delta')).toHaveCount(0);
     await expect(page.locator('.weekly-review-open')).toHaveText('Week still open.');
-    // v55 (Sep 27 2026) — CHECK N4 (round 1): "total time —" used to be a
-    // permanent 4th tile even with zero confirmed sessions. Now that tile is
-    // HIDDEN until a week has a confirmed time, so this week (none) shows
-    // only the other three (capacity, max wall sit, back pain).
-    await expect(page.locator('.weekly-review-total')).toHaveCount(3);
-    await expect(page.locator('.weekly-review-totals')).not.toContainText('total time');
-    await expect(page.locator('.weekly-review-totals')).toContainText('6.0 → 7.0');
-    await expect(page.locator('.weekly-review-totals')).not.toContainText('avg capacity');
+    // v64: the tiles (total time, capacity, max wall sit, back pain) are one line of words, and
+    // capacity is not on this page any more (her Q6).
+    await expect(page.locator('.weekly-review-totals')).toHaveCount(0);
+    await expect(page.locator('#app')).not.toContainText('capacity');
     // The live week has nothing after it: › is hidden.
     await expect(page.locator('#next-week')).toBeHidden();
 
     await page.locator('#prev-week').click();
     await expect(page.locator('.review-title')).toHaveText('R2 · Week 3 · Sep 12–18');
-    const delta = page.locator('.weekly-review-delta');
-    await expect(delta).toBeVisible();
+    await expect(page.locator('.weekly-review-delta')).toHaveCount(0);
     await expect(page.locator('.weekly-review-open')).toHaveCount(0);
-    // T2 fix r1 (Sep 27 2026, checker's "must"): none of these seeded rows
-    // has a confirmed her_start/her_end (only the app's own `durationSec`,
-    // a red herring) — the weekly review must never turn that into a "total
-    // time" number or arrow. The row is dropped entirely, not shown as ±0.
-    const time = delta.locator('.weekly-review-delta-row').filter({ hasText: 'total time' });
-    await expect(time).toHaveCount(0);
-    const wall = delta.locator('.weekly-review-delta-row').filter({ hasText: 'max wall sit' });
-    await expect(wall.locator('.weekly-review-delta-num')).toHaveText('↑ +3s');
+    // T2 fix r1 (Sep 27 2026): none of these rows has a confirmed her_start/her_end (only the
+    // app's own durationSec, a red herring) - the words line must never turn that into a time.
+    const measured = page.locator('.review-measured');
+    await expect(measured).toBeVisible();
+    await expect(measured).not.toContainText('time');
     // › steps forward again.
     await page.locator('#next-week').click();
     await expect(page.locator('.review-title')).toContainText('This week');

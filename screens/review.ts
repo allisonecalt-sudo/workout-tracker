@@ -2,9 +2,11 @@
 // module. Moved out of app.ts verbatim; no behaviour change, no version bump.
 //
 // Owns: renderWeeklyReview (the plain week and the week-by-week pager, the title for a live,
-// past, held or Sick week, the totals / delta cards, the session list), the helpers only it uses
-// (computeWeekTotals and its types, the week-session lookups, the delta renderers, the 3-per-week
-// target grid) and its two click handlers (attachReviewHandlers: the < > week arrows).
+// past, held or Sick week, the session list with the D ride as a normal row, "Your usual", "What
+// was measured" in words), the helpers only it uses (computeWeekTotals and its types, the
+// week-session lookups) and its two click handlers (attachReviewHandlers: the < > week arrows).
+// v64: the totals card, the "vs previous week" box and the week-by-week grid are gone (the grid
+// lives on Progress as the weeks grid; the rows come from weeks-grid.ts).
 // Imports state / ui / bus / dom / format / week-clock / session-row / pure modules only -
 // NEVER app.ts or another screen. app.ts imports renderWeeklyReview (render() switch),
 // attachReviewHandlers (attachHandlers(), same slot as before) and computeWeekTotals (the
@@ -16,15 +18,16 @@
 import { trainingMinutes, formatWorkoutMinutesTotal } from '../timing.js';
 import { type WeekSpan, LEGACY_LAST_CLOSED_WEEK_INSTANT } from '../week.js';
 import { type DWeekTarget, type DWeekModel, weekWindowFor } from '../week-d.js';
-import { type WorkoutId, PROGRAM_START_DATE } from '../program.js';
 import type { LogEntry } from '../types.js';
 import { ui } from '../ui.js';
 import { requestRender } from '../bus.js';
 import { bindClick } from '../dom.js';
 import { loadLogs } from '../state.js';
-import { escapeHtml, formatMonthDay, formatWeekRange } from '../format.js';
+import { escapeHtml, formatWeekRange } from '../format.js';
 import { shownSessionCount } from '../number-rules.js';
-import { formatDate, formatWeekdayDate } from '../dates.js';
+import { buildWeekRows, usualWeekCount } from '../weeks-grid.js';
+import { honestWallSitLogs } from '../viz.js';
+import { formatWeekdayDate } from '../dates.js';
 import {
   getProgramWeek,
   weekModel,
@@ -32,143 +35,8 @@ import {
   saturdayForOffset,
   firstProgramSaturday,
 } from '../week-clock.js';
-import { attributeSessionsToWeeks, sessionsAttributedTo } from '../program-week.js';
-import {
-  formatRowDate,
-  logsNewestFirst,
-  renderSessionRow,
-  BACK_PAIN_STOP_AT,
-} from '../session-row.js';
-
-type WeeklyTargetRow = {
-  saturday: Date;
-  weekNum: number;
-  round: number;
-  skippedLabel: string | null; // e.g. 'Sick' — week holds its slot but doesn't count
-  workouts: ('A' | 'B' | 'C')[]; // in order completed (chronological)
-  logs: (LogEntry | null)[]; // parallel to workouts, for click→detail
-  isCurrentWeek: boolean;
-};
-
-function buildWeeklyTargetRows(logsIn: LogEntry[]): WeeklyTargetRow[] {
-  // v54 (Sep 27 2026): this is the 3-PER-WEEK view (her "its 3 a week" rule)
-  // — D is extra, never one of the three, so it's excluded before any
-  // attribution/slot math the same way sessionsForWeekModel excludes it from
-  // the completion model.
-  const logs = logsIn.filter((l): l is LogEntry & { workout: WorkoutId } => l.workout !== 'D');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayDow = today.getDay();
-  const daysSinceSat = (todayDow + 1) % 7;
-  const thisSaturday = new Date(today);
-  thisSaturday.setDate(today.getDate() - daysSinceSat);
-  thisSaturday.setHours(0, 0, 0, 0);
-
-  const programStart = new Date(PROGRAM_START_DATE + 'T00:00:00');
-
-  // Walk back from this Saturday to the Saturday on/before programStart.
-  const rows: WeeklyTargetRow[] = [];
-  const cursor = new Date(thisSaturday);
-  // Swing-aware (v42): attribution computed once, shared by every row.
-  const attribution = attributeSessionsToWeeks(logs);
-  while (cursor.getTime() >= programStart.getTime() - 6 * 24 * 60 * 60 * 1000) {
-    const weekStart = new Date(cursor);
-
-    // Sessions COUNTED toward this week (chronological — oldest first)
-    const weekLogs = sessionsAttributedTo(logs, weekStart, attribution).slice(0, 3); // cap at 3 for the 3-slot view
-
-    const pw = getProgramWeek(weekStart);
-    rows.push({
-      saturday: new Date(weekStart),
-      weekNum: pw.num,
-      round: pw.round,
-      skippedLabel: pw.skippedLabel,
-      // v54: safe — `logs` (above) already excludes D, so nothing in
-      // weekLogs (derived from it) is ever 'D'; this is a type-only
-      // narrowing, not a second filter (a second filter here would
-      // desync `workouts` from the parallel `logs` array below).
-      workouts: weekLogs.map((l) => l.workout as 'A' | 'B' | 'C'),
-      logs: weekLogs,
-      isCurrentWeek: weekStart.getTime() === thisSaturday.getTime(),
-    });
-
-    cursor.setDate(cursor.getDate() - 7);
-  }
-
-  return rows;
-}
-
-// 3-per-week target view (replaces the 7-cells-per-week year-grid).
-// Allison's words 2026-05-15 15:13 JDT: "i think theres too many sessions"
-// + "its 3 a week" + "go back to 3 per week." The year-grid showed 7 cells
-// per week which implied a daily target — but she's only doing 3/week. This
-// view shows ONE row per week × 3 slot pills, each filled with the workout
-// letter she actually did (or empty outline).
-
-// 3-per-week target view. One row per program week × 3 slot pills.
-// v48 · P4 (Sep 24 2026): lives at the bottom of Weekly review now, collapsed
-// as "Week by week ▸" (DECISIONS Q3 — her Aug 30 "consistency should be
-// collapsible"; Weekly review is where looking back lives). One <details>, so
-// it's still one tap open.
-function renderWeeklyTargetGrid(summaryLabel = 'Consistency'): string {
-  const logs = loadLogs();
-  const rows = buildWeeklyTargetRows(logs);
-  // v48 · P6 (Sep 24 2026): the "N of 3 this week" + swing note that sat on
-  // this summary (and again inside it) are gone — in Weekly review the count
-  // is the screen's own subtitle, and home's week line carries the swing in
-  // words (DECISIONS §2 #2: "One quiet count, not 3-5").
-
-  const rowsHtml = rows
-    .map((r) => {
-      const rangeLabel = `${r.saturday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-      const slots = [0, 1, 2]
-        .map((i) => {
-          const w = r.workouts[i];
-          const log = r.logs[i];
-          if (w && log) {
-            const cls = `weekly-slot weekly-slot-${w}`;
-            const id = log.id ? `data-detail="${escapeHtml(log.id)}"` : '';
-            const tooltip = `${formatDate(log.date)} · Workout ${w} · capacity ${log.capacityBefore ?? '—'}→${log.capacityAfter ?? '—'}`;
-            return `<button class="${cls}" type="button" ${id} aria-label="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}">${w}</button>`;
-          }
-          return `<div class="weekly-slot weekly-slot-empty" aria-label="open slot"></div>`;
-        })
-        .join('');
-      const cls = r.isCurrentWeek ? 'weekly-row weekly-row-current' : 'weekly-row';
-      const label = r.isCurrentWeek
-        ? 'This week'
-        : r.skippedLabel
-          ? `${r.skippedLabel} · ${rangeLabel}`
-          : `${r.round > 1 ? `R${r.round} · ` : ''}Wk ${r.weekNum} · ${rangeLabel}`;
-      return `
-        <div class="${cls}">
-          <div class="weekly-row-label">${label}</div>
-          <div class="weekly-slots">${slots}</div>
-        </div>`;
-    })
-    .join('');
-
-  // Collapsed by default (her call Aug 30 2026: "consistency should be
-  // collapsible and the workouts should be first") — the summary line keeps
-  // the one number she cares about visible without the full week list.
-  return `
-    <details class="consistency-wrap">
-      <summary class="next-week-summary">
-        <span class="next-week-summary-label">${summaryLabel}</span>
-        <span class="next-week-summary-meta">3 per week · since ${formatMonthDay(PROGRAM_START_DATE + 'T00:00:00')}</span>
-        <span class="next-week-chev">▸</span>
-      </summary>
-      <div class="past-weeks-body weekly-target-card">
-        <div class="weekly-target-header">
-          <h3 class="weekly-target-title">
-            Consistency · <span class="weekly-target-sub">3 per week</span>
-          </h3>
-        </div>
-        <div class="weekly-target-rows">${rowsHtml}</div>
-      </div>
-    </details>
-  `;
-}
+import { sessionsAttributedTo } from '../program-week.js';
+import { logsNewestFirst, renderSessionRow } from '../session-row.js';
 
 type WeekSession = {
   log: LogEntry;
@@ -312,53 +180,6 @@ export function computeWeekTotals(sessions: WeekSession[]): WeekTotals {
     maxWallSit,
     avgBackPain: backPainCount > 0 ? backPainSum / backPainCount : null,
   };
-}
-
-function formatAvg(n: number | null, digits = 1): string {
-  if (n === null) return '—';
-  return n.toFixed(digits);
-}
-
-// Calmly directional delta. NOT shouty — per agency rule. Show direction with
-// muted progress/dim tokens; a "worse" delta gets --text-dim, NOT a warn color.
-// v48 · P6 (Sep 24 2026): with its unit — "↓ -22m", "↑ +5s" (a bare "-22" left
-// her to guess minutes or seconds; uxui weekly).
-function renderDelta(
-  curr: number,
-  prev: number,
-  kind: 'higher-better' | 'lower-better',
-  unit = ''
-): string {
-  const diff = curr - prev;
-  if (diff === 0) {
-    return `<span class="weekly-review-delta-num delta-same">±0${unit}</span>`;
-  }
-  const arrow = diff > 0 ? '↑' : '↓';
-  const sign = diff > 0 ? '+' : '';
-  const isImprovement =
-    (kind === 'higher-better' && diff > 0) || (kind === 'lower-better' && diff < 0);
-  const cls = isImprovement ? 'delta-up' : 'delta-down';
-  return `<span class="weekly-review-delta-num ${cls}">${arrow} ${sign}${diff}${unit}</span>`;
-}
-
-function renderDeltaDecimal(
-  curr: number | null,
-  prev: number | null,
-  kind: 'higher-better' | 'lower-better'
-): string {
-  if (curr === null || prev === null) {
-    return `<span class="weekly-review-delta-num delta-same">—</span>`;
-  }
-  const diff = curr - prev;
-  if (Math.abs(diff) < 0.05) {
-    return `<span class="weekly-review-delta-num delta-same">±0</span>`;
-  }
-  const arrow = diff > 0 ? '↑' : '↓';
-  const sign = diff > 0 ? '+' : '';
-  const isImprovement =
-    (kind === 'higher-better' && diff > 0) || (kind === 'lower-better' && diff < 0);
-  const cls = isImprovement ? 'delta-up' : 'delta-down';
-  return `<span class="weekly-review-delta-num ${cls}">${arrow} ${sign}${diff.toFixed(1)}</span>`;
 }
 
 // The review's title in home's words: "This week · R2 · Week 4 · Sep 19–25",
@@ -552,6 +373,48 @@ function reviewCanGoBack(offset: number): boolean {
 //  - All data reads from existing loadLogs(). No new Supabase queries.
 //  - D-1 visual tokens only (no new color vars).
 
+// v64 (Oct 20 2026): "What was measured" in words, one line, over everything the page lists
+// (A/B/C and the D ride): "wall sit 45 s · pain-free 1 of 2 · wrist 1". Capacity is not shown
+// here (her Q6: the default-5 readings are untrustworthy; it stays in Session detail and on
+// the Cycle page). Each part appears only when there is something real to say.
+function measuredWords(listed: LogEntry[]): string {
+  const parts: string[] = [];
+  const totals = computeWeekTotals(listed.map((log) => ({ log })));
+  if (totals.trainingKnownCount > 0) {
+    const partial =
+      totals.trainingKnownCount < totals.count
+        ? ` (${totals.trainingKnownCount} of ${totals.count} sessions)`
+        : '';
+    parts.push(`time ${formatWorkoutMinutesTotal(totals.trainingMinSum)}${partial}`);
+  }
+  // Honest wall sits only (viz.ts: a pre-Sep 24 row saved the PRESCRIBED hold, not a reading).
+  const walls = honestWallSitLogs(listed).map((l) => l.wallSitSec);
+  if (walls.length > 0) parts.push(`wall sit ${Math.max(...walls)} s`);
+  const back = listed.map((l) => l.backPain).filter((v): v is number => v !== null);
+  if (back.length > 0)
+    parts.push(`pain-free ${back.filter((v) => v === 0).length} of ${back.length}`);
+  const wrist = [...listed]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((l) => l.wristPain)
+    .filter((v): v is number => typeof v === 'number');
+  if (wrist.length > 0) {
+    const first = wrist[0]!;
+    const last = wrist[wrist.length - 1]!;
+    parts.push(first === last ? `wrist ${last}` : `wrist ${first} → ${last}`);
+  }
+  return parts.join(' · ');
+}
+
+// v64: "Your usual: 3 a week · this week: 3" - the rolling median of the last 4 normal weeks
+// (weeks-grid.ts), only once 4 exist; "that week" on a past page. One line, no arrows: a
+// one-week delta on numbers this small is noise, and "down" was good news for back pain.
+function usualLine(pageOffset: number, shownCount: number, isLiveOpen: boolean): string {
+  const usual = usualWeekCount(buildWeekRows(loadLogs()), pageOffset);
+  if (usual === null) return '';
+  const shown = Number.isInteger(usual) ? String(usual) : usual.toFixed(1);
+  return `<p class="review-usual">Your usual: ${shown} a week · ${isLiveOpen ? 'this week' : 'that week'}: ${shownCount}</p>`;
+}
+
 export function renderWeeklyReview(): string {
   const offset = ui.viewedWeekOffset;
   const view = reviewWeekViewAt(offset);
@@ -559,15 +422,6 @@ export function renderWeeklyReview(): string {
 
   const sessions = view.sessions;
   const totals = computeWeekTotals(sessions);
-  const prev = computeWeekTotals(view.prevSessions);
-  // v62.3 F2: the "vs previous week" box counts sessions the way the header
-  // does (D counted in on a completion-model week) - both weeks, same rule.
-  const prevView = reviewWeekViewAt(offset + 1);
-  const prevShownCount = shownSessionCount(
-    prev.count,
-    prevView.countsD,
-    prevView.extraSessions.length
-  );
 
   // The ‹ › arrows sit around the title (moved from home, DECISIONS §5). The
   // live week has nothing after it, so › is hidden — not a dead button.
@@ -595,29 +449,21 @@ export function renderWeeklyReview(): string {
         Sessions: <span class="${sessionCountClass}"><strong>${reviewShownCount}</strong> of ${reviewDenom}</span>
       </div>`;
 
-  // v54 fix r2 (Sep 27 2026), checker's should #1: D never counts toward
-  // "N of 3" (it isn't one of the three), but a D ride that week is real and
-  // hiding it made the page say something untrue ("No sessions this week"
-  // right after she rode one). Listed as its own honest extra line, under
-  // the count, never folded into it.
-  const extraRows = view.extraSessions
-    .map(
-      (l) => `<div class="weekly-review-extra-row">D · ${formatRowDate(l.date)} · extra ride</div>`
-    )
-    .join('');
+  const newestFirst = logsNewestFirst();
+  // v64: the D ride is a normal row in the list (it was a session), in date order with the
+  // A/B/C rows - no separate "D · ... · extra ride" line.
+  const listed = [...sessions.map((s) => s.log), ...view.extraSessions].sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+  const sessionRows = listed.map((l) => renderSessionRow(l, newestFirst)).join('');
 
   // Empty state — single subtle line, no nudge.
   if (sessions.length === 0) {
-    // v54 fix r3 (Sep 27 2026), checker's should #1 (round 3 — round 2's own
-    // fix above only half-closed this): "No sessions this week." directly
-    // above a "D · ... · extra ride" line contradicts itself — she DID ride,
-    // it just wasn't one of A/B/C. When extraRows is non-empty the line now
-    // names what's actually still open (skippedLabel never co-occurs with
-    // extraSessions — completion pages always set skippedLabel: null, see
-    // reviewWeekViewAt — so this branches cleanly ahead of it).
+    // v54 fix r3 (Sep 27 2026): "No sessions this week." above a D ride she did
+    // contradicts itself - when D rows exist the line names what is still open.
     const emptyLine = view.skippedLabel
       ? 'Held the slot — doesn’t count.'
-      : extraRows
+      : view.extraSessions.length > 0
         ? view.isLiveOpen
           ? 'None of A, B, C yet.'
           : 'None of A, B, C that week.'
@@ -628,114 +474,15 @@ export function renderWeeklyReview(): string {
       ${header}
       ${subtitle}
       <p class="weekly-review-empty">${emptyLine}</p>
-      ${extraRows ? `<div class="weekly-review-extras">${extraRows}</div>` : ''}
-      ${renderWeeklyTargetGrid('Week by week')}
+      ${
+        view.extraSessions.length > 0
+          ? `<div class="card weekly-review-sessions session-list">${sessionRows}</div>`
+          : ''
+      }
     `;
   }
 
-  const newestFirst = logsNewestFirst();
-  const sessionRows = sessions.map((s) => renderSessionRow(s.log, newestFirst)).join('');
-
-  // "6.0 → 7.0"; with no after-readings that week, just the before (the
-  // Session screen's "7 when after is null" — a hole never drawn as "→ —").
-  const capTile =
-    totals.avgCapBefore === null && totals.avgCapAfter === null
-      ? '—'
-      : totals.avgCapAfter === null
-        ? formatAvg(totals.avgCapBefore)
-        : `${formatAvg(totals.avgCapBefore)} → ${formatAvg(totals.avgCapAfter)}`;
-  const painWarn = totals.avgBackPain !== null && totals.avgBackPain >= BACK_PAIN_STOP_AT;
-  // v55 (Sep 27 2026) — CHECK N4 (round 1): "TOTAL TIME —" was showing on
-  // every week before her confirmed-timing rows existed (T2 removed the old
-  // app-time fallback correctly; nothing replaced the tile). Fix per the
-  // checker's own words: hide the tile until a week has a confirmed time,
-  // rather than show an honest but permanent "—".
-  const totalTimeTile =
-    totals.trainingKnownCount > 0
-      ? `
-        <div class="weekly-review-total">
-          <div class="weekly-review-total-num">${formatWorkoutMinutesTotal(totals.trainingMinSum)}</div>
-          <div class="weekly-review-total-lbl">${
-            totals.trainingKnownCount < totals.count
-              ? `total time · ${totals.trainingKnownCount} of ${totals.count} sessions`
-              : 'total time'
-          }</div>
-        </div>`
-      : '';
-  // Four tiles, an even grid (v48 · P6: one "Capacity 5.5 → 6.0" tile replaced
-  // the two average tiles; back pain always has its tile — "none" when no pain).
-  const totalsCard = `
-    <div class="card weekly-review-totals">
-      <h3>Week totals</h3>
-      <div class="weekly-review-totals-grid">
-        ${totalTimeTile}
-        <div class="weekly-review-total">
-          <div class="weekly-review-total-num">${capTile}</div>
-          <div class="weekly-review-total-lbl">capacity</div>
-        </div>
-        <div class="weekly-review-total">
-          <div class="weekly-review-total-num">${totals.maxWallSit > 0 ? `${totals.maxWallSit}s` : '—'}</div>
-          <div class="weekly-review-total-lbl">max wall sit</div>
-        </div>
-        <div class="weekly-review-total${painWarn ? ' weekly-review-total-warn' : ''}">
-          <div class="weekly-review-total-num">${totals.avgBackPain === null ? 'none' : formatAvg(totals.avgBackPain)}</div>
-          <div class="weekly-review-total-lbl">${totals.avgBackPain === null ? 'back pain' : 'avg back pain'}</div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  // v48 · P6 (Sep 24 2026): "vs previous week" only for a CLOSED week — on a
-  // Thursday it showed "↓ -1" for a week she was on track to finish (uxui
-  // weekly 4/5). The live week says so in one quiet line instead.
-  const deltaCard =
-    !view.isLiveOpen && prev.count > 0
-      ? `
-        <div class="card weekly-review-delta">
-          <h3>vs previous week</h3>
-          <div class="weekly-review-delta-grid">
-            <div class="weekly-review-delta-row">
-              <span class="weekly-review-delta-lbl">sessions</span>
-              <span class="weekly-review-delta-vals">${prevShownCount} → ${reviewShownCount}</span>
-              ${renderDelta(reviewShownCount, prevShownCount, 'higher-better')}
-            </div>
-            ${
-              // T2 fix r1 (Sep 27 2026, checker's "must"): only compare
-              // confirmed training minutes, and only when BOTH weeks have at
-              // least one confirmed session — no arrow drawn from a week (or
-              // two) with nothing confirmed, and never from durationSec again.
-              prev.trainingKnownCount > 0 && totals.trainingKnownCount > 0
-                ? `<div class="weekly-review-delta-row">
-                    <span class="weekly-review-delta-lbl">total time</span>
-                    <span class="weekly-review-delta-vals">${formatWorkoutMinutesTotal(prev.trainingMinSum)} → ${formatWorkoutMinutesTotal(totals.trainingMinSum)}</span>
-                    ${renderDelta(Math.round(totals.trainingMinSum), Math.round(prev.trainingMinSum), 'higher-better', 'm')}
-                  </div>`
-                : ''
-            }
-            ${
-              prev.maxWallSit > 0 || totals.maxWallSit > 0
-                ? `<div class="weekly-review-delta-row weekly-review-delta-row-emph">
-                    <span class="weekly-review-delta-lbl">max wall sit</span>
-                    <span class="weekly-review-delta-vals">${prev.maxWallSit}s → ${totals.maxWallSit}s</span>
-                    ${renderDelta(totals.maxWallSit, prev.maxWallSit, 'higher-better', 's')}
-                  </div>`
-                : ''
-            }
-            ${
-              prev.avgBackPain !== null || totals.avgBackPain !== null
-                ? `<div class="weekly-review-delta-row">
-                    <span class="weekly-review-delta-lbl">avg back pain</span>
-                    <span class="weekly-review-delta-vals">${formatAvg(prev.avgBackPain)} → ${formatAvg(totals.avgBackPain)}</span>
-                    ${renderDeltaDecimal(totals.avgBackPain, prev.avgBackPain, 'lower-better')}
-                  </div>`
-                : ''
-            }
-          </div>
-        </div>
-      `
-      : view.isLiveOpen
-        ? '<p class="weekly-review-open">Week still open.</p>'
-        : '';
+  const measured = measuredWords(listed);
 
   return `
     ${header}
@@ -743,13 +490,13 @@ export function renderWeeklyReview(): string {
     <div class="card weekly-review-sessions session-list">
       ${sessionRows}
     </div>
-    ${extraRows ? `<div class="weekly-review-extras">${extraRows}</div>` : ''}
-    ${totalsCard}
-    ${deltaCard}
+    ${usualLine(offset, reviewShownCount, view.isLiveOpen)}
     ${
-      // v48 · P4 (Sep 24 2026): re-homed from home; stays at the bottom, closed.
-      renderWeeklyTargetGrid('Week by week')
+      measured
+        ? `<p class="review-measured"><span class="review-measured-lbl">What was measured</span> ${escapeHtml(measured)}</p>`
+        : ''
     }
+    ${view.isLiveOpen ? '<p class="weekly-review-open">Week still open.</p>' : ''}
   `;
 }
 

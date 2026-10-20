@@ -6,7 +6,6 @@ import {
   SWING_WEEK3_A,
   SWING_WEEK3_B,
   SWING_SAT_C,
-  openWeekByWeek,
   mockDate,
   movableClock,
   ignoreSickWeeks,
@@ -936,12 +935,12 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.home-header h1')).toContainText('Week 6');
       await expect(page.locator('.home-hero')).toContainText('~20 min');
       await expect(page.locator('.home-hero')).toContainText('Cardio: 10 min');
-      // The weekly grid keeps a labeled blank row for the Oct 3 week.
-      await openWeekByWeek(page);
-      const sickRow = page.locator('.weekly-row').filter({ hasText: 'Sick' });
-      // Two Sick rows now: the July one (Round 1, unchanged) and Oct 3.
-      await expect(sickRow).toHaveCount(2);
-      await expect(sickRow.last().locator('.weekly-slot-empty')).toHaveCount(3);
+      // The weeks grid (v64: on Progress) keeps a grey, labelled square for the Oct 3 week.
+      await page.locator('#open-progress-link').click();
+      const sick = page.locator('.wk-cell[aria-label="Sick week, not counted"]');
+      // Two Sick squares: the July one (Round 1, unchanged) and Oct 3.
+      await expect(sick).toHaveCount(2);
+      await expect(sick.last()).toHaveText('S');
       await page.goto('/');
       // A, B and C are the same light session: 1 round, the 10-min ride in
       // the warmup, only Belly breathing + Pelvic tilts in the main, no
@@ -1426,7 +1425,9 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.weekly-review-subtitle')).toContainText('Sessions:');
       await expect(page.locator('.weekly-review-subtitle strong')).toHaveText('3');
       await expect(page.locator('.weekly-review-subtitle')).toContainText('of 4');
-      await expect(page.locator('.weekly-review-extra-row')).toHaveCount(0);
+      await expect(
+        page.locator('.weekly-review-sessions .history-workout-badge', { hasText: 'D' })
+      ).toHaveCount(0);
     });
 
     // "gap + Sunday opening": C Fri (weekday close), D Sat (mid-gap, the
@@ -1453,15 +1454,17 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.review-title')).toContainText('Week 6');
       await expect(page.locator('.weekly-review-subtitle strong')).toHaveText('2');
       await expect(page.locator('.weekly-review-subtitle')).toContainText('of 4');
-      await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
-      await expect(page.locator('.weekly-review-extra-row')).toContainText('D');
-      await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
+      await expect(
+        page.locator('.weekly-review-sessions .history-workout-badge', { hasText: 'D' })
+      ).toHaveCount(1);
       // Page 1, Week 5, must not also claim that same Saturday D.
       await page.locator('#prev-week').click();
       await expect(page.locator('.review-title')).toContainText('Week 5');
       await expect(page.locator('.review-title')).toContainText('complete · 3 of 4');
       await expect(page.locator('.weekly-review-subtitle strong')).toHaveText('3');
-      await expect(page.locator('.weekly-review-extra-row')).toHaveCount(0);
+      await expect(
+        page.locator('.weekly-review-sessions .history-workout-badge', { hasText: 'D' })
+      ).toHaveCount(0);
     });
 
     // "D then A on the same Saturday" (her real Sep 28 order, replayed at the
@@ -1485,11 +1488,13 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.review-title')).toContainText('Week 6');
       await expect(page.locator('.weekly-review-subtitle strong')).toHaveText('2');
       await expect(page.locator('.weekly-review-subtitle')).toContainText('of 4');
-      await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
+      await expect(
+        page.locator('.weekly-review-sessions .history-workout-badge', { hasText: 'D' })
+      ).toHaveCount(1);
     });
   });
 
-  test('(f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress', async ({
+  test('(f) v64 the re-homed pieces: week card → Weekly review (the week-by-week grid moved to Progress); Gear in Settings; Past weeks in Progress', async ({
     page,
   }) => {
     await mockDate(page, THU_WEEK4);
@@ -1497,9 +1502,8 @@ test.describe('v48 P4 home', () => {
     await page.goto('/');
     await page.locator('#open-weekly-review').click();
     await expect(page.locator('h2').first()).toContainText('This week');
-    const wbw = page.locator('details.consistency-wrap');
-    await expect(wbw.locator('.next-week-summary-label')).toHaveText('Week by week');
-    await expect(wbw).toHaveJSProperty('open', false);
+    // v64: the week-by-week grid left the review; it is the weeks grid on Progress now.
+    await expect(page.locator('details.consistency-wrap')).toHaveCount(0);
     await page.locator('#back-home').click();
     await page.locator('#open-settings').click();
     await expect(page.locator('.settings-screen .gear-card')).toContainText('Gear');

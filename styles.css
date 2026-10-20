@@ -7256,3 +7256,16 @@ button.wk-cell {
   font-size: var(--t-body);
   text-align: right;
 }
+
+/* v64 Weekly review: "Your usual" and "What was measured" are two quiet lines, not cards. */
+.review-usual,
+.review-measured {
+  margin: var(--s3) 0 0;
+  font-size: var(--t-small);
+  color: var(--ink-2);
+}
+
+.review-measured-lbl {
+  color: var(--ink-3);
+  margin-right: 6px;
+}

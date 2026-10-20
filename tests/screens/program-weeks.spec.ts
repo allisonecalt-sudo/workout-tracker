@@ -5,7 +5,6 @@ import {
   setupPage,
   NEXT,
   openCue,
-  openWeekByWeek,
   mockDate,
   appSourceFiles,
   TESTS_DIR as __dirname,
@@ -132,18 +131,39 @@ test('sick week Jul 11-17 holds a blank slot and Jul 18-24 is Week 11', async ({
   // Her calls Jul 17+19 2026: the sick week stays blank and doesn't count
   // ("it should be week 11" + "show a space for the missing week").
   await mockDate(page, '2026-07-19T10:00:00.000Z'); // Sun in the resume week
+  await page.addInitScript(() => {
+    const row = (id: string, date: string, workout: string) => ({
+      id,
+      date,
+      workout,
+      capacityBefore: 6,
+      capacityAfter: 6,
+      wallSitSec: 0,
+      backPain: 0,
+      word: '',
+      synced: true,
+    });
+    window.localStorage.setItem(
+      'workout-tracker:logs',
+      JSON.stringify([
+        row('r1a', '2026-07-05T10:00:00.000Z', 'A'),
+        row('r1b', '2026-07-07T10:00:00.000Z', 'B'),
+      ])
+    );
+  });
   await page.goto('/');
   // Banner: the skipped week doesn't advance the count — Week 11, not 12.
   await expect(page.locator('.home-header h1')).toContainText('Week 11');
   // The weekly grid keeps a visible row for the missed week, labeled Sick,
   // with all 3 slots empty. (v48 · P4: Weekly review › Week by week.)
-  await openWeekByWeek(page);
-  const sickRow = page.locator('.weekly-row').filter({ hasText: 'Sick' });
-  await expect(sickRow).toHaveCount(1);
-  await expect(sickRow.locator('.weekly-slot-empty')).toHaveCount(3);
+  // (v64: the weeks grid on Progress - a grey, labelled square, never an empty gap.)
+  await page.locator('#open-progress-link').click();
+  const sick = page.locator('.wk-cell[aria-label="Sick week, not counted"]');
+  await expect(sick).toHaveCount(1);
+  await expect(sick).toHaveText('S');
 });
 
-test('home order: the workout sits first; the week-by-week list is collapsed in Weekly review', async ({
+test('home order: the workout sits first; the week-by-week list is off Weekly review (v64: it is the weeks grid on Progress)', async ({
   page,
 }) => {
   // Her call Aug 30 2026: "consistency should be collapsible and the
@@ -158,9 +178,8 @@ test('home order: the workout sits first; the week-by-week list is collapsed in 
   // v61 (Sep 28 2026), spec item d: "of 4" now.
   await expect(page.locator('.week-line')).toContainText('of 4 · A, B and C to go');
   await page.locator('#open-weekly-review').click();
-  const wrap = page.locator('.consistency-wrap');
-  await expect(wrap).toHaveJSProperty('open', false);
-  await expect(wrap.locator('.next-week-summary-label')).toHaveText('Week by week');
+  // v64: the week-by-week list left the review (it is the weeks grid on Progress).
+  await expect(page.locator('.consistency-wrap')).toHaveCount(0);
 });
 
 // v53 (Sep 26 2026) Tips audit: her words, "Cue in the app? It says to cue
@@ -314,16 +333,38 @@ test('round 2: break weeks Jul 25–Aug 28 hold blank labeled rows, round-1 week
   page,
 }) => {
   await mockDate(page, '2026-08-30T15:00:00.000Z');
+  await page.addInitScript(() => {
+    const row = (id: string, date: string, workout: string) => ({
+      id,
+      date,
+      workout,
+      capacityBefore: 6,
+      capacityAfter: 6,
+      wallSitSec: 0,
+      backPain: 0,
+      word: '',
+      synced: true,
+    });
+    window.localStorage.setItem(
+      'workout-tracker:logs',
+      JSON.stringify([
+        row('r1a', '2026-07-05T10:00:00.000Z', 'A'),
+        row('r1b', '2026-07-07T10:00:00.000Z', 'B'),
+      ])
+    );
+  });
+
   await page.goto('/');
   // Consistency is collapsed by default (v26) — expand it to see the rows.
   // (v48 · P4: in Weekly review.)
-  await openWeekByWeek(page);
-  // Five Break rows, each with 3 empty slots (nothing logged over the summer).
-  const breakRows = page.locator('.weekly-row').filter({ hasText: 'Break' });
-  await expect(breakRows).toHaveCount(5);
-  // Round-1 rows keep their old plain "Wk N" labels (no R1 prefix).
-  await expect(page.locator('.weekly-row-label', { hasText: /Wk 10 ·/ }).first()).toBeVisible();
-  await expect(page.locator('.weekly-row-label', { hasText: /R1/ })).toHaveCount(0);
+  // v64: the weeks grid on Progress. Five grey, labelled Break squares (nothing logged over
+  // the summer) - the page needs 2+ sessions to show, so seed two.
+  await page.locator('#open-progress-link').click();
+  const breaks = page.locator('.wk-cell[aria-label="Break week, not counted"]');
+  await expect(breaks).toHaveCount(5);
+  // Round-1 weeks keep their plain labels (no "(round N)" suffix).
+  await expect(page.locator('.wk-cell[aria-label^="Week 10,"]').first()).toBeVisible();
+  await expect(page.locator('.wk-cell[aria-label*="(round 1)"]')).toHaveCount(0);
 });
 
 test('walk credit: start/stop timer logs a walk, bumps week count, streak untouched', async ({

@@ -93,9 +93,9 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     await page.locator('#open-weekly-review .week-card-head').click();
     await expect(page.locator('.review-title')).toHaveText('Week 5 · since Sat Sep 26');
     await expect(page.locator('.weekly-review-empty')).toHaveText('None of A, B, C yet.');
-    await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
-    await expect(page.locator('.weekly-review-extra-row')).toContainText('D');
-    await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
+    await expect(
+      page.locator('.weekly-review-sessions .history-workout-badge', { hasText: 'D' })
+    ).toHaveCount(1);
   });
 
   // v55 (Sep 27 2026) — CHECK round 3 N1: a D ride dated in the GAP after a
@@ -128,9 +128,9 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     await page.goto('/');
     await page.locator('#open-weekly-review .week-card-head').click();
     await expect(page.locator('.review-title')).toContainText('Week 5');
-    await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
-    await expect(page.locator('.weekly-review-extra-row')).toContainText('D');
-    await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
+    await expect(
+      page.locator('.weekly-review-sessions .history-workout-badge', { hasText: 'D' })
+    ).toHaveCount(1);
 
     // Week 6 genuinely opens now (a real session on/after Sat Oct 3) — the
     // gap ride must STAY on Week 5's page, and Week 6's own page must not
@@ -140,11 +140,14 @@ test.describe('WK4 (Sep 27 2026): weekly review / Progress / how-to / walks / sa
     await page.goto('/');
     await page.locator('#open-weekly-review .week-card-head').click();
     await expect(page.locator('.review-title')).toContainText('Week 6');
-    await expect(page.locator('.weekly-review-extra-row')).toHaveCount(0);
+    await expect(
+      page.locator('.weekly-review-sessions .history-workout-badge', { hasText: 'D' })
+    ).toHaveCount(0);
     await page.locator('#prev-week').click();
     await expect(page.locator('.review-title')).toContainText('Week 5');
-    await expect(page.locator('.weekly-review-extra-row')).toHaveCount(1);
-    await expect(page.locator('.weekly-review-extra-row')).toContainText('extra ride');
+    await expect(
+      page.locator('.weekly-review-sessions .history-workout-badge', { hasText: 'D' })
+    ).toHaveCount(1);
   });
 
   test('Progress · weeks grid (v64): a closed completion week reads "3 of 4", never a recomputed calendar count', async ({

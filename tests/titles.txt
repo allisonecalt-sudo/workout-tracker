@@ -170,7 +170,7 @@ buildPlainPhaseTable / buildPlainMoodPhaseTable — bucketed into the 4 plain ph
 canonicalMoveName › a plain move name passes through unchanged
 canonicalMoveName › any ride-name lane maps back to the one PROGRAM ever encodes
 capacity before (v39): a missing reading stays missing through the sync, the week average and the import
-capacity before (v39): the history row shows an em dash, never "0"
+capacity before (v39, v64): the history row carries no capacity, so never an invented "0"
 captureBody matches voice-capture exactly › a recording with no length sends none (voice-capture omits it too); never a category
 captureBody matches voice-capture exactly › a recording: the length rounded to whole seconds, same key order
 captureBody matches voice-capture exactly › a typed note: duration_seconds 0, key order transcript, source, id, duration_seconds
@@ -287,7 +287,7 @@ holdSetsFace — the 3 done-face states a multi-set hold walks through › a red
 holdSetsFace — the 3 done-face states a multi-set hold walks through › both sets done -> all-done, "2 sets ✓ · 20 s · 18 s"
 holdSetsFace — the 3 done-face states a multi-set hold walks through › nothing held yet -> ready (app.ts keeps its own existing Ready face for this)
 holdSetsFace — the 3 done-face states a multi-set hold walks through › set 1 of 2 done -> more-sets, "Set 1 ✓ 20 s" + Start set 2
-home order: the workout sits first; the week-by-week list is collapsed in Weekly review
+home order: the workout sits first; the week-by-week list is off Weekly review (v64: it is the weeks grid on Progress)
 home screen shows three workout options and zero sessions
 honest readings — the pre-v48 untouched-5 exclusion › a post-cutoff exact 5 is trusted (v48+ only saves a 5 when she chose it)
 honest readings — the pre-v48 untouched-5 exclusion › a pre-cutoff exact 5 is excluded (ambiguous: chosen, or the untouched default)
@@ -509,9 +509,9 @@ setsPrescribed — generalized off the reps text, never hardcoded to Wall lean �
 setsPrescribed — generalized off the reps text, never hardcoded to Wall lean › no reps text at all -> 1
 setup blocks (v40): every phase that renders an Exercise also renders its setup
 sheet groups by phase: Warm-up, Main round 1, Main round 2, Upper back, Cool-down
-ship 3 (replaced): weekly-target grid renders with 3 slots per row
+ship 3 (v64): the 3-per-week grid is off the Weekly review (it is the weeks grid on Progress now)
+ship 3 (v64): two wall-sit values draw no sparkline (it needs 5+ honest points)
 ship 3: sparkline NOT rendered for row with 0 or 1 wall-sit value
-ship 3: sparkline renders for history row with >=2 wall-sit values
 ship 4: weekly review empty state for week with no sessions
 ship 4: weekly review header shows session count for current week
 ship 4: weekly review reachable from home button
@@ -701,8 +701,8 @@ v48 P4 home › (e2) swing Saturday: Up next is the workout last week is still m
 v48 P4 home › (e2b) swing Saturday: home shows LAST week — Week 4 on top, its 8 days, A + C done, B left
 v48 P4 home › (e2c) after Saturday's B the Done card reports Week 4, not the new week
 v48 P4 home › (e3) once Saturday completes last week, Up next starts the new week at A
-v48 P4 home › (f) the re-homed pieces: week card → Weekly review › Week by week; Gear in Settings; Past weeks in Progress
 v48 P4 home › (f) the week card opens from the keyboard too
+v48 P4 home › (f) v64 the re-homed pieces: week card → Weekly review (the week-by-week grid moved to Progress); Gear in Settings; Past weeks in Progress
 v48 P4 home › (h) the walk row: "4,210 steps today" only when Fit answered; one row, no paragraph
 v48 P4 home › (swing-plan a) Sat Sep 26 evening, Thu A + Fri C logged: B still trains on Week 4's plan (10-min ride) — the swing
 v48 P4 home › (swing-plan b → WK2) Sun Sep 27, now past the real launch: A opens on Week 5's plan (12-min ride), header plain
@@ -776,7 +776,7 @@ v48 P5 logs › v58 (d4) Hip hinge: every round runs Set 1 -> Set 2 -> the feel 
 v48 P5 logs › v58 (e) push -> pull round trip: move_feel survives sessionPayload + mergeRemoteSessions untouched
 v48 P5 logs › v58 (f) a tapped feel survives an app close mid-session (the resume snapshot)
 v48 P5 logs › v63 item 2: the row shows in round 1 and in the last round; a tap saves the right slug — no qty on a reps-only move
-v48 P6 mirror › (a) live week: no "vs previous week", one quiet "Week still open."; ‹ to last week compares with units
+v48 P6 mirror › (a) v64 live week: no "vs previous week", no totals card, one quiet "Week still open."; ‹ to last week says what was measured in words
 v48 P6 mirror › (b) a held (break) week: "Held the slot — doesn't count.", no "of 3"
 v48 P6 mirror › (c) back pain 2 is plain; 3 (her stop line) is amber
 v48 P6 mirror › (d) a session opened from the review: × Back lands on the review, on the same week
@@ -794,7 +794,7 @@ v48 P7 cool-down › (g) Done stretching ✓ lands on the post-log; nothing abou
 v48 P7 cool-down › (h) Skip lands on the post-log too — same handler as Done stretching ✓
 v48 P7 cool-down › at phone size › (e) the whole list fits: Done stretching ✓ pinned in view, page ≤ 1400 px, one sage, a quiet Skip
 v48 P8 sweep › (a) no "streak", "Do a workout", "app.ts", "localStorage" or "oEmbed" on any screen
-v48 P8 sweep › (b) label tier (timer label, session meta, review tile label) >= 4.5:1 on its card
+v48 P8 sweep › (b) label tier (timer label, session meta, review measured label) >= 4.5:1 on its card
 v48 P8 sweep › (d) the version: home "<version> · <date, no year>", Settings "Build <version> · <full date>"
 v48 P8 sweep › at phone size › (c) every Workout A screen has at most one sage primary
 v48 P8 sweep › at phone size › (e) every tap target on home, Settings and each Workout A step is >= 44 px tall
@@ -851,7 +851,7 @@ v62.3 F1 - a per-week bar fills from the same numbers as its label › 3 / 4 fil
 v62.3 F1 - per-week bar fill = its label › Week 5 reads "3 of 4" on the weeks grid (v64: the bar is gone; the square and its label agree)
 v62.3 F2 - one session count for a week › a completion-model week counts a D ride as one more session
 v62.3 F2 - one session count for a week › a legacy week (no D concept) and a week with no D count A/B/C alone
-v62.3 F2 - the weekly review counts sessions one way › a closed Week 5 with a D ride: header "4 of 4" and the "vs previous week" box says 3 -> 4, not 3 -> 3
+v62.3 F2 - the weekly review counts sessions one way › a closed Week 5 with a D ride (v64): header "4 of 4" is the page's only count; the D ride is a row in the list, no "vs previous week" box
 v62.3 F3 - Home and Progress read the same session count › 3 sessions + 1 D ride: both screens say 3 with "+1 ride", never 4
 v62.3 F3 - one session count on Home and Progress › her data: 45 rows with one D ride is 44 sessions and "+1 ride"
 v62.3 F3 - one session count on Home and Progress › the tag is plural for 2+ and empty for none
@@ -1031,6 +1031,16 @@ v64 Progress - weeks you showed up lead; what grew, body check, more › no side
 v64 Progress - weeks you showed up lead; what grew, body check, more › the grid: full = filled with its count, partial = outlined with its count, the Sick week is grey and labelled and not tappable, this week says now
 v64 Progress - weeks you showed up lead; what grew, body check, more › the hero is "N full weeks" with its basis, and the old A/B/C chips and per-week bars are gone
 v64 Progress - weeks you showed up lead; what grew, body check, more › under 2 sessions: the calm line and the More group
+v64 Weekly review - one counting rule, the D ride in the list, your usual, words › "What was measured" in words: wall sit, pain-free, wrist; capacity is not shown
+v64 Weekly review - one counting rule, the D ride in the list, your usual, words › "Your usual: 3 a week · that week: 3" on a past page, once 4 normal weeks exist
+v64 Weekly review - one counting rule, the D ride in the list, your usual, words › Sessions rows no longer show capacity (it stays in Session detail)
+v64 Weekly review - one counting rule, the D ride in the list, your usual, words › a wall-sit sparkline needs 5 honest points (shown on the Sessions row at 5)
+v64 Weekly review - one counting rule, the D ride in the list, your usual, words › before 4 normal weeks exist there is no usual line
+v64 Weekly review - one counting rule, the D ride in the list, your usual, words › no 2-point wall-sit sparkline on the review rows; no week-by-week grid at the bottom
+v64 Weekly review - one counting rule, the D ride in the list, your usual, words › no sideways scroll at 360px on a review page
+v64 Weekly review - one counting rule, the D ride in the list, your usual, words › no sideways scroll at 412px on a review page
+v64 Weekly review - one counting rule, the D ride in the list, your usual, words › the D ride is a normal row in date order; the old "D · extra ride" line is gone
+v64 Weekly review - one counting rule, the D ride in the list, your usual, words › the live week says "this week", and the Sick-cut Week 5 is not a normal week in the median
 v64 number words (pure) › full weeks words and the Home line
 v64 number words (pure) › workouts and rides: the F3 counts, "+ 1 ride" as its own tag
 v64 what grew (pure) › a level row only across rides of the SAME length; none otherwise
