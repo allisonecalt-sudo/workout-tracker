@@ -547,6 +547,14 @@ test.describe('sync - cycle_periods, week_moves and walks (step 9b, characterisa
     expect(await fetchFitSteps(5000, 1000)).toBeNull(); // end before start: no request
     expect(calls).toHaveLength(2);
   });
+
+  test('fetchFitSteps sends only headers the fit-steps CORS allows (no Prefer, v67)', async () => {
+    replies.push(reply(200, { steps: 1 }));
+    await fetchFitSteps(1000, 5000);
+    const names = Object.keys(calls[0]?.headers ?? {}).map((n) => n.toLowerCase());
+    expect(names.sort()).toEqual(['apikey', 'authorization', 'content-type']);
+    expect(names).not.toContain('prefer');
+  });
 });
 
 // ---- step 9c: the four mutants the step-9 checker found alive ------------------------------

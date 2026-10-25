@@ -556,6 +556,7 @@ swing: a SUNDAY session never swings, even when last week is short
 swing: a Saturday session completes a 2-session week — last week shows 3 of 3, this week 0
 swing: a Saturday session does NOT swing when last week already has 3 — it opens the new week
 sync - cycle_periods, week_moves and walks (step 9b, characterisation) › a failed cycle push leaves the row unsynced (it is retried on the next flush)
+sync - cycle_periods, week_moves and walks (step 9b, characterisation) › fetchFitSteps sends only headers the fit-steps CORS allows (no Prefer, v67)
 sync - cycle_periods, week_moves and walks (step 9b, characterisation) › fetchFitSteps: a number from the edge function, null on any failure or a bad window
 sync - cycle_periods, week_moves and walks (step 9b, characterisation) › pushCyclePeriod upserts on start_date and marks the local row synced on ok
 sync - cycle_periods, week_moves and walks (step 9b, characterisation) › pushWalk POSTs minutes only to movement_log and marks the walk synced
@@ -1069,7 +1070,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v65 - the version › package.json appVersion (the one source) is v65
+v67 - the version › package.json appVersion (the one source) is v67
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"
@@ -1100,8 +1101,8 @@ week-clock replay — synthetic golden (step 5a) › the widened fixture (step 5
 week-clock replay — the real-data tool refuses git checkouts (step 5f) › --out inside ANOTHER checkout (a .git FILE, as in a worktree) is refused too
 week-clock replay — the real-data tool refuses git checkouts (step 5f) › --out inside this repo (a .git directory above it) is refused, nothing written
 week-dots row is rendered with 7 day labels
-weekCountLine › 0 done, D only: "1 of 4 · A, B and C to go" — her exact repro 1 text (CHECK-v61.md round 2)
-weekCountLine › 0 done, no D: "0 of 4 · A, B and C to go"
+weekCountLine › 0 done, D only: "1 of 4 · A, B and C left" — her repro 1 count (CHECK-v61.md round 2), v66 wording
+weekCountLine › 0 done, no D: "0 of 4 · A, B, C and D to go" (v66: D named while not done)
 weekCountLine › a CLOSED week, no D: "complete · 3 of 4" (the peek's own line)
 weekCountLine › a CLOSED week, with D: "4 of 4 ✓"
 weekCountLine › one A/B/C done, no D: "... left", not "... to go"

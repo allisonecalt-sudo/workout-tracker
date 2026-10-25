@@ -67,6 +67,24 @@ export async function flushPendingWalks(): Promise<void> {
 // server-side in the edge function (never in the app). Returns null on any
 // failure (offline, test mode, Fit not linked) so callers keep the motion-sensor
 // estimate as a graceful fallback — the walk still logs either way.
+// v67 (Oct 25 2026): ONLY the three headers the edge function's CORS allows
+// ("authorization, apikey, content-type"). supabaseHeaders() also carries
+// PostgREST's `Prefer`, which the browser preflight refused — so every Fit call
+// since v16 failed with a CORS error and walks fell back to the sensor estimate.
+// Found from the live console, her yes Oct 25 14:57.
+export const FIT_STEPS_ALLOWED_HEADERS = ['authorization', 'apikey', 'content-type'] as const;
+
+export function fitStepsHeaders(): Record<string, string> {
+  const all = supabaseHeaders() as Record<string, string>;
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(all)) {
+    if ((FIT_STEPS_ALLOWED_HEADERS as readonly string[]).includes(name.toLowerCase())) {
+      out[name] = value;
+    }
+  }
+  return out;
+}
+
 export async function fetchFitSteps(startMs: number, endMs: number): Promise<number | null> {
   if (syncDisabled()) return null;
   if (!startMs || !endMs || endMs <= startMs) return null;
@@ -75,7 +93,7 @@ export async function fetchFitSteps(startMs: number, endMs: number): Promise<num
     const timer = setTimeout(() => ctrl.abort(), 5000);
     const res = await fetch(`${SUPABASE_URL}/functions/v1/fit-steps`, {
       method: 'POST',
-      headers: supabaseHeaders(),
+      headers: fitStepsHeaders(),
       body: JSON.stringify({ startMillis: startMs, endMillis: endMs }),
       signal: ctrl.signal,
     });
