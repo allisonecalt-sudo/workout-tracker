@@ -26,7 +26,13 @@ import {
   LEGACY_LAST_CLOSED_WEEK_INSTANT,
   type WeekSpan,
 } from '../week.js';
-import { weekCountLine, weekTargetForD, weekWindowFor, type DWeekTarget } from '../week-d.js';
+import {
+  weekCountLine,
+  weekLeftWords,
+  weekTargetForD,
+  weekWindowFor,
+  type DWeekTarget,
+} from '../week-d.js';
 import {
   planForWeekKey,
   noPlanLine,
@@ -1084,10 +1090,8 @@ export function renderHome(): string {
       const openHasD = weekHasDFor(liveWeekDTarget(shown), model, dLogs);
       const done = doneAbc + (openHasD ? 1 : 0);
       const missing = shown.span?.missing ?? (['A', 'B', 'C'] as const);
-      const missingWords = joinMissingLetters(missing);
-      const tail = missing.length === 3 ? 'to go' : 'left';
       doneCardLines = [
-        `${done} of 4 in Week ${shown.key.week}${missingWords ? ` · ${missingWords} ${tail}` : ''}`,
+        `${done} of 4 in Week ${shown.key.week}${missing.length ? ` · ${weekLeftWords(missing, openHasD, done)}` : ''}`,
       ];
     }
 

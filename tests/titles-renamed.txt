@@ -66,3 +66,6 @@ multi-week: Settings About shows Program weeks count (17) — pre-launch, unchan
 program-week — step 5c: the plan row is found by week key › the gap case: Week 6 closed on a Wednesday; Thu-Fri a session counts back (Week 6 row), Sat on Week 7 (repeat of 6) => program-week — step 5c: the plan row is found by week key › the gap case: Week 6 closed on a Wednesday; Thu-Fri a session counts back (Week 6 row), Sat on Week 7 (its own row)
 program-week — step 5c: the plan row is found by week key › the repeat case: Week 7 has no PROGRAM row, so it repeats the Week 6 row => program-week — step 5c: the plan row is found by week key › Week 7 has its own row; Week 8 has none, so it repeats the Week 7 row
 v64.1 - the version › package.json appVersion (the one source) is v64.1 => v65 - the version › package.json appVersion (the one source) is v65
+v65 - the version › package.json appVersion (the one source) is v65 => v66 - the version › package.json appVersion (the one source) is v66
+weekCountLine › 0 done, no D: "0 of 4 · A, B and C to go" => weekCountLine › 0 done, no D: "0 of 4 · A, B, C and D to go" (v66: D named while not done)
+weekCountLine › 0 done, D only: "1 of 4 · A, B and C to go" — her exact repro 1 text (CHECK-v61.md round 2) => weekCountLine › 0 done, D only: "1 of 4 · A, B and C left" — her repro 1 count (CHECK-v61.md round 2), v66 wording

@@ -38,17 +38,17 @@ function modelFor(sessions: SessionLite[]): DWeekModel {
 }
 
 test.describe('weekCountLine', () => {
-  test('0 done, no D: "0 of 4 · A, B and C to go"', () => {
-    expect(weekCountLine({ span: null }, false)).toBe('0 of 4 · A, B and C to go');
+  test('0 done, no D: "0 of 4 · A, B, C and D to go" (v66: D named while not done)', () => {
+    expect(weekCountLine({ span: null }, false)).toBe('0 of 4 · A, B, C and D to go');
   });
 
-  test('0 done, D only: "1 of 4 · A, B and C to go" — her exact repro 1 text (CHECK-v61.md round 2)', () => {
-    expect(weekCountLine({ span: null }, true)).toBe('1 of 4 · A, B and C to go');
+  test('0 done, D only: "1 of 4 · A, B and C left" — her repro 1 count (CHECK-v61.md round 2), v66 wording', () => {
+    expect(weekCountLine({ span: null }, true)).toBe('1 of 4 · A, B and C left');
   });
 
   test('one A/B/C done, no D: "... left", not "... to go"', () => {
     const model = modelFor([{ id: 'wk5-a', date: '2026-09-27T15:00:00.000Z', workout: 'A' }]);
-    expect(weekCountLine({ span: model.open }, false)).toBe('1 of 4 · B and C left');
+    expect(weekCountLine({ span: model.open }, false)).toBe('1 of 4 · B, C and D left');
   });
 
   test('a CLOSED week, no D: "complete · 3 of 4" (the peek\'s own line)', () => {

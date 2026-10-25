@@ -259,10 +259,19 @@ export function weekCountLine(shown: { span: WeekSpan | null }, hasD = false): s
   const doneAbc = shown.span ? shown.span.done.length : 0;
   const done = doneAbc + (hasD ? 1 : 0);
   if (missing.length === 0) return hasD ? '4 of 4 ✓' : 'complete · 3 of 4';
-  const missingWords =
-    missing.length === 1
-      ? (missing[0] as string)
-      : `${missing.slice(0, -1).join(', ')} and ${missing[missing.length - 1]}`;
-  const tail = missing.length === 3 ? `${missingWords} to go` : `${missingWords} left`;
-  return `${done} of 4 · ${tail}`;
+  return `${done} of 4 · ${weekLeftWords(missing, hasD, done)}`;
+}
+
+/** "A, B, C and D to go" / "B, C and D left" / "C left" — what an OPEN week
+ * still has to do, D included while it isn't done. v66 (Oct 25 2026), her
+ * words: "there should be a D for this week" — the line counted 4 but only
+ * named A, B and C, so D read as not part of the week. "to go" = nothing done
+ * yet, "left" = something done. The week still closes on A/B/C alone. */
+export function weekLeftWords(missing: readonly string[], hasD: boolean, done: number): string {
+  const letters = hasD ? [...missing] : [...missing, 'D'];
+  const words =
+    letters.length === 1
+      ? (letters[0] as string)
+      : `${letters.slice(0, -1).join(', ')} and ${letters[letters.length - 1]}`;
+  return `${words} ${done === 0 ? 'to go' : 'left'}`;
 }

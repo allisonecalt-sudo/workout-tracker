@@ -494,7 +494,7 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.week-sub-line').first()).toHaveText('since Sat Sep 26 · day 3');
       // v61 (Sep 28 2026), spec item d: the week line counts D now ("of 4") —
       // no D logged in this seed, so it's just the denominator that moved.
-      await expect(page.locator('.week-line')).toHaveText('1 of 4 · B and C left');
+      await expect(page.locator('.week-line')).toHaveText('1 of 4 · B, C and D left');
       await expect(page.locator('.week-card .week-dot')).toHaveCount(3);
       await expect(page.locator('.week-card .dot-A')).toHaveCount(1);
       await expect(page.locator('button.home-hero[data-workout="B"]')).toContainText('Up next');
@@ -527,7 +527,7 @@ test.describe('v48 P4 home', () => {
       await page.locator('#save-log').click();
       // v61 (Sep 28 2026), spec item d: the Done card's own line counts D
       // now ("of 4") — no D logged here.
-      await expect(page.locator('.home-done-line')).toHaveText('2 of 4 in Week 5 · C left');
+      await expect(page.locator('.home-done-line')).toHaveText('2 of 4 in Week 5 · C and D left');
     });
 
     test('post-log line: a REPEAT letter (B again) still reads "1 of 4", never overcounts to "2 of 4"', async ({
@@ -561,7 +561,9 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.postlog-witness')).not.toContainText('2 of 4');
       await page.locator('#save-log').click();
       // v61 (Sep 28 2026), spec item d: same "of 4" widening as above.
-      await expect(page.locator('.home-done-line')).toHaveText('1 of 4 in Week 5 · A and C left');
+      await expect(page.locator('.home-done-line')).toHaveText(
+        '1 of 4 in Week 5 · A, C and D left'
+      );
     });
 
     test('a closing save mid-week (Tue): "Week 5 done · 3 of 3 ✓" then "Week 6 opens" the next Sat/Sun', async ({
@@ -587,7 +589,7 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.week-sub-line').first()).toHaveText(
         'opens Sat Oct 3 · a session before then counts as an extra for Week 5'
       );
-      await expect(page.locator('.week-line')).toHaveText('0 of 4 · A, B and C to go');
+      await expect(page.locator('.week-line')).toHaveText('0 of 4 · A, B, C and D to go');
       // WK2 fix r2 (Sep 27 2026, checker's should #2): the chip lead used to
       // always say "Week 6 ·" here even though a tap on any of these chips
       // right now would actually count BACKWARD as an extra rep into Week 5
@@ -646,7 +648,7 @@ test.describe('v48 P4 home', () => {
       ]);
       await expect(page.locator('.home-header h1')).toHaveText('Week 6');
       await expect(page.locator('.week-sub-line').first()).toHaveText('since Sat Oct 3 · day 1');
-      await expect(page.locator('.week-line')).toHaveText('0 of 4 · A, B and C to go');
+      await expect(page.locator('.week-line')).toHaveText('0 of 4 · A, B, C and D to go');
     });
 
     test('"‹ Week 4" peeks at the OLD model\'s last week (nothing has closed under the new one yet); "Week 5 ›" returns', async ({
@@ -753,7 +755,7 @@ test.describe('v48 P4 home', () => {
       await page.goto('/');
       await expect(page.locator('.home-header h1')).toHaveText('Week 5');
       // v61 (Sep 28 2026), spec item d: "of 4" now — no D logged this week.
-      await expect(page.locator('.week-line')).toHaveText('2 of 4 · C left');
+      await expect(page.locator('.week-line')).toHaveText('2 of 4 · C and D left');
       // Day 1 (A) kept, ONE fold column for the empty middle, then the last
       // 7 days (days 5-11) kept whole — 8 real day columns + 1 fold.
       await expect(page.locator('#week-strip .week-dot')).toHaveCount(8);
@@ -1231,7 +1233,7 @@ test.describe('v48 P4 home', () => {
       await expect(page.locator('.home-header h1')).toHaveText('Week 6');
       // The spec's own example (CHECK-v61.md): "after D only: 1 of 4 · A, B
       // and C to go" — not "0 of 4", the bug's exact symptom.
-      await expect(page.locator('.week-line')).toHaveText('1 of 4 · A, B and C to go');
+      await expect(page.locator('.week-line')).toHaveText('1 of 4 · A, B and C left');
       const todayDot = page.locator('.week-dot.is-today');
       await expect(todayDot.locator('.week-dot-d')).toHaveText('D');
     });
@@ -1350,7 +1352,7 @@ test.describe('v48 P4 home', () => {
       // Week 6 itself: 0 of 4, no D dot anywhere in its strip — before the
       // fix this read '1 of 4 · A, B and C to go' with a D dot on day 1,
       // though nothing had actually happened in Week 6 yet.
-      await expect(page.locator('.week-line')).toHaveText('0 of 4 · A, B and C to go');
+      await expect(page.locator('.week-line')).toHaveText('0 of 4 · A, B, C and D to go');
       await expect(page.locator('.week-dots#week-strip .week-dot-d')).toHaveCount(0);
       const todayCol = page.locator('.week-dot.is-today');
       await expect(todayCol).toHaveClass(/dot-empty/);

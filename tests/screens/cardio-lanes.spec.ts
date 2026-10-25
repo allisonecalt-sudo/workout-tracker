@@ -403,7 +403,7 @@ test('Workout D: straight onto the 30-min ride, no lane picker, no cool-down, sa
 
   // v61 (Sep 28 2026), spec item d: D never closes the week (A, B and C are
   // still all to go), but it DOES count into the number shown now — "1 of 4".
-  await expect(page.locator('.week-line')).toContainText('1 of 4 · A, B and C to go');
+  await expect(page.locator('.week-line')).toContainText('1 of 4 · A, B and C left');
   await expect(page.locator('.week-line')).not.toContainText('D');
 });
 
@@ -509,7 +509,7 @@ test('Workout D survives a second read: Done card, Sessions, the rides page and 
   );
   // v61 (Sep 28 2026), spec item d: Week 5 still reads "1 of 4" (D counted,
   // A/B/C still all to go) on the SECOND read same as the first.
-  await expect(reopened.locator('.week-line')).toContainText('1 of 4 · A, B and C to go');
+  await expect(reopened.locator('.week-line')).toContainText('1 of 4 · A, B and C left');
   // v55 (Sep 27 2026) — CHECK N2 (round 1/2): the Home "Sessions" count used
   // to read "1" here as if D were a 4th A/B/C session. Her call: A/B/C only
   // (0, none yet), D folded in as its own "+1 ride".

@@ -176,7 +176,7 @@ test('home order: the workout sits first; the week-by-week list is off Weekly re
   expect(heroBox!.y).toBeLessThan(weekBox!.y);
   // WK2 (Sep 27 2026): see the "zero sessions" test's own comment above.
   // v61 (Sep 28 2026), spec item d: "of 4" now.
-  await expect(page.locator('.week-line')).toContainText('of 4 · A, B and C to go');
+  await expect(page.locator('.week-line')).toContainText('of 4 · A, B, C and D to go');
   await page.locator('#open-weekly-review').click();
   // v64: the week-by-week list left the review (it is the weeks grid on Progress).
   await expect(page.locator('.consistency-wrap')).toHaveCount(0);

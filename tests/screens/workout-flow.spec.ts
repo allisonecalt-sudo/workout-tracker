@@ -26,7 +26,7 @@ test('home screen shows three workout options and zero sessions', async ({ page 
   // line (§2.4's #week-count table), not the old calendar "this week" line.
   // v61 (Sep 28 2026), spec item d: "of 4" now — D counts into the number
   // shown (never into closing the week).
-  await expect(page.locator('.week-line')).toContainText('0 of 4 · A, B and C to go');
+  await expect(page.locator('.week-line')).toContainText('0 of 4 · A, B, C and D to go');
   // v49 · look (Sep 25 2026): the lifetime count moved off the week line and
   // onto the Start → Now card's "Sessions" row — which itself only appears
   // once there's at least one session (spec: "Only one count on Home").
@@ -281,7 +281,7 @@ test('quit during workout asks for confirmation and returns home', async ({ page
   await expect(page.locator('.home-header h1')).toBeVisible();
   // WK2 (Sep 27 2026): see the "zero sessions" test's own comment above.
   // v61 (Sep 28 2026), spec item d: "of 4" now.
-  await expect(page.locator('.week-line')).toContainText('0 of 4 · A, B and C to go');
+  await expect(page.locator('.week-line')).toContainText('0 of 4 · A, B, C and D to go');
   expect(dialogs).toEqual([]);
 });
 

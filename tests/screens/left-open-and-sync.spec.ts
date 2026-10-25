@@ -98,7 +98,7 @@ test('left-open gate: "No, throw it away" discards it and clears the snapshot', 
   await expect(reopened.locator('#stale-session-card')).toHaveCount(0);
   // WK2 (Sep 27 2026): see the "zero sessions" test's own comment above.
   // v61 (Sep 28 2026), spec item d: "of 4" now.
-  await expect(reopened.locator('.week-line')).toContainText('0 of 4 · A, B and C to go');
+  await expect(reopened.locator('.week-line')).toContainText('0 of 4 · A, B, C and D to go');
   const active = await reopened.evaluate((key) => localStorage.getItem(key), ACTIVE_SESSION_KEY);
   expect(active).toBeNull();
   await reopened.close();
