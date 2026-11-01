@@ -2454,6 +2454,97 @@ PROGRAM.push({
   },
 });
 
+// v68 (Nov 1 2026) — R2 Week 8: 50% of Week 5, the next step back to 100%.
+// WHAT: every Week 5 move, 1 round (Week 5 = 2), at Week 5's FULL reps/seconds
+// (1 round of 2 = 50%). Ride: A/B 10 min, C 15. Weights at the 1 kg end.
+// WHY: her words (Sun Nov 1 2026 16:58): "ok so it shoudl fo this week to 50%
+// form 35". Road: Wk7 35% → Wk8 50% → next step decided after this week is
+// assessed. Back read 2 before A and B in Week 7 (usual 0-1), so A keeps
+// bodyweight squats, not the split squat.
+// Every name stays EXACTLY as Week 5 / Week 7 (voice notes, detail cards,
+// move_feel and the 'Outdoor walk' cardio lanes key off it).
+const R2W7_PLAN = PROGRAM[PROGRAM.length - 1]!;
+if (R2W7_PLAN.round !== 2 || R2W7_PLAN.weekNum !== 7) {
+  throw new Error('R2W8: expected the last PROGRAM row to be Round 2 Week 7');
+}
+const W8_REPS: Record<string, { reps: string; durationSec?: number }> = {
+  'Bodyweight hip hinge': { reps: '12 reps · 1 set · holding 1 kg' },
+  'Glute bridges': { reps: '12 reps · 2-sec hold at top' },
+  'Wall sit': { reps: '45 sec hold', durationSec: 45 },
+  'Full dead bug': { reps: '8 each side' },
+  'Forearm plank': { reps: '1 set · 20 sec hold', durationSec: 20 },
+  'Side-lying leg raises': { reps: '12 each side' },
+  'Side-lying clamshells': { reps: '10 each side · yellow band (tied into a loop)' },
+  'Single-leg glute bridges': { reps: '10 each side' },
+  'Standing calf raises': { reps: '12 reps' },
+  'Wall angels': { reps: '1 set · 10 slow reps' },
+  'IWYT raises': { reps: '1 set · 8 each (I, W, Y, T)' },
+  'Prone row (bodyweight)': { reps: '1 set · 12 reps each side · 1 kg' },
+  '1 kg biceps curl': { reps: '1 set · 12 reps · 1 kg' },
+  'Bird dog (legs only)': { reps: '1 set · 6 each side · 2-sec hold' },
+  'Wall lean (wrist on-ramp)': { reps: '1 × 20 sec', durationSec: 20 },
+};
+const W8_REPS_C: Record<string, { reps: string }> = {
+  'Bodyweight squats': { reps: '10 reps · 3-1-3 tempo' },
+  'Glute bridges': { reps: '15 reps · 2-sec hold' },
+  'Single-leg glute bridges': { reps: '8 each side' },
+  'Side-lying leg raises': { reps: '10 each side' },
+  'Modified dead bug': { reps: '8 each side' },
+  'Standing calf raises': { reps: '15 reps' },
+};
+const scaleW8 = (
+  items: Exercise[],
+  table: Record<string, { reps: string; durationSec?: number }>
+) =>
+  items.map((ex) => {
+    const next = table[ex.name];
+    if (!next) throw new Error(`R2W8: no Week 8 reps for '${ex.name}'`);
+    return { ...ex, ...next };
+  });
+const W8_SQUAT_A: Exercise = (() => {
+  const found = R2W3_PLAN.workouts.A.main.find((ex) => ex.name === 'Bodyweight squats');
+  if (!found) throw new Error('R2W8: expected Bodyweight squats in Week 3 workout A');
+  return { ...found, reps: '10 reps · 3-1-3 tempo' };
+})();
+
+PROGRAM.push({
+  round: 2,
+  weekNum: 8,
+  startsOn: '2026-10-31',
+  label: 'Round 2 — Week 8 · back toward 100%: every move, 1 round (50%)',
+  workouts: {
+    A: {
+      ...W5A,
+      description: 'Week 5 moves at 50% · 1 round · ride 10 min · ~28 min',
+      rounds: 1,
+      warmup: rideW7(W5A.warmup, 10),
+      main: [
+        W8_SQUAT_A,
+        ...scaleW8(
+          W5A.main.filter((ex) => ex.name !== 'Supported split squat'),
+          W8_REPS
+        ),
+      ],
+      upperBack: scaleW8(W5A.upperBack ?? [], W8_REPS),
+    },
+    B: {
+      ...W5B,
+      description: 'Week 5 moves at 50% · 1 round · ride 10 min · ~28 min',
+      rounds: 1,
+      warmup: rideW7(W5B.warmup, 10),
+      main: scaleW8(W5B.main, W8_REPS),
+      upperBack: scaleW8(W5B.upperBack ?? [], W8_REPS),
+    },
+    C: {
+      ...W5C,
+      description: '15-min cardio (elliptical or walk) + 1-round strength block · ~30 min',
+      rounds: 1,
+      warmup: rideW7(W5C.warmup, 15),
+      main: scaleW8(W5C.main, W8_REPS_C),
+    },
+  },
+});
+
 // --- Resolvers -----------------------------------------------------------
 //
 // These two resolvers are the CALENDAR lookup: a date in, the plan row whose

@@ -280,7 +280,9 @@ test.describe('program-week — step 5c: the plan row is found by week key', () 
 
   // v65 (Oct 20 2026): Week 7 got its own row (35% of Week 5), so Week 7 now
   // resolves exactly and the repeat case moved up to Week 8 (repeats Week 7).
-  test('Week 7 has its own row; Week 8 has none, so it repeats the Week 7 row', () => {
+  // v68 (Nov 1 2026): Week 8 got its own row too (50% of Week 5), so the
+  // no-row repeat case is now Week 9 repeating Week 8.
+  test('Week 7 and Week 8 have their own rows; Week 9 has none, so it repeats the Week 8 row', () => {
     const w6: LogEntry[] = [
       ...WEEK5,
       log('w6a', '2026-10-12T10:00:00+03:00', 'A'),
@@ -294,7 +296,8 @@ test.describe('program-week — step 5c: the plan row is found by week key', () 
     expect(planForWeekKey({ round: 2, week: 7 }).repeatsWeek).toBeNull();
     expect(currentWeekPlan(i)).toBe(planForWeekKey({ round: 2, week: 7 }).plan);
     expect(rowOf(i)).toBe('R2W7');
-    expect(planForWeekKey({ round: 2, week: 8 }).repeatsWeek).toBe(7);
+    expect(planForWeekKey({ round: 2, week: 8 }).repeatsWeek).toBeNull();
+    expect(planForWeekKey({ round: 2, week: 9 }).repeatsWeek).toBe(8);
   });
 
   test('the gap case: Week 6 closed on a Wednesday; Thu-Fri a session counts back (Week 6 row), Sat on Week 7 (its own row)', () => {
