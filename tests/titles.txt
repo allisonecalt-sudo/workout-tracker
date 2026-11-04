@@ -661,6 +661,7 @@ v48 P2 shell › (c) the split squat face shows the safety line, and the full ti
 v48 P2 shell › (c2) no visible "Cue" on any A/B/C step; Tips opens where an exercise has one
 v48 P2 shell › (d) "New tonight" on the split squat until an A is logged this plan week
 v48 P2 shell › (d) a move from an earlier week reads "Again tonight", not "New tonight"
+v48 P2 shell › (d) after the light restart week, only a move that truly came back is badged
 v48 P2 shell › (d) no "New tonight" once an A is logged on/after the week started
 v48 P2 shell › (e) wall sit: Stop mid-hold saves the REAL seconds to the post-log
 v48 P2 shell › (e)(f) wall sit: Stop instead of "Running…", then "✓ held 45 s · last time 43"; one sage either side
@@ -1070,7 +1071,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v68 - the version › package.json appVersion (the one source) is v68
+v69 - the version › package.json appVersion (the one source) is v69
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

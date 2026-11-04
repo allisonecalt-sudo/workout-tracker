@@ -133,6 +133,11 @@ export type WeekPlan = {
   startsOn: string;
   // Optional short tag — e.g. "Starter", "Consolidation", "Bump week".
   label?: string;
+  // v69 (Nov 4 2026): a stripped-down restart week (sick / light) that carries
+  // none of the usual moves. The "New / Again tonight" badge compares a week to
+  // the last week NOT marked light, so coming back from one doesn't badge every
+  // move. Her note (Oct 27): "Why does squats say again tonight?"
+  light?: true;
   workouts: Record<WorkoutId, Workout>;
 };
 
@@ -2342,6 +2347,7 @@ PROGRAM.push({
   weekNum: 6,
   startsOn: '2026-10-10',
   label: 'Round 2 — Week 6 · light restart after being sick',
+  light: true,
   workouts: {
     A: lightRestart('A'),
     B: lightRestart('B'),

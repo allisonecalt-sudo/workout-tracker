@@ -303,7 +303,11 @@ function isNewTonight(ex: Exercise, id: AnyWorkoutId): boolean {
   if (id === 'D') return false;
   const current = getWeekPlan();
   const idx = PROGRAM.indexOf(current);
-  const prev = idx > 0 ? PROGRAM[idx - 1] : undefined;
+  // v69 (Nov 4 2026): skip a `light` restart week — compare to the last real
+  // week, or after the sick week every move read "Again tonight".
+  const prev = PROGRAM.slice(0, Math.max(idx, 0))
+    .reverse()
+    .find((wp) => !wp.light);
   if (!prev) return false; // Week 1 of the program: everything is new, so nothing is
   const pw = prev.workouts[id];
   const phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];

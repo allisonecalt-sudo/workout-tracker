@@ -246,6 +246,28 @@ test.describe('v48 P2 shell', () => {
     await expect(page.locator('.new-tonight-badge')).toHaveText('Again tonight');
   });
 
+  // v69 (Nov 4 2026): her Oct 27 note "Why does squats say again tonight?" — Week 6
+  // was the light sick-restart week, so comparing to it badged EVERY Week 7 move.
+  // Now the light week is skipped: only the real swap (bodyweight squats in for
+  // the split squat) reads "Again tonight".
+  test('(d) after the light restart week, only a move that truly came back is badged', async ({
+    page,
+  }) => {
+    await mockDate(page, '2026-10-27T14:00:00.000Z'); // Tue inside Round 2 Week 7 (startsOn Oct 24)
+    // Week 6 done (A, B, C), so the completion model has moved on to Week 7.
+    await seedLogs(page, [
+      aLog('light-week-a', '2026-10-13T15:00:00.000Z', 0),
+      { ...aLog('light-week-b', '2026-10-15T15:00:00.000Z', 0), workout: 'B' },
+      { ...aLog('light-week-c', '2026-10-18T15:00:00.000Z', 0), workout: 'C' },
+    ]);
+    await page.goto('/');
+    await startA(page);
+    await goToStep(page, 'Bodyweight squats');
+    await expect(page.locator('.new-tonight-badge')).toHaveText('Again tonight');
+    await goToStep(page, 'Glute bridges');
+    await expect(page.locator('.new-tonight-badge')).toHaveCount(0);
+  });
+
   test('(d) no "New tonight" once an A is logged on/after the week started', async ({ page }) => {
     await mockDate(page, TUE_WEEK4);
     await seedLogs(page, [aLog('this-week-a', '2026-09-20T15:00:00.000Z', 45)]);
