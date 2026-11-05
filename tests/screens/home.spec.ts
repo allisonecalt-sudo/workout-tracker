@@ -902,8 +902,10 @@ test.describe('v48 P4 home', () => {
       // got its own row, so the repeat is now Week 8 repeating Week 7.
       // v68 (Nov 1 2026): and once more — R2 Week 8 (50%) got its own row, so
       // the repeat is now Week 9 repeating Week 8.
-      await mockDate(page, '2026-11-01T10:00:00.000Z'); // Sun Nov 1 — inside the open Week 9
-      // Week 9 only exists because the Oct 3 Sick week is honoured (the default now).
+      // v70 (Nov 5 2026): once more — R2 Week 9 (60%) got its own row, so the
+      // repeat is now Week 10 repeating Week 9.
+      await mockDate(page, '2026-11-08T10:00:00.000Z'); // Sun Nov 8 — inside the open Week 10
+      // Week 10 only exists because the Oct 3 Sick week is honoured (the default now).
       await seedLogs(page, [
         swingLog('wk6-a', '2026-10-11T15:00:00.000Z', 'A'),
         swingLog('wk6-b', '2026-10-12T15:00:00.000Z', 'B'),
@@ -914,10 +916,13 @@ test.describe('v48 P4 home', () => {
         swingLog('wk8-a', '2026-10-25T15:00:00.000Z', 'A'),
         swingLog('wk8-b', '2026-10-26T15:00:00.000Z', 'B'),
         swingLog('wk8-c', '2026-10-31T15:00:00.000Z', 'C'), // Sat — closes Week 8, opens Week 9 same day
+        swingLog('wk9-a', '2026-11-01T15:00:00.000Z', 'A'),
+        swingLog('wk9-b', '2026-11-02T15:00:00.000Z', 'B'),
+        swingLog('wk9-c', '2026-11-07T15:00:00.000Z', 'C'), // Sat — closes Week 9, opens Week 10 same day
       ]);
       await page.goto('/');
       await page.locator('button[data-workout="A"]').click(); // pins state.pinnedWeekKey (startWorkout)
-      await expect(page.locator('.prelog-meta')).toContainText('Week 9 · same moves as Week 8');
+      await expect(page.locator('.prelog-meta')).toContainText('Week 10 · same moves as Week 9');
       await expect(page.locator('.prelog-stepped')).toHaveCount(0);
       const stepped = await page.evaluate(() =>
         (

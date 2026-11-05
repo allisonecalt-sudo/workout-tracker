@@ -2551,6 +2551,99 @@ PROGRAM.push({
   },
 });
 
+// v70 (Nov 5 2026) — R2 Week 9: 60% of Week 5.
+// WHAT: every Week 5 move, 2 rounds (Week 5's own count), each round at about
+// 60% of Week 5's reps/seconds (2 × 0.6 of a 2-round week = 60%). Ride: A/B 10
+// min, C 15 (same as Weeks 7-8). Weights at the 1 kg end.
+// WHY: her words (Thu Nov 5 2026 12:51): "i want o go to 60% next week". Her
+// Week 8 A note (Nov 4): "it was an easier workout… I think I can go a little
+// faster. But… I don't want to skip too much." Road: Wk7 35% → Wk8 50% → Wk9
+// 60% → next step decided after this week. Back read 0 before A in Week 8,
+// but A keeps bodyweight squats: the split squat comes back only on her word.
+// Every name stays EXACTLY as Week 5 / Week 8 (voice notes, detail cards,
+// move_feel and the 'Outdoor walk' cardio lanes key off it).
+const R2W8_PLAN = PROGRAM[PROGRAM.length - 1]!;
+if (R2W8_PLAN.round !== 2 || R2W8_PLAN.weekNum !== 8) {
+  throw new Error('R2W9: expected the last PROGRAM row to be Round 2 Week 8');
+}
+const W9_REPS: Record<string, { reps: string; durationSec?: number }> = {
+  'Bodyweight hip hinge': { reps: '7 reps · 1 set · holding 1 kg' },
+  'Glute bridges': { reps: '7 reps · 2-sec hold at top' },
+  'Wall sit': { reps: '25 sec hold', durationSec: 25 },
+  'Full dead bug': { reps: '5 each side' },
+  'Forearm plank': { reps: '1 set · 12 sec hold', durationSec: 12 },
+  'Side-lying leg raises': { reps: '7 each side' },
+  'Side-lying clamshells': { reps: '6 each side · yellow band (tied into a loop)' },
+  'Single-leg glute bridges': { reps: '6 each side' },
+  'Standing calf raises': { reps: '7 reps' },
+  'Wall angels': { reps: '1 set · 6 slow reps' },
+  'IWYT raises': { reps: '1 set · 5 each (I, W, Y, T)' },
+  'Prone row (bodyweight)': { reps: '1 set · 7 reps each side · 1 kg' },
+  '1 kg biceps curl': { reps: '1 set · 7 reps · 1 kg' },
+  'Bird dog (legs only)': { reps: '1 set · 4 each side · 2-sec hold' },
+  'Wall lean (wrist on-ramp)': { reps: '1 × 12 sec', durationSec: 12 },
+};
+const W9_REPS_C: Record<string, { reps: string }> = {
+  'Bodyweight squats': { reps: '6 reps · 3-1-3 tempo' },
+  'Glute bridges': { reps: '9 reps · 2-sec hold' },
+  'Single-leg glute bridges': { reps: '5 each side' },
+  'Side-lying leg raises': { reps: '6 each side' },
+  'Modified dead bug': { reps: '5 each side' },
+  'Standing calf raises': { reps: '9 reps' },
+};
+const scaleW9 = (
+  items: Exercise[],
+  table: Record<string, { reps: string; durationSec?: number }>
+) =>
+  items.map((ex) => {
+    const next = table[ex.name];
+    if (!next) throw new Error(`R2W9: no Week 9 reps for '${ex.name}'`);
+    return { ...ex, ...next };
+  });
+const W9_SQUAT_A: Exercise = (() => {
+  const found = R2W3_PLAN.workouts.A.main.find((ex) => ex.name === 'Bodyweight squats');
+  if (!found) throw new Error('R2W9: expected Bodyweight squats in Week 3 workout A');
+  return { ...found, reps: '6 reps · 3-1-3 tempo' };
+})();
+
+PROGRAM.push({
+  round: 2,
+  weekNum: 9,
+  startsOn: '2026-11-07',
+  label: 'Round 2 — Week 9 · back toward 100%: every move, 2 rounds (60%)',
+  workouts: {
+    A: {
+      ...W5A,
+      description: 'Week 5 moves at 60% · 2 rounds · ride 10 min · ~30 min',
+      rounds: 2,
+      warmup: rideW7(W5A.warmup, 10),
+      main: [
+        W9_SQUAT_A,
+        ...scaleW9(
+          W5A.main.filter((ex) => ex.name !== 'Supported split squat'),
+          W9_REPS
+        ),
+      ],
+      upperBack: scaleW9(W5A.upperBack ?? [], W9_REPS),
+    },
+    B: {
+      ...W5B,
+      description: 'Week 5 moves at 60% · 2 rounds · ride 10 min · ~30 min',
+      rounds: 2,
+      warmup: rideW7(W5B.warmup, 10),
+      main: scaleW9(W5B.main, W9_REPS),
+      upperBack: scaleW9(W5B.upperBack ?? [], W9_REPS),
+    },
+    C: {
+      ...W5C,
+      description: '15-min cardio (elliptical or walk) + 2-round strength block · ~32 min',
+      rounds: 2,
+      warmup: rideW7(W5C.warmup, 15),
+      main: scaleW9(W5C.main, W9_REPS_C),
+    },
+  },
+});
+
 // --- Resolvers -----------------------------------------------------------
 //
 // These two resolvers are the CALENDAR lookup: a date in, the plan row whose

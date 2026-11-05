@@ -104,14 +104,14 @@ test.describe("v62.3 F8 - Claude's notes are not shown as her words", () => {
   });
 });
 
-test.describe('v69 - the version', () => {
-  test('package.json appVersion (the one source) is v69', () => {
+test.describe('v70 - the version', () => {
+  test('package.json appVersion (the one source) is v70', () => {
     const fs = require('fs') as typeof import('fs');
     const path = require('path') as typeof import('path');
     const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as {
       appVersion?: string;
     };
-    expect(pkg.appVersion).toBe('v69');
+    expect(pkg.appVersion).toBe('v70');
   });
 });
 
