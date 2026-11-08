@@ -2460,25 +2460,7 @@ PROGRAM.push({
   },
 });
 
-// v71 (Nov 8 2026) — R2 Week 8 = Week 7 again (35%), after being sick.
-// WHAT: Week 7's row as it stands (same moves, reps, rounds and rides), only
-// re-numbered and re-labelled. The 50% step moves to Week 9, 60% to Week 10.
-// WHY: her words (Sun Nov 8 2026 12:05): "i only did one workout iwa s sick so
-// lets have this week replicate prev week" · "so week 8 shoudl be same as week
-// 7" · next week 50% (her "a"). Her Week 8 A (Nov 4) was done at 50% and stays
-// logged as she did it.
-const R2W7_ROW = PROGRAM[PROGRAM.length - 1]!;
-if (R2W7_ROW.round !== 2 || R2W7_ROW.weekNum !== 7) {
-  throw new Error('R2W8: expected the last PROGRAM row to be Round 2 Week 7');
-}
-PROGRAM.push({
-  ...R2W7_ROW,
-  weekNum: 8,
-  startsOn: '2026-10-31',
-  label: 'Round 2 — Week 8 · Week 7 again after being sick: every move, 1 round (35%)',
-});
 // v68 (Nov 1 2026) — R2 Week 8: 50% of Week 5, the next step back to 100%.
-// v71 (Nov 8): now Week 9 — Week 8 repeats Week 7 after being sick.
 // WHAT: every Week 5 move, 1 round (Week 5 = 2), at Week 5's FULL reps/seconds
 // (1 round of 2 = 50%). Ride: A/B 10 min, C 15. Weights at the 1 kg end.
 // WHY: her words (Sun Nov 1 2026 16:58): "ok so it shoudl fo this week to 50%
@@ -2487,11 +2469,11 @@ PROGRAM.push({
 // bodyweight squats, not the split squat.
 // Every name stays EXACTLY as Week 5 / Week 7 (voice notes, detail cards,
 // move_feel and the 'Outdoor walk' cardio lanes key off it).
-const R2W8_PLAN = PROGRAM[PROGRAM.length - 1]!;
-if (R2W8_PLAN.round !== 2 || R2W8_PLAN.weekNum !== 8) {
-  throw new Error('R2W9: expected the last PROGRAM row to be Round 2 Week 8');
+const R2W7_PLAN = PROGRAM[PROGRAM.length - 1]!;
+if (R2W7_PLAN.round !== 2 || R2W7_PLAN.weekNum !== 7) {
+  throw new Error('R2W8: expected the last PROGRAM row to be Round 2 Week 7');
 }
-const W9_REPS: Record<string, { reps: string; durationSec?: number }> = {
+const W8_REPS: Record<string, { reps: string; durationSec?: number }> = {
   'Bodyweight hip hinge': { reps: '12 reps · 1 set · holding 1 kg' },
   'Glute bridges': { reps: '12 reps · 2-sec hold at top' },
   'Wall sit': { reps: '45 sec hold', durationSec: 45 },
@@ -2508,7 +2490,7 @@ const W9_REPS: Record<string, { reps: string; durationSec?: number }> = {
   'Bird dog (legs only)': { reps: '1 set · 6 each side · 2-sec hold' },
   'Wall lean (wrist on-ramp)': { reps: '1 × 20 sec', durationSec: 20 },
 };
-const W9_REPS_C: Record<string, { reps: string }> = {
+const W8_REPS_C: Record<string, { reps: string }> = {
   'Bodyweight squats': { reps: '10 reps · 3-1-3 tempo' },
   'Glute bridges': { reps: '15 reps · 2-sec hold' },
   'Single-leg glute bridges': { reps: '8 each side' },
@@ -2516,26 +2498,26 @@ const W9_REPS_C: Record<string, { reps: string }> = {
   'Modified dead bug': { reps: '8 each side' },
   'Standing calf raises': { reps: '15 reps' },
 };
-const scaleW9 = (
+const scaleW8 = (
   items: Exercise[],
   table: Record<string, { reps: string; durationSec?: number }>
 ) =>
   items.map((ex) => {
     const next = table[ex.name];
-    if (!next) throw new Error(`R2W9: no Week 9 reps for '${ex.name}'`);
+    if (!next) throw new Error(`R2W8: no Week 8 reps for '${ex.name}'`);
     return { ...ex, ...next };
   });
-const W9_SQUAT_A: Exercise = (() => {
+const W8_SQUAT_A: Exercise = (() => {
   const found = R2W3_PLAN.workouts.A.main.find((ex) => ex.name === 'Bodyweight squats');
-  if (!found) throw new Error('R2W9: expected Bodyweight squats in Week 3 workout A');
+  if (!found) throw new Error('R2W8: expected Bodyweight squats in Week 3 workout A');
   return { ...found, reps: '10 reps · 3-1-3 tempo' };
 })();
 
 PROGRAM.push({
   round: 2,
-  weekNum: 9,
-  startsOn: '2026-11-07',
-  label: 'Round 2 — Week 9 · back toward 100%: every move, 1 round (50%)',
+  weekNum: 8,
+  startsOn: '2026-10-31',
+  label: 'Round 2 — Week 8 · back toward 100%: every move, 1 round (50%)',
   workouts: {
     A: {
       ...W5A,
@@ -2543,34 +2525,33 @@ PROGRAM.push({
       rounds: 1,
       warmup: rideW7(W5A.warmup, 10),
       main: [
-        W9_SQUAT_A,
-        ...scaleW9(
+        W8_SQUAT_A,
+        ...scaleW8(
           W5A.main.filter((ex) => ex.name !== 'Supported split squat'),
-          W9_REPS
+          W8_REPS
         ),
       ],
-      upperBack: scaleW9(W5A.upperBack ?? [], W9_REPS),
+      upperBack: scaleW8(W5A.upperBack ?? [], W8_REPS),
     },
     B: {
       ...W5B,
       description: 'Week 5 moves at 50% · 1 round · ride 10 min · ~28 min',
       rounds: 1,
       warmup: rideW7(W5B.warmup, 10),
-      main: scaleW9(W5B.main, W9_REPS),
-      upperBack: scaleW9(W5B.upperBack ?? [], W9_REPS),
+      main: scaleW8(W5B.main, W8_REPS),
+      upperBack: scaleW8(W5B.upperBack ?? [], W8_REPS),
     },
     C: {
       ...W5C,
       description: '15-min cardio (elliptical or walk) + 1-round strength block · ~30 min',
       rounds: 1,
       warmup: rideW7(W5C.warmup, 15),
-      main: scaleW9(W5C.main, W9_REPS_C),
+      main: scaleW8(W5C.main, W8_REPS_C),
     },
   },
 });
 
-// v70 (Nov 5 2026) — R2 Week 9: 60% of Week 5. v71 (Nov 8): now Week 10 —
-// Week 8 repeats Week 7 after being sick, so 50% is Week 9 and 60% Week 10.
+// v70 (Nov 5 2026) — R2 Week 9: 60% of Week 5.
 // WHAT: every Week 5 move, 2 rounds (Week 5's own count), each round at about
 // 60% of Week 5's reps/seconds (2 × 0.6 of a 2-round week = 60%). Ride: A/B 10
 // min, C 15 (same as Weeks 7-8). Weights at the 1 kg end.
@@ -2581,11 +2562,11 @@ PROGRAM.push({
 // but A keeps bodyweight squats: the split squat comes back only on her word.
 // Every name stays EXACTLY as Week 5 / Week 8 (voice notes, detail cards,
 // move_feel and the 'Outdoor walk' cardio lanes key off it).
-const R2W9_PLAN = PROGRAM[PROGRAM.length - 1]!;
-if (R2W9_PLAN.round !== 2 || R2W9_PLAN.weekNum !== 9) {
-  throw new Error('R2W10: expected the last PROGRAM row to be Round 2 Week 9');
+const R2W8_PLAN = PROGRAM[PROGRAM.length - 1]!;
+if (R2W8_PLAN.round !== 2 || R2W8_PLAN.weekNum !== 8) {
+  throw new Error('R2W9: expected the last PROGRAM row to be Round 2 Week 8');
 }
-const W10_REPS: Record<string, { reps: string; durationSec?: number }> = {
+const W9_REPS: Record<string, { reps: string; durationSec?: number }> = {
   'Bodyweight hip hinge': { reps: '7 reps · 1 set · holding 1 kg' },
   'Glute bridges': { reps: '7 reps · 2-sec hold at top' },
   'Wall sit': { reps: '25 sec hold', durationSec: 25 },
@@ -2602,7 +2583,7 @@ const W10_REPS: Record<string, { reps: string; durationSec?: number }> = {
   'Bird dog (legs only)': { reps: '1 set · 4 each side · 2-sec hold' },
   'Wall lean (wrist on-ramp)': { reps: '1 × 12 sec', durationSec: 12 },
 };
-const W10_REPS_C: Record<string, { reps: string }> = {
+const W9_REPS_C: Record<string, { reps: string }> = {
   'Bodyweight squats': { reps: '6 reps · 3-1-3 tempo' },
   'Glute bridges': { reps: '9 reps · 2-sec hold' },
   'Single-leg glute bridges': { reps: '5 each side' },
@@ -2610,26 +2591,26 @@ const W10_REPS_C: Record<string, { reps: string }> = {
   'Modified dead bug': { reps: '5 each side' },
   'Standing calf raises': { reps: '9 reps' },
 };
-const scaleW10 = (
+const scaleW9 = (
   items: Exercise[],
   table: Record<string, { reps: string; durationSec?: number }>
 ) =>
   items.map((ex) => {
     const next = table[ex.name];
-    if (!next) throw new Error(`R2W10: no Week 10 reps for '${ex.name}'`);
+    if (!next) throw new Error(`R2W9: no Week 9 reps for '${ex.name}'`);
     return { ...ex, ...next };
   });
-const W10_SQUAT_A: Exercise = (() => {
+const W9_SQUAT_A: Exercise = (() => {
   const found = R2W3_PLAN.workouts.A.main.find((ex) => ex.name === 'Bodyweight squats');
-  if (!found) throw new Error('R2W10: expected Bodyweight squats in Week 3 workout A');
+  if (!found) throw new Error('R2W9: expected Bodyweight squats in Week 3 workout A');
   return { ...found, reps: '6 reps · 3-1-3 tempo' };
 })();
 
 PROGRAM.push({
   round: 2,
-  weekNum: 10,
-  startsOn: '2026-11-14',
-  label: 'Round 2 — Week 10 · back toward 100%: every move, 2 rounds (60%)',
+  weekNum: 9,
+  startsOn: '2026-11-07',
+  label: 'Round 2 — Week 9 · back toward 100%: every move, 2 rounds (60%)',
   workouts: {
     A: {
       ...W5A,
@@ -2637,28 +2618,28 @@ PROGRAM.push({
       rounds: 2,
       warmup: rideW7(W5A.warmup, 10),
       main: [
-        W10_SQUAT_A,
-        ...scaleW10(
+        W9_SQUAT_A,
+        ...scaleW9(
           W5A.main.filter((ex) => ex.name !== 'Supported split squat'),
-          W10_REPS
+          W9_REPS
         ),
       ],
-      upperBack: scaleW10(W5A.upperBack ?? [], W10_REPS),
+      upperBack: scaleW9(W5A.upperBack ?? [], W9_REPS),
     },
     B: {
       ...W5B,
       description: 'Week 5 moves at 60% · 2 rounds · ride 10 min · ~30 min',
       rounds: 2,
       warmup: rideW7(W5B.warmup, 10),
-      main: scaleW10(W5B.main, W10_REPS),
-      upperBack: scaleW10(W5B.upperBack ?? [], W10_REPS),
+      main: scaleW9(W5B.main, W9_REPS),
+      upperBack: scaleW9(W5B.upperBack ?? [], W9_REPS),
     },
     C: {
       ...W5C,
       description: '15-min cardio (elliptical or walk) + 2-round strength block · ~32 min',
       rounds: 2,
       warmup: rideW7(W5C.warmup, 15),
-      main: scaleW10(W5C.main, W10_REPS_C),
+      main: scaleW9(W5C.main, W9_REPS_C),
     },
   },
 });
