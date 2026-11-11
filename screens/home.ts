@@ -48,6 +48,7 @@ import {
   LAST_DONE_KEY,
   state,
   loadLogs,
+  loadRestDays,
   loadWeekMoves,
   getChronologicalLogs,
   loadWalks,
@@ -700,6 +701,16 @@ function renderUpNextHero(id: WorkoutId): string {
 // WK2 (Sep 27 2026): `weekLines` replaces the old single weekCount/weekLabel
 // pair — the completion model's closing save needs TWO lines ("Week 5 done ·
 // 3 of 3 ✓" then "Week 6 starts now", §2.4's Done card spec), not one.
+// v74 (Nov 11 2026): a logged rest day. Not a workout: it is never "missed", never A / B / C, never
+// closes a week. Home just says so, calmly, in place of the Up-next card (the workout chips stay).
+function renderRecoveryDayCard(): string {
+  return `
+    <div class="card home-recovery-card" id="home-recovery-card">
+      <div class="home-done-title">Recovery day ✓</div>
+      <div class="home-done-line">Rest counts. Back when you're ready.</div>
+    </div>`;
+}
+
 function renderDoneTodayCard(log: LogEntry, weekLines: string[]): string {
   const lastDone = loadLastDone();
   const firsts = lastDone && lastDone.id === log.id ? lastDone.firsts : [];
@@ -801,6 +812,8 @@ export function renderHome(): string {
   const dDoneToday = logs.some(
     (l) => l.workout === 'D' && localIsoDate(new Date(l.date)) === todayIso
   );
+  // v74: a rest day logged today (its own store; never in `logs`).
+  const restToday = loadRestDays().some((d) => localIsoDate(new Date(d.date)) === todayIso);
   const weekWalks = walksThisWeek();
   const walkStartedAt = activeWalkStart();
 
@@ -1171,7 +1184,7 @@ export function renderHome(): string {
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
     ${ui.staleSnapshot ? renderStaleSessionCard(ui.staleSnapshot) : ''}
 
-    ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : renderUpNextHero(pick) + renderPreviewLink(pick)}
+    ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : restToday ? renderRecoveryDayCard() : renderUpNextHero(pick) + renderPreviewLink(pick)}
     ${chipsHtml}
     ${renderWorkoutDChip(dDoneToday)}
 

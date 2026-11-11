@@ -90,6 +90,7 @@ const NO_DEFAULT_CLOCK = new Set([
   'sw-upgrade.spec.ts', // service-worker install/cache mechanics, no dates in play
   'screens/r3-paths.spec.ts', // v73: every test pins mockDate to Sun Nov 15 (Round 3's first day) itself
   'screens/r3-fix-round.spec.ts', // v73.1: same - every test pins mockDate (Sun Nov 15 or Sat Nov 14)
+  'screens/day-mode.spec.ts', // v74: same - every test pins mockDate (Sun Nov 15, Sat Nov 14 or a later Round 3 day)
 ]);
 
 // Tests allowed to seed the calendar marks (ignoreSickWeeks = no Sick weeks;

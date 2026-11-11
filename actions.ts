@@ -20,6 +20,7 @@
 // They are called at exactly the points the old inline calls ran, in the same order.
 
 import type { Workout } from './program.js';
+import type { RestDay } from './types.js';
 import type { WeekKey } from './week.js';
 import type {
   LogEntry,
@@ -39,6 +40,8 @@ import {
   writeCyclePeriods,
   loadWeekMoves,
   writeWeekMoves,
+  loadRestDays,
+  writeRestDays,
   WW_RESULT_KEY,
   LAST_DONE_KEY,
   ACTIVE_SESSION_KEY,
@@ -50,9 +53,10 @@ import {
 } from './state.js';
 import { ui } from './ui.js';
 import { DEFAULT_PATH } from './paths.js';
+import { pathInForce } from './day-mode.js';
 import { requestRender } from './bus.js';
 import { moveFeelString, withOverrideFeel, type SteppedMove } from './move-feel.js';
-import { pushLogToSupabase, patchLogToSupabase, syncDisabled } from './sync.js';
+import { pushLogToSupabase, patchLogToSupabase, pushRestDay, syncDisabled } from './sync.js';
 import { pushCyclePeriod, deleteCyclePeriod } from './sync-cycle.js';
 import { pushWeekMove, deleteWeekMove, weekMoveKey } from './sync-week-moves.js';
 import { pushWalk, fetchFitSteps } from './sync-movement.js';
@@ -345,7 +349,9 @@ export async function saveCompletedSession(): Promise<void> {
     // v50 · mood: a chip she never tapped is not a reading — null, same rule as capacity.
     moodBefore: state.moodBeforeTouched ? state.moodBefore : null,
     moodAfter: state.moodAfterTouched ? state.moodAfter : null,
-    wallSitSec: state.wallSitSec,
+    // v74: on a day mode the Wall sit (if one was swapped in) is a comfort-angle hold, not the trend's
+    // test: it must never become a wall-sit reading.
+    wallSitSec: state.dayMode ? 0 : state.wallSitSec,
     backPain: state.backPainTouched ? state.backPain : null,
     // v49 · engine: same null-means-not-answered shape as backPain.
     wristPain: state.wristPainTouched ? state.wristPain : null,
@@ -379,7 +385,9 @@ export async function saveCompletedSession(): Promise<void> {
     sessionNote,
     liteDay: state.liteDay,
     // v73: the Round 3 time path (null on D and on any workout without paths).
-    sessionPath: w?.paths ? (state.sessionPath ?? DEFAULT_PATH) : null,
+    sessionPath: w?.paths ? (pathInForce(state.sessionPath, state.dayMode) ?? DEFAULT_PATH) : null,
+    // v74: the "Not my best day?" pick (null on a normal day, on D and on Round 2).
+    dayMode: w?.paths ? state.dayMode : null,
     // v48 · P5 (Sep 24 2026): "curl=easy@2kg;row=right@1kg" — only the parts
     // she engaged with, null when none. v55: the "@load" suffix carries her
     // per-set weight pick, sent to Supabase as-is since fix r3 (Sep 28 2026,
@@ -534,6 +542,21 @@ export function undoPeriodStart(): void {
   requestRender();
 }
 
+/** v74: "Log rest day" - saves a recovery day (fever / stomach bug, or a Crohn's flare). It is NOT a
+ * workout: it goes in its own store, never in the sessions list, so it can never count as a missed
+ * workout, as A / B / C, or close a week. Optimistic local write first, then pushed (like every save
+ * here). Then the session screen state is reset and she lands on Home ("Recovery day ✓"). */
+export function logRestDay(mode: 'fever' | 'crohns'): void {
+  const day: RestDay = { id: genId(), date: new Date().toISOString(), mode, synced: false };
+  writeRestDays([day, ...loadRestDays()]);
+  hooks().resetState();
+  requestRender();
+  void pushRestDay(day).then((ok) => {
+    state.syncStatus = ok ? 'synced' : 'offline';
+    hooks().updateSyncIndicator();
+  });
+}
+
 export async function flushPendingSyncs(): Promise<void> {
   if (syncDisabled()) {
     // v48 · P4 (Sep 24 2026): under automation nothing syncs, so say so rather
@@ -558,8 +581,10 @@ export async function flushPendingSyncs(): Promise<void> {
   // re-create on Supabase the exact row she just undid.
   const pendingWeekMoves = loadWeekMoves().filter((m) => !m.synced && !m.deleted);
   const pendingWeekMoveDeletes = loadWeekMoves().filter((m) => !m.synced && m.deleted);
+  const pendingRestDays = loadRestDays().filter((d) => !d.synced);
   if (
     pendingLogs.length === 0 &&
+    pendingRestDays.length === 0 &&
     pendingPeriods.length === 0 &&
     pendingWeekMoves.length === 0 &&
     pendingWeekMoveDeletes.length === 0
@@ -577,6 +602,9 @@ export async function flushPendingSyncs(): Promise<void> {
     // the two can never share one code path.
     const ok = entry.pendingEdit ? await patchLogToSupabase(entry) : await pushLogToSupabase(entry);
     if (!ok) allOk = false;
+  }
+  for (const day of pendingRestDays) {
+    if (!(await pushRestDay(day))) allOk = false;
   }
   for (const period of pendingPeriods) {
     await pushCyclePeriod(period); // marks synced:true in localStorage on success
@@ -741,6 +769,7 @@ export function saveActiveSession(): void {
       pausedMs: state.pausedMs,
       liteDay: state.liteDay,
       sessionPath: state.sessionPath,
+      dayMode: state.dayMode,
       roundBreak: state.roundBreak,
       finishHereLitePrev: state.finishHereLitePrev,
       stoppedEarlyAt: state.stoppedEarlyAt,

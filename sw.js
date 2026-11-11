@@ -178,6 +178,11 @@ const OPTIONAL_ASSETS = [
   './assets/voice/one-arm-dumbbell-row.mp3',
   './assets/voice/side-plank-on-knees.mp3',
   './assets/voice/supported-split-squat-r3.mp3',
+  // v74 (Nov 11 2026): the three "Not my best day?" variant cards (this sw.js edit is authorized by the
+  // main window on Allison's build go; the repo rule reserves sw.js for checkers).
+  './assets/voice/wall-push-up-on-forearms.mp3',
+  './assets/voice/bird-dog-on-forearms.mp3',
+  './assets/voice/hip-hinge-no-weight-hands-on-the-wall.mp3',
   './assets/voice/wrist-extension-left.mp3',
   './assets/voice/wrist-extension-right.mp3',
   './assets/voice/wrist-flexion-left.mp3',

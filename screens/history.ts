@@ -15,6 +15,7 @@
 import { requestRender } from '../bus.js';
 import { bindClick } from '../dom.js';
 import { state, loadLogs } from '../state.js';
+import { DAY_MODE_SHORT } from '../day-mode.js';
 import { ui } from '../ui.js';
 import { saveHistoryEdit } from '../actions.js';
 import { escapeHtml, formatMmSs } from '../format.js';
@@ -188,6 +189,7 @@ export function renderHistoryDetail(): string {
   if (cardio)
     rows.push(detailRow('Cardio', escapeHtml(cardioText(cardio)), { id: 'detail-cardio' }));
   if (log.sessionPath) rows.push(detailRow('Path', `${log.sessionPath} min`)); // v73
+  if (log.dayMode) rows.push(detailRow('Day', DAY_MODE_SHORT[log.dayMode])); // v74
   if (log.liteDay) {
     // Lite = one round less than the plan that week had. Swing fix (Sep 26
     // 2026): the plan follows the week the session counted toward. WK4 (Sep 27

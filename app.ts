@@ -31,7 +31,8 @@ import {
   flushPendingSyncs,
   setActionHooks,
 } from './actions.js';
-import { state, isValidLogEntry, loadLogs } from './state.js';
+import { state, isValidLogEntry, loadLogs, loadRestDays } from './state.js';
+import { comingBackActive } from './day-mode.js';
 import { setRenderer, setScrollRestoreSink, requestScrollRestore } from './bus.js';
 import { installTimerVisibilityHandler } from './timer.js';
 import {
@@ -211,6 +212,13 @@ function startWorkout(id: AnyWorkoutId): void {
   state.screen = 'pre-log';
   state.liteDay = false; // fresh pick, full program until she says otherwise
   state.sessionPath = null; // v73: and no time path picked yet (Start alone = 48)
+  state.dayMode = null; // v74: a normal day until she taps "Not my best day?"
+  ui.daySheetOpen = false;
+  // v74: coming back from a logged EASY / REST day, the next 2-3 Round 3 workouts open with the 38 path
+  // pre-picked (she can tap another path). Only a workout with time paths (Round 3 A/B/C).
+  if (getCurrentWorkout()?.paths && comingBackActive(loadLogs(), loadRestDays())) {
+    state.sessionPath = '38';
+  }
   // T1 (Sep 27 2026), §3.1: a fresh pick asks fresh — never carry yesterday's
   // confirmed start time into a new session.
   state.herStartAt = null;

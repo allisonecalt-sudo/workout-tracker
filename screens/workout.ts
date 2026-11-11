@@ -53,6 +53,7 @@ import { escapeHtml } from '../format.js';
 import { renderActionBar } from '../action-bar.js';
 import { flattenSteps, nextUndoneStep, type WorkoutStep } from '../step-list.js';
 import { DEFAULT_PATH } from '../paths.js';
+import { RIDE_NOTES, dayModeNote, pathInForce } from '../day-mode.js';
 import { setsPrescribed, holdSetsFace, formatHeldSeconds } from '../hold-sets.js';
 import { honestWallSitLogs } from '../viz.js';
 import { isMoveFeelValue, MOVE_FEEL_VALUES, slugFor } from '../move-feel.js';
@@ -86,7 +87,7 @@ import {
   heldSecAfterReload,
   laneMinutesNow,
 } from '../workout-lanes.js';
-import { SAFETY_LINE, R3_RIDE_NOTE, type Exercise, type Workout, type Phase } from '../program.js';
+import { SAFETY_LINE, type Exercise, type Workout, type Phase } from '../program.js';
 import { saveActiveSession } from '../actions.js';
 import {
   togglePause,
@@ -429,8 +430,22 @@ function renderHoldTimerCard(ex: Exercise, showTempo: boolean): string {
 // other notes and show nothing here.
 function rideNoteHtml(): string {
   const raw = rawCurrentExercise();
-  if (!raw || raw.name !== 'Outdoor walk' || raw.notes !== R3_RIDE_NOTE) return '';
-  return `<p class="exercise-safety ride-note">${escapeHtml(R3_RIDE_NOTE)}</p>`;
+  if (!raw || raw.name !== 'Outdoor walk' || !raw.notes || !RIDE_NOTES.includes(raw.notes)) {
+    return '';
+  }
+  return `<p class="exercise-safety ride-note">${escapeHtml(raw.notes)}</p>`;
+}
+
+// v74: the top line of a swapped move ("Swapped for your wrist today: ...") and, on every page of a
+// sore / easy day, the one quiet line that names the day. Both '' on a normal day.
+function swapLineHtml(ex: Exercise | null): string {
+  const raw = rawCurrentExercise();
+  const text = ex?.swap ?? raw?.swap;
+  return text ? `<p class="swap-line" id="swap-line">${escapeHtml(text)}</p>` : '';
+}
+function dayModeLineHtml(): string {
+  const note = dayModeNote(state.dayMode);
+  return note ? `<p class="day-mode-line" id="day-mode-line">${escapeHtml(note)}</p>` : '';
 }
 
 // v73.1: an optional move ("Hammer curl (if time)") gets a "Skip - no time" button. Skipping is not a
@@ -480,7 +495,7 @@ export function renderWorkout(): string {
         <button class="quit-link" id="quit" type="button">× Quit workout</button>
       </div>
     </div>
-    ${renderProgressLine(w)}`;
+    ${renderProgressLine(w)}${dayModeLineHtml()}`;
 
   // v48 · P3 (Sep 24 2026) — the cardio CHOICE (no lane picked, no walk
   // running). Her walk: "one green Elliptical button, Walk and Apartment small
@@ -494,13 +509,19 @@ export function renderWorkout(): string {
       <div class="card">
         <div class="exercise-display">
           <div class="exercise-name-row"><div class="exercise-name">${displayName(ex)}</div></div>
+          ${swapLineHtml(ex)}
           <div class="exercise-reps">${walkStepMinutes(ex)} min</div>
           <p class="exercise-safety">Conversational pace</p>
           ${rideNoteHtml()}
           <div class="cardio-choice">
-            <button class="btn-large btn-primary" id="ww-elliptical" type="button">▶ Elliptical</button>
+            ${
+              /* v74: a knee day is the walk lane - the elliptical sits it out, so Walk is the big button. */
+              state.dayMode === 'knee'
+                ? `<button class="btn-large btn-primary" id="ww-start" type="button">🚶 Walk outside<span class="cardio-half-sub"> · tap as you head out</span></button>`
+                : `<button class="btn-large btn-primary" id="ww-elliptical" type="button">▶ Elliptical</button>`
+            }
             <div class="cardio-choice-row">
-              <button class="cardio-half" id="ww-start" type="button"><span class="cardio-half-main">🚶 Walk outside</span><span class="cardio-half-sub">tap as you head out</span></button>
+              ${state.dayMode === 'knee' ? '' : `<button class="cardio-half" id="ww-start" type="button"><span class="cardio-half-main">🚶 Walk outside</span><span class="cardio-half-sub">tap as you head out</span></button>`}
               <button class="cardio-half" id="ww-apartment" type="button"><span class="cardio-half-main">🏠 Apartment</span></button>
             </div>
             <button class="back-link cardio-skip" id="ww-skip" type="button">Skip cardio today</button>
@@ -525,6 +546,7 @@ export function renderWorkout(): string {
       <div class="card">
         <div class="exercise-display">
           <div class="exercise-name-row"><div class="exercise-name">${displayName(ex)}</div></div>
+          ${swapLineHtml(ex)}
           <div class="exercise-reps">${walkStepMinutes(ex)} min</div>
           <p class="walk-live-line">🚶 <span id="walk-live">${walkLiveText(workoutWalkStart())}</span></p>
           <p class="gear-note">It saves with this workout. Tap Done · Next when you're back.</p>
@@ -564,7 +586,7 @@ export function renderWorkout(): string {
   // v54: Workout D never reaches this generic branch (its one step is the
   // elliptical, handled above) — the 'D' exclusion here is type-safety only.
   const kind =
-    !indoorLane && state.selectedWorkout !== null && state.selectedWorkout !== 'D'
+    !indoorLane && !ex.swap && state.selectedWorkout !== null && state.selectedWorkout !== 'D'
       ? tonightKind(ex, state.selectedWorkout)
       : null;
 
@@ -589,6 +611,7 @@ export function renderWorkout(): string {
           <div class="exercise-name">${displayName(ex)}</div>
           ${kind ? `<span class="new-tonight-badge">${kind === 'new' ? 'New tonight' : 'Again tonight'}</span>` : ''}
         </div>
+        ${swapLineHtml(ex)}
         <div class="exercise-reps">${ex.reps ?? ''}</div>
         ${renderArmFeel(ex)}
         ${renderMoveFeel(ex, {
@@ -1615,7 +1638,9 @@ function beginExercises(): void {
   endPreLogClockTick();
   // v73: Start without a path pick means 48 — kept on state so it is saved and
   // survives a close (only a workout that has paths).
-  if (state.sessionPath === null && getCurrentWorkout()?.paths) state.sessionPath = DEFAULT_PATH;
+  if (state.sessionPath === null && getCurrentWorkout()?.paths) {
+    state.sessionPath = pathInForce(null, state.dayMode) ?? DEFAULT_PATH; // v74: an easy day is 38
+  }
   state.screen = 'workout';
   state.currentRound = 1;
   state.currentPhase = 'warmup';

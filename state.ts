@@ -22,7 +22,14 @@
 import type { AnyWorkoutId, PathId, Phase } from './program.js';
 import type { WeekKey } from './week.js';
 import type { MoveFeelMark, MoveFeelValue } from './move-feel.js';
-import type { LogEntry, StoredWeekMove, WalkEntry, StoredCyclePeriod } from './types.js';
+import type {
+  LogEntry,
+  StoredWeekMove,
+  WalkEntry,
+  StoredCyclePeriod,
+  RestDay,
+  DayMode,
+} from './types.js';
 import type { CyclePeriod } from './cycle.js';
 import type { WeekClockInput } from './program-week.js';
 
@@ -156,6 +163,10 @@ export type AppState = {
   // ('38' | '48' | '60'); null = not picked (Start then means 48 — paths.ts).
   // Saved as workout_sessions.session_path. Only a workout with `paths` uses it.
   sessionPath: PathId | null;
+  // v74 (Nov 11 2026): the "Not my best day?" pick on the pre-workout page (null = a normal day).
+  // Never set by anything but her tap. Saved as workout_sessions.day_mode; carried by the resume
+  // snapshot. back / knee / wrist = swap day, cold = easy day, fever / crohns = rest day (no workout).
+  dayMode: DayMode | null;
   // Wall-sit timing capture (group 1D): when the user starts a timed wall sit
   // we stash the start timestamp here so we can compute actual held duration
   // even if she taps Done before the timer expires.
@@ -347,6 +358,7 @@ export type ActiveSessionSnapshot = {
   pausedMs: number;
   liteDay: boolean;
   sessionPath: PathId | null; // v73: a pick survives an app close
+  dayMode: DayMode | null; // v74: so does a "Not my best day?" pick
   // v48: an app close on the "Round 1 done ✓" screen reopens on it; a
   // finish-here and a stop-early survive a close too.
   roundBreak: boolean;
@@ -425,6 +437,9 @@ export const WW_LANE_PAUSE_BASE_KEY = 'workout-tracker:ww-lane-pause-base';
 export const LAST_DONE_KEY = 'workout-tracker:last-done';
 export const CYCLE_STORAGE_KEY = 'workout-tracker:cycle-periods';
 export const WEEK_MOVES_STORAGE_KEY = 'workout-tracker:week-moves';
+// v74 (Nov 11 2026): logged rest days, in their OWN store. A rest day is not a workout, so it never
+// goes in STORAGE_KEY's list - nothing that counts sessions can see it.
+export const REST_DAYS_STORAGE_KEY = 'workout-tracker:rest-days';
 export const PACE_RULE_SEEN_KEY = 'workout-tracker:pace-rule-seen';
 // v63 item 1 (Oct 19 2026): the "Note to Claude" queue - the small record of every note not yet in
 // her Brain dump inbox (text notes carry their text, voice notes carry the id of the recording in
@@ -558,6 +573,7 @@ export const state: AppState = {
   pausedMs: 0,
   liteDay: false,
   sessionPath: null,
+  dayMode: null,
   wallSitStartedAt: null,
   historyDetailId: null,
   detailReturnTo: null,
@@ -634,6 +650,13 @@ export function isValidLogEntry(x: unknown): x is LogEntry {
       o['sessionPath'] === '38' ||
       o['sessionPath'] === '48' ||
       o['sessionPath'] === '60') &&
+    // v74: optional AND nullable - every row saved before the day-mode button has neither.
+    (o['dayMode'] === undefined ||
+      o['dayMode'] === null ||
+      o['dayMode'] === 'back' ||
+      o['dayMode'] === 'knee' ||
+      o['dayMode'] === 'wrist' ||
+      o['dayMode'] === 'cold') &&
     isOptionalOf(o['armFeel'], 'string') &&
     isOptionalOf(o['moveFeel'], 'string') &&
     isOptionalOf(o['voicePlays'], 'number') &&
@@ -684,6 +707,35 @@ export function writeLogs(logs: LogEntry[]): void {
     return b.date.localeCompare(a.date); // newest first
   });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted.slice(0, PULL_LIMIT)));
+}
+
+export function loadRestDays(): RestDay[] {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem(REST_DAYS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (r): r is RestDay =>
+        !!r &&
+        typeof r === 'object' &&
+        typeof (r as RestDay).id === 'string' &&
+        typeof (r as RestDay).date === 'string' &&
+        ((r as RestDay).mode === 'fever' || (r as RestDay).mode === 'crohns')
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function writeRestDays(days: RestDay[]): void {
+  try {
+    const sorted = [...days].sort((a, b) => b.date.localeCompare(a.date));
+    localStorage.setItem(REST_DAYS_STORAGE_KEY, JSON.stringify(sorted.slice(0, 200)));
+  } catch {
+    // Non-fatal: the server row (once synced) is the record.
+  }
 }
 
 export function loadWeekMoves(): StoredWeekMove[] {

@@ -11,6 +11,10 @@
 import type { AnyWorkoutId, PathId } from './program.js';
 import type { CyclePeriod } from './cycle.js';
 
+// v74 (Nov 11 2026): the six "Not my best day?" modes (day-mode.ts holds the logic and the words). The
+// type lives here so state.ts and this file stay free of any import of day-mode.ts.
+export type DayMode = 'back' | 'knee' | 'wrist' | 'cold' | 'fever' | 'crohns';
+
 export type LogEntry = {
   id?: string;
   date: string;
@@ -82,6 +86,10 @@ export type LogEntry = {
   // v73 (Nov 11 2026): the Round 3 time path she picked ('38' | '48' | '60'),
   // null/absent on every older row and on D. workout_sessions.session_path.
   sessionPath?: PathId | null;
+  // v74 (Nov 11 2026): the "Not my best day?" pick she made before Start - 'back' | 'knee' | 'wrist'
+  // (a swap day) or 'cold' (an easy day). null/absent on every older row and on a normal day.
+  // workout_sessions.day_mode. (A rest day is not a LogEntry: see RestDay.)
+  dayMode?: DayMode | null;
   // "curl=easy;row=right" — the one-tap Easy/Right/Hard on the 1 kg moves (P5).
   armFeel?: string | null;
   // v58 (Sep 28 2026) — "splitsquat=right;wallsit=easy@45s;ride=right@12min":
@@ -134,6 +142,16 @@ export type LogEntry = {
   // to Supabase; a local-only flag for a human (her, or Claude) to notice
   // and resolve deliberately.
   staleRemoteDelete?: boolean;
+};
+
+// v74 (Nov 11 2026): a logged REST day ('fever' | 'crohns'). Deliberately NOT a LogEntry: it lives
+// in its own store (state.ts loadRestDays), so no count, week clock, Progress or history list can
+// ever see it as a workout. Server side it is a workout_sessions row with workout_type 'R'.
+export type RestDay = {
+  id: string;
+  date: string;
+  mode: 'fever' | 'crohns';
+  synced?: boolean;
 };
 
 // `missing` is kept as the plain letters string ("B" / "BC", §2.2's own

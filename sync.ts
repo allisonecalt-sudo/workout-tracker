@@ -19,6 +19,8 @@ import {
   writeLogs,
   loadCyclePeriods,
   loadWeekMoves,
+  loadRestDays,
+  writeRestDays,
   PULL_LIMIT,
 } from './state.js';
 import { requestRender } from './bus.js';
@@ -27,7 +29,7 @@ import { planForLog, completionClosingSessionIds } from './week-clock.js';
 import { legacyCardioMarker } from './cardio-notes.js';
 import { workoutHasWallSit } from './hold-sets.js';
 import type { AnyWorkoutId } from './program.js';
-import type { LogEntry } from './types.js';
+import type { LogEntry, RestDay } from './types.js';
 
 export const SUPABASE_URL = 'https://hpiyvnfhoqnnnotrmwaz.supabase.co';
 export const SUPABASE_ANON_KEY =
@@ -99,6 +101,10 @@ const V58_MOVE_FEEL_SESSION_COLUMNS = ['move_feel'] as const;
 // reasoning as every V-group here: a server that has not run it yet still
 // saves the session, just without this one column.
 const V73_SESSION_PATH_COLUMNS = ['session_path'] as const;
+
+// The one column added in v74 for "Not my best day?"
+// (migrations/2026-11-11-v74-day-mode.sql). Own strip group, same reasoning as every V-group here.
+const V74_DAY_MODE_COLUMNS = ['day_mode'] as const;
 
 // The five columns added in T1 for her start/finish "Right?" + breaks
 // (migrations/2026-09-27-v53-timing.sql). APPLIED Sep 27 2026 (her 10:49
@@ -175,6 +181,8 @@ export function sessionPayload(entry: LogEntry): Record<string, unknown> {
     move_feel: entry.moveFeel ?? null,
     // v73: the Round 3 time path ('38' | '48' | '60'); null on older rows and D.
     session_path: entry.sessionPath ?? null,
+    // v74: the "Not my best day?" pick (back | knee | wrist | cold); null on a normal day.
+    day_mode: entry.dayMode ?? null,
     voice_plays: entry.voicePlays ?? null,
     steps_skipped: entry.stepsSkipped ?? null,
     // T1 (Sep 27 2026), §3: her own start/finish answers — see LogEntry's
@@ -202,6 +210,7 @@ export function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
   for (const col of V53_TIMING_SESSION_COLUMNS) delete payload[col];
   for (const col of V58_MOVE_FEEL_SESSION_COLUMNS) delete payload[col];
   for (const col of V73_SESSION_PATH_COLUMNS) delete payload[col];
+  for (const col of V74_DAY_MODE_COLUMNS) delete payload[col];
   const noteParts = [legacyCardioMarker(entry), entry.sessionNote, entry.notes].filter(
     (p): p is string => typeof p === 'string' && p.trim() !== ''
   );
@@ -425,7 +434,7 @@ export async function patchLogToSupabase(entry: LogEntry): Promise<boolean> {
 type RemoteSession = {
   id: string;
   date: string;
-  workout_type: AnyWorkoutId;
+  workout_type: AnyWorkoutId | 'R';
   capacity_before_1_10: number | null;
   capacity_after_1_10: number | null;
   wall_sit_seconds: number | null;
@@ -470,6 +479,8 @@ type RemoteSession = {
   move_feel?: string | null;
   // v73: optional — a server without the column, or a pre-Round-3 row.
   session_path?: string | null;
+  // v74: optional - a server without the column, or any older row.
+  day_mode?: string | null;
   voice_plays?: number | null;
   // v50 · jump list (Sep 25 2026): optional — a server that hasn't run the
   // migration, or a pre-v50 row, simply doesn't carry it.
@@ -501,9 +512,15 @@ type RemoteSession = {
 // the server once had (synced) that is missing from the fetched window is gone.
 // Rows older than a full 50-row window are left alone (they may simply be past
 // the window), and an empty server answer is never read as "delete everything".
-export function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]): LogEntry[] {
+export function mergeRemoteSessions(
+  local: LogEntry[],
+  remote: RemoteSession[],
+  // v74: how many rows the server sent in all (rest-day 'R' rows are taken out before this merge, but
+  // they still filled the window).
+  fetchedCount: number = remote.length
+): LogEntry[] {
   const remoteIds = new Set(remote.map((r) => r.id));
-  const windowIsEverything = remote.length < PULL_LIMIT;
+  const windowIsEverything = fetchedCount < PULL_LIMIT;
   const oldestRemoteMs =
     remote.length > 0 ? Math.min(...remote.map((r) => new Date(r.date).getTime())) : NaN;
   // WK2 fix r2 (Sep 27 2026, checker's must #1 / GATE 1) — computed ONCE, off
@@ -536,6 +553,7 @@ export function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]):
     byId.set(l.id, l);
   }
   for (const r of remote) {
+    if (r.workout_type === 'R') continue; // v74: a rest day is never a session (pullFromSupabase splits them out first)
     const existing = byId.get(r.id);
     if (existing && !existing.synced) {
       // Local-unsynced wins on content. But the server having its id means an
@@ -587,6 +605,13 @@ export function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]):
       ellipticalKcal: r.elliptical_kcal == null ? null : Number(r.elliptical_kcal),
       sessionNote: r.session_note ?? null,
       liteDay: r.lite_day ?? null,
+      dayMode:
+        r.day_mode === 'back' ||
+        r.day_mode === 'knee' ||
+        r.day_mode === 'wrist' ||
+        r.day_mode === 'cold'
+          ? r.day_mode
+          : null,
       sessionPath:
         r.session_path === '38' || r.session_path === '48' || r.session_path === '60'
           ? r.session_path
@@ -642,14 +667,59 @@ export async function pullFromSupabase(): Promise<void> {
       // own list is at least as fresh as that copy, so don't merge (the v33
       // delete rule would drop anything synced after the cache was taken).
     } else if (sRes.ok) {
-      const remote: RemoteSession[] = await sRes.json();
-      writeLogs(mergeRemoteSessions(loadLogs(), remote));
+      const all: RemoteSession[] = await sRes.json();
+      // v74: a logged rest day is a workout_type 'R' row. It goes to its own store and never into the
+      // sessions list, so no count / week clock / Progress / history can see it as a workout.
+      const remote = all.filter((r) => r.workout_type !== 'R');
+      writeLogs(mergeRemoteSessions(loadLogs(), remote, all.length));
+      writeRestDays(
+        mergeRestDays(
+          loadRestDays(),
+          all.filter((r) => r.workout_type === 'R')
+        )
+      );
     } else {
       console.warn('[sync] pull sessions failed:', sRes.status);
     }
     if (state.screen === 'home') requestRender();
   } catch (err) {
     console.warn('[sync] pull threw:', err);
+  }
+}
+
+// v74 (Nov 11 2026): rest days. The server row is a workout_sessions row with workout_type 'R' and
+// day_mode fever | crohns (migrations/2026-11-11-v74-day-mode.sql). No other column is sent.
+export function restDayPayload(r: RestDay): Record<string, unknown> {
+  return { id: r.id, date: r.date, workout_type: 'R', day_mode: r.mode };
+}
+
+/** Server rest rows replace the synced local ones; a local unsynced rest day never loses its write. */
+export function mergeRestDays(local: RestDay[], remote: RemoteSession[]): RestDay[] {
+  const byId = new Map<string, RestDay>();
+  for (const r of remote) {
+    if (r.day_mode !== 'fever' && r.day_mode !== 'crohns') continue;
+    byId.set(r.id, { id: r.id, date: r.date, mode: r.day_mode, synced: true });
+  }
+  for (const l of local) {
+    if (!l.synced && !byId.has(l.id)) byId.set(l.id, l);
+    else if (!l.synced && byId.has(l.id)) byId.set(l.id, { ...l, synced: true });
+  }
+  return Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export async function pushRestDay(r: RestDay): Promise<boolean> {
+  if (syncDisabled()) return false;
+  try {
+    const res = await postSession(restDayPayload(r));
+    if (!res.ok) {
+      console.warn('[sync] rest day push failed:', res.status, await res.text().catch(() => ''));
+      return false;
+    }
+    writeRestDays(loadRestDays().map((d) => (d.id === r.id ? { ...d, synced: true } : d)));
+    return true;
+  } catch (err) {
+    console.warn('[sync] rest day push threw:', err);
+    return false;
   }
 }
 
@@ -661,6 +731,7 @@ export function syncIndicatorText(): string {
   // a pending week_moves row.
   const pending =
     loadLogs().filter((l) => !l.synced).length +
+    loadRestDays().filter((d) => !d.synced).length +
     loadCyclePeriods().filter((p) => !p.synced).length +
     loadWeekMoves().filter((m) => !m.synced).length;
   // v63 item 1: a "Note to Claude" not yet in her inbox is named here too, in its own words; with

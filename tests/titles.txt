@@ -1071,7 +1071,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v73 - the version › package.json appVersion (the one source) is v73.1
+v73 - the version › package.json appVersion (the one source) is v74
 v73 — Round 3 Week 1 is the written plan › A: cool-down is chin tucks, then her stretches at 45 s, and no shoulder / calf stretch
 v73 — Round 3 Week 1 is the written plan › A: the five main moves are in priority order, 2 rounds
 v73 — Round 3 Week 1 is the written plan › A: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
@@ -1133,6 +1133,62 @@ v73.1 - the optional Hammer curl › the "try 2 kg" hint hides once 2 kg is pick
 v73.1 - the pre-workout page › "What's in it" keeps its open state when a path is tapped
 v73.1 - the pre-workout page › Back & wrist scrolls clear of the pinned bar (A, B, C)
 v73.1 - the pre-workout page › the new-tonight line never lists the cardio lane as a move
+v74 - EASY day (a cold, no fever) › a swap day mid-workout survives a reload (the resume snapshot carries it)
+v74 - EASY day (a cold, no fever) › an easy day swaps no moves
+v74 - EASY day (a cold, no fever) › the 38 path is forced whatever she had tapped; 3 moves, 1 round, easy ride note
+v74 - EASY day (a cold, no fever) › the card, the 38 path locked, 3 moves, 1 round, the easy ride note, saved cold + 38
+v74 - EASY day (a cold, no fever) › undoing the easy day gives her own path pick back
+v74 - Nov 11-14 is still Round 2 Week 8 with C open › the shown week stays Round 2 Week 8 until Sun Nov 15, and has no time paths or day modes
+v74 - REST day › "Log rest day": Home says "Recovery day ✓"; it is NOT a workout (no session row, week unchanged, no missed)
+v74 - REST day › Crohn's: gentle walk, electrolytes, dizzy / dark pee / cramps → no exercise, plus the same doctor list
+v74 - REST day › Progress and Sessions never see a rest day
+v74 - REST day › fever: the calm card, the doctor list, no workout and no Start; Change reopens the sheet
+v74 - SWAP day: back › A: Chair squat keeps its name (card + voice + history) with a higher seat, shorter range
+v74 - SWAP day: back › B: hip hinge becomes the wall hinge (bridges already follow), with its top line
+v74 - SWAP day: back › C: the split squat becomes a Wall sit at a comfortable angle (a timed hold)
+v74 - SWAP day: back › the ride stays (the elliptical is still offered) and its note offers the walk lane 5-10 min
+v74 - SWAP day: knee › Chair squat is half depth; the split squat is a shallow, pain-free Wall sit
+v74 - SWAP day: knee › the ride becomes the walk lane, same minutes; bridges and clamshells stay
+v74 - SWAP day: wrist › A: the incline push-up on fists becomes the wall push-up on forearms
+v74 - SWAP day: wrist › B: bird dog becomes bird dog on forearms (60 path); one-arm rows get a loose grip
+v74 - SWAP day: wrist › C: floor press is thumbs in, lighter or no weight; the side plank is already on the forearm
+v74 - SWAP days › back on B: 1 round, the wall hinge with its top line, saved day_mode back
+v74 - SWAP days › knee on C: the ride choice has no elliptical (the walk lane, same minutes), wall sit instead of split squat
+v74 - SWAP days › the wall push-up step: top line, the new card, and the day line on the page
+v74 - SWAP days › wrist on A: the wall push-up on forearms shows its top line first; the picked path is kept
+v74 - a normal day is unchanged › no day mode: 2 rounds, the picker works, saved day_mode is null
+v74 - a rest day is never a workout › a logged rest day does not move the week clock: the same week, the same sessions
+v74 - a rest day is never a workout › mergeRemoteSessions never turns an R row into a session (and a rest day filled the window)
+v74 - a rest day is never a workout › mergeRestDays: server rows win, a local unsynced rest day is kept and marked synced when the server has it
+v74 - a rest day is never a workout › the server row is workout_type R + day_mode; nothing else
+v74 - coming back from being sick › a newer sick day starts it again
+v74 - coming back from being sick › after a logged EASY day (the cold session itself does not count as one of the 3)
+v74 - coming back from being sick › after a logged REST day: on for the next 3 workouts, off from the 4th
+v74 - coming back from being sick › never on with no sick day logged (a swap day does not count)
+v74 - coming back from being sick › she can override: a workout done on another path ends it; workout D never counts
+v74 - coming back › a logged REST day starts it too, and Start saves the pre-picked 38
+v74 - coming back › after a logged easy day the next workout opens with 38 pre-picked and the line; another path overrides
+v74 - coming back › it lasts for 3 workouts and then is gone; with no sick day logged it never shows
+v74 - day_mode on the wire › a pull round-trips day_mode on a working day and ignores a junk value
+v74 - day_mode on the wire › a saved row with a day mode is a valid log; a rest mode is not a valid log entry
+v74 - day_mode on the wire › the payload carries day_mode; a normal day carries null; a server without the column still saves
+v74 - the link and the sheet › Round 3 A: a quiet "Not my best day?" link under the picker; the sheet has 3 rows and 6 buttons
+v74 - the link and the sheet › a low body reading only SUGGESTS it (an outline); nothing switches on
+v74 - the link and the sheet › no link on Workout D, and none the day before Round 3 (Sat Nov 14 is Round 2)
+v74 - the link and the sheet › undo / change before Start: tap the lit button, "change", or "Back to a normal day"
+v74 - the rest card words are the design (no medical advice beyond it) › the doctor list is the six items, exactly
+v74 - the rest card words are the design (no medical advice beyond it) › the swap note
+v74 - the six modes › D and every Round 2 week have no day modes: the workout comes back untouched
+v74 - the six modes › SWAP and EASY days are 1 round on every path, A, B and C
+v74 - the six modes › a REST day has no workout to change (same object back); the page shows a card instead
+v74 - the six modes › a normal day is the very same workout object
+v74 - the six modes › the cool-down and the primer are never touched by a day mode
+v74 - the six modes › there are six, in three kinds
+v74 - the three new cards (detail + video + voice + safety + how-to) › Bird dog on forearms: detail card, checked video, voice file, safety line, how-to
+v74 - the three new cards (detail + video + voice + safety + how-to) › Hip hinge, no weight, hands on the wall: detail card, checked video, voice file, safety line, how-to
+v74 - the three new cards (detail + video + voice + safety + how-to) › Wall push-up on forearms: detail card, checked video, voice file, safety line, how-to
+v74 - the three new cards (detail + video + voice + safety + how-to) › every swapped-in move that is not a new card already has a card (Wall sit, Glute bridges)
+v74 - the three new cards (detail + video + voice + safety + how-to) › no swapped move on any path of any day mode lacks a detail card or a safety/how-to
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

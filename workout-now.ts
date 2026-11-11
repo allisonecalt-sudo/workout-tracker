@@ -28,6 +28,7 @@ import { ellipticalMinutes, apartmentCardioMinutes } from './cardio-readings.js'
 import { APARTMENT_CARDIO_NAME, apartmentCardioStep } from './walk.js';
 import { steppedMovesForWorkout, type SteppedMove } from './move-feel.js';
 import { workoutForPath } from './paths.js';
+import { applyDayMode, pathInForce } from './day-mode.js';
 import type { WeekSpan, PendingWeek } from './week.js';
 import { sessionsAttributedTo } from './program-week.js';
 import {
@@ -163,7 +164,10 @@ export function currentSteppedMoves(): SteppedMove[] {
 // disagree about which moves are in today's workout. No `paths` = unchanged.
 export function getCurrentWorkout(): Workout | null {
   const w = planWorkoutForNow();
-  return w ? workoutForPath(w, state.sessionPath) : null;
+  // v74: then the day mode (swaps / easy day), so every screen sees the same workout.
+  return w
+    ? applyDayMode(workoutForPath(w, pathInForce(state.sessionPath, state.dayMode)), state.dayMode)
+    : null;
 }
 
 function planWorkoutForNow(): Workout | null {
@@ -375,7 +379,8 @@ export function tonightNames(
       const name = displayName(ex)
         .replace(/\s*\([^)]*\)/g, '')
         .toLowerCase();
-      if (tonightKind(ex, id) === want && !out.includes(name)) out.push(name);
+      // v74: a move swapped in for a sore/sick day is not "new" or "again" - its own top line says why.
+      if (!ex.swap && tonightKind(ex, id) === want && !out.includes(name)) out.push(name);
     }
   }
   return out;

@@ -34,6 +34,7 @@ import { stopTimer } from './timer.js';
 import { stopVoiceNote } from './audio.js';
 import { ELLIPTICAL_NAME, getWorkoutById, getWorkoutD } from './workout-now.js';
 import { isPathId, workoutForPath } from './paths.js';
+import { applyDayMode, isDayMode, isRestMode, pathInForce } from './day-mode.js';
 
 export type ResumeHooks = {
   beginPostLogClockTick: () => void;
@@ -180,8 +181,15 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
     // path has a 6th main move the plan row alone does not list).
     const planW =
       snap.selectedWorkout === 'D' ? getWorkoutD() : getWorkoutById(snap.selectedWorkout);
+    const snapMode = isDayMode(snap.dayMode) && !isRestMode(snap.dayMode) ? snap.dayMode : null;
     const w = planW
-      ? workoutForPath(planW, isPathId(snap.sessionPath) ? snap.sessionPath : null)
+      ? applyDayMode(
+          workoutForPath(
+            planW,
+            pathInForce(isPathId(snap.sessionPath) ? snap.sessionPath : null, snapMode)
+          ),
+          snapMode
+        )
       : planW;
     if (!w) {
       clearActiveSession();
@@ -262,6 +270,8 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       pausedMs: typeof snap.pausedMs === 'number' && snap.pausedMs >= 0 ? snap.pausedMs : 0,
       liteDay: snap.liteDay === true, // default false on old snapshots
       sessionPath: isPathId(snap.sessionPath) ? snap.sessionPath : null, // v73
+      // v74: only a working day mode can be in a snapshot (a rest day never starts a session).
+      dayMode: isDayMode(snap.dayMode) && !isRestMode(snap.dayMode) ? snap.dayMode : null,
       // v48: pre-v48 snapshots have none of these → the plain step, no marker.
       roundBreak: snap.roundBreak === true && phase === 'main',
       finishHereLitePrev:
@@ -373,6 +383,7 @@ export function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.startedAt = snap.startedAt ?? new Date().toISOString();
   state.liteDay = snap.liteDay;
   state.sessionPath = snap.sessionPath;
+  state.dayMode = snap.dayMode;
   state.roundBreak = snap.roundBreak;
   state.finishHereLitePrev = snap.finishHereLitePrev;
   state.stoppedEarlyAt = snap.stoppedEarlyAt;
@@ -485,6 +496,7 @@ export function resetState(): void {
   state.pausedMs = 0;
   state.liteDay = false;
   state.sessionPath = null; // v73: the next session starts with no pick
+  state.dayMode = null; // v74: and with a normal day
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
   state.howToOpenFor = null;
@@ -513,6 +525,7 @@ export function resetState(): void {
   state.rideNumbersOpen = false; // v51
   ui.stepListOpen = false; // v50 · jump list: a closed session closes the sheet too
   ui.postTimeSkipped = false; // v73: the next session shows its time card
+  ui.daySheetOpen = false; // v74
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
   clearHoldStart(); // item 5: a hold's start belongs to one session

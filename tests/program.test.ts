@@ -23,6 +23,7 @@ import {
   type WeekPlan,
 } from '../program';
 import { EXERCISE_DETAIL } from '../exercise-detail';
+import { DAY_MODE_NEW_CARDS } from '../day-mode';
 import { slugFor } from '../move-feel';
 import { allSourceFiles, appSourceFiles, bundledSourceFiles, nextRoundNum } from './helpers';
 
@@ -115,6 +116,8 @@ test.describe('PROGRAM — names resolve where the app looks them up', () => {
 
   test('every SAFETY_LINE key is an exercise name that is actually in the program', () => {
     const inProgram = new Set(allExercises().map((r) => r.ex.name));
+    // v74: the three "Not my best day?" variant cards are swapped in by day-mode.ts, not written in PROGRAM.
+    for (const n of DAY_MODE_NEW_CARDS) inProgram.add(n);
     const orphans = Object.keys(SAFETY_LINE).filter((k) => !inProgram.has(k));
     expect(orphans).toEqual([]);
   });

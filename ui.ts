@@ -23,6 +23,9 @@ export interface Ui {
   // "Right?" + breaks). Transient UI like stepListOpen: the saved fields simply
   // stay unconfirmed; a reload shows the card again.
   postTimeSkipped: boolean;
+  // v74 (Nov 11 2026): whether the "Not my best day?" sheet is open on the pre-workout page. Transient
+  // UI like stepListOpen - the pick itself is state.dayMode.
+  daySheetOpen: boolean;
   // v50 · jump list (Sep 25 2026): whether the "List" sheet is open. Transient
   // UI, not session progress — deliberately NOT on AppState/the resume
   // snapshot, the same way the quit-confirm panel isn't: a reload should land
@@ -106,6 +109,7 @@ export interface Ui {
 
 export const ui: Ui = {
   postTimeSkipped: false,
+  daySheetOpen: false,
   stepListOpen: false,
   timerPipOpen: false,
   audioCtx: null,

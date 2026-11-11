@@ -389,4 +389,28 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     // Sitting-tall chin tuck from a PT; the lying version is the same glide. oEmbed 200 Nov 11 2026.
     attribution: 'Chin Tucks Sitting — Ask Doctor Jo',
   },
+  // ----- v74 (Nov 11 2026): the three "Not my best day?" variant cards. Each id was checked live on YouTube
+  // oEmbed Nov 11 2026 (HTTP 200 = exists and embeddable); picked by title and channel, not watched end to end. -----
+  'Wall push-up on forearms': {
+    youtubeId: 'wIPJvBQs7RA',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // Hinge Health PT video of the wall push-up. It shows hands on the wall; hers go on the forearms (the card says so). No PT video of the forearm version was found. oEmbed 200 Nov 11 2026.
+    attribution: 'How to Do Wall Push Ups: A Guide from Physical Therapists — Hinge Health',
+  },
+  'Bird dog on forearms': {
+    youtubeId: 'L_IAjrqt4KE',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // The forearm bird dog from a physical therapist: the exact variation. oEmbed 200 Nov 11 2026.
+    attribution: 'Forearm Bird-Dog — Erin Lee, DPT',
+  },
+  'Hip hinge, no weight, hands on the wall': {
+    youtubeId: 'bhcKj9E_xIA',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // Physical therapy video: the hinge with the hands on the wall, the exact variation. oEmbed 200 Nov 11 2026.
+    attribution:
+      'Hip Hinge with Hands Pressing into the Wall — FlySpace Physical Therapy - Performing Arts NYC',
+  },
 };

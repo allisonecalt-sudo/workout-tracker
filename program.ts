@@ -66,6 +66,10 @@ export type Exercise = {
   // v73.1: look the detail card (+ its voice note) up under this key instead of `name`. Used by the
   // Round 3 split squat, whose wording changed while Round 2's stays as it was.
   detailKey?: string;
+  // v74 (Nov 11 2026): a move swapped in by "Not my best day?" carries the line shown at the top of its
+  // page, e.g. "Swapped for your wrist today: Wall push-up on forearms instead of Incline push-up on
+  // fists". Display only; set by day-mode.ts, never written in PROGRAM.
+  swap?: string;
   // v48 (Sep 24 2026): the ONE line that belongs on the card face mid-set — the
   // safety rule, not the whole cue. Falls back to SAFETY_LINE by name. The full
   // `notes` moves behind a closed "Cue ▸" (47-70 words on the face, mid-set, on 7
@@ -2978,6 +2982,18 @@ export const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
   // v73 (Nov 11 2026) — Round 3's new moves. Plain words; the pain rule is her
   // governing one (a little pain is OK; above your usual -> hold; sharp,
   // climbing, or still there tomorrow -> step back a rung).
+  'Wall push-up on forearms': {
+    howTo:
+      'Stand about an arm and a half from a wall. Put your forearms flat on the wall at shoulder height, elbows under the shoulders, fingers pointing up. Keep the body in one long line. Lean in toward the wall, then press back out. No weight through the hands, so the wrists rest. Do about half your usual reps at effort 5 to 6 out of 10. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
+  'Bird dog on forearms': {
+    howTo:
+      'On hands and knees, then lower onto the forearms with the elbows right under the shoulders. Reach ONE arm forward and the OPPOSITE leg back until both are level with the body. Hold 3 seconds, then lower with control and switch sides. Keep the hips square and the neck long with your eyes on the floor. Do not let the low back sag. Do about half your usual reps at effort 5 to 6 out of 10. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
+  'Hip hinge, no weight, hands on the wall': {
+    howTo:
+      'Stand facing a wall, about an arm and a half away, hands on the wall at hip height, knees soft. Push the hips back with a flat back until you feel the hamstrings. Squeeze the glutes to stand tall. No weight in the hands, and the wall carries some of your weight, so the low back is not loaded. Do not round the low back. Do about half your usual reps at effort 5 to 6 out of 10. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
   '1-minute primer': {
     howTo:
       'Right after the ride, on your back or standing tall. Take 5 slow belly breaths. On each breath out, tilt the pelvis gently so the low back flattens, hold 2 to 3 seconds, then let go. Then do ONE light practice set of the first move of the day, easy, about half effort. That is the whole warm-up: it wakes up the back and the hips without taking another ten minutes.',
@@ -3154,6 +3170,11 @@ export const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
 // PROGRAM notes are NOT edited: the prescription and its full cue stay hers +
 // Lisa's. An Exercise's own `safety` wins over this map.
 export const SAFETY_LINE: Record<string, string> = {
+  'Wall push-up on forearms':
+    'Forearms flat, no weight through the hands. Body in one line, no sagging.',
+  'Bird dog on forearms': 'Weight on the forearms, not the hands. Hips square, no sagging.',
+  'Hip hinge, no weight, hands on the wall':
+    'Hips back, flat back. The wall holds you up. Do NOT round the low back.',
   'Chair squat': 'Knees over the toes, not past. Sit back, chest tall.',
   'Band row':
     'Thumbs up, wrists straight. Pain tells — back off if it is sharp, climbing, or still there tomorrow.',

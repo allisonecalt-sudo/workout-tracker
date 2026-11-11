@@ -2528,5 +2528,127 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       },
     ],
   },
+  // ===== v74 (Nov 11 2026): the three variant cards for "Not my best day?" (day-mode.ts). Voice notes:
+  // edge-tts en-US-AvaMultilingualNeural, like every note above. =====
+  'Wall push-up on forearms': {
+    exercise: 'Wall push-up on forearms',
+    voiceSrc: './assets/voice/wall-push-up-on-forearms.mp3',
+    voiceScript:
+      'Wall push-up on forearms. This is the wrist-friendly push-up, for a day your wrists are sore. Stand about an arm and a half from a wall. Put your forearms flat on the wall at shoulder height, elbows under your shoulders, fingers pointing up. Keep your body in one long line. Lean in toward the wall, then press back out. No weight goes through your hands. Do the reps on your screen. Effort five to six out of ten, about half your usual reps. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['chest', 'shoulders', 'forearms'],
+    muscleLabel: 'Chest, front of shoulders, back of the arm (no weight on the hands)',
+    steps: [
+      'Stand about an arm and a half from a wall.',
+      'Forearms flat on the wall at shoulder height, elbows under the shoulders, fingers up.',
+      'Lean in toward the wall, body in one long line, then press back out.',
+      'No weight through the hands. Do the reps on your screen.',
+    ],
+    dos: [
+      'Keep your forearms flat and your elbows under the shoulders.',
+      'Keep your body in one line, glutes squeezed.',
+      'Go slowly in and out.',
+      'Use this on a day your wrist is sore.',
+    ],
+    donts: [
+      "Don't let the low back sag or the hips poke back.",
+      "Don't press through your palms or bend the wrists back.",
+      "Don't shrug the shoulders up to your ears.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow, step back.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Hips poking back, body bent in the middle.',
+        fix: 'Squeeze the glutes and lean from the ankles.',
+      },
+      {
+        mistake: 'Elbows flaring out wide.',
+        fix: 'Keep them under the shoulders, close to your sides.',
+      },
+      {
+        mistake: 'Wrists bending back to push.',
+        fix: 'Keep the whole forearm flat on the wall.',
+      },
+    ],
+  },
+  'Bird dog on forearms': {
+    exercise: 'Bird dog on forearms',
+    voiceSrc: './assets/voice/bird-dog-on-forearms.mp3',
+    voiceScript:
+      'Bird dog on forearms. This is the wrist-friendly bird dog, for a day your wrists are sore. Get on your hands and knees, then lower onto your forearms, with your elbows right under your shoulders. Back long and flat. Reach one arm forward and the opposite leg back, until both are level with your body. Hold three seconds. Lower with control and switch sides. Do the reps on your screen. Keep your hips square, your neck long, and your eyes on the floor. Do not let your low back sag. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['core', 'glutes', 'back', 'forearms'],
+    muscleLabel: 'Deep core + glutes + back, weight on the forearms',
+    steps: [
+      'On hands and knees, then lower onto your forearms, elbows right under the shoulders.',
+      'Reach ONE arm forward and the OPPOSITE leg back until both are level with your body.',
+      'Hold 3 seconds. Lower with control and switch sides.',
+      'Hips square, neck long, eyes on the floor. Do the reps on your screen.',
+    ],
+    dos: [
+      'Rest your weight on the forearms, not the hands.',
+      'Move the opposite arm and leg together, slowly.',
+      'Keep the hips square.',
+      'Hold 3 seconds and lower with control.',
+    ],
+    donts: [
+      "Don't let the low back sag or the leg swing up past level.",
+      "Don't crane your neck up to look forward.",
+      "Don't rush: slow beats high.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow, step back.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Hips rolling open as the leg goes back.',
+        fix: 'Lift the leg less and keep both hip bones pointing at the floor.',
+      },
+      {
+        mistake: 'Low back sagging or arching.',
+        fix: 'Brace the belly, and reach only as high as your body line.',
+      },
+      {
+        mistake: 'Shoulders sinking between the arms.',
+        fix: 'Press the forearms into the floor and push the floor away.',
+      },
+    ],
+  },
+  'Hip hinge, no weight, hands on the wall': {
+    exercise: 'Hip hinge, no weight, hands on the wall',
+    voiceSrc: './assets/voice/hip-hinge-no-weight-hands-on-the-wall.mp3',
+    voiceScript:
+      'Hip hinge, no weight, hands on the wall. This is the back-friendly hinge, for a day your back is sore. Stand facing a wall, about an arm and a half away, with your hands on the wall at hip height and soft knees. Now push your hips back, keeping your back flat, until you feel it in the backs of your thighs. Then squeeze your glutes and stand tall. Push the hips back, do not squat down. The wall holds you up, so there is no weight and no load on your low back. Do not round your low back. Do the reps on your screen. Effort five to six out of ten, about half your usual reps. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['hamstrings', 'glutes', 'hips'],
+    muscleLabel: 'Hamstrings + glutes, the wall takes the load off the back',
+    steps: [
+      'Stand facing a wall, about an arm and a half away, hands on the wall at hip height, knees soft.',
+      'Push your hips back, flat back, until you feel the backs of your thighs.',
+      'Squeeze the glutes and stand tall.',
+      'No weight in the hands. Do the reps on your screen.',
+    ],
+    dos: [
+      'Push the hips back, like closing a door with your bottom.',
+      'Keep the back flat and the neck long.',
+      'Let the wall take some of your weight.',
+      'Squeeze the glutes to stand.',
+    ],
+    donts: [
+      "Don't round the low back.",
+      "Don't squat down: send the hips back instead.",
+      "Don't lock the knees.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow, step back.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Rounding the low back at the bottom.',
+        fix: 'Hinge less far: stop where the back is still flat.',
+      },
+      {
+        mistake: 'Bending the knees into a squat.',
+        fix: 'Keep them soft and push the hips straight back.',
+      },
+      {
+        mistake: 'Standing back up with the back, not the hips.',
+        fix: 'Squeeze the glutes to bring the hips forward.',
+      },
+    ],
+  },
   // ===== END AUTO-GENERATED =====
 };

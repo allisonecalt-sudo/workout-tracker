@@ -7418,3 +7418,143 @@ button.wk-cell {
 #app.has-action-bar:has(.path-picker) {
   padding-bottom: calc(148px + env(safe-area-inset-bottom));
 }
+
+/* v74 (Nov 11 2026): "Not my best day?" - the quiet link, its sheet, the day card, the rest card, the
+   swap line on a swapped move, the recovery-day card on Home. */
+.day-link-row {
+  margin: 0 0 10px;
+  color: var(--text-dim);
+  font-size: var(--font-small);
+}
+
+.day-link {
+  min-height: 44px;
+  padding: 0 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: var(--font-small);
+  font-weight: 500;
+  text-decoration: underline;
+}
+
+/* a low body reading only SUGGESTS it: a gentle outline, never switched on for her */
+.day-link.day-link-suggest {
+  color: var(--text);
+  border-color: var(--accent-progress);
+  padding: 0 14px;
+  text-decoration: none;
+}
+
+.day-sheet-hint {
+  margin: 0;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: var(--font-small);
+}
+
+.day-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.day-row-title {
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.day-row-btns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.day-btn {
+  min-height: 52px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-small);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.day-btn.day-btn-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
+.day-card-title {
+  font-weight: 600;
+}
+
+.day-card-text,
+.rest-card-text {
+  margin: 8px 0 0;
+}
+
+.day-card-swaps {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+  font-size: var(--font-small);
+}
+
+.coming-back-line {
+  margin: 0 0 8px;
+  color: var(--text-dim);
+  font-size: var(--font-small);
+}
+
+.path-chip:disabled:not(.path-chip-on) {
+  opacity: 0.45;
+}
+
+.rest-card-title {
+  font-size: var(--font-heading);
+  font-weight: 600;
+}
+
+.rest-doctor {
+  text-align: left;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-strong);
+  font-size: var(--font-small);
+}
+
+.rest-doctor-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.rest-doctor ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+}
+
+.swap-line {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--accent-progress);
+  color: var(--text);
+  font-size: var(--font-small);
+}
+
+.day-mode-line {
+  margin: 6px 0 0;
+  color: var(--text-dim);
+  font-size: var(--font-meta);
+}
+
+.home-recovery-card {
+  text-align: center;
+}

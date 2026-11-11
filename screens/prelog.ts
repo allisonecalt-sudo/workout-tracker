@@ -16,7 +16,24 @@
 // shared delegates are narrowed by selector ([data-time-chip="start"], the "-before" groups)
 // so each element still gets exactly one listener.
 
-import { state } from '../state.js';
+import { state, loadLogs, loadRestDays } from '../state.js';
+import { ui } from '../ui.js';
+import { logRestDay } from '../actions.js';
+import {
+  COMING_BACK_LINE,
+  DAY_MODE_LABEL,
+  DAY_MODE_ROWS,
+  EASY_CARD,
+  REST_CARD_CROHNS,
+  REST_CARD_FEVER,
+  SEE_A_DOCTOR,
+  SEE_A_DOCTOR_TITLE,
+  comingBackActive,
+  dayModeNote,
+  isDayMode,
+  isRestMode,
+  type DayMode,
+} from '../day-mode.js';
 import { requestRender } from '../bus.js';
 import { bindClick } from '../dom.js';
 import { escapeHtml } from '../format.js';
@@ -129,21 +146,112 @@ function preLogWeekLabel(): string {
 function renderPathPicker(w: Workout): string {
   const spec = w.paths;
   if (!spec) return '';
+  const locked = state.dayMode === 'cold';
+  const comingBack = !state.dayMode && comingBackActive(loadLogs(), loadRestDays());
   const chips = PATH_IDS.map((p) => {
-    const on = state.sessionPath === p;
+    // v74: an EASY day locks the 38 path (it is the only one lit and the others are off).
+    const on = locked ? p === '38' : state.sessionPath === p;
     const moves = Math.min(PATH_MOVE_COUNT[p], 5);
-    return `<button class="path-chip${on ? ' path-chip-on' : ''}" type="button" data-path="${p}" aria-pressed="${on ? 'true' : 'false'}"><span class="path-chip-main">${pathLabel(p)}</span><span class="path-chip-sub">ride ${spec.rideMin[p]} · ${moves} moves${p === '60' ? '+' : ''}</span></button>`;
+    return `<button class="path-chip${on ? ' path-chip-on' : ''}" type="button" data-path="${p}" aria-pressed="${on ? 'true' : 'false'}"${locked ? ' disabled' : ''}><span class="path-chip-main">${pathLabel(p)}</span><span class="path-chip-sub">ride ${spec.rideMin[p]} · ${moves} moves${p === '60' ? '+' : ''}</span></button>`;
   }).join('');
   return `
     <div class="path-picker" id="path-picker" role="group" aria-label="Which path today?">
-      <span class="path-picker-label">Which path today?</span>
+      <span class="path-picker-label">Which path today?${locked ? ' · easy day: 38 min' : ''}</span>
+      ${comingBack ? `<p class="coming-back-line" id="coming-back-line">${escapeHtml(COMING_BACK_LINE)}</p>` : ''}
       <div class="path-picker-row">${chips}</div>
     </div>`;
+}
+
+// ---- v74 (Nov 11 2026): "Not my best day?" ----
+// A quiet link under the path picker (Round 3 A/B/C only: a workout with `paths`). It opens one sheet with
+// three rows (Sore today / Under the weather / Rest today). Nothing is ever pre-selected for her: a low
+// body reading may only SUGGEST it with a gentle outline (same rule the old Lite chip followed).
+// Words come from day-mode.ts (research README section 11 + 12).
+
+function renderDayLink(): string {
+  if (state.dayMode) {
+    return `<p class="day-link-row">Today: <strong>${escapeHtml(DAY_MODE_LABEL[state.dayMode])}</strong> · <button class="day-link" id="day-link" type="button">change</button></p>`;
+  }
+  const suggest = state.capacityBeforeTouched && state.capacityBefore <= 3;
+  return `<p class="day-link-row"><button class="day-link${suggest ? ' day-link-suggest' : ''}" id="day-link" type="button">Not my best day?</button></p>`;
+}
+
+function renderDaySheet(): string {
+  if (!ui.daySheetOpen) return '';
+  const rows = DAY_MODE_ROWS.map((row) => {
+    const btns = row.modes
+      .map((m) => {
+        const on = state.dayMode === m;
+        return `<button class="day-btn${on ? ' day-btn-on' : ''}" type="button" data-day-mode="${m}" aria-pressed="${on ? 'true' : 'false'}">${escapeHtml(DAY_MODE_LABEL[m])}</button>`;
+      })
+      .join('');
+    return `<div class="day-row"><span class="day-row-title">${escapeHtml(row.title)}</span><div class="day-row-btns">${btns}</div></div>`;
+  }).join('');
+  return `
+    <div class="move-sheet" id="day-sheet" role="dialog" aria-label="Not my best day?">
+      <div class="move-sheet-card">
+        <div class="move-sheet-head">
+          <h2 class="move-sheet-name">Not my best day?</h2>
+          <button type="button" class="move-sheet-x" id="day-sheet-x" aria-label="Close">×</button>
+        </div>
+        <p class="day-sheet-hint">Pick what fits. You can change it any time before you start.</p>
+        ${rows}
+        ${state.dayMode ? `<button type="button" class="btn-quiet" id="day-clear">Back to a normal day</button>` : ''}
+      </div>
+    </div>`;
+}
+
+/** The card at the top of a working (non-rest) day: what the day is, and each swap in plain words. */
+function renderDayCard(w: Workout): string {
+  const mode = state.dayMode;
+  if (mode === null || isRestMode(mode)) return '';
+  const swaps = [...w.warmup, ...w.main]
+    .filter((ex) => ex.swap)
+    .map((ex) => `<li>${escapeHtml(ex.swap ?? '')}</li>`)
+    .join('');
+  const lead = mode === 'cold' ? `<p class="day-card-text">${escapeHtml(EASY_CARD)}</p>` : '';
+  return `
+    <div class="card day-card" id="day-card">
+      <div class="day-card-title">${escapeHtml(dayModeNote(mode))}</div>
+      ${lead}
+      ${swaps ? `<ul class="day-card-swaps">${swaps}</ul>` : ''}
+    </div>`;
+}
+
+/** The whole pre-workout page for a REST day: a calm card, no workout, "Log rest day". */
+function renderRestPage(w: Workout, mode: 'fever' | 'crohns'): string {
+  const text = mode === 'fever' ? REST_CARD_FEVER : REST_CARD_CROHNS;
+  const doctor = SEE_A_DOCTOR.map((d) => `<li>${escapeHtml(d)}</li>`).join('');
+  return `
+    <div class="screen-header prelog-header">
+      <div class="prelog-title">
+        <h2>Workout ${w.id}</h2>
+        <span class="subtitle-inline">${escapeHtml(w.name)}</span>
+      </div>
+      <button class="quit-link" id="back-home" type="button">× Back</button>
+    </div>
+    ${renderDayLink()}
+    <div class="card rest-card" id="rest-card">
+      <div class="rest-card-title">${escapeHtml(DAY_MODE_LABEL[mode])}</div>
+      <p class="rest-card-text">${escapeHtml(text)}</p>
+      <div class="rest-doctor">
+        <div class="rest-doctor-title">${escapeHtml(SEE_A_DOCTOR_TITLE)}</div>
+        <ul>${doctor}</ul>
+      </div>
+    </div>
+    ${renderDaySheet()}
+    ${renderActionBar(`<div class="step-nav">
+        <button class="btn-large btn-back" id="rest-change" type="button">Change</button>
+        <button class="btn-large btn-primary" id="log-rest" type="button" data-rest-mode="${mode}">Log rest day</button>
+      </div>`)}
+  `;
 }
 
 export function renderPreLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
+  // v74: a REST day has no workout to show - a calm card and "Log rest day" instead.
+  if (w.paths && isRestMode(state.dayMode)) return renderRestPage(w, state.dayMode);
   // v48 · P5 (Sep 24 2026): one quiet line instead of a subtitle, a counts card
   // and an amber box — her walk: "it asks 'how do you feel?', then the slider
   // says 'your BODY, not your mood' … Start is cut off at the bottom".
@@ -224,15 +332,20 @@ export function renderPreLog(): string {
     <p class="prelog-meta">${escapeHtml(meta)}</p>
     ${steppedLine ? `<p class="prelog-stepped" id="prelog-stepped">${escapeHtml(steppedLine)}</p>` : ''}
 
+    ${renderDayCard(w)}
+
     ${renderWorkoutOverview(w)}
 
     ${pathPicker}
+    ${w.paths ? renderDayLink() : ''}
 
     <div class="card body-card">
       ${renderBodyChips('cap-before', state.capacityBefore, state.capacityBeforeTouched, 'Your BODY right now, not your mood')}
       ${renderBodyChips('mood-before', state.moodBefore, state.moodBeforeTouched, 'Mood', '1 irritable · 10 happy / calm')}
       ${backWristBefore}
     </div>
+
+    ${w.paths ? renderDaySheet() : ''}
 
     ${workoutNeedsWristLine(w) ? `<p class="safety-line">Wrist + back: pressure fine — back off if it is sharp, climbing, or still there tomorrow.</p>` : ''}
 
@@ -467,6 +580,41 @@ export function attachPreLogHandlers(): void {
 
   // v73: the time-path picker. A tap lights that path; a second tap on the lit one
   // clears it (back to "not picked"). The workout list above is redrawn for it.
+  // v74: "Not my best day?" - the link, the sheet, the six buttons, undo / change, Log rest day.
+  // A tap on the lit button clears it (back to a normal day). Nothing here ever runs on its own.
+  const openDaySheet = (): void => {
+    ui.daySheetOpen = true;
+    requestRender();
+  };
+  const closeDaySheet = (): void => {
+    ui.daySheetOpen = false;
+    requestRender();
+  };
+  bindClick('day-link', openDaySheet);
+  bindClick('rest-change', openDaySheet);
+  bindClick('day-sheet-x', closeDaySheet);
+  bindClick('day-clear', () => {
+    state.dayMode = null;
+    ui.daySheetOpen = false;
+    requestRender();
+  });
+  document.getElementById('day-sheet')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeDaySheet();
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-day-mode]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset['dayMode'];
+      if (!isDayMode(m)) return;
+      state.dayMode = state.dayMode === m ? null : (m as DayMode);
+      ui.daySheetOpen = false;
+      requestRender();
+    });
+  });
+  document.getElementById('log-rest')?.addEventListener('click', () => {
+    const m = state.dayMode;
+    if (m === 'fever' || m === 'crohns') logRestDay(m);
+  });
+
   document.querySelectorAll<HTMLButtonElement>('[data-path]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const p = btn.dataset['path'];
