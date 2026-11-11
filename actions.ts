@@ -21,6 +21,7 @@
 
 import type { Workout } from './program.js';
 import type { RestDay } from './types.js';
+import { localIsoDate } from './dates.js';
 import type { WeekKey } from './week.js';
 import type {
   LogEntry,
@@ -41,6 +42,7 @@ import {
   loadWeekMoves,
   writeWeekMoves,
   loadRestDays,
+  loadRestDaysRaw,
   writeRestDays,
   WW_RESULT_KEY,
   LAST_DONE_KEY,
@@ -548,13 +550,28 @@ export function undoPeriodStart(): void {
  * here). Then the session screen state is reset and she lands on Home ("Recovery day ✓"). */
 export function logRestDay(mode: 'fever' | 'crohns'): void {
   const day: RestDay = { id: genId(), date: new Date().toISOString(), mode, synced: false };
-  writeRestDays([day, ...loadRestDays()]);
+  writeRestDays([day, ...loadRestDaysRaw()]);
   hooks().resetState();
   requestRender();
   void pushRestDay(day).then((ok) => {
     state.syncStatus = ok ? 'synced' : 'offline';
     hooks().updateSyncIndicator();
   });
+}
+
+/** v74.1: "Undo" on Home's Recovery card. Marks today's rest day(s) undone, locally (a tombstone): Home
+ * offers the workout again and "coming back" (the 38 pre-pick) stops, because both read loadRestDays.
+ * The app has NO way to delete a workout_sessions row (history only edits), so a row that already
+ * synced stays on the server as an 'R' row; the tombstone keeps it hidden here, and an unsynced one is
+ * never pushed. */
+export function undoRestDay(todayIso: string): void {
+  const all = loadRestDaysRaw();
+  writeRestDays(
+    all.map((d) =>
+      d.undone !== true && localIsoDate(new Date(d.date)) === todayIso ? { ...d, undone: true } : d
+    )
+  );
+  requestRender();
 }
 
 export async function flushPendingSyncs(): Promise<void> {

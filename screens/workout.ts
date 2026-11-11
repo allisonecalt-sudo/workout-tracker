@@ -517,7 +517,7 @@ export function renderWorkout(): string {
             ${
               /* v74: a knee day is the walk lane - the elliptical sits it out, so Walk is the big button. */
               state.dayMode === 'knee'
-                ? `<button class="btn-large btn-primary" id="ww-start" type="button">🚶 Walk outside<span class="cardio-half-sub"> · tap as you head out</span></button>`
+                ? `<button class="btn-large btn-primary" id="ww-start" type="button">🚶 Walk outside<span class="cardio-primary-sub">tap as you head out</span></button>`
                 : `<button class="btn-large btn-primary" id="ww-elliptical" type="button">▶ Elliptical</button>`
             }
             <div class="cardio-choice-row">
@@ -1697,7 +1697,9 @@ function beginExercises(): void {
     chooseElliptical(30);
   } else {
     const cardio = getCurrentWorkout()?.warmup.find((e) => e.name === 'Outdoor walk');
-    if (cardio) {
+    // v74.1: on a knee day never auto-pick the elliptical or the apartment from her last lane - the
+    // choice screen opens with the Walk big button and the "Swapped for your knee today" line.
+    if (cardio && state.dayMode !== 'knee') {
       const lane = lastCardioLane();
       if (lane === 'elliptical') chooseElliptical(walkStepMinutes(cardio));
       else if (lane === 'apartment') chooseApartmentCardio(walkStepMinutes(cardio));

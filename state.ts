@@ -709,7 +709,8 @@ export function writeLogs(logs: LogEntry[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sorted.slice(0, PULL_LIMIT)));
 }
 
-export function loadRestDays(): RestDay[] {
+/** Every stored rest day, undone tombstones included (only the merge / write paths want these). */
+export function loadRestDaysRaw(): RestDay[] {
   try {
     if (typeof localStorage === 'undefined') return [];
     const raw = localStorage.getItem(REST_DAYS_STORAGE_KEY);
@@ -727,6 +728,11 @@ export function loadRestDays(): RestDay[] {
   } catch {
     return [];
   }
+}
+
+/** The rest days she can see: an undone one is gone for every screen and for coming back. */
+export function loadRestDays(): RestDay[] {
+  return loadRestDaysRaw().filter((r) => r.undone !== true);
 }
 
 export function writeRestDays(days: RestDay[]): void {

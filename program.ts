@@ -2702,7 +2702,7 @@ const R3_STRENGTH_NOTE = 'Effort 6–7 out of 10 — the last 2–3 reps feel ha
 // v73.1: shown on whichever ride lane she uses (the lanes swap the step, so the screen reads this
 // text off the raw step: screens/workout.ts rideNoteHtml).
 export const R3_RIDE_NOTE =
-  'Ride first. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Grows only if your knee is fine the next morning.';
+  'Ride first. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Grows a few minutes every week or two, only if your knee is fine the next morning.';
 const R3_RIDE: Exercise = {
   name: 'Outdoor walk',
   reps: '12 min',

@@ -10,7 +10,14 @@
 // The UI half (the link, the sheet, the cards, Home) is tests/screens/day-mode.spec.ts.
 
 import { test, expect } from '@playwright/test';
-import { planForWeekKey, PROGRAM, SAFETY_LINE, EXERCISE_GUIDE, type WorkoutId } from '../program';
+import {
+  planForWeekKey,
+  R3_RIDE_NOTE,
+  PROGRAM,
+  SAFETY_LINE,
+  EXERCISE_GUIDE,
+  type WorkoutId,
+} from '../program';
 import { workoutForPath } from '../paths';
 import {
   applyDayMode,
@@ -23,6 +30,9 @@ import {
   DAY_MODE_NEW_CARDS,
   SWAP_NOTE,
   SEE_A_DOCTOR,
+  GET_CHECKED,
+  GET_CHECKED_TITLE,
+  DAY_MODE_LABEL,
   type DayMode,
 } from '../day-mode';
 import { EXERCISE_DETAIL } from '../exercise-detail';
@@ -143,6 +153,8 @@ test.describe('v74 - SWAP day: back', () => {
     expect(ride.reps).toBe('12 min');
     expect(ride.notes).toContain('walk lane');
     expect(ride.notes).toContain('5–10 min');
+    expect(ride.notes).toContain('If standing tall hurts');
+    expect(ride.notes).not.toContain('sitting tall');
     expect(ride.swap).toBeUndefined();
   });
 });
@@ -452,5 +464,48 @@ test.describe('v74 - Nov 11-14 is still Round 2 Week 8 with C open', () => {
     const r2 = PROGRAM.filter((wp) => wp.round === 2);
     const wk = r2[r2.length - 1]!;
     for (const id of LETTERS) expect(wk.workouts[id].paths).toBeUndefined();
+  });
+});
+
+test.describe('v74.1 - fix round', () => {
+  test('the ride note carries the progression sentence on the three workouts and the back day', () => {
+    expect(R3_RIDE_NOTE).toBe(
+      'Ride first. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Grows a few minutes every week or two, only if your knee is fine the next morning.'
+    );
+    expect(today('B', '48', 'back').warmup[0]!.notes).toContain(R3_RIDE_NOTE);
+  });
+
+  test('wrist day: the optional Hammer curl gets its own top line', () => {
+    const curl = today('A', '60', 'wrist').main.find((e) => e.name === 'Hammer curl');
+    expect(curl?.swap).toBe('Sore wrist today: skip it, or go lighter');
+    expect(today('A', '60', null).main.find((e) => e.name === 'Hammer curl')?.swap).toBeUndefined();
+  });
+
+  test('"Get checked if…" lists, by mode, in the research words', () => {
+    expect(GET_CHECKED_TITLE).toBe('Get checked if…');
+    expect(GET_CHECKED.back).toHaveLength(4);
+    expect(GET_CHECKED.back.join(' | ')).toContain('saddle');
+    expect(GET_CHECKED.knee).toEqual([
+      'the knee locks',
+      "you can't put weight on it",
+      'big swelling (or swelling with a fever)',
+    ]);
+    expect(GET_CHECKED.wrist).toHaveLength(3);
+  });
+
+  test('the sheet button says chest cough', () => {
+    expect(DAY_MODE_LABEL.fever).toBe('Fever / body aches / chest cough / stomach bug');
+  });
+
+  test('an undone rest day is gone for coming back; the merge keeps it undone', () => {
+    const rd = { id: 'r1', date: '2026-11-16T08:00:00.000Z', mode: 'fever' as const, synced: true };
+    expect(comingBackActive([], [rd])).toBe(true);
+    expect(comingBackActive([], [])).toBe(false);
+    const merged = mergeRestDays(
+      [{ ...rd, undone: true }],
+      [{ id: 'r1', date: rd.date, workout_type: 'R', day_mode: 'fever' } as never]
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]!.undone).toBe(true);
   });
 });

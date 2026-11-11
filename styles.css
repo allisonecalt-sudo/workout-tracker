@@ -7558,3 +7558,45 @@ button.wk-cell {
 .home-recovery-card {
   text-align: center;
 }
+
+/* v74.1: Recovery card - "Feel better? Start A anyway" + Undo; swap-day "Get checked if..." list;
+   knee day's big Walk button keeps its small line readable (dark text inside the sage button). */
+.recovery-start {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+}
+
+.recovery-undo {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.day-card-check {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-strong);
+  font-size: var(--font-small);
+}
+
+.day-card-check-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.day-card-check ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+}
+
+.cardio-primary-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--on-sage);
+  font-size: var(--font-small);
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: normal;
+}

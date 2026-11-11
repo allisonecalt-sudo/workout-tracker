@@ -152,6 +152,9 @@ export type RestDay = {
   date: string;
   mode: 'fever' | 'crohns';
   synced?: boolean;
+  // v74.1: "Undo" on the Recovery card. A local tombstone: every reader skips it (loadRestDays), the
+  // merge keeps it so a pull cannot bring the row back, and nothing is pushed for it.
+  undone?: boolean;
 };
 
 // `missing` is kept as the plain letters string ("B" / "BC", §2.2's own

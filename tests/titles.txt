@@ -1071,7 +1071,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v73 - the version › package.json appVersion (the one source) is v74
+v73 - the version › package.json appVersion (the one source) is v74.1
 v73 — Round 3 Week 1 is the written plan › A: cool-down is chin tucks, then her stretches at 45 s, and no shoulder / calf stretch
 v73 — Round 3 Week 1 is the written plan › A: the five main moves are in priority order, 2 rounds
 v73 — Round 3 Week 1 is the written plan › A: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
@@ -1189,6 +1189,23 @@ v74 - the three new cards (detail + video + voice + safety + how-to) › Hip hin
 v74 - the three new cards (detail + video + voice + safety + how-to) › Wall push-up on forearms: detail card, checked video, voice file, safety line, how-to
 v74 - the three new cards (detail + video + voice + safety + how-to) › every swapped-in move that is not a new card already has a card (Wall sit, Glute bridges)
 v74 - the three new cards (detail + video + voice + safety + how-to) › no swapped move on any path of any day mode lacks a detail card or a safety/how-to
+v74.1 - fix round › "Get checked if…" lists, by mode, in the research words
+v74.1 - fix round › an undone rest day is gone for coming back; the merge keeps it undone
+v74.1 - fix round › the ride note carries the progression sentence on the three workouts and the back day
+v74.1 - fix round › the sheet button says chest cough
+v74.1 - fix round › wrist day: the optional Hammer curl gets its own top line
+v74.1 - knee day ignores the saved last lane › a normal day still opens on the last lane (elliptical history)
+v74.1 - knee day ignores the saved last lane › last lane apartment (seeded history): the knee day opens the Walk choice, not the apartment
+v74.1 - knee day ignores the saved last lane › last lane elliptical (seeded history): the knee day opens the Walk choice, not the elliptical
+v74.1 - rest day: start anyway and undo › Undo removes the rest day and cancels the 38 pre-pick it caused
+v74.1 - rest day: start anyway and undo › a synced rest day is undone too, and a reload keeps it undone
+v74.1 - rest day: start anyway and undo › the Recovery card offers Start anyway (rest row stays) and Undo
+v74.1 - swap-day "Get checked if..." and the small lines › an easy day has no "Get checked if..." list
+v74.1 - swap-day "Get checked if..." and the small lines › back: the day card lists "Get checked if..."
+v74.1 - swap-day "Get checked if..." and the small lines › knee: the day card lists "Get checked if..."
+v74.1 - swap-day "Get checked if..." and the small lines › the "coming back" line hides once she taps another path
+v74.1 - swap-day "Get checked if..." and the small lines › wrist day on the 60 path: the Hammer curl page opens with its own top line
+v74.1 - swap-day "Get checked if..." and the small lines › wrist: the day card lists "Get checked if..."
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

@@ -20,6 +20,7 @@ import {
   loadCyclePeriods,
   loadWeekMoves,
   loadRestDays,
+  loadRestDaysRaw,
   writeRestDays,
   PULL_LIMIT,
 } from './state.js';
@@ -674,7 +675,7 @@ export async function pullFromSupabase(): Promise<void> {
       writeLogs(mergeRemoteSessions(loadLogs(), remote, all.length));
       writeRestDays(
         mergeRestDays(
-          loadRestDays(),
+          loadRestDaysRaw(),
           all.filter((r) => r.workout_type === 'R')
         )
       );
@@ -701,7 +702,9 @@ export function mergeRestDays(local: RestDay[], remote: RemoteSession[]): RestDa
     byId.set(r.id, { id: r.id, date: r.date, mode: r.day_mode, synced: true });
   }
   for (const l of local) {
-    if (!l.synced && !byId.has(l.id)) byId.set(l.id, l);
+    // v74.1: an undone rest day stays undone whatever the server still says.
+    if (l.undone === true) byId.set(l.id, { ...(byId.get(l.id) ?? l), undone: true });
+    else if (!l.synced && !byId.has(l.id)) byId.set(l.id, l);
     else if (!l.synced && byId.has(l.id)) byId.set(l.id, { ...l, synced: true });
   }
   return Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date));
@@ -709,13 +712,14 @@ export function mergeRestDays(local: RestDay[], remote: RemoteSession[]): RestDa
 
 export async function pushRestDay(r: RestDay): Promise<boolean> {
   if (syncDisabled()) return false;
+  if (loadRestDaysRaw().some((d) => d.id === r.id && d.undone === true)) return true; // undone: never push
   try {
     const res = await postSession(restDayPayload(r));
     if (!res.ok) {
       console.warn('[sync] rest day push failed:', res.status, await res.text().catch(() => ''));
       return false;
     }
-    writeRestDays(loadRestDays().map((d) => (d.id === r.id ? { ...d, synced: true } : d)));
+    writeRestDays(loadRestDaysRaw().map((d) => (d.id === r.id ? { ...d, synced: true } : d)));
     return true;
   } catch (err) {
     console.warn('[sync] rest day push threw:', err);

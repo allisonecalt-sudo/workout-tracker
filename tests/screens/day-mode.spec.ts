@@ -99,7 +99,7 @@ test.describe('v74 - the link and the sheet', () => {
       'Knee',
       'Wrist',
       'A cold, no fever',
-      'Fever / body aches / stomach bug',
+      'Fever / body aches / chest cough / stomach bug',
       "Crohn's flare",
     ]);
     // nothing is lit: it is never pre-selected
@@ -456,5 +456,189 @@ test.describe('v74 - a normal day is unchanged', () => {
     await page.locator('#save-log').click();
     const log = (await readKey(page, LOGS_KEY))[0]!;
     expect(log['dayMode'] ?? null).toBeNull();
+  });
+});
+
+// ---- v74.1 fix round ----
+
+const hist = (id: string, lane: string): Row => ({
+  id,
+  date: '2026-11-12T16:00:00.000Z',
+  workout: 'C',
+  capacityBefore: null,
+  capacityAfter: null,
+  wallSitSec: 0,
+  backPain: null,
+  word: '',
+  synced: true,
+  cardioLane: lane,
+});
+
+test.describe('v74.1 - knee day ignores the saved last lane', () => {
+  test.use({ viewport: { width: 412, height: 915 } });
+
+  for (const lane of ['elliptical', 'apartment']) {
+    test(`last lane ${lane} (seeded history): the knee day opens the Walk choice, not the ${lane}`, async ({
+      page,
+    }) => {
+      await openPreLog(page, SUN_R3, 'C', [hist(`h-${lane}`, lane)]);
+      await pickDay(page, 'knee');
+      await page.locator('#begin').click();
+      await expect(page.locator('.cardio-choice')).toBeVisible();
+      await expect(page.locator('#ww-start')).toBeVisible();
+      await expect(page.locator('#ww-elliptical')).toHaveCount(0);
+      await expect(page.locator('#swap-line')).toContainText('Swapped for your knee today');
+      await expect(page.locator('#ww-start')).toHaveClass(/btn-primary/);
+      await expect(page.locator('#ww-start .cardio-primary-sub')).toHaveText('tap as you head out');
+      // readable: the small line has the button's own text colour, and nothing scrolls sideways
+      const colours = await page.evaluate(() => {
+        const sub = document.querySelector('#ww-start .cardio-primary-sub');
+        const btn = document.querySelector('#ww-start');
+        return [getComputedStyle(sub!).color, getComputedStyle(btn!).color];
+      });
+      expect(colours[0]).toBe(colours[1]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= 412)).toBe(true);
+    });
+  }
+
+  test('a normal day still opens on the last lane (elliptical history)', async ({ page }) => {
+    await openPreLog(page, SUN_R3, 'C', [hist('h-n', 'elliptical')]);
+    await page.locator('#begin').click();
+    await expect(page.locator('.cardio-choice')).toHaveCount(0);
+  });
+});
+
+test.describe('v74.1 - swap-day "Get checked if..." and the small lines', () => {
+  test.use({ viewport: { width: 412, height: 915 } });
+
+  const expectations: Record<string, string[]> = {
+    back: [
+      'new leg weakness or numbness',
+      'numb saddle area',
+      'stays at night or at rest',
+      'fever with new back pain',
+    ],
+    knee: ['the knee locks', "can't put weight on it", 'big swelling'],
+    wrist: [
+      'numbness or tingling',
+      'a new lump or deformity',
+      "can't bear any load after an injury",
+    ],
+  };
+  for (const [mode, bits] of Object.entries(expectations)) {
+    test(`${mode}: the day card lists "Get checked if..."`, async ({ page }) => {
+      await openPreLog(page, SUN_R3, 'A');
+      await pickDay(page, mode);
+      await expect(page.locator('#get-checked')).toContainText('Get checked if…');
+      for (const b of bits) await expect(page.locator('#get-checked')).toContainText(b);
+    });
+  }
+
+  test('an easy day has no "Get checked if..." list', async ({ page }) => {
+    await openPreLog(page, SUN_R3, 'A');
+    await pickDay(page, 'cold');
+    await expect(page.locator('#get-checked')).toHaveCount(0);
+  });
+
+  test('the "coming back" line hides once she taps another path', async ({ page }) => {
+    const sick: Row = {
+      id: 'seed-cold',
+      date: '2026-11-15T08:00:00.000Z',
+      workout: 'A',
+      capacityBefore: null,
+      capacityAfter: null,
+      wallSitSec: 0,
+      backPain: null,
+      word: '',
+      synced: true,
+      dayMode: 'cold',
+      sessionPath: '38',
+    };
+    await openPreLog(page, '2026-11-17T07:00:00.000Z', 'any', [sick]);
+    await expect(page.locator('#coming-back-line')).toBeVisible();
+    await page.locator('[data-path="48"]').click();
+    await expect(page.locator('#coming-back-line')).toHaveCount(0);
+  });
+
+  test('wrist day on the 60 path: the Hammer curl page opens with its own top line', async ({
+    page,
+  }) => {
+    await openPreLog(page, SUN_R3, 'A');
+    await page.locator('[data-path="60"]').click();
+    await pickDay(page, 'wrist');
+    await page.locator('#begin').click();
+    let found = false;
+    for (let i = 0; i < 40 && !found; i++) {
+      const name = await page.locator('.exercise-name').first().textContent();
+      if (name?.includes('Hammer curl')) {
+        await expect(page.locator('#swap-line')).toHaveText(
+          'Sore wrist today: skip it, or go lighter'
+        );
+        found = true;
+        break;
+      }
+      const next = page.locator('#next, #ww-skip');
+      if (!(await next.isVisible())) break;
+      await next.click();
+    }
+    expect(found).toBe(true);
+  });
+});
+
+test.describe('v74.1 - rest day: start anyway and undo', () => {
+  test.use({ viewport: { width: 412, height: 915 } });
+
+  test('the Recovery card offers Start anyway (rest row stays) and Undo', async ({ page }) => {
+    await openPreLog(page, SUN_R3, 'A');
+    await pickDay(page, 'fever');
+    await page.locator('#log-rest').click();
+    await expect(page.locator('#recovery-start')).toContainText('Feel better? Start');
+    await expect(page.locator('#recovery-undo')).toHaveText('Undo');
+    await page.locator('#recovery-start').click();
+    await expect(page.locator('#begin')).toBeVisible();
+    expect((await readKey(page, REST_KEY)).filter((r) => r['undone'] !== true)).toHaveLength(1);
+  });
+
+  test('Undo removes the rest day and cancels the 38 pre-pick it caused', async ({ page }) => {
+    await openPreLog(page, SUN_R3, 'A');
+    await pickDay(page, 'fever');
+    await page.locator('#log-rest').click();
+    await page.locator('#recovery-start').click();
+    await expect(page.locator('#coming-back-line')).toBeVisible();
+    await expect(page.locator('[data-path="38"]')).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('#back-home').click();
+    await page.locator('#recovery-undo').click();
+    await expect(page.locator('#home-recovery-card')).toHaveCount(0);
+    await expect(page.locator('button[data-workout]').first()).toBeVisible();
+    // a local tombstone, never pushed; nothing visible reads it
+    const rest = await readKey(page, REST_KEY);
+    expect(rest).toHaveLength(1);
+    expect(rest[0]!['undone']).toBe(true);
+    await page.locator('button[data-workout="A"]').first().click();
+    await expect(page.locator('#coming-back-line')).toHaveCount(0);
+    await expect(page.locator('.path-chip-on')).toHaveCount(0);
+  });
+
+  test('a synced rest day is undone too, and a reload keeps it undone', async ({ page }) => {
+    await mockDate(page, SUN_R3);
+    await page.addInitScript(
+      ([restKey]) => {
+        if (window.sessionStorage.getItem('seeded')) return;
+        window.sessionStorage.setItem('seeded', '1');
+        window.localStorage.clear();
+        window.localStorage.setItem(
+          restKey as string,
+          JSON.stringify([
+            { id: 'r1', date: '2026-11-15T07:00:00.000Z', mode: 'crohns', synced: true },
+          ])
+        );
+      },
+      [REST_KEY] as const
+    );
+    await page.goto('/');
+    await page.locator('#recovery-undo').click();
+    await expect(page.locator('#home-recovery-card')).toHaveCount(0);
+    await page.reload();
+    await expect(page.locator('#home-recovery-card')).toHaveCount(0);
   });
 });

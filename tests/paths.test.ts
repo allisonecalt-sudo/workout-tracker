@@ -269,7 +269,7 @@ test.describe('v73.1 - Round 3 wording on reused moves', () => {
       expect(R3W1.workouts[id].warmup[0]!.notes).toBe(R3_RIDE_NOTE);
     }
     expect(R3_RIDE_NOTE).toBe(
-      'Ride first. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Grows only if your knee is fine the next morning.'
+      'Ride first. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Grows a few minutes every week or two, only if your knee is fine the next morning.'
     );
     expect(R3W1.workouts.A.paths!.optional![0]!.optional).toBe(true);
     expect(R3W1.workouts.A.main.every((e) => !e.optional)).toBe(true);

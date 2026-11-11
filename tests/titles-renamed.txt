@@ -91,3 +91,4 @@ v48 P5 logs › (b) once Lite is on, the outline goes and the chip says how to u
 v48 P5 logs › at phone size › (a) pre-log: blank chips, one quiet line, Start in the fold on A, B and C with Lite on and off => v48 P5 logs › at phone size › (a) pre-log: blank chips, one quiet line, Start and Skip in the fold on A, B and C, no Lite chip
 v73 - the version › package.json appVersion (the one source) is v73 => v73 - the version › package.json appVersion (the one source) is v73.1
 v73 - the version › package.json appVersion (the one source) is v73.1 => v73 - the version › package.json appVersion (the one source) is v74
+v73 - the version › package.json appVersion (the one source) is v74 => v73 - the version › package.json appVersion (the one source) is v74.1

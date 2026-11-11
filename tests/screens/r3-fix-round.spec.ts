@@ -161,7 +161,7 @@ test.describe('v73.1 - the Round 3 ride note shows on the lane she uses', () => 
     await expect(page.locator('.ride-note')).toContainText(NOTE); // the choice screen
     await page.locator('#ww-elliptical').click();
     await expect(page.locator('.ride-note')).toContainText(NOTE);
-    await expect(page.locator('.ride-note')).toContainText('Grows only if your knee is fine');
+    await expect(page.locator('.ride-note')).toContainText('Grows a few minutes every week or two');
     await page.locator('#ww-outdoor').click(); // back to the choice
     await page.locator('#ww-apartment').click();
     await expect(page.locator('.ride-note')).toContainText(NOTE);

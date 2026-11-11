@@ -52,7 +52,7 @@ export const DAY_MODE_LABEL: Record<DayMode, string> = {
   knee: 'Knee',
   wrist: 'Wrist',
   cold: 'A cold, no fever',
-  fever: 'Fever / body aches / stomach bug',
+  fever: 'Fever / body aches / chest cough / stomach bug',
   crohns: "Crohn's flare",
 };
 
@@ -89,12 +89,32 @@ export const SEE_A_DOCTOR: readonly string[] = [
   'a crash 1–2 days after exercise',
 ];
 
+/** Swap-day card: a calm "Get checked if…" list by mode (research §11). Not orders. */
+export const GET_CHECKED_TITLE = 'Get checked if…';
+export const GET_CHECKED: Record<SwapMode, readonly string[]> = {
+  back: [
+    'new leg weakness or numbness',
+    'a change in bladder or bowel, or a numb saddle area',
+    'back pain that stays at night or at rest',
+    'fever with new back pain',
+  ],
+  knee: ['the knee locks', "you can't put weight on it", 'big swelling (or swelling with a fever)'],
+  wrist: [
+    'numbness or tingling',
+    'a new lump or deformity',
+    "you can't bear any load after an injury",
+  ],
+};
+
+/** Optional Hammer curl on a wrist day: the top line (not a "Swapped for…" line). */
+export const WRIST_CURL_LINE = 'Sore wrist today: skip it, or go lighter';
+
 export const COMING_BACK_LINE = 'Coming back from being sick: easy for 2–3 workouts';
 /** How many workouts after a logged EASY / REST day open with the 38 path pre-picked. */
 export const COMING_BACK_SESSIONS = 3;
 
 export const EASY_RIDE_NOTE = 'Easy — short sentences or easier.';
-const BACK_RIDE_NOTE = `${R3_RIDE_NOTE} If sitting tall hurts, use the walk lane for 5–10 min instead.`;
+const BACK_RIDE_NOTE = `${R3_RIDE_NOTE} If standing tall hurts, use the walk lane for 5–10 min instead.`;
 const KNEE_RIDE_NOTE =
   'Walk on flat ground at an easy pace, talking in short sentences. The elliptical sits this one out.';
 /** Every text the ride step can carry as a note (screens/workout.ts shows it under the ride). */
@@ -223,6 +243,7 @@ const SWAPS: Record<SwapMode, Record<string, Swap>> = {
       ...BIRD_DOG_FOREARMS_EX,
       swap: line('wrist', `${BIRD_DOG_FOREARMS} instead of ${ex.name}`),
     }),
+    'Hammer curl': (ex) => ({ ...ex, swap: WRIST_CURL_LINE }),
     'Floor press': (ex) =>
       sameCard(ex, 'wrist', null, 'thumbs in, lighter or no weight instead of the usual weight.', {
         reps: '10–15 · thumbs in · lighter or no weight',

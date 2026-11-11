@@ -21,6 +21,9 @@ import { ui } from '../ui.js';
 import { logRestDay } from '../actions.js';
 import {
   COMING_BACK_LINE,
+  GET_CHECKED,
+  GET_CHECKED_TITLE,
+  isSwapMode,
   DAY_MODE_LABEL,
   DAY_MODE_ROWS,
   EASY_CARD,
@@ -157,7 +160,7 @@ function renderPathPicker(w: Workout): string {
   return `
     <div class="path-picker" id="path-picker" role="group" aria-label="Which path today?">
       <span class="path-picker-label">Which path today?${locked ? ' · easy day: 38 min' : ''}</span>
-      ${comingBack ? `<p class="coming-back-line" id="coming-back-line">${escapeHtml(COMING_BACK_LINE)}</p>` : ''}
+      ${comingBack && state.sessionPath !== '48' && state.sessionPath !== '60' ? `<p class="coming-back-line" id="coming-back-line">${escapeHtml(COMING_BACK_LINE)}</p>` : ''}
       <div class="path-picker-row">${chips}</div>
     </div>`;
 }
@@ -209,12 +212,19 @@ function renderDayCard(w: Workout): string {
     .filter((ex) => ex.swap)
     .map((ex) => `<li>${escapeHtml(ex.swap ?? '')}</li>`)
     .join('');
+  const check = isSwapMode(mode)
+    ? `<div class="day-card-check" id="get-checked">
+        <div class="day-card-check-title">${escapeHtml(GET_CHECKED_TITLE)}</div>
+        <ul>${GET_CHECKED[mode].map((t) => `<li>${escapeHtml(t)}</li>`).join('')}</ul>
+      </div>`
+    : '';
   const lead = mode === 'cold' ? `<p class="day-card-text">${escapeHtml(EASY_CARD)}</p>` : '';
   return `
     <div class="card day-card" id="day-card">
       <div class="day-card-title">${escapeHtml(dayModeNote(mode))}</div>
       ${lead}
       ${swaps ? `<ul class="day-card-swaps">${swaps}</ul>` : ''}
+      ${check}
     </div>`;
 }
 
