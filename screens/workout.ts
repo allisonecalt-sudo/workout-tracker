@@ -86,7 +86,7 @@ import {
   heldSecAfterReload,
   laneMinutesNow,
 } from '../workout-lanes.js';
-import { SAFETY_LINE, type Exercise, type Workout, type Phase } from '../program.js';
+import { SAFETY_LINE, R3_RIDE_NOTE, type Exercise, type Workout, type Phase } from '../program.js';
 import { saveActiveSession } from '../actions.js';
 import {
   togglePause,
@@ -125,6 +125,7 @@ import {
   heldOnThisStep,
   canGoBack,
   currentStepKey,
+  SKIPPED_SLUG,
 } from '../workout-now.js';
 import {
   isArmFeel,
@@ -423,6 +424,30 @@ function renderHoldTimerCard(ex: Exercise, showTempo: boolean): string {
     </div>`;
 }
 
+// v73.1: the Round 3 ride note, on whichever ride lane she is on. The lanes swap the step for their own
+// (elliptical / apartment keep no notes), so the text is read off the RAW step. Round 1/2 rides have
+// other notes and show nothing here.
+function rideNoteHtml(): string {
+  const raw = rawCurrentExercise();
+  if (!raw || raw.name !== 'Outdoor walk' || raw.notes !== R3_RIDE_NOTE) return '';
+  return `<p class="exercise-safety ride-note">${escapeHtml(R3_RIDE_NOTE)}</p>`;
+}
+
+// v73.1: an optional move ("Hammer curl (if time)") gets a "Skip - no time" button. Skipping is not a
+// load: it saves no arm_feel, and the step counts as skipped like any other (not as "hurt").
+function renderSkipOptional(ex: Exercise): string {
+  return ex.optional
+    ? `<button class="btn-quiet skip-optional-btn" id="skip-optional" type="button">Skip — no time</button>`
+    : '';
+}
+
+function skipOptional(): void {
+  const ex = getCurrentExercise();
+  if (!ex || !ex.optional || state.screen !== 'workout') return;
+  showToast('Skipped.');
+  advanceExercise({ hurtSlug: SKIPPED_SLUG });
+}
+
 export function renderWorkout(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
@@ -471,6 +496,7 @@ export function renderWorkout(): string {
           <div class="exercise-name-row"><div class="exercise-name">${displayName(ex)}</div></div>
           <div class="exercise-reps">${walkStepMinutes(ex)} min</div>
           <p class="exercise-safety">Conversational pace</p>
+          ${rideNoteHtml()}
           <div class="cardio-choice">
             <button class="btn-large btn-primary" id="ww-elliptical" type="button">▶ Elliptical</button>
             <div class="cardio-choice-row">
@@ -502,6 +528,7 @@ export function renderWorkout(): string {
           <div class="exercise-reps">${walkStepMinutes(ex)} min</div>
           <p class="walk-live-line">🚶 <span id="walk-live">${walkLiveText(workoutWalkStart())}</span></p>
           <p class="gear-note">It saves with this workout. Tap Done · Next when you're back.</p>
+          ${rideNoteHtml()}
           ${feelHtml ? `<div id="walk-move-feel-slot" class="${feelReady ? '' : 'wt-hidden'}">${feelHtml}</div>` : ''}
           ${renderThisHurts()}
         </div>
@@ -569,6 +596,8 @@ export function renderWorkout(): string {
           ready: hold ? holdRan : indoorLane ? laneRan && timerIdle : true,
         })}
         ${renderThisHurts()}
+        ${renderSkipOptional(ex)}
+        ${ex.name === APARTMENT_CARDIO_NAME ? rideNoteHtml() : ''}
         ${safety ? `<p class="exercise-safety">${escapeHtml(safety)}</p>` : ''}
         ${renderTipsExpander(ex, safety)}
         ${renderExerciseSetup(ex)}
@@ -598,7 +627,7 @@ export function renderWorkout(): string {
         : ''
     }
 
-    ${EXERCISE_DETAIL[ex.name] ? renderDetailCard(ex.name) : renderHowToCard(ex.name)}
+    ${EXERCISE_DETAIL[ex.detailKey ?? ex.name] ? renderDetailCard(ex.detailKey ?? ex.name) : renderHowToCard(ex.name)}
 
     ${
       // v48: on a hold, Done stays quiet until the timer has run on this step
@@ -674,6 +703,7 @@ function thisHurts(): void {
 
 export function attachWorkoutFeelHandlers(): void {
   bindClick('this-hurts', thisHurts);
+  bindClick('skip-optional', skipOptional);
   // v48 · P5: arm feel on the 1 kg curl / prone row — tap selects, tap clears.
   document.querySelectorAll<HTMLButtonElement>('[data-arm-step]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1213,6 +1243,7 @@ function renderEllipticalStep(ex: Exercise, header: string): string {
         <p class="ride-plan-line" id="ride-plan-line">${escapeHtml(planLine)}</p>
         ${instead}
         ${renderThisHurts()}
+        ${rideNoteHtml()}
       </div>
     </div>
     ${guide}

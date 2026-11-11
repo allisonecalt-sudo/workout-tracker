@@ -156,9 +156,10 @@ export function renderPreLog(): string {
   // D branch). "Extra" says the true thing here too.
   const meta = [
     w.id === 'D' ? 'Extra' : preLogWeekLabel(),
+    // v73.1: the lane word sits BEFORE the new / again lists; after them it read as one more new move.
+    hasCardio && lastCardioLane() === 'elliptical' ? 'elliptical' : '',
     fresh.length ? `new tonight: ${fresh.join(' · ')}` : '',
     back.length ? `again: ${back.join(' · ')}` : '',
-    hasCardio && lastCardioLane() === 'elliptical' ? 'elliptical' : '',
     workoutMinutesLabel(w),
   ]
     .filter((s) => s !== '')
@@ -291,6 +292,10 @@ export function fitSteppedLine(stepped: readonly SteppedMove[]): void {
 // structure at a glance"). v48 · P5 (Sep 24 2026): folded into ONE closed row
 // "What's in it ▸" — the counts card (4 / 6 / 6 / 18) never said what was new
 // tonight, and it pushed Start below the fold. Open, each phase lists its moves.
+// v73.1: the fold stays as she left it when a tap (a path, a chip) redraws the page. Module-local, this
+// visit only: the redraw rebuilds the <details>, which used to snap it shut.
+let overviewOpen = false;
+
 function renderWorkoutOverview(w: Workout): string {
   const phases: { key: Phase; label: string; emoji: string; items: Exercise[] }[] = [
     { key: 'warmup', label: 'Warm-up', emoji: '🚶', items: w.warmup },
@@ -333,7 +338,7 @@ function renderWorkoutOverview(w: Workout): string {
     .join('');
   // The week now lives in the pre-log's one quiet line ("R2 · Week 4 · …").
   return `
-    <details class="card overview-card prelog-overview">
+    <details class="card overview-card prelog-overview"${overviewOpen ? ' open' : ''}>
       <summary class="prelog-overview-summary">What's in it</summary>
       <div class="overview-phases">${rows}</div>
     </details>
@@ -453,6 +458,11 @@ export function attachPreLogHandlers(): void {
       state.wristPainBeforeTouched = false;
     }
     requestRender();
+  });
+
+  const overview = document.querySelector<HTMLDetailsElement>('details.prelog-overview');
+  overview?.addEventListener('toggle', () => {
+    overviewOpen = overview.open;
   });
 
   // v73: the time-path picker. A tap lights that path; a second tap on the lit one

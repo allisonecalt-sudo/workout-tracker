@@ -224,3 +224,54 @@ test.describe('v73 — session_path on the wire', () => {
     expect('session_path' in legacy).toBe(false);
   });
 });
+
+// ---- v73.1 (Nov 11 2026): reused moves carry Round 3 wording, not Round 2's ----
+import { EXERCISE_DETAIL } from '../exercise-detail';
+import { R3_SPLIT_SQUAT_DETAIL_KEY, R3_RIDE_NOTE } from '../program';
+
+test.describe('v73.1 - Round 3 wording on reused moves', () => {
+  const C = R3W1.workouts.C;
+  const clam = C.main.find((e) => e.name === 'Side-lying clamshells')!;
+  const split = C.main.find((e) => e.name === 'Supported split squat')!;
+
+  test('clamshells: 12 each side with the band, the old "10 each side, not 15" is gone', () => {
+    expect(clam.reps).toBe('12 each side · band');
+    expect(clam.notes).toContain('12 each side');
+    expect(clam.notes).not.toContain('not 15');
+    expect(clam.notes).not.toContain('10 each side');
+  });
+
+  test('split squat: hold a chair lightly, her pain rule, no wrist rule, no knee ceiling', () => {
+    const text = `${split.notes} ${split.safety}`;
+    expect(split.notes).toContain('hold it lightly');
+    expect(text).not.toMatch(/fingertips|no gripping|ceiling|stop about 2 short/i);
+    expect(split.notes).toContain('A little pain is OK');
+    expect(split.notes).toContain('Sharp, climbing during the set');
+    expect(split.safety).toContain('step back');
+  });
+
+  test('split squat: its own detail card + voice note; Round 2 keeps the old card', () => {
+    expect(split.detailKey).toBe(R3_SPLIT_SQUAT_DETAIL_KEY);
+    const d = EXERCISE_DETAIL[R3_SPLIT_SQUAT_DETAIL_KEY]!;
+    expect(d.voiceSrc).toBe('./assets/voice/supported-split-squat-r3.mp3');
+    const fs = require('fs') as typeof import('fs');
+    const path = require('path') as typeof import('path');
+    expect(fs.existsSync(path.join(__dirname, '..', d.voiceSrc))).toBe(true);
+    expect(d.donts.join(' ')).not.toMatch(/ceiling/);
+    expect(EXERCISE_DETAIL['Supported split squat']!.donts.join(' ')).toContain('ceiling');
+    expect(EXERCISE_DETAIL['Supported split squat']!.voiceSrc).toBe(
+      './assets/voice/supported-split-squat.mp3'
+    );
+  });
+
+  test('the ride note is the exact Round 3 text on all three workouts; Hammer curl is optional', () => {
+    for (const id of LETTERS) {
+      expect(R3W1.workouts[id].warmup[0]!.notes).toBe(R3_RIDE_NOTE);
+    }
+    expect(R3_RIDE_NOTE).toBe(
+      'Ride first. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Grows only if your knee is fine the next morning.'
+    );
+    expect(R3W1.workouts.A.paths!.optional![0]!.optional).toBe(true);
+    expect(R3W1.workouts.A.main.every((e) => !e.optional)).toBe(true);
+  });
+});

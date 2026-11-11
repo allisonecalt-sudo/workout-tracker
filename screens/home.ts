@@ -61,6 +61,7 @@ import { formatDate, formatWeekdayDate, localIsoDate, formatDateLong } from '../
 import { requestRender } from '../bus.js';
 import { activeWalkStart, walkLiveText, walkStepMinutes } from '../walk.js';
 import { bindClick } from '../dom.js';
+import { workoutForPath } from '../paths.js';
 import { APP_VERSION, BUILD_DATE } from '../version.js';
 import { syncIndicatorText } from '../sync.js';
 import {
@@ -595,9 +596,15 @@ const WORKOUT_SHORT_LABEL: Record<AnyWorkoutId, string> = {
   D: 'Cardio 30', // matches renderWorkoutDChip's own hardcoded "D · Cardio 30"
 };
 
-// "B · Glutes + back" — the letter and its fixed short label.
+// v73.1: the short label for a workout. A Round 3 workout (it has `paths`) uses its own name
+// ("Lower + Pull + Push"); the fixed Round 2 labels would name the wrong moves on a Round 3 day.
+function workoutShortLabel(w: Workout): string {
+  return w.paths ? w.name : WORKOUT_SHORT_LABEL[w.id];
+}
+
+// "B · Glutes + back" — the letter and its short label.
 function workoutChipLabel(w: Workout): string {
-  return `${w.id} · ${WORKOUT_SHORT_LABEL[w.id]}`;
+  return `${w.id} · ${workoutShortLabel(w)}`;
 }
 
 function renderWorkoutChips(exclude: WorkoutId | null, lead = 'or do'): string {
@@ -668,16 +675,19 @@ function renderPreviewLink(id: WorkoutId): string {
 // target (→ pre-log), so Home → working out stays 2 taps (guide §1).
 function renderUpNextHero(id: WorkoutId): string {
   const w = getWorkoutById(id);
-  const fresh = tonightNames(w, id, 'new');
+  // v73.1: "New tonight" names only the moves Start would show: a Round 3 workout is cut to the
+  // default path (48) first, so a 5th move that path does not show is never listed.
+  const shown = workoutForPath(w, null);
+  const fresh = tonightNames(shown, id, 'new');
   // v48 · fix r1: moves she's done before (Round 1) come back — named as such.
-  const back = tonightNames(w, id, 'back');
+  const back = tonightNames(shown, id, 'back');
   const cardio = heroCardioLine(w);
   const rounds = `${w.rounds} round${w.rounds === 1 ? '' : 's'}`;
   return `
     <button class="workout-card workout-card-pick home-hero" data-workout="${id}" type="button">
       <span class="hero-label">Up next</span>
       <span class="hero-title">Workout ${id}</span>
-      <span class="hero-line">${escapeHtml(`${WORKOUT_SHORT_LABEL[id]} · ${rounds} · ${workoutMinutesLabel(w)}`)}</span>
+      <span class="hero-line">${escapeHtml(`${workoutShortLabel(w)} · ${rounds} · ${workoutMinutesLabel(w)}`)}</span>
       ${fresh.length ? `<span class="hero-line hero-new">New tonight: ${escapeHtml(fresh.join(' · '))}</span>` : ''}
       ${back.length ? `<span class="hero-line hero-back">Again tonight: ${escapeHtml(back.join(' · '))}</span>` : ''}
       ${cardio ? `<span class="hero-line">${escapeHtml(cardio)}</span>` : ''}

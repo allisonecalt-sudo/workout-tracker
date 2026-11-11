@@ -467,6 +467,51 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     ],
   },
 
+  // v73.1 (Nov 11 2026): the Round 3 wording of the split squat, looked up by the Round 3 exercise's
+  // `detailKey`. Round 2's card above is untouched. Her wrist is fine now (Nov 11: "writs ti s good"), so
+  // the old fingertips-only wrist rule is gone; hold a chair or counter lightly. The pain rule is hers
+  // (workout-rules.md section 0). The video stays the name-keyed one in exercise-visuals.ts.
+  'Supported split squat (Round 3)': {
+    exercise: 'Supported split squat',
+    voiceSrc: './assets/voice/supported-split-squat-r3.mp3',
+    voiceScript:
+      "Supported split squat. Stand a long step in front of a chair or the counter, and hold it lightly for balance. Front foot flat, back heel up. Keep your chest tall and lower straight down, shallow, so the back knee moves toward the floor and the front knee stays over the toes, not past. Then push through the front heel to stand. Do the reps on your screen. If you wobble a lot, make the range smaller. A little pain is okay. If it is above your usual, hold, and don't add. If it is sharp, climbing during the set, or not settled by the next morning, step back.",
+    muscles: ['quads', 'glutes', 'core'],
+    muscleLabel: 'Quads + glutes, one leg at a time',
+    steps: [
+      'Stand a long step in front of a chair or the counter; hold it lightly for balance.',
+      'One foot forward and flat; the other foot back with the heel up. Chest tall.',
+      'Lower straight down, shallow. Back knee toward the floor, front knee over the toes, not past.',
+      'Push through the front heel to stand.',
+      'Do the reps on your screen. Wobbling a lot? Make the range smaller.',
+    ],
+    dos: [
+      'Hold the chair or counter lightly. It is there for balance.',
+      'Keep the front knee over the toes, not past, and tracking over the front foot.',
+      'Stay tall through the chest; the torso goes down, not forward.',
+      'A little pain is OK. Above your usual, hold and do not add.',
+    ],
+    donts: [
+      "Don't let the front knee travel past the toes.",
+      "Don't let the front heel lift; drive through it.",
+      "Don't push on through sharp pain, pain that climbs during the set, or pain that has not settled by the next morning. Step back.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Torso pitching forward as you lower.',
+        fix: 'Think elevator: drop straight down between the feet, chest tall, eyes forward.',
+      },
+      {
+        mistake: 'Front knee drifting inward.',
+        fix: 'Push the knee out toward the pinky toe, same cue as your squats.',
+      },
+      {
+        mistake: 'Wobbling a lot.',
+        fix: 'Shorten the range a little and hold the chair lightly. That is the right call, not a failure.',
+      },
+    ],
+  },
+
   'Bird dog (legs only)': {
     exercise: 'Bird dog (legs only)',
     voiceSrc: './assets/voice/bird-dog-legs-only.mp3',

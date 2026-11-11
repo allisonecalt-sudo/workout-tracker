@@ -60,6 +60,12 @@ export type Exercise = {
   // displayName(). First use: the Week-4 hinge held the 1 kg under the title
   // "Bodyweight hip hinge" — the same misreading class the relabel fixed.
   label?: string;
+  // v73.1 (Nov 11 2026): an optional move ("if time"): its page gets a "Skip - no time" button, and
+  // skipping it saves NO load (arm_feel) - only Done after really doing it does.
+  optional?: boolean;
+  // v73.1: look the detail card (+ its voice note) up under this key instead of `name`. Used by the
+  // Round 3 split squat, whose wording changed while Round 2's stays as it was.
+  detailKey?: string;
   // v48 (Sep 24 2026): the ONE line that belongs on the card face mid-set — the
   // safety rule, not the whole cue. Falls back to SAFETY_LINE by name. The full
   // `notes` moves behind a closed "Cue ▸" (47-70 words on the face, mid-set, on 7
@@ -2682,13 +2688,32 @@ const R3_EXISTING = (name: string, over: Partial<Exercise>): Exercise => {
   }
   throw new Error(`R3W1: expected an earlier PROGRAM row to carry '${name}'`);
 };
+// v73.1: the Round 3 pain rule, in her words (workout-rules.md §0).
+const R3_SPLIT_SQUAT_NOTE =
+  "Stand a long step in front of a chair or the counter and hold it lightly for balance. Front foot flat, back heel up, chest tall. Shallow: straight down, back knee toward the floor, front knee over the toes, not past. Push through the front heel to stand. Wobbling a lot? Smaller range. A little pain is OK. Above your usual → hold, don't add. Sharp, climbing during the set, or not settled by the next morning → step back.";
+const R3_SPLIT_SQUAT_SAFETY =
+  'Hold a chair or counter lightly. Shallow, knee over the toes. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.';
+export const R3_SPLIT_SQUAT_DETAIL_KEY = 'Supported split squat (Round 3)';
 const R3_STRENGTH_NOTE = 'Effort 6–7 out of 10 — the last 2–3 reps feel hard, never to failure.';
+// v73.1: shown on whichever ride lane she uses (the lanes swap the step, so the screen reads this
+// text off the raw step: screens/workout.ts rideNoteHtml).
+export const R3_RIDE_NOTE =
+  'Ride first. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Grows only if your knee is fine the next morning.';
 const R3_RIDE: Exercise = {
   name: 'Outdoor walk',
   reps: '12 min',
-  notes:
-    'Ride first. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Grows 2–3 min a week only if your knee is fine the next morning.',
+  notes: R3_RIDE_NOTE,
 };
+// v73.1: Round 2's note said "10 each side, not 15"; Round 3 is 12 each side with the band.
+const R3_CLAMSHELLS: Exercise = (() => {
+  const base = R3_EXISTING('Side-lying clamshells', { reps: '12 each side · band' });
+  const notes = base.notes?.replace(
+    '<strong>10 each side, not 15</strong>',
+    '<strong>12 each side</strong>'
+  );
+  if (!notes || notes.includes('not 15')) throw new Error('R3W1: clamshell note wording changed');
+  return { ...base, notes };
+})();
 const R3_PRIMER: Exercise = {
   name: '1-minute primer',
   reps: '1 min',
@@ -2710,6 +2735,7 @@ const R3_PULL_APART: Exercise = {
 const R3_HAMMER_CURL: Exercise = {
   name: 'Hammer curl',
   label: 'Hammer curl (if time)',
+  optional: true,
   reps: '10–15 · 2 kg · thumbs up',
   notes:
     'Thumbs up the whole way, wrist straight. Elbows stay at your sides; curl up, lower slowly. No swinging.',
@@ -2823,6 +2849,11 @@ PROGRAM.push({
       main: [
         R3_EXISTING('Supported split squat', {
           reps: '8–10 each side · shallow, hold a chair',
+          // v73.1: Round 2's note was a wrist rule (fingertips only, no gripping) and a knee-ceiling
+          // rule; her wrist is fine now (Nov 11: "writs ti s good") and the pain rule is hers.
+          notes: R3_SPLIT_SQUAT_NOTE,
+          safety: R3_SPLIT_SQUAT_SAFETY,
+          detailKey: R3_SPLIT_SQUAT_DETAIL_KEY,
         }),
         R3_PULL_APART,
         {
@@ -2840,7 +2871,7 @@ PROGRAM.push({
           durationSec: 20,
           isTimed: true,
         },
-        R3_EXISTING('Side-lying clamshells', { reps: '12 each side · band' }),
+        R3_CLAMSHELLS,
       ],
       cooldown: R3_COOLDOWN,
       rounds: 2,

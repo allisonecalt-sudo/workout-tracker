@@ -163,6 +163,21 @@ const OPTIONAL_ASSETS = [
   './assets/voice/wall-sit.mp3',
   // R2 Week 4 (Sep 19 2026) — was missing from the precache until v45.
   './assets/voice/supported-split-squat.mp3',
+  // v73.1 (Nov 11 2026) - the Round 3 voice notes (the 11 new in v73 + the Round 3 split squat), so
+  // they play offline. Optional (tolerant .catch), like every note above. This one sw.js edit was
+  // authorized by the main window on Allison's build go (the repo rule reserves sw.js for checkers).
+  './assets/voice/1-minute-primer.mp3',
+  './assets/voice/band-pull-apart.mp3',
+  './assets/voice/band-row.mp3',
+  './assets/voice/bird-dog.mp3',
+  './assets/voice/chair-squat.mp3',
+  './assets/voice/chin-tucks.mp3',
+  './assets/voice/floor-press.mp3',
+  './assets/voice/hammer-curl.mp3',
+  './assets/voice/incline-push-up-on-fists.mp3',
+  './assets/voice/one-arm-dumbbell-row.mp3',
+  './assets/voice/side-plank-on-knees.mp3',
+  './assets/voice/supported-split-squat-r3.mp3',
   './assets/voice/wrist-extension-left.mp3',
   './assets/voice/wrist-extension-right.mp3',
   './assets/voice/wrist-flexion-left.mp3',

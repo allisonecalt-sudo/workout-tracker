@@ -267,12 +267,19 @@ export function skippedStepsCount(w: Workout): number {
 
 // v63 item 3: how many of those skipped moves were skipped with "This hurts" (the post-log line
 // says "(1 because it hurt)"). Same countable steps as skippedStepsCount, so the two always agree.
+// v73.1: hurtSteps also carries a step skipped with "Skip - no time" (an optional move), under this
+// slug. It is handled like a hurt step (Done does not walk back to it) but never says "hurt".
+export const SKIPPED_SLUG = 'skipped';
+
 export function hurtStepsCount(w: Workout): number {
   const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
   const countable =
     state.finishHereLitePrev !== null ? movable.filter((s) => s.phase !== 'upperBack') : movable;
   return countable.filter(
-    (s) => state.hurtSteps[s.key] !== undefined && state.completedSteps[s.key] !== true
+    (s) =>
+      state.hurtSteps[s.key] !== undefined &&
+      state.hurtSteps[s.key] !== SKIPPED_SLUG &&
+      state.completedSteps[s.key] !== true
   ).length;
 }
 

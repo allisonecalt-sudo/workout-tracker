@@ -355,7 +355,7 @@ function tipsRedundant(ex: Exercise, safety: string | undefined): boolean {
   const notesNorm = normalize(ex.notes);
   if (notesNorm === '') return true;
   if (safety && normalize(safety) === notesNorm) return true;
-  const detail = EXERCISE_DETAIL[ex.name];
+  const detail = EXERCISE_DETAIL[ex.detailKey ?? ex.name];
   if (detail && detail.steps.length > 0) {
     const stepsNorm = normalize(detail.steps.join(' '));
     if (stepsNorm.includes(notesNorm)) return true;

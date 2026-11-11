@@ -113,6 +113,8 @@ function renderArmLoadChips(step: 'curl' | 'row'): string {
 // same convention as the CHIP AFTER THE LAST SET timing already uses.
 // Storage blocked → it just shows every time (never crashes, never blocks).
 function renderPaceRuleOnce(): string {
+  // v73.1: "try 2 kg" is no use when 2 kg is already picked.
+  if (state.armLoad.curl === '2kg') return '';
   try {
     if (localStorage.getItem(PACE_RULE_SEEN_KEY) === '1') return '';
   } catch {

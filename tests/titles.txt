@@ -1071,7 +1071,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v73 - the version › package.json appVersion (the one source) is v73
+v73 - the version › package.json appVersion (the one source) is v73.1
 v73 — Round 3 Week 1 is the written plan › A: cool-down is chin tucks, then her stretches at 45 s, and no shoulder / calf stretch
 v73 — Round 3 Week 1 is the written plan › A: the five main moves are in priority order, 2 rounds
 v73 — Round 3 Week 1 is the written plan › A: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
@@ -1118,6 +1118,21 @@ v73 — the time-path picker › no picker on Workout D
 v73 — the time-path picker › no picker the day before Round 3 starts (Sat Nov 14 is still Round 2)
 v73 — the time-path picker › tapping a path lights it and redraws the plan; tapping it again clears the pick
 v73 — the time-path picker › the picker, the body chips and the mood chips sit above the pinned bar, Skip beside Start (A, B, C)
+v73.1 - Home names Round 3 workouts by their own names › Round 2 day (Sat Nov 14): the old labels stay
+v73.1 - Home names Round 3 workouts by their own names › Round 3 day: the hero and the chips use the R3 names
+v73.1 - Round 3 wording on reused moves › clamshells: 12 each side with the band, the old "10 each side, not 15" is gone
+v73.1 - Round 3 wording on reused moves › split squat: hold a chair lightly, her pain rule, no wrist rule, no knee ceiling
+v73.1 - Round 3 wording on reused moves › split squat: its own detail card + voice note; Round 2 keeps the old card
+v73.1 - Round 3 wording on reused moves › the ride note is the exact Round 3 text on all three workouts; Hammer curl is optional
+v73.1 - the Round 3 ride note shows on the lane she uses › a Round 2 ride shows no such note
+v73.1 - the Round 3 ride note shows on the lane she uses › the lane choice, the elliptical, the walk and the apartment all show it
+v73.1 - the optional Hammer curl › doing it and tapping Done still saves the load she picked
+v73.1 - the optional Hammer curl › only the optional move has a "Skip - no time" button
+v73.1 - the optional Hammer curl › skipping it saves NO arm_feel load and counts it as skipped, not hurt
+v73.1 - the optional Hammer curl › the "try 2 kg" hint hides once 2 kg is picked
+v73.1 - the pre-workout page › "What's in it" keeps its open state when a path is tapped
+v73.1 - the pre-workout page › Back & wrist scrolls clear of the pinned bar (A, B, C)
+v73.1 - the pre-workout page › the new-tonight line never lists the cardio lane as a move
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

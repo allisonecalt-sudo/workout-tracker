@@ -62,7 +62,7 @@ function cardsHtml(ex: Exercise, local: Local): string {
     return `
       ${renderExerciseVisual(ex.name)}
       ${renderTipsExpander(ex, safety)}
-      ${EXERCISE_DETAIL[ex.name] ? renderDetailCard(ex.name) : ''}
+      ${EXERCISE_DETAIL[ex.detailKey ?? ex.name] ? renderDetailCard(ex.detailKey ?? ex.name) : ''}
       ${renderHowToCard(ex.name)}`;
   } finally {
     state.videoExpandedFor = saved.video;

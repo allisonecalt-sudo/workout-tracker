@@ -7411,3 +7411,10 @@ button.wk-cell {
 .body-line {
   flex-wrap: wrap;
 }
+
+/* v73.1: on a Round 3 day the pre-workout page (path picker + body chips + Back & wrist) is taller than
+ * the fold; the Back & wrist row ended ~23 px under the pinned bar even scrolled to the end. Extra
+ * bottom room (only when the picker is on the page) lets it scroll clear. */
+#app.has-action-bar:has(.path-picker) {
+  padding-bottom: calc(148px + env(safe-area-inset-bottom));
+}
