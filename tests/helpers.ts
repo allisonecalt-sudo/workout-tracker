@@ -440,3 +440,12 @@ export function bundledSourceFiles(): AppSourceFile[] {
   }
   return [...seen.keys()].sort().map((file) => seen.get(file)!);
 }
+
+/** v73 (Nov 11 2026): the Lite chip left the pre-log page (the Round 3 time paths replaced it),
+ *  but Lite itself still exists - "Finish here" and "Log what I did" set it, and old sessions
+ *  carry it. This sets it BEFORE Start, the way the chip used to (automation-only app hook). */
+export async function setLiteDay(page: Page, on = true): Promise<void> {
+  await page.evaluate((v) => {
+    (window as unknown as { __wtSetLiteDay: (on: boolean) => void }).__wtSetLiteDay(v);
+  }, on);
+}

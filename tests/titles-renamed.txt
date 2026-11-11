@@ -81,3 +81,11 @@ PROGRAM — shape › has exactly 19 weeks (the Settings "Program weeks" number)
 multi-week: Settings About shows Program weeks count (19) — pre-launch, unchanged => multi-week: Settings About shows Program weeks count (20) — pre-launch, unchanged
 program-week — step 5c: the plan row is found by week key › Week 7 and Week 8 have their own rows; Week 9 has none, so it repeats the Week 8 row => program-week — step 5c: the plan row is found by week key › Weeks 7, 8 and 9 have their own rows; Week 10 has none, so it repeats the Week 9 row
 v70 - the version › package.json appVersion (the one source) is v70 => v72 - the version › package.json appVersion (the one source) is v72
+PROGRAM — shape › has exactly 20 weeks (the Settings "Program weeks" number) => PROGRAM — shape › has exactly 21 weeks (the Settings "Program weeks" number)
+multi-week: Settings About shows Program weeks count (20) — pre-launch, unchanged => multi-week: Settings About shows Program weeks count (21) — pre-launch, unchanged
+v72 - the version › package.json appVersion (the one source) is v72 => v73 - the version › package.json appVersion (the one source) is v73
+lite day: pre-log toggle drops one round and marks the session lite => lite day: Lite set before Start drops one round and marks the session lite
+v48 P1 data › (d) Lite on pre-log saves liteDay true => v48 P1 data › (d) Lite set before Start saves liteDay true
+v48 P5 logs › (b) a body reading of 2 SUGGESTS Lite (outline) but never switches it on => v48 P5 logs › (b) a body reading of 2 offers no Lite chip and never switches Lite on
+v48 P5 logs › (b) once Lite is on, the outline goes and the chip says how to undo it => v48 P5 logs › (b) Lite set before Start still reads "lite" on the workout and saves liteDay true
+v48 P5 logs › at phone size › (a) pre-log: blank chips, one quiet line, Start in the fold on A, B and C with Lite on and off => v48 P5 logs › at phone size › (a) pre-log: blank chips, one quiet line, Start and Skip in the fold on A, B and C, no Lite chip

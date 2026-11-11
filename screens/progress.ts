@@ -116,7 +116,7 @@ function renderComingNextWeek(): string {
         <details class="next-week-preview" ${idx === 0 ? '' : ''}>
           <summary class="next-week-summary">
             <span class="next-week-summary-label">${summaryLabel}</span>
-            <span class="next-week-summary-meta">${weekPlanTitle(wp)} · starts Sat ${startLabel}</span>
+            <span class="next-week-summary-meta">${weekPlanTitle(wp)} · starts ${weekdayLabel(start)} ${startLabel}</span>
             <span class="next-week-chev">▸</span>
           </summary>
           <div class="next-week-body">
@@ -194,7 +194,7 @@ function renderPastWeeks(): string {
         <details class="next-week-preview">
           <summary class="next-week-summary">
             <span class="next-week-summary-label">${weekPlanTitle(wp)}</span>
-            <span class="next-week-summary-meta">started Sat ${startLabel}</span>
+            <span class="next-week-summary-meta">started ${weekdayLabel(start)} ${startLabel}</span>
             <span class="next-week-chev">▸</span>
           </summary>
           <div class="next-week-body">
@@ -476,6 +476,13 @@ function renderMoreGroup(logs: LogEntry[]): string {
         ${archive}
       </div>
     </div>`;
+}
+
+// v73 (Nov 11 2026): every PROGRAM week used to start on a Saturday, so these rows said "Sat"
+// in plain text. Round 3 starts on a Sunday, so the label now names the real weekday.
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function weekdayLabel(d: Date): string {
+  return WEEKDAYS[d.getDay()] ?? 'Sat';
 }
 
 export function renderProgress(): string {

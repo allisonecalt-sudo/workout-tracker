@@ -8,7 +8,7 @@
 // — a cycle. Types only, no values, no DOM, no storage. Moved verbatim.
 // NEXT: later steps (state.ts, screens/*) import these from here too.
 
-import type { AnyWorkoutId } from './program.js';
+import type { AnyWorkoutId, PathId } from './program.js';
 import type { CyclePeriod } from './cycle.js';
 
 export type LogEntry = {
@@ -79,6 +79,9 @@ export type LogEntry = {
   // Her free-text post-log line, verbatim — never glued to a machine marker.
   sessionNote?: string | null;
   liteDay?: boolean | null;
+  // v73 (Nov 11 2026): the Round 3 time path she picked ('38' | '48' | '60'),
+  // null/absent on every older row and on D. workout_sessions.session_path.
+  sessionPath?: PathId | null;
   // "curl=easy;row=right" — the one-tap Easy/Right/Hard on the 1 kg moves (P5).
   armFeel?: string | null;
   // v58 (Sep 28 2026) — "splitsquat=right;wallsit=easy@45s;ride=right@12min":

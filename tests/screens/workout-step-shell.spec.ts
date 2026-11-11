@@ -1,7 +1,7 @@
 // Split out of tests/app.spec.ts by scripts/split-spec.mjs (code-shape step 1, Oct 13 2026);
 // the test bodies below are copied line for line.
 import { test, expect, type Page } from '@playwright/test';
-import { setupPage, mockDate, movableClock, advanceClock } from '../helpers';
+import { setupPage, mockDate, movableClock, advanceClock, setLiteDay } from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -440,7 +440,7 @@ test.describe('v48 P2 shell', () => {
     await mockDate(page, TUE_WEEK4);
     await page.goto('/');
     await page.locator('button[data-workout="C"]').click();
-    await page.locator('#lite-toggle').click();
+    await setLiteDay(page);
     await page.locator('button:has-text("Start")').click();
     for (let i = 0; i < 60; i++) {
       if (await page.locator('text=Quick log').isVisible()) break;

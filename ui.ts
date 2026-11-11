@@ -19,6 +19,10 @@ import type { ActiveSessionSnapshot, AppScreen } from './state.js';
 import type { HistoryEditDraft, TimerHandle, WorkoutWalkResult } from './types.js';
 
 export interface Ui {
+  // v73 (Nov 11 2026): she tapped Skip on the post-log time card (start / finish
+  // "Right?" + breaks). Transient UI like stepListOpen: the saved fields simply
+  // stay unconfirmed; a reload shows the card again.
+  postTimeSkipped: boolean;
   // v50 · jump list (Sep 25 2026): whether the "List" sheet is open. Transient
   // UI, not session progress — deliberately NOT on AppState/the resume
   // snapshot, the same way the quit-confirm panel isn't: a reload should land
@@ -101,6 +105,7 @@ export interface Ui {
 }
 
 export const ui: Ui = {
+  postTimeSkipped: false,
   stepListOpen: false,
   timerPipOpen: false,
   audioCtx: null,

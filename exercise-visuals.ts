@@ -308,4 +308,85 @@ export const EXERCISE_VISUALS: Record<string, ExerciseVisual> = {
     // The video is the full arm-and-leg version, which is exactly this move.
     attribution: 'Dead Bug — Hinge Health (PT)',
   },
+  // ----- v73 (Nov 11 2026): Round 3's new moves. Each id was checked live on
+  // YouTube oEmbed Nov 11 2026 (HTTP 200 = exists and embeddable; title + author
+  // as quoted); picked by title and channel, not watched end to end. -----
+  '1-minute primer': {
+    youtubeId: 'U0dfnyfhpwk',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // The tilt half of the primer (the belly breaths go with it). Same video as Pelvic tilts. oEmbed 200 Nov 11 2026.
+    attribution: 'How to Do a Supine Pelvic Tilt — MedBridge',
+  },
+  'Chair squat': {
+    youtubeId: 'OViE2ghEop0',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // Hospital PT video, sit back to a chair and stand. oEmbed 200 Nov 11 2026.
+    attribution: 'How to do a chair squat — MassGeneralHospital',
+  },
+  'Band row': {
+    youtubeId: 'TT_JGLeMwiA',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // A narrow (thumbs-up) grip band row, band anchored. oEmbed 200 Nov 11 2026.
+    attribution: 'Standing narrow row with band — Rehab My Patient',
+  },
+  'Incline push-up on fists': {
+    youtubeId: '-JWrwgP7QL8',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // PT counter (incline) push-up; the video uses flat hands, hers are on fists (the card says so). oEmbed 200 Nov 11 2026.
+    attribution:
+      'Strong Arms and Wrists: Counter Push Ups for Seniors and 60+ — Margaret Martin, Physical Therapist · hers are on fists',
+  },
+  'Band pull-apart': {
+    youtubeId: 'bYsgk9SrJ48',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // oEmbed 200 Nov 11 2026.
+    attribution: 'How to Do Band Pull Aparts: A Guide from Physical Therapists — Hinge Health',
+  },
+  'One-arm dumbbell row': {
+    youtubeId: 'mUF-dSu-x-c',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // One hand on a chair, the other rows — the exact variation. oEmbed 200 Nov 11 2026.
+    attribution: 'Bent Over DB Row w/ Chair Support — Ashley Sterling',
+  },
+  'Bird dog': {
+    youtubeId: 'xEDnlOxeJH4',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // The FULL bird dog (opposite arm + leg) — the same video the legs-only entry above uses. oEmbed 200 Nov 11 2026.
+    attribution: 'How to Do the Bird Dog Exercise — Hinge Health (PT)',
+  },
+  'Floor press': {
+    youtubeId: 'riT31sLb8HU',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // Dumbbell floor press from a PT channel (about 5 min). oEmbed 200 Nov 11 2026.
+    attribution: 'Floor Press 101! — [P]rehab',
+  },
+  'Side plank on knees': {
+    youtubeId: 'UurF0EhHFLg',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // Kneeling (bent-knee) side plank. oEmbed 200 Nov 11 2026. (CHA Healthcare 9Y-z2xbSsqc was tried first: embedding is disabled, oEmbed 401.)
+    attribution: 'How to do a Side plank kneeling — Rehab My Patient',
+  },
+  'Hammer curl': {
+    youtubeId: 'Tu2oFLwbfeI',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // oEmbed 200 Nov 11 2026.
+    attribution: 'Deep Physio | Dumbbell Hammer Curls — European School of Physiotherapy',
+  },
+  'Chin tucks': {
+    youtubeId: '7rnlAVhAK-8',
+    source: 'youtube-only',
+    license: 'YouTube embed (ToS)',
+    // Sitting-tall chin tuck from a PT; the lying version is the same glide. oEmbed 200 Nov 11 2026.
+    attribution: 'Chin Tucks Sitting — Ask Doctor Jo',
+  },
 };

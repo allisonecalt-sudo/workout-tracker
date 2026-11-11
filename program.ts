@@ -20,6 +20,11 @@ import type { WeekKey } from './week.js';
 
 export type WorkoutId = 'A' | 'B' | 'C';
 
+// v73 (Nov 11 2026) — Round 3's three time paths, tapped on the pre-workout
+// page: 38 / 48 / 60 minutes. The id is the saved value (workout_sessions
+// .session_path, a text column with CHECK in ('38','48','60')).
+export type PathId = '38' | '48' | '60';
+
 // v54 (Sep 27 2026) — Workout D: "30 min elliptical", her Sep 27 NotebookLM
 // reflection ("we definitely need a 4th element a week... call it Workout D").
 // Deliberately NOT folded into WorkoutId: WeekPlan.workouts is a
@@ -89,6 +94,12 @@ export type Workout = {
   upperBack?: Exercise[];
   cooldown: Exercise[];
   rounds: number;
+  // v73 (Nov 11 2026): a workout with time paths lists its `main` moves in
+  // PRIORITY order; the path picked decides how many show (paths.ts
+  // workoutForPath: 38 -> first 3, 48 -> first 4, 60 -> all + `optional`) and
+  // the ride minutes (the 'Outdoor walk' step's reps). Absent = no picker
+  // (every R1/R2 week, and Workout D).
+  paths?: { rideMin: Record<PathId, number>; optional?: Exercise[] };
 };
 
 export type Phase = 'warmup' | 'main' | 'upperBack' | 'cooldown';
@@ -2644,6 +2655,200 @@ PROGRAM.push({
   },
 });
 
+// v73 (Nov 11 2026) — Round 3, Week 1: the new A / B / C, each with three time
+// paths (38 / 48 / 60 min) picked on the pre-workout page.
+// WHAT: each workout lists its 5 main moves in PRIORITY order; `paths` (see
+// Workout.paths, paths.ts) decides how many show and how long the ride is.
+// Warm-up = the ride (first), then ONE "1-minute primer". Cool-down = chin
+// tucks, then her stretches (45 s each). 2 rounds, effort 6-7 out of 10.
+// WHY: her words (Wed Nov 11 2026): "we are makign a b c anew" · "each one has
+// 30,45,hour and i click the path" · "if im goign to show up it needs to be
+// realistic". Plan + spec: second-brain projects/workout-tracker/
+// R3-PLAN-2026-11-11.md (BUILD SPEC v73). Goals in order: weight loss, protect
+// the back, protect the wrist, a strong upper body.
+// Weeks 2+ are NOT written here: she decides each week the week before. Until
+// then planForWeekKey says "same moves as Week 1" (the repeat fallback).
+// Every name that already existed stays EXACTLY as it was (voice notes, detail
+// cards, move_feel slugs and the 'Outdoor walk' cardio lanes key off it).
+const R3_EXISTING = (name: string, over: Partial<Exercise>): Exercise => {
+  for (let i = PROGRAM.length - 1; i >= 0; i--) {
+    const wp = PROGRAM[i]!;
+    for (const id of ['A', 'B', 'C'] as WorkoutId[]) {
+      const w = wp.workouts[id];
+      for (const ex of [...w.warmup, ...w.main, ...(w.upperBack ?? []), ...w.cooldown]) {
+        if (ex.name === name) return { ...ex, ...over };
+      }
+    }
+  }
+  throw new Error(`R3W1: expected an earlier PROGRAM row to carry '${name}'`);
+};
+const R3_STRENGTH_NOTE = 'Effort 6–7 out of 10 — the last 2–3 reps feel hard, never to failure.';
+const R3_RIDE: Exercise = {
+  name: 'Outdoor walk',
+  reps: '12 min',
+  notes:
+    'Ride first. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Grows 2–3 min a week only if your knee is fine the next morning.',
+};
+const R3_PRIMER: Exercise = {
+  name: '1-minute primer',
+  reps: '1 min',
+  notes:
+    '5 slow belly breaths, each with a gentle pelvic tilt held 2–3 s. Then one light practice set of your first move.',
+};
+const R3_BAND_ROW: Exercise = {
+  name: 'Band row',
+  reps: '10–15 · thumbs up',
+  notes:
+    'Band anchored at chest height, or looped round your feet sitting with legs out. Thumbs up, elbows close to your sides. Squeeze the shoulder blades back and together, then return slowly. Wrist straight.',
+};
+const R3_PULL_APART: Exercise = {
+  name: 'Band pull-apart',
+  reps: '12–15',
+  notes:
+    'Arms straight in front at chest height, band in both hands. Pull the band apart by squeezing the shoulder blades back and together; return slowly. Ribs down, no shrugging.',
+};
+const R3_HAMMER_CURL: Exercise = {
+  name: 'Hammer curl',
+  label: 'Hammer curl (if time)',
+  reps: '10–15 · 2 kg · thumbs up',
+  notes:
+    'Thumbs up the whole way, wrist straight. Elbows stay at your sides; curl up, lower slowly. No swinging.',
+};
+// Her stretches (STRETCH_COOLDOWN), minus the shoulder stretch and both calf
+// stretches (not in Round 3), in her order, 45 s each. The neck stretch is
+// "each side" by its reps so the list counts both sides.
+const R3_STRETCH_ORDER = [
+  'Doorway pec stretch',
+  'Neck stretch',
+  'Biceps stretch — right',
+  'Biceps stretch — left',
+  'Leg cross — right',
+  'Leg cross — left',
+  'Leg up in air — right',
+  'Leg up in air — left',
+  'Both knees to chest',
+  'Hip flexor — right knee in, left leg dangles',
+  'Hip flexor — left knee in, right leg dangles',
+  'Wrist extension — right',
+  'Wrist extension — left',
+  'Wrist flexion — right',
+  'Wrist flexion — left',
+];
+const R3_COOLDOWN: Exercise[] = [
+  {
+    name: 'Chin tucks',
+    reps: '8–10 slow reps · hold each 5–10 s',
+    notes:
+      'Lying on your back, or sitting tall. Glide the chin straight back, like making a double chin, eyes level. Hold, then relax. No nodding down.',
+  },
+  ...R3_STRETCH_ORDER.map((name) => {
+    const found = STRETCH_COOLDOWN.find((ex) => ex.name === name);
+    if (!found) throw new Error(`R3W1: no stretch named '${name}' in STRETCH_COOLDOWN`);
+    return name === 'Neck stretch' ? { ...found, reps: '45 sec each side' } : found;
+  }),
+];
+const R3_RIDE_MIN: Record<PathId, number> = { '38': 10, '48': 12, '60': 15 };
+const R3_DESCRIPTION = (what: string): string =>
+  `${what} · pick your path (38 / 48 / 60 min) · 2 rounds · ~48 min`;
+
+PROGRAM.push({
+  round: 3,
+  weekNum: 1,
+  startsOn: '2026-11-15',
+  label: 'Round 3 — Week 1 · new A/B/C, pick your path',
+  workouts: {
+    A: {
+      id: 'A',
+      name: 'Lower + Pull + Push',
+      description: R3_DESCRIPTION('Chair squat, rows, push-up, dead bug'),
+      warmup: [R3_RIDE, R3_PRIMER],
+      main: [
+        {
+          name: 'Chair squat',
+          reps: '10–15 · sit back to a chair · 2 kg at the chest when easy',
+          notes:
+            'Sit back to a chair and stand up. Knees over the toes, not past. Hold 2 kg at your chest when it feels easy. ' +
+            R3_STRENGTH_NOTE,
+        },
+        R3_BAND_ROW,
+        {
+          name: 'Incline push-up on fists',
+          reps: '8–12 · hands on a counter, on fists',
+          notes:
+            'Hands on a counter, in fists, so the wrist stays straight. Body in one line, lower the chest toward the counter, push back up. No sagging in the low back.',
+        },
+        R3_EXISTING('Full dead bug', { reps: '6–8 each side' }),
+        R3_PULL_APART,
+      ],
+      cooldown: R3_COOLDOWN,
+      rounds: 2,
+      paths: { rideMin: R3_RIDE_MIN, optional: [R3_HAMMER_CURL] },
+    },
+    B: {
+      id: 'B',
+      name: 'Hinge + Pull + Glutes',
+      description: R3_DESCRIPTION('Hip hinge, rows, bridges, bird dog'),
+      warmup: [R3_RIDE, R3_PRIMER],
+      main: [
+        R3_EXISTING('Bodyweight hip hinge', {
+          reps: '10–15 · holding 2 kg',
+          notes:
+            'Hinge at the hips, soft knees, flat back: hands slide down the thighs (holding 2 kg), feel it in the hamstrings and glutes. Do NOT round the low back. ' +
+            R3_STRENGTH_NOTE,
+        }),
+        {
+          name: 'One-arm dumbbell row',
+          reps: '10–12 each side · 2 kg · other hand on a chair',
+          notes:
+            'Hinge forward with a flat back, one hand on a chair. Row the weight toward your hip, elbow close to your side, shoulder blade back. Lower slowly. Wrist straight.',
+        },
+        R3_EXISTING('Glute bridges', { reps: '12–15 reps · 2-sec hold at top' }),
+        R3_EXISTING('IWYT raises', { reps: '6–8 each letter (I, W, Y, T)' }),
+        {
+          name: 'Bird dog',
+          reps: '6–8 each side · 3-sec hold',
+          notes:
+            'Hands and knees: opposite arm and leg reach out together, level with your body. Hold 3 sec, switch. Hands flat, or on fists if flat bothers the wrist. Hips square, neck long, no sagging.',
+        },
+      ],
+      cooldown: R3_COOLDOWN,
+      rounds: 2,
+      paths: { rideMin: R3_RIDE_MIN, optional: [R3_HAMMER_CURL] },
+    },
+    C: {
+      id: 'C',
+      name: 'Legs + Pull + Push + Core',
+      description: R3_DESCRIPTION('Split squat, pull-apart, floor press, side plank'),
+      warmup: [R3_RIDE, R3_PRIMER],
+      main: [
+        R3_EXISTING('Supported split squat', {
+          reps: '8–10 each side · shallow, hold a chair',
+        }),
+        R3_PULL_APART,
+        {
+          name: 'Floor press',
+          reps: '10–15 · 2 kg · thumbs facing in',
+          notes:
+            'Lying on the floor, knees bent, 2 kg in each hand. Thumbs face in. Press up, lower until the elbows touch the floor. Wrists straight. ' +
+            R3_STRENGTH_NOTE,
+        },
+        {
+          name: 'Side plank on knees',
+          reps: '2 × 20 sec · left side, then right (15–25 s each is fine)',
+          notes:
+            'On your side, forearm under the shoulder, knees bent. Lift the hips so the body is one line from knees to head. Breathe. No sagging, no twisting.',
+          durationSec: 20,
+          isTimed: true,
+        },
+        R3_EXISTING('Side-lying clamshells', { reps: '12 each side · band' }),
+      ],
+      cooldown: R3_COOLDOWN,
+      rounds: 2,
+      paths: { rideMin: R3_RIDE_MIN, optional: [R3_HAMMER_CURL] },
+    },
+  },
+});
+
 // --- Resolvers -----------------------------------------------------------
 //
 // These two resolvers are the CALENDAR lookup: a date in, the plan row whose
@@ -2739,6 +2944,53 @@ export function diffWorkout(prev: Workout, next: Workout): string[] {
 // Eliana-era entries removed per audit §8 (group 3P); Lisa Cohen wrist
 // entries moved to archive/hand-routine-2026-05-15/ on 2026-05-15.
 export const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
+  // v73 (Nov 11 2026) — Round 3's new moves. Plain words; the pain rule is her
+  // governing one (a little pain is OK; above your usual -> hold; sharp,
+  // climbing, or still there tomorrow -> step back a rung).
+  '1-minute primer': {
+    howTo:
+      'Right after the ride, on your back or standing tall. Take 5 slow belly breaths. On each breath out, tilt the pelvis gently so the low back flattens, hold 2 to 3 seconds, then let go. Then do ONE light practice set of the first move of the day, easy, about half effort. That is the whole warm-up: it wakes up the back and the hips without taking another ten minutes.',
+  },
+  'Chair squat': {
+    howTo:
+      'Stand in front of a sturdy chair, feet about hip-width, toes slightly out. Sit back toward the chair as if reaching for it with your hips, lightly touch it, and stand up again. Knees track over the toes and stay over them, not past them. Chest tall, eyes forward. Breathe out as you stand. When it feels easy, hold 2 kg at your chest. Effort 6 to 7 out of 10: the last 2 to 3 reps feel hard, never to failure. A little pain is OK. Above your usual, hold at this level. Sharp, climbing, or still there tomorrow, step back.',
+  },
+  'Band row': {
+    howTo:
+      'Anchor the band at chest height (closed door), or sit with your legs out and the band looped round your feet. Hold the ends with thumbs up, arms long. Squeeze the shoulder blades back and together as you pull the elbows past your sides, then return slowly. Wrists stay straight. Ribs down, no leaning back, no shrugging. Effort 6 to 7 out of 10, never to failure. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
+  'Incline push-up on fists': {
+    howTo:
+      'Make two fists and rest them on a sturdy counter, a little wider than the shoulders, so the wrists stay straight. Walk the feet back until the body is one long line from head to heels. Lower the chest toward the counter, elbows about 45 degrees from the body, then push back up. Squeeze the glutes and brace the belly so the low back does not sag. The higher the counter, the easier it is. Effort 6 to 7 out of 10, never to failure. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
+  'Band pull-apart': {
+    howTo:
+      'Stand tall, band in both hands, arms straight out in front at chest height, hands about shoulder-width apart. Pull the band apart by squeezing the shoulder blades back and together, until the band touches the chest or the arms are out to the sides. Return slowly. Ribs down, no shrugging, wrists straight. Effort 6 to 7 out of 10, never to failure. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
+  'One-arm dumbbell row': {
+    howTo:
+      'Stand beside a sturdy chair, one hand flat on it, a 2 kg weight in the other hand. Hinge forward at the hips with a flat back, soft knees, neck long. Let the weight hang under the shoulder. Row it toward your hip, elbow close to your side, shoulder blade squeezing back. Lower slowly. Wrist straight throughout. Do all the reps on one side, then switch. Effort 6 to 7 out of 10, never to failure. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
+  'Bird dog': {
+    howTo:
+      'On hands and knees: hands under the shoulders (flat, or on fists if flat bothers the wrist), knees under the hips, back long and flat. Reach ONE arm forward and the OPPOSITE leg back until both are level with your body. Hold 3 seconds, then lower with control and switch sides. Keep the hips square, as if balancing a cup on your lower back, and the neck long with your eyes on the floor. Do not let the low back sag. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back to the legs-only version.',
+  },
+  'Floor press': {
+    howTo:
+      'Lie on your back on the floor, knees bent, feet flat, a 2 kg weight in each hand. Elbows bent, resting on the floor, thumbs facing in. Press the weights straight up over the chest, then lower slowly until the elbows lightly touch the floor. Wrists stay straight, stacked over the forearms. Keep the low back from arching. Effort 6 to 7 out of 10, never to failure. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
+  'Side plank on knees': {
+    howTo:
+      'Lie on your side, knees bent, forearm on the floor with the elbow right under the shoulder. Lift the hips until the body is one straight line from knees to head. Hold, breathing normally, 15 to 25 seconds, then lower and switch sides. Do not let the hips sag or roll forward or back. Forearm only, no weight through the hand. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
+  'Hammer curl': {
+    howTo:
+      'Stand tall with a 2 kg weight in each hand, thumbs up, palms facing each other. Keep the elbows at your sides and curl both weights up toward the shoulders, wrists straight, then lower slowly. No swinging, no leaning back. This is the optional move for the 60-minute path, when there is time. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
+  'Chin tucks': {
+    howTo:
+      'Lie on your back with a small towel under the head, or sit tall. Look straight ahead. Glide the chin straight back, like making a gentle double chin, without tilting the head up or down. Hold 5 to 10 seconds, then relax. Do 8 to 10 slow reps. Feel a mild stretch at the back of the neck, never a strain. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+  },
   'Belly breathing': {
     howTo:
       "Lie on your back, knees bent, feet flat. Rest one arm at your side (no weight on the hand). Inhale through your nose for 4 counts — your BELLY should rise, not your chest. Exhale slowly through your mouth for 6 counts. Common mistake: chest rising instead of belly. If that happens, slow down and put less effort into the inhale. This wakes up your diaphragm and signals your nervous system it's safe to work.",
@@ -2871,6 +3123,19 @@ export const EXERCISE_GUIDE: Record<string, { howTo: string }> = {
 // PROGRAM notes are NOT edited: the prescription and its full cue stay hers +
 // Lisa's. An Exercise's own `safety` wins over this map.
 export const SAFETY_LINE: Record<string, string> = {
+  'Chair squat': 'Knees over the toes, not past. Sit back, chest tall.',
+  'Band row':
+    'Thumbs up, wrists straight. Pain tells — back off if it is sharp, climbing, or still there tomorrow.',
+  'Incline push-up on fists':
+    'Fists keep the wrist straight. Body in one line, no sagging. Pain tells — back off if it is sharp, climbing, or still there tomorrow.',
+  'Band pull-apart': 'Ribs down, no shrugging. Wrists straight.',
+  'One-arm dumbbell row': 'Flat back, hand on the chair. Wrist straight.',
+  'Bird dog':
+    'Hips square, no sagging. Pressure is fine — back off if it is sharp, climbing, or still there tomorrow.',
+  'Floor press': 'Thumbs facing in, wrists straight. Ease the weight down.',
+  'Side plank on knees': 'Forearm only, no weight through the hand. Hips lifted, no sagging.',
+  'Hammer curl': 'Thumbs up, wrist straight. No swinging.',
+  'Chin tucks': 'Gentle glide straight back — a mild stretch, never a strain.',
   'Supported split squat':
     'Fingertips on the couch for balance only — no weight through the hands.',
   'Bodyweight hip hinge': 'Do NOT round the low back.',
@@ -2903,6 +3168,9 @@ export const PROGRAM_START_DATE = '2026-05-02';
 export const ROUNDS: { num: number; start: string }[] = [
   { num: 1, start: PROGRAM_START_DATE },
   { num: 2, start: '2026-08-29' },
+  // v73 (Nov 11 2026): Round 3 starts Sunday Nov 15 by her call (the new A/B/C);
+  // R2 Week 8/9 stay as they are and whatever is open closes by round_ended.
+  { num: 3, start: '2026-11-15' },
 ];
 
 /** TEST-ONLY seed (v62.1; app.ts calls it only under automation, from its __wt

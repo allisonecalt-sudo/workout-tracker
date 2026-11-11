@@ -8,7 +8,7 @@
 // a reload, and the post-log/saved row both carry the skipped count.
 
 import { test, expect, type Page } from '@playwright/test';
-import { installTestClock } from './helpers';
+import { installTestClock, setLiteDay } from './helpers';
 
 test.beforeEach(async ({ page, context }) => {
   await installTestClock(context);
@@ -49,7 +49,7 @@ async function startWorkoutA(page: Page, { lite = false }: { lite?: boolean } = 
   await mockDate(page, TUE_WEEK4);
   await page.goto('/');
   await page.locator('button[data-workout="A"]').click();
-  if (lite) await page.locator('#lite-toggle').click();
+  if (lite) await setLiteDay(page);
   await page.locator('button:has-text("Start")').click();
   await expect(page.locator('.exercise-name')).toBeVisible();
 }

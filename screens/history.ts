@@ -187,6 +187,7 @@ export function renderHistoryDetail(): string {
   const cardio = sessionCardio(log);
   if (cardio)
     rows.push(detailRow('Cardio', escapeHtml(cardioText(cardio)), { id: 'detail-cardio' }));
+  if (log.sessionPath) rows.push(detailRow('Path', `${log.sessionPath} min`)); // v73
   if (log.liteDay) {
     // Lite = one round less than the plan that week had. Swing fix (Sep 26
     // 2026): the plan follows the week the session counted toward. WK4 (Sep 27

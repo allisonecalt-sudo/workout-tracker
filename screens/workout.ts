@@ -52,6 +52,7 @@ import { bindClick, setVoiceBtnPlaying, showToast, wireHoldToSkip } from '../dom
 import { escapeHtml } from '../format.js';
 import { renderActionBar } from '../action-bar.js';
 import { flattenSteps, nextUndoneStep, type WorkoutStep } from '../step-list.js';
+import { DEFAULT_PATH } from '../paths.js';
 import { setsPrescribed, holdSetsFace, formatHeldSeconds } from '../hold-sets.js';
 import { honestWallSitLogs } from '../viz.js';
 import { isMoveFeelValue, MOVE_FEEL_VALUES, slugFor } from '../move-feel.js';
@@ -131,6 +132,7 @@ import {
   heavierArmLoad,
   defaultArmLoad,
   markPaceRuleSeen,
+  multiSetCount,
   renderArmFeel,
   renderMoveFeel,
   renderThisHurts,
@@ -1433,6 +1435,19 @@ export function attachWorkoutNavHandlers(): void {
     unlockAudio(); // Group 1C
     beginExercises();
   });
+  // v73 (Nov 11 2026), her 14:31 ask: "i shoukld be able to skip ... the page with
+  // mood if i wnat to skip". Straight to the workout; what the page asks (body,
+  // mood, back, wrist BEFORE) stays unset (null), never a default number.
+  bindClick('prelog-skip', () => {
+    unlockAudio();
+    state.capacityBeforeTouched = false;
+    state.moodBeforeTouched = false;
+    state.backPainBeforeTouched = false;
+    state.backBeforeSomethingOpen = false;
+    state.wristPainBeforeTouched = false;
+    state.wristBeforeSomethingOpen = false;
+    beginExercises();
+  });
 
   bindClick('next', () => {
     // v51 (Sep 25 2026): Done · Next on the elliptical step opens the ride-
@@ -1567,6 +1582,9 @@ function beginExercises(): void {
     state.herStartAt = new Date().toISOString();
   }
   endPreLogClockTick();
+  // v73: Start without a path pick means 48 — kept on state so it is saved and
+  // survives a close (only a workout that has paths).
+  if (state.sessionPath === null && getCurrentWorkout()?.paths) state.sessionPath = DEFAULT_PATH;
   state.screen = 'workout';
   state.currentRound = 1;
   state.currentPhase = 'warmup';
@@ -1727,7 +1745,16 @@ function advanceExercise(opts: { hurtSlug?: string } = {}): void {
   // deliberate pause, never skipped over just because something else is open.
   const curKey = currentStepKey();
   if (opts.hurtSlug !== undefined) markStepHurt(curKey, opts.hurtSlug);
-  else markStepDone(curKey);
+  else {
+    markStepDone(curKey);
+    // v73 (Nov 11 2026): Round 3's two arm moves are single-set (no "Set N done"
+    // tap), so Done is the only "she was really here" signal their 1 kg / 2 kg
+    // load pick has. Mark it, so armFeelString saves the load (arm_feel).
+    const cur = getCurrentExercise();
+    if (cur && ARM_FEEL_STEPS[cur.name] && multiSetCount(cur.reps) === 1) {
+      state.setsDoneFor = { ...state.setsDoneFor, [cur.name]: state.setsDoneFor[cur.name] || 1 };
+    }
+  }
   const handled = handledSteps();
   const movable = flattenSteps(toStepWorkout(w), effectiveRounds(w));
   const curPos = movable.findIndex((s) => s.key === curKey);

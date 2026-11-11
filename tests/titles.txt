@@ -68,7 +68,7 @@ PROGRAM — names resolve where the app looks them up › move-feel slugs: every
 PROGRAM — names resolve where the app looks them up › the exceptions list holds no stale name (every listed name is still in the program)
 PROGRAM — shape › (round, weekNum) is unique and ascending; startsOn strictly ascends with it
 PROGRAM — shape › every startsOn is a Saturday (weeks are Sat-Fri throughout the app)
-PROGRAM — shape › has exactly 20 weeks (the Settings "Program weeks" number)
+PROGRAM — shape › has exactly 21 weeks (the Settings "Program weeks" number)
 PROGRAM — the Jul 8 timer rule › every sustained hold has durationSec AND isTimed (except the named Round-1 W1-W4 stretches)
 PROGRAM — the Jul 8 timer rule › isTimed and durationSec always travel together (never one without the other)
 PROGRAM — the Jul 8 timer rule › the exceptions list holds no stale name (each listed stretch still occurs in Round 1 weeks 1-4)
@@ -345,7 +345,7 @@ left-open gate: a 10-minute-old workout still resumes silently (no card)
 left-open gate: a 4-day-old workout is a question on home, not a silent resume
 length gate: 44 min (under the 45-min brake) does not block; a 90-min runaway row is excluded, not counted as a violation
 length gate: a minutesDelta rung is blocked when the last 2 sessions of that letter ran over the brake
-lite day: pre-log toggle drops one round and marks the session lite
+lite day: Lite set before Start drops one round and marks the session lite
 logging from the page (spec §2.6) › logs today, confirms with Undo, and the date-picker path
 median › empty -> null
 median › even count: the average of the two middle values, rounded to 1dp
@@ -365,7 +365,7 @@ moveFeelString / parseMoveFeelString — tap saves the right slug/qty › parseM
 moveFeelSummary: the Session screen line › a slug the plan no longer has stays as saved; nothing saved is an empty string
 moveFeelSummary: the Session screen line › every move's feel, with its seconds / minutes spaced
 multi-week: "Coming next week" preview renders in Progress with diff
-multi-week: Settings About shows Program weeks count (20) — pre-launch, unchanged
+multi-week: Settings About shows Program weeks count (21) — pre-launch, unchanged
 multi-week: Week 4 content active for May 25 (Session A holds — squats 12, plank 1x15s)
 multi-week: home week-banner reads Week 3 for May 16-22 range
 multi-week: pre-log overview shows Week 3 badge in May 16-22 range
@@ -645,7 +645,7 @@ v48 P1 data › (b) wall_sit_seconds is null on B and C (no wall sit), the numbe
 v48 P1 data › (b2) mood_before/mood_after send her numbers, or null when untouched
 v48 P1 data › (b3) back_pain_before/wrist_pain_before send her numbers, or null when untouched
 v48 P1 data › (c) the post-log note lands in session_note, never in notes
-v48 P1 data › (d) Lite on pre-log saves liteDay true
+v48 P1 data › (d) Lite set before Start saves liteDay true
 v48 P1 data › (e) each voice-note play that starts is counted onto the saved session
 v48 P1 data › (f) the nine new columns round-trip through the pull; a row without them still loads
 v48 P1 data › (g) the import accepts an old-shape and a new-shape entry, and refuses junk in a new field
@@ -743,8 +743,8 @@ v48 P4 home › at phone size › (g) Sat Sep 26 morning (Week 5 now encoded, no
 v48 P4 home › at phone size › (g) the version tag is one line and carries the version + a time
 v48 P5 logs › (a) chip 7 then Start saves capacityBefore 7; untouched saves null
 v48 P5 logs › (a) the wrist + back line shows on A and not on C; What's in it is one closed row
-v48 P5 logs › (b) a body reading of 2 SUGGESTS Lite (outline) but never switches it on
-v48 P5 logs › (b) once Lite is on, the outline goes and the chip says how to undo it
+v48 P5 logs › (b) Lite set before Start still reads "lite" on the workout and saves liteDay true
+v48 P5 logs › (b) a body reading of 2 offers no Lite chip and never switches Lite on
 v48 P5 logs › (c) post-log on A after a held wall sit: the field is pre-filled with the real seconds
 v48 P5 logs › (c) post-log on C has no wall-sit field
 v48 P5 logs › (d) back: "Fine" saves 0
@@ -768,7 +768,7 @@ v48 P5 logs › (f) the pace-rule caption shows once on the curl step, then neve
 v48 P5 logs › (f) v55 fix r3: the how-to still SVG drops the fixed "1 kg" caption too
 v48 P5 logs › (f) v55: no "Ask Lisa" card exists any more, no matter how many easy sessions in a row
 v48 P5 logs › (f) v55: reps text says "1–2 kg (your pick)", never a fixed 1 kg, for both loaded moves
-v48 P5 logs › at phone size › (a) pre-log: blank chips, one quiet line, Start in the fold on A, B and C with Lite on and off
+v48 P5 logs › at phone size › (a) pre-log: blank chips, one quiet line, Start and Skip in the fold on A, B and C, no Lite chip
 v48 P5 logs › at phone size › (d2) pre-log Start stays visible without scrolling on every workout
 v48 P5 logs › at phone size › (e) one note box: no #word, the note saves verbatim, Save stays in view while typing
 v48 P5 logs › v58 (a) which moves ask: Workout A has real stepped moves this week, unchanged Workout C has none
@@ -1071,7 +1071,53 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v72 - the version › package.json appVersion (the one source) is v72
+v73 - the version › package.json appVersion (the one source) is v73
+v73 — Round 3 Week 1 is the written plan › A: cool-down is chin tucks, then her stretches at 45 s, and no shoulder / calf stretch
+v73 — Round 3 Week 1 is the written plan › A: the five main moves are in priority order, 2 rounds
+v73 — Round 3 Week 1 is the written plan › A: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
+v73 — Round 3 Week 1 is the written plan › B: cool-down is chin tucks, then her stretches at 45 s, and no shoulder / calf stretch
+v73 — Round 3 Week 1 is the written plan › B: the five main moves are in priority order, 2 rounds
+v73 — Round 3 Week 1 is the written plan › B: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
+v73 — Round 3 Week 1 is the written plan › C: cool-down is chin tucks, then her stretches at 45 s, and no shoulder / calf stretch
+v73 — Round 3 Week 1 is the written plan › C: the five main moves are in priority order, 2 rounds
+v73 — Round 3 Week 1 is the written plan › C: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
+v73 — Round 3 Week 1 is the written plan › Hammer curl is the optional last step of the 60 path in A, B and C
+v73 — Round 3 Week 1 is the written plan › Weeks 2+ are not written: Round 3 Week 2 repeats Week 1 (she decides each week)
+v73 — Round 3 Week 1 is the written plan › the row exists: round 3, week 1, from Sun Nov 15, with her label
+v73 — Round 3 starts Sun Nov 15 and not before › ROUNDS carries Round 3 at 2026-11-15 (Sunday)
+v73 — Round 3 starts Sun Nov 15 and not before › Wed Nov 11 .. Sat Nov 14 23:59 is still Round 2; Sun Nov 15 00:00 is Round 3 Week 1
+v73 — Round 3 starts Sun Nov 15 and not before › the round start is Jerusalem local midnight (+02:00 in November)
+v73 — Skip on the mood page and on the time page › "Add them" brings the time card back
+v73 — Skip on the mood page and on the time page › Skip on the pre-workout page goes straight to the workout with every BEFORE reading unset
+v73 — Skip on the mood page and on the time page › Skip the times on the post-workout page: the rest is still offered, the session saves unconfirmed
+v73 — no picker outside Round 3 A/B/C › Workout D has no paths: the very same object comes back for any pick
+v73 — no picker outside Round 3 A/B/C › no Round 1 / Round 2 workout has paths (their A/B/C pass through untouched)
+v73 — path slicing › A: 2 rounds on every path, the cool-down is the same on every path
+v73 — path slicing › A: 38 -> first 3, 48 -> first 4, 60 -> all 5 plus the optional Hammer curl last
+v73 — path slicing › A: the ride minutes follow the path (38 -> 10, 48 -> 12, 60 -> 15), same step name
+v73 — path slicing › B: 2 rounds on every path, the cool-down is the same on every path
+v73 — path slicing › B: 38 -> first 3, 48 -> first 4, 60 -> all 5 plus the optional Hammer curl last
+v73 — path slicing › B: the ride minutes follow the path (38 -> 10, 48 -> 12, 60 -> 15), same step name
+v73 — path slicing › C: 2 rounds on every path, the cool-down is the same on every path
+v73 — path slicing › C: 38 -> first 3, 48 -> first 4, 60 -> all 5 plus the optional Hammer curl last
+v73 — path slicing › C: the ride minutes follow the path (38 -> 10, 48 -> 12, 60 -> 15), same step name
+v73 — path slicing › isPathId accepts exactly 38 / 48 / 60
+v73 — path slicing › no pick means 48
+v73 — path slicing › the description's minutes follow the path (workoutMinutesLabel reads '~N min')
+v73 — path slicing › the plan row itself is never changed by slicing
+v73 — session_path on the wire › a server without the column still saves: the legacy retry drops session_path
+v73 — session_path on the wire › the payload carries session_path; an older row and D carry null
+v73 — the load chip maps to Round 3 › Hammer curl is the curl chip and One-arm dumbbell row is the row chip; the old names stay
+v73 — the load chip on the Round 3 arm moves › One-arm dumbbell row (B, 48 path) shows the 1 kg / 2 kg chips and saves the pick in arm_feel
+v73 — the path decides the moves, and is saved › Start without a pick walks the 48 path and saves session_path 48
+v73 — the path decides the moves, and is saved › the 38 pick walks 3 moves and is saved
+v73 — the path decides the moves, and is saved › the 60 pick: all five moves and the optional Hammer curl last in each round
+v73 — the path decides the moves, and is saved › the pick survives a reload mid-workout (the resume snapshot carries it)
+v73 — the time-path picker › Round 3 A: "Which path today?" with 38 · 48 · 60, nothing lit until she taps
+v73 — the time-path picker › no picker on Workout D
+v73 — the time-path picker › no picker the day before Round 3 starts (Sat Nov 14 is still Round 2)
+v73 — the time-path picker › tapping a path lights it and redraws the plan; tapping it again clears the pick
+v73 — the time-path picker › the picker, the body chips and the mood chips sit above the pinned bar, Skip beside Start (A, B, C)
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

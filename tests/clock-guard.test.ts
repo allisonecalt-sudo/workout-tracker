@@ -88,6 +88,7 @@ const IN_PAGE_ALLOW: Record<string, { count: number; why: string }> = {
 const NO_DEFAULT_CLOCK = new Set([
   'golden.spec.ts', // every golden test pins movableClock(NOW_ISO) itself
   'sw-upgrade.spec.ts', // service-worker install/cache mechanics, no dates in play
+  'screens/r3-paths.spec.ts', // v73: every test pins mockDate to Sun Nov 15 (Round 3's first day) itself
 ]);
 
 // Tests allowed to seed the calendar marks (ignoreSickWeeks = no Sick weeks;

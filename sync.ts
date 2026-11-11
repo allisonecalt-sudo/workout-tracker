@@ -94,6 +94,12 @@ const V50_MOOD_SESSION_COLUMNS = ['mood_before', 'mood_after'] as const;
 // still saves cleanly, just without this one column.
 const V58_MOVE_FEEL_SESSION_COLUMNS = ['move_feel'] as const;
 
+// The one column added in v73 for Round 3's time path
+// (migrations/2026-11-11-v73-session-path.sql). Own strip group, same
+// reasoning as every V-group here: a server that has not run it yet still
+// saves the session, just without this one column.
+const V73_SESSION_PATH_COLUMNS = ['session_path'] as const;
+
 // The five columns added in T1 for her start/finish "Right?" + breaks
 // (migrations/2026-09-27-v53-timing.sql). APPLIED Sep 27 2026 (her 10:49
 // yes) — kept as its own strip group anyway (T1 fix r1, checker's should
@@ -167,6 +173,8 @@ export function sessionPayload(entry: LogEntry): Record<string, unknown> {
     // v58 (Sep 28 2026): plain passthrough, same as arm_feel above — the
     // slug/qty shape is already the wire shape (move-feel.ts's moveFeelString).
     move_feel: entry.moveFeel ?? null,
+    // v73: the Round 3 time path ('38' | '48' | '60'); null on older rows and D.
+    session_path: entry.sessionPath ?? null,
     voice_plays: entry.voicePlays ?? null,
     steps_skipped: entry.stepsSkipped ?? null,
     // T1 (Sep 27 2026), §3: her own start/finish answers — see LogEntry's
@@ -193,6 +201,7 @@ export function legacySessionPayload(entry: LogEntry): Record<string, unknown> {
   for (const col of V51_BACK_WRIST_BEFORE_SESSION_COLUMNS) delete payload[col];
   for (const col of V53_TIMING_SESSION_COLUMNS) delete payload[col];
   for (const col of V58_MOVE_FEEL_SESSION_COLUMNS) delete payload[col];
+  for (const col of V73_SESSION_PATH_COLUMNS) delete payload[col];
   const noteParts = [legacyCardioMarker(entry), entry.sessionNote, entry.notes].filter(
     (p): p is string => typeof p === 'string' && p.trim() !== ''
   );
@@ -459,6 +468,8 @@ type RemoteSession = {
   // v58 (Sep 28 2026): optional — a server that hasn't run the migration, or
   // a pre-v58 row, simply doesn't carry it.
   move_feel?: string | null;
+  // v73: optional — a server without the column, or a pre-Round-3 row.
+  session_path?: string | null;
   voice_plays?: number | null;
   // v50 · jump list (Sep 25 2026): optional — a server that hasn't run the
   // migration, or a pre-v50 row, simply doesn't carry it.
@@ -576,6 +587,10 @@ export function mergeRemoteSessions(local: LogEntry[], remote: RemoteSession[]):
       ellipticalKcal: r.elliptical_kcal == null ? null : Number(r.elliptical_kcal),
       sessionNote: r.session_note ?? null,
       liteDay: r.lite_day ?? null,
+      sessionPath:
+        r.session_path === '38' || r.session_path === '48' || r.session_path === '60'
+          ? r.session_path
+          : null,
       // v55 fix r3 (Sep 28 2026, checker's must): plain passthrough, but this
       // USED to be the bug — sessionPayload stripped the "@1kg"/"@2kg" LOAD
       // CHIP suffix before send (fix r2's stripArmFeelLoad, since deleted),

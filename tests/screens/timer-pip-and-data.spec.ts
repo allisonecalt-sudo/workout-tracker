@@ -1,7 +1,15 @@
 // Split out of tests/app.spec.ts by scripts/split-spec.mjs (code-shape step 1, Oct 13 2026);
 // the test bodies below are copied line for line.
 import { test, expect, type Page } from '@playwright/test';
-import { setupPage, NEXT, openCue, mockDate, movableClock, advanceClock } from '../helpers';
+import {
+  setupPage,
+  NEXT,
+  openCue,
+  mockDate,
+  movableClock,
+  advanceClock,
+  setLiteDay,
+} from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -418,11 +426,11 @@ test.describe('v48 P1 data', () => {
     await expect(page.locator('.new-tonight-badge')).toHaveText('First ride');
   });
 
-  test('(d) Lite on pre-log saves liteDay true', async ({ page }) => {
+  test('(d) Lite set before Start saves liteDay true', async ({ page }) => {
     await mockDate(page, '2026-09-24T14:00:00.000Z');
     await page.goto('/');
     await page.locator('button[data-workout="C"]').click();
-    await page.locator('#lite-toggle').click();
+    await setLiteDay(page);
     await page.locator('button:has-text("Start")').click();
     await finishToPostLog(page);
     const log = await saveAndReadLog(page);

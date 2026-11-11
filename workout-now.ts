@@ -27,6 +27,7 @@ import { flattenSteps, stepKey as buildStepKey, type WorkoutSteps } from './step
 import { ellipticalMinutes, apartmentCardioMinutes } from './cardio-readings.js';
 import { APARTMENT_CARDIO_NAME, apartmentCardioStep } from './walk.js';
 import { steppedMovesForWorkout, type SteppedMove } from './move-feel.js';
+import { workoutForPath } from './paths.js';
 import type { WeekSpan, PendingWeek } from './week.js';
 import { sessionsAttributedTo } from './program-week.js';
 import {
@@ -42,6 +43,10 @@ export const ELLIPTICAL_NAME = 'Elliptical';
 export const ARM_FEEL_STEPS: Record<string, keyof ArmFeelState> = {
   '1 kg biceps curl': 'curl',
   'Prone row (bodyweight)': 'row',
+  // v73 (Nov 11 2026): Round 3 keeps the 1 kg / 2 kg LOAD CHIP on its two arm
+  // moves, so the load still saves in arm_feel with no DB change.
+  'Hammer curl': 'curl',
+  'One-arm dumbbell row': 'row',
 };
 
 export function ellipticalStep(minutes: number): Exercise {
@@ -136,6 +141,12 @@ function steppedMovesForWorkoutId(id: AnyWorkoutId | null): SteppedMove[] {
   }
   const idx = PROGRAM.indexOf(current);
   const prev = idx > 0 ? PROGRAM[idx - 1] : undefined;
+  // v73 (Nov 11 2026): the first week of a NEW round has nothing to "step" from — Round 3's
+  // new A/B/C vs Round 2's last week would call every move stepped ("ride 12 min · +6 more"),
+  // a line that says nothing and costs a line of height on the pre-log page. A round's first
+  // week reads like the very first encoded week above: no stepped line (every move still asks
+  // its own Easy / Right / Hard, and "new tonight" still names what is new).
+  if (prev && (prev.round ?? 1) !== (current.round ?? 1)) return [];
   return steppedMovesForWorkout(prev?.workouts[id], current.workouts[id], excludeNames);
 }
 
@@ -146,7 +157,16 @@ export function currentSteppedMoves(): SteppedMove[] {
   return steppedMovesForWorkoutId(state.selectedWorkout);
 }
 
+// v73 (Nov 11 2026): the workout she does today = the plan row's workout cut to
+// her time path (paths.ts). Every caller below goes through this one wrapper,
+// so the pre-log list, the steps, the progress line and the save can never
+// disagree about which moves are in today's workout. No `paths` = unchanged.
 export function getCurrentWorkout(): Workout | null {
+  const w = planWorkoutForNow();
+  return w ? workoutForPath(w, state.sessionPath) : null;
+}
+
+function planWorkoutForNow(): Workout | null {
   if (!state.selectedWorkout) return null;
   // v54 (Sep 27 2026): D is fixed, not week-programmed — resolve it straight
   // off getWorkoutD() and skip every plan/week lookup below (they're all

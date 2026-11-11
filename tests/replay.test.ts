@@ -15,6 +15,7 @@
 // outputs" as the whole contract. This is the CI half of that proof; the other
 // half is scripts/replay-week-clock.mjs on her real rows (local only).
 //
+// (v73, Nov 11 2026: the real Round 3 is written, starts Nov 15; the golden was regenerated for it.)
 // The hypothetical round is the one AFTER the highest real round (num omitted in the
 // fixture), so the golden's R3 labels are today's. Writing a real Round 3 changes
 // the real rounds under the replay: regenerate then (synthetic fixture only), with
@@ -100,16 +101,19 @@ test.describe('week-clock replay — synthetic golden (step 5a)', () => {
     expect(at('2026-10-25T09:00')['week'].open.done).toBe('BC');
     expect(at('2026-10-26T21:00')['week'].spans.at(-1).key).toBe('R2W7');
     expect(at('2026-10-26T21:00')['week'].spans.at(-1).how).toBe('three');
-    // a SECOND Move on (Week 9, Nov 21) opens Week 10
+    // v73 (Nov 11 2026): the REAL Round 3 starts Sun Nov 15, so Week 9 closes
+    // 'round_ended' there and R3W1 opens; the SECOND Move on (Week 9, Nov 21) lands
+    // after that and changes nothing (it used to open Week 10)
     expect(at('2026-11-22T09:00')['week'].spans.at(-1).key).toBe('R2W9');
-    expect(at('2026-11-22T09:00')['week'].spans.at(-1).how).toBe('moved_on');
-    expect(at('2026-11-22T09:00')['week'].open.key).toBe('R2W10');
+    expect(at('2026-11-22T09:00')['week'].spans.at(-1).how).toBe('round_ended');
+    expect(at('2026-11-22T09:00')['week'].open.key).toBe('R3W1');
     // a future-dated session (dated Nov 11, logged Nov 9) is IN the week model
     // from the moment it exists - the app never filters rows by date
     expect(at('2026-11-09T21:00')['week'].open.sessions).toContain('s33');
-    // a hypothetical Round 3 (starts Nov 28) closes Week 10 'round_ended' and
-    // opens R3W1; it can be moved on once it has been open 8+ days with 1 done
-    expect(at('2026-11-27T21:00')['week'].shown).toBe('R2W10');
+    // a hypothetical round after the real Round 3 (starts Nov 28) closes R3W1
+    // 'round_ended' and opens its own Week 1; it can be moved on once it has been
+    // open 8+ days with 1 done
+    expect(at('2026-11-27T21:00')['week'].shown).toBe('R3W1');
     expect(at('2026-11-28T21:00')['week'].shown).toBe(`R${nextRoundNum()}W1`);
     expect(at('2026-11-28T21:00')['week'].spans.at(-1).how).toBe('round_ended');
     expect(at('2026-12-07T21:00')['week'].canMoveOn).toBe(true);
@@ -143,7 +147,7 @@ test.describe('week-clock replay — a future round takes effect on its date (v6
     const at = (r: typeof none, t: string): Record<string, any> =>
       // eslint-disable-line @typescript-eslint/no-explicit-any
       r.snapshots.find((s) => s['t'] === t) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-    expect(at(early, '2026-11-27T21:00')['week'].shown).toBe('R2W10');
+    expect(at(early, '2026-11-27T21:00')['week'].shown).toBe('R3W1'); // v73: the real Round 3 (Nov 15)
     expect(at(early, '2026-11-28T09:00')['week'].shown).toBe(`R${nextRoundNum()}W1`);
   });
 });

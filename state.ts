@@ -19,7 +19,7 @@
 // another module's binding at load, so evaluation order cannot change what this
 // file builds.
 
-import type { AnyWorkoutId, Phase } from './program.js';
+import type { AnyWorkoutId, PathId, Phase } from './program.js';
 import type { WeekKey } from './week.js';
 import type { MoveFeelMark, MoveFeelValue } from './move-feel.js';
 import type { LogEntry, StoredWeekMove, WalkEntry, StoredCyclePeriod } from './types.js';
@@ -152,6 +152,10 @@ export type AppState = {
   // one round (A/B 3→2, C 2→1) and marks the stretch list "do what you need."
   // Same moves, same walk, streak intact. Showing up IS the win.
   liteDay: boolean;
+  // v73 (Nov 11 2026): the Round 3 time path she tapped on the pre-workout page
+  // ('38' | '48' | '60'); null = not picked (Start then means 48 — paths.ts).
+  // Saved as workout_sessions.session_path. Only a workout with `paths` uses it.
+  sessionPath: PathId | null;
   // Wall-sit timing capture (group 1D): when the user starts a timed wall sit
   // we stash the start timestamp here so we can compute actual held duration
   // even if she taps Done before the timer expires.
@@ -342,6 +346,7 @@ export type ActiveSessionSnapshot = {
   pausedAt: number | null;
   pausedMs: number;
   liteDay: boolean;
+  sessionPath: PathId | null; // v73: a pick survives an app close
   // v48: an app close on the "Round 1 done ✓" screen reopens on it; a
   // finish-here and a stop-early survive a close too.
   roundBreak: boolean;
@@ -552,6 +557,7 @@ export const state: AppState = {
   pausedAt: null,
   pausedMs: 0,
   liteDay: false,
+  sessionPath: null,
   wallSitStartedAt: null,
   historyDetailId: null,
   detailReturnTo: null,
@@ -622,6 +628,12 @@ export function isValidLogEntry(x: unknown): x is LogEntry {
     isOptionalOf(o['ellipticalPulse'], 'number') &&
     isOptionalOf(o['sessionNote'], 'string') &&
     isOptionalOf(o['liteDay'], 'boolean') &&
+    // v73: optional AND nullable — every row saved before Round 3 has neither.
+    (o['sessionPath'] === undefined ||
+      o['sessionPath'] === null ||
+      o['sessionPath'] === '38' ||
+      o['sessionPath'] === '48' ||
+      o['sessionPath'] === '60') &&
     isOptionalOf(o['armFeel'], 'string') &&
     isOptionalOf(o['moveFeel'], 'string') &&
     isOptionalOf(o['voicePlays'], 'number') &&

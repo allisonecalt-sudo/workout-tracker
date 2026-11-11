@@ -22,6 +22,7 @@ import { bindClick } from '../dom.js';
 import { escapeHtml } from '../format.js';
 import { formatClock, formatWeekdayDate, combineDateAndClock } from '../dates.js';
 import { renderActionBar } from '../action-bar.js';
+import { PATH_IDS, PATH_MOVE_COUNT, isPathId, pathLabel } from '../paths.js';
 import { painFromFeel } from '../pain-feel.js';
 import { steppedLineText, steppedLineFor, type SteppedMove } from '../move-feel.js';
 import { planForWeekKey, type Exercise, type Workout, type Phase } from '../program.js';
@@ -121,6 +122,25 @@ function preLogWeekLabel(): string {
     : `Week ${shown.key.week} · same moves as Week ${planInfo.repeatsWeek}`;
 }
 
+// v73 (Nov 11 2026): "Which path today?  38 · 48 · 60". Each chip says what it means
+// (the ride and how many moves), so no extra line is needed. Nothing is lit until she
+// taps; Start alone means 48. `w` is already cut to the path in force (getCurrentWorkout),
+// so the chip numbers come from the plan row's own `paths`, not from `w`.
+function renderPathPicker(w: Workout): string {
+  const spec = w.paths;
+  if (!spec) return '';
+  const chips = PATH_IDS.map((p) => {
+    const on = state.sessionPath === p;
+    const moves = Math.min(PATH_MOVE_COUNT[p], 5);
+    return `<button class="path-chip${on ? ' path-chip-on' : ''}" type="button" data-path="${p}" aria-pressed="${on ? 'true' : 'false'}"><span class="path-chip-main">${pathLabel(p)}</span><span class="path-chip-sub">ride ${spec.rideMin[p]} · ${moves} moves${p === '60' ? '+' : ''}</span></button>`;
+  }).join('');
+  return `
+    <div class="path-picker" id="path-picker" role="group" aria-label="Which path today?">
+      <span class="path-picker-label">Which path today?</span>
+      <div class="path-picker-row">${chips}</div>
+    </div>`;
+}
+
 export function renderPreLog(): string {
   const w = getCurrentWorkout();
   if (!w) return '';
@@ -158,21 +178,11 @@ export function renderPreLog(): string {
   // directly, so every move still gets asked, only the PREVIEW truncates.
   const steppedThisWeek = currentSteppedMoves();
   const steppedLine = steppedLineText(steppedThisWeek);
-  // Lite = one round less, never below 1 — the chip says how many rounds today.
-  const liteRounds = Math.max(1, w.rounds - 1);
-  const liteWord = liteRounds === 1 ? 'one round' : `${liteRounds} rounds`;
-  // A low body reading SUGGESTS Lite with a gentle outline; it never switches
-  // itself on (agency rule: ask or suggest, never tell).
-  const suggestLite = !state.liteDay && state.capacityBeforeTouched && state.capacityBefore <= 3;
-  // v54 fix r2 (Sep 27 2026), checker's should #2: D always has one step and
-  // one round already (getWorkoutD()) — "Lite — one round, still counts"
-  // read as an offer to CUT something D never had two of. No Lite row on D.
-  const liteChip =
-    w.id === 'D'
-      ? ''
-      : state.liteDay
-        ? `<button class="lite-chip lite-toggle-on" id="lite-toggle" type="button" aria-pressed="true">✓ Lite · ${liteRounds} round${liteRounds === 1 ? '' : 's'} today · tap to undo</button>`
-        : `<button class="lite-chip${suggestLite ? ' lite-suggest' : ''}" id="lite-toggle" type="button" aria-pressed="false">🪫 Hard day? Lite — ${liteWord}, still counts</button>`;
+  // v73 (Nov 11 2026): the Round 3 time-path picker replaces the old Lite chip
+  // (Lite = one round less; the paths do that job better, her words: "dont need
+  // ti"). Only a workout with `paths` has one — D and every R1/R2 week do not.
+  // No default selection: nothing is lit until she taps; Start alone means 48.
+  const pathPicker = w.paths ? renderPathPicker(w) : '';
   // v51 (Sep 25 2026): the pre-log Back & wrist reading — same "Fine · Back ·
   // Wrist" combined control as post-log (renderBackWristControl), its own ids
   // ("-pre" suffix) and its own state fields (backPainBefore/wristPainBefore)
@@ -215,17 +225,24 @@ export function renderPreLog(): string {
 
     ${renderWorkoutOverview(w)}
 
+    ${pathPicker}
+
     <div class="card body-card">
       ${renderBodyChips('cap-before', state.capacityBefore, state.capacityBeforeTouched, 'Your BODY right now, not your mood')}
       ${renderBodyChips('mood-before', state.moodBefore, state.moodBeforeTouched, 'Mood', '1 irritable · 10 happy / calm')}
       ${backWristBefore}
     </div>
 
-    ${liteChip}
-
     ${workoutNeedsWristLine(w) ? `<p class="safety-line">Wrist + back: pressure fine — back off if it is sharp, climbing, or still there tomorrow.</p>` : ''}
 
-    ${renderActionBar(`<button class="btn-large btn-primary" id="begin" type="button">Start</button>`)}
+    ${
+      /* v73: Skip sits beside Start in the pinned bar (zero page height, never pushed off
+         the fold): straight to the workout, every BEFORE reading left unset. */
+      renderActionBar(`<div class="step-nav">
+        <button class="btn-large btn-back" id="prelog-skip" type="button" aria-label="Skip the body and mood questions">Skip</button>
+        <button class="btn-large btn-primary" id="begin" type="button">Start</button>
+      </div>`)
+    }
   `;
 }
 
@@ -438,9 +455,14 @@ export function attachPreLogHandlers(): void {
     requestRender();
   });
 
-  // Lite-day toggle on pre-log (Allison Jul 12 2026): one round less, streak intact.
-  bindClick('lite-toggle', () => {
-    state.liteDay = !state.liteDay;
-    requestRender();
+  // v73: the time-path picker. A tap lights that path; a second tap on the lit one
+  // clears it (back to "not picked"). The workout list above is redrawn for it.
+  document.querySelectorAll<HTMLButtonElement>('[data-path]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const p = btn.dataset['path'];
+      if (!isPathId(p)) return;
+      state.sessionPath = state.sessionPath === p ? null : p;
+      requestRender();
+    });
   });
 }

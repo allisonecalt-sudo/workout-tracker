@@ -6,6 +6,7 @@ import {
   NEXT,
   openCue,
   mockDate,
+  setLiteDay,
   appSourceFiles,
   TESTS_DIR as __dirname,
 } from '../helpers';
@@ -104,14 +105,14 @@ test('Settings About: post-launch shows the completion model’s own Round/Week,
   ).toHaveCount(0);
 });
 
-test('multi-week: Settings About shows Program weeks count (20) — pre-launch, unchanged', async ({
+test('multi-week: Settings About shows Program weeks count (21) — pre-launch, unchanged', async ({
   page,
 }) => {
   await mockDate(page, '2026-09-22T10:00:00.000Z'); // Tue Sep 22 2026 — before the launch, Week 4
   await page.goto('/');
   await page.locator('#open-settings').click();
   await expect(page.locator('.settings-screen')).toBeVisible();
-  // About section has a "Program weeks: 20" row. The 20 is written in two
+  // About section has a "Program weeks: 21" row. The 21 is written in two
   // places: here, and as PROGRAM_WEEK_COUNT in tests/program.test.ts (which pins
   // PROGRAM.length to it) — change them together; if one drifts, the other fails.
   // (11 round-1 weeks + R2 W1 + R2 W2 + R2 W3 + R2 W4 + R2 W5 (v52.2, Sep 26 2026)
@@ -120,7 +121,7 @@ test('multi-week: Settings About shows Program weeks count (20) — pre-launch, 
   // + R2 W9 (v70, Nov 5 2026 — 60% of Week 5)).
   await expect(
     page.locator('.settings-about-row').filter({ hasText: 'Program weeks' })
-  ).toContainText('Program weeks: 20');
+  ).toContainText('Program weeks: 21');
 });
 
 test('multi-week: home week-banner reads Week 3 for May 16-22 range', async ({ page }) => {
@@ -412,15 +413,18 @@ test('in-workout walk: does NOT auto-start on the step — needs an explicit Sta
   ).not.toBeNull();
 });
 
-test('lite day: pre-log toggle drops one round and marks the session lite', async ({ page }) => {
+test('lite day: Lite set before Start drops one round and marks the session lite', async ({
+  page,
+}) => {
   // Allison Jul 12 2026 (from the Jul-9 deep-dive): a low-energy day needs a real
-  // mechanic, not advice — tap Lite on pre-log → one round less (C: 2→1), streak
-  // intact. The round indicator carries the "lite" tag.
+  // mechanic, not advice: Lite = one round less (C: 2→1), streak intact. The round
+  // indicator carries the "lite" tag. v73 (Nov 11 2026): the pre-log chip is gone (the
+  // Round 3 time paths replaced it); Lite is still set by "Finish here", so this sets it
+  // before Start through the automation hook, and the pre-log shows no Lite chip.
   await page.locator('button[data-workout="C"]').click();
-  await expect(page.locator('#lite-toggle')).toBeVisible();
-  await page.locator('#lite-toggle').click();
-  // v48 · P5: the chip says what Lite is today, and how to undo it.
-  await expect(page.locator('#lite-toggle')).toHaveText('✓ Lite · 1 round today · tap to undo');
+  await expect(page.locator('#begin')).toBeVisible();
+  await expect(page.locator('#lite-toggle')).toHaveCount(0);
+  await setLiteDay(page);
   await page.locator('button:has-text("Start")').click();
   // C's warmup is the walk step — advance past it into the main block.
   await page.locator(NEXT).click();

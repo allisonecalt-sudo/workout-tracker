@@ -210,6 +210,7 @@ function startWorkout(id: AnyWorkoutId): void {
   }
   state.screen = 'pre-log';
   state.liteDay = false; // fresh pick, full program until she says otherwise
+  state.sessionPath = null; // v73: and no time path picked yet (Start alone = 48)
   // T1 (Sep 27 2026), §3.1: a fresh pick asks fresh — never carry yesterday's
   // confirmed start time into a new session.
   state.herStartAt = null;
@@ -324,6 +325,7 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
     __wtPatchMatchedARow?: typeof patchMatchedARow;
     __wtWeekAttributionSummary?: typeof weekAttributionSummary;
     __wtStartWorkout?: typeof startWorkout;
+    __wtSetLiteDay?: (on: boolean) => void;
     __wtInjectMarkerProgramWeek?: typeof injectMarkerProgramWeek;
     __wtPlanKeyForLog?: typeof planKeyForLog;
     __wtCurrentHowToWeekKey?: typeof currentHowToWeekKey;
@@ -363,6 +365,13 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
   // time) needs a way in that isn't a Home click. startWorkout() itself is
   // the exact function a real tap already calls; reached here the same way.
   w.__wtStartWorkout = startWorkout;
+  // v73 (Nov 11 2026): the Lite chip left the pre-log page, but Lite itself still
+  // exists ("Finish here" / "Log what I did" set it; old sessions carry it). This is
+  // how a test sets it before Start, the way the chip used to.
+  w.__wtSetLiteDay = (on: boolean): void => {
+    state.liteDay = on;
+    render();
+  };
   w.__wtInjectMarkerProgramWeek = injectMarkerProgramWeek;
   // WK4 (Sep 27 2026): the saved-session plan lookup's own resolved KEY, for a
   // test to assert directly — planForLog's plan CONTENT can't tell two weeks

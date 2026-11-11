@@ -430,7 +430,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Supported split squat',
     voiceSrc: './assets/voice/supported-split-squat.mp3',
     voiceScript:
-      'Supported split squat. It takes the place of your squats in workout A. Stand a long step in front of the couch or a chair, and rest your fingertips on it, for balance only. Light touch. No gripping, and no weight through your hands. Front foot flat, back heel up. Keep your chest tall and lower straight down, so the back knee moves toward the floor and the front thigh comes near parallel. Think elevator, not escalator. Then push through the front heel to stand. Six to eight each side, one set each round. On the last round, stop about two reps short. If the front knee pinches, or you wobble a lot, make the range smaller and keep your fingertips down. That is the right call, not a failure.',
+      'Supported split squat. Stand a long step in front of a chair or the couch, and rest your fingertips on it, for balance only. Light touch. No gripping, and no weight through your hands. Front foot flat, back heel up. Keep your chest tall and lower straight down, so the back knee moves toward the floor and the front thigh comes near parallel. Think elevator, not escalator. Then push through the front heel to stand. Keep the range shallow, and do the reps on your screen. If the front knee pinches, or you wobble a lot, make the range smaller and keep your fingertips down. That is the right call, not a failure.',
     muscles: ['quads', 'glutes', 'core'],
     muscleLabel: 'Quads + glutes, one leg at a time',
     steps: [
@@ -438,7 +438,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       'One foot forward and flat; the other foot back with the heel up. Chest tall.',
       'Lower straight down — back knee toward the floor, front thigh near parallel. Elevator, not escalator.',
       'Push through the front heel to stand.',
-      '6-8 each side, one set each round. Last round: stop about 2 short.',
+      'Keep it shallow. Do the reps on your screen.',
     ],
     dos: [
       'Keep the fingertips down the whole set — a light touch is the support.',
@@ -450,7 +450,6 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       "Don't grip the couch or lean weight into your hands — balance only.",
       "Don't let the front heel lift; drive through it.",
       "Don't push past today's knee pain ceiling.",
-      "Don't swap it into C — C keeps its 10 squats on purpose.",
     ],
     mistakes: [
       {
@@ -522,7 +521,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     // Regenerated with edge-tts (same voice, en-US-AvaMultilingualNeural) —
     // see VOICE NOTES above.
     voiceScript:
-      "Bodyweight hip hinge. Stand tall, feet hip-width, with soft, unlocked knees and your hands resting on the front of your thighs. Now hinge at the hips — push your butt back as your hands slide down your thighs toward your knees. Keep your spine flat and neutral the whole way, and you'll feel it in your hamstrings and glutes. Then stand back up by driving your hips forward and squeezing your glutes. The main thing: push your hips back, don't squat down. And don't round your low back — keep it flat the whole way. Bodyweight, or holding one or two kilos, whichever you pick. A little pain is OK, keep moving — but sharp pain, climbing pain, or pain still there the next morning means back off.",
+      "Bodyweight hip hinge. Stand tall, feet hip-width, with soft, unlocked knees and your hands resting on the front of your thighs. Now hinge at the hips — push your butt back as your hands slide down your thighs toward your knees. Keep your spine flat and neutral the whole way, and you'll feel it in your hamstrings and glutes. Then stand back up by driving your hips forward and squeezing your glutes. The main thing: push your hips back, don't squat down. And don't round your low back — keep it flat the whole way. Today you hold two kilos, in your hands. A little pain is OK, keep moving — but sharp pain, climbing pain, or pain still there the next morning means back off.",
     muscles: ['hamstrings', 'glutes', 'hips'],
     muscleLabel: 'Hamstrings + glutes (hip hinge)',
     steps: [
@@ -784,14 +783,14 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'Full dead bug',
     voiceSrc: './assets/voice/full-dead-bug.mp3',
     voiceScript:
-      "Full dead bug. This is the level up from the modified version you've been doing. Same start: on your back, hips and knees both at ninety degrees in the air, shins parallel to the ceiling. Now reach both arms straight up toward the ceiling. Extend one leg out low, and at the same time let the opposite arm reach back overhead toward the floor. Then bring them both home and switch sides. Eight each side. The whole exercise is your lower back — it stays pressed into the mat the entire time. If it lifts off, bend the extending knee more. A shorter lever is the fix; pushing through is not. Breathe out as the arm and leg travel away from you, and keep your ribs down so they don't flare as the arm goes overhead. Your arms move through the air, so there's zero weight on your wrists.",
+      "Full dead bug. This is the level up from the modified version you've been doing. Same start: on your back, hips and knees both at ninety degrees in the air, shins parallel to the ceiling. Now reach both arms straight up toward the ceiling. Extend one leg out low, and at the same time let the opposite arm reach back overhead toward the floor. Then bring them both home and switch sides. Do the reps on your screen. The whole exercise is your lower back — it stays pressed into the mat the entire time. If it lifts off, bend the extending knee more. A shorter lever is the fix; pushing through is not. Breathe out as the arm and leg travel away from you, and keep your ribs down so they don't flare as the arm goes overhead. Your arms move through the air, so there's zero weight on your wrists.",
     muscles: ['core'],
     muscleLabel: 'Abs / deep core (anti-arch, now with the arms)',
     steps: [
       'Lie on your back, hips and knees both at 90° in the air, shins parallel to the ceiling.',
       'Reach both arms straight up toward the ceiling.',
       'Extend ONE leg out low while the OPPOSITE arm reaches back overhead toward the floor.',
-      'Bring both home to the start, then switch sides. 8 each side.',
+      'Bring both home to the start, then switch sides. Do the reps on your screen.',
       'Low back stays pressed to the mat the whole time — exhale as the limbs travel away.',
     ],
     dos: [
@@ -994,7 +993,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
     exercise: 'IWYT raises',
     voiceSrc: './assets/voice/iwyt-raises.mp3',
     voiceScript:
-      "IWYT raises. Lie face down on the mat with your forehead on a folded towel, so your neck stays long and relaxed. Keep your thumbs pointing up the whole time — that keeps your wrists neutral, with no weight through the palms. For each letter, make the shape, lift your arms just a few centimeters off the floor by squeezing your upper back, hold one breath, and lower. Rest your hands on the floor between reps — that's the rest position. Do about eight of each letter: I, W, Y, and T. Lift from the upper back, not the neck, and keep it gentle — stop if your neck complains.",
+      "IWYT raises. Lie face down on the mat with your forehead on a folded towel, so your neck stays long and relaxed. Keep your thumbs pointing up the whole time — that keeps your wrists neutral, with no weight through the palms. For each letter, make the shape, lift your arms just a few centimeters off the floor by squeezing your upper back, hold one breath, and lower. Rest your hands on the floor between reps — that's the rest position. Do the reps on your screen for each letter: I, W, Y, and T. Lift from the upper back, not the neck, and keep it gentle — stop if your neck complains.",
     muscles: ['back', 'shoulders'],
     muscleLabel: 'Upper back + rear shoulders',
     steps: [
@@ -1003,7 +1002,7 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       "Make each letter's shape: I — arms straight down along your sides; W — elbows bent toward your ribs; Y — narrow overhead V; T — arms straight out at shoulder height.",
       'Lift the arms a few centimeters off the floor by squeezing your upper back, hold one breath, then lower.',
       'Rest your hands ON the floor between reps, and finish all reps of one letter before moving to the next.',
-      'Do about 8 of each letter (I, W, Y, T), 2 rounds — keep it gentle for the neck.',
+      'Do the reps on your screen for each letter (I, W, Y, T) — keep it gentle for the neck.',
     ],
     dos: [
       'Thumbs up throughout — keeps the wrist neutral with no palm load.',
@@ -2049,6 +2048,438 @@ export const EXERCISE_DETAIL: Record<string, ExerciseDetail> = {
       {
         mistake: 'Pushing on despite pain or pins-and-needles.',
         fix: 'Ease off the stretch right away.',
+      },
+    ],
+  },
+  // ===== v73 (Nov 11 2026) — Round 3's new moves. Same shape as above; the script
+  // is the card's how-to in short spoken sentences (edge-tts, en-US-AvaMultilingualNeural).
+  // The pain rule is hers (workout-rules §0): a little pain is OK; above your
+  // usual -> hold at this level; sharp, climbing, or still there tomorrow ->
+  // step back a rung. Video ids + oEmbed checks live in exercise-visuals.ts. =====
+  '1-minute primer': {
+    exercise: '1-minute primer',
+    voiceSrc: './assets/voice/1-minute-primer.mp3',
+    voiceScript:
+      'One-minute primer. This comes right after the ride, and it takes about a minute. Take five slow belly breaths. On each breath out, tilt your pelvis gently so your low back flattens, hold it two to three seconds, then let go. After the fifth, do one light practice set of your first move today. Easy, about half effort. That is it. It wakes up your back and hips without another long warm-up.',
+    muscles: ['core', 'hips'],
+    muscleLabel: 'Deep core + hips, gently woken up',
+    steps: [
+      'Right after the ride, lie on your back with knees bent, or stand tall.',
+      '5 slow belly breaths. On each breath out, tilt the pelvis so the low back flattens; hold it 2-3 seconds, then release.',
+      'Then one light practice set of the first move of the day, at about half effort.',
+    ],
+    dos: [
+      'Keep the tilt small and slow — an inch or two at the hips.',
+      'Breathe out on the tilt, in on the release.',
+      'Keep the practice set easy, about half effort.',
+    ],
+    donts: [
+      "Don't turn it into a workout — it is about a minute.",
+      "Don't over-arch on the release; go back to neutral.",
+      "Don't hold your breath.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Chest rising instead of the belly on the breath in.',
+        fix: 'Slow down and ease off the effort of the breath in.',
+      },
+      {
+        mistake: 'Making the practice set heavy or fast.',
+        fix: 'Half effort only — the real sets come next.',
+      },
+    ],
+  },
+  'Chair squat': {
+    exercise: 'Chair squat',
+    voiceSrc: './assets/voice/chair-squat.mp3',
+    voiceScript:
+      'Chair squat. Stand in front of a sturdy chair, feet about hip-width apart, toes turned out a little. Sit back toward the chair, like you are reaching for it with your hips, lightly touch it, and stand back up. Keep your knees over your toes. They can go toward your toes, but not past them. Chest tall, eyes forward. Breathe out as you stand. When it feels easy, hold two kilos at your chest. Do the reps on your screen. Effort six to seven out of ten: the last two or three reps feel hard, never to failure. A little pain is OK. If it is above your usual, hold at this level. If it is sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['quads', 'glutes', 'core'],
+    muscleLabel: 'Quads + glutes',
+    steps: [
+      'Stand in front of a sturdy chair, feet hip-width, toes turned out a little.',
+      'Sit back toward the chair, hips first, and lightly touch it.',
+      'Stand back up, breathing out. Knees stay over the toes, not past them.',
+      'When it feels easy, hold 2 kg at your chest. Do the reps on your screen.',
+    ],
+    dos: [
+      'Sit back like reaching for the chair with your hips.',
+      'Keep your knees over your toes, tracking out toward the pinky toe.',
+      'Keep your chest tall and your eyes forward.',
+      'Stop 2-3 reps short of failure — effort 6-7 out of 10.',
+    ],
+    donts: [
+      "Don't let the knees travel past the toes.",
+      "Don't flop onto the chair — touch it and stand.",
+      "Don't let the knees cave inward.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow — step back a rung.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Knees drifting past the toes.',
+        fix: 'Sit back further with the hips and keep the shins more upright.',
+      },
+      {
+        mistake: 'Dropping onto the chair.',
+        fix: 'Lower slowly and just touch the seat before standing.',
+      },
+      {
+        mistake: 'Chest dropping toward the knees.',
+        fix: 'Eyes forward, chest tall, and hold the weight close to your chest.',
+      },
+    ],
+  },
+  'Band row': {
+    exercise: 'Band row',
+    voiceSrc: './assets/voice/band-row.mp3',
+    voiceScript:
+      'Band row. Anchor the band at chest height, on a closed door, or sit with your legs out and loop the band round your feet. Hold the ends with your thumbs up and your arms long. Squeeze your shoulder blades back and together as you pull your elbows past your sides. Then let the band back slowly. Keep your wrists straight, your ribs down, and do not lean back or shrug. Do the reps on your screen. Effort six to seven out of ten, never to failure. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['back', 'shoulders', 'forearms'],
+    muscleLabel: 'Upper back + rear shoulders',
+    steps: [
+      'Anchor the band at chest height, or sit with legs out and the band looped round your feet.',
+      'Hold the ends with thumbs UP, arms long, wrists straight.',
+      'Squeeze the shoulder blades back and together and pull the elbows past your sides.',
+      'Return slowly. Do the reps on your screen.',
+    ],
+    dos: [
+      'Keep your thumbs up and your wrists straight.',
+      'Start the pull from the shoulder blades, then let the arms follow.',
+      'Keep your ribs down and your neck long.',
+      'Return slowly — the way back counts too.',
+    ],
+    donts: [
+      "Don't lean back to finish the pull.",
+      "Don't shrug the shoulders up to your ears.",
+      "Don't bend the wrists — keep them in line with the forearms.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow — step back a rung.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Shoulders creeping up toward the ears.',
+        fix: 'Set the shoulders down and back first, then pull.',
+      },
+      {
+        mistake: 'Leaning back to get the band in.',
+        fix: 'Sit or stand tall; use a lighter band or move closer to the anchor.',
+      },
+      {
+        mistake: 'Wrists bending as you grip.',
+        fix: 'Thumbs up, grip light, wrist in line with the forearm.',
+      },
+    ],
+  },
+  'Incline push-up on fists': {
+    exercise: 'Incline push-up on fists',
+    voiceSrc: './assets/voice/incline-push-up-on-fists.mp3',
+    voiceScript:
+      'Incline push-up on fists. Make two fists and rest them on a sturdy counter, a little wider than your shoulders. Fists keep your wrists straight. Walk your feet back until your body is one long line from head to heels. Lower your chest toward the counter, elbows about forty-five degrees from your body, then push back up. Squeeze your glutes and brace your belly so your low back does not sag. The higher the counter, the easier it is. Do the reps on your screen. Effort six to seven out of ten, never to failure. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['chest', 'shoulders', 'core'],
+    muscleLabel: 'Chest, front of shoulders, core',
+    steps: [
+      'Make two fists and rest them on a sturdy counter, a little wider than the shoulders. Wrists straight.',
+      'Walk the feet back until the body is one line from head to heels.',
+      'Lower the chest toward the counter, elbows about 45° from the body.',
+      'Push back up. Squeeze the glutes, brace the belly. Do the reps on your screen.',
+    ],
+    dos: [
+      'Keep the wrists straight — that is what the fists are for.',
+      'Keep the body in one line from head to heels.',
+      'Use a higher counter if it feels too hard.',
+      'Stop 2-3 reps short of failure — effort 6-7 out of 10.',
+    ],
+    donts: [
+      "Don't let the low back sag or the hips pike up.",
+      "Don't flare the elbows straight out to the sides.",
+      "Don't let the head drop forward — keep the neck long.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow — step back a rung.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Hips sagging toward the counter.',
+        fix: 'Squeeze the glutes and brace the belly, or use a higher counter.',
+      },
+      {
+        mistake: 'Wrists bending on the fists.',
+        fix: 'Keep the fist stacked under the forearm; raise the counter height.',
+      },
+      {
+        mistake: 'Elbows flaring wide.',
+        fix: 'Keep them about 45° from the body.',
+      },
+    ],
+  },
+  'Band pull-apart': {
+    exercise: 'Band pull-apart',
+    voiceSrc: './assets/voice/band-pull-apart.mp3',
+    voiceScript:
+      'Band pull-apart. Stand tall with the band in both hands, arms straight out in front at chest height, hands about shoulder-width apart. Pull the band apart by squeezing your shoulder blades back and together, until the band touches your chest or your arms are out to the sides. Then come back slowly. Keep your ribs down, your shoulders away from your ears, and your wrists straight. Do the reps on your screen. Effort six to seven out of ten, never to failure. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['back', 'shoulders'],
+    muscleLabel: 'Upper back + rear shoulders',
+    steps: [
+      'Stand tall, band in both hands, arms straight out in front at chest height.',
+      'Pull the band apart by squeezing the shoulder blades back and together.',
+      'Go until the band touches the chest or the arms are out to the sides.',
+      'Return slowly. Ribs down, wrists straight. Do the reps on your screen.',
+    ],
+    dos: [
+      'Start the pull from the shoulder blades.',
+      'Keep your arms level and your wrists straight.',
+      'Keep your ribs down and your neck long.',
+      'Return slowly.',
+    ],
+    donts: [
+      "Don't shrug your shoulders up.",
+      "Don't arch the low back to pull further.",
+      "Don't let the band snap back — control it on the way in.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow — step back a rung.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Shoulders shrugging up.',
+        fix: 'Set the shoulders down first; use a lighter band.',
+      },
+      {
+        mistake: 'Arching the back to finish the pull.',
+        fix: 'Ribs down, belly braced, shorter range.',
+      },
+      {
+        mistake: 'Letting the band whip back.',
+        fix: 'Take 2-3 seconds on the way back in.',
+      },
+    ],
+  },
+  'One-arm dumbbell row': {
+    exercise: 'One-arm dumbbell row',
+    voiceSrc: './assets/voice/one-arm-dumbbell-row.mp3',
+    voiceScript:
+      'One-arm dumbbell row. Stand beside a sturdy chair, one hand flat on it, with a two-kilo weight in the other hand. Hinge forward at the hips with a flat back, soft knees and a long neck. Let the weight hang under your shoulder. Row it toward your hip, with your elbow close to your side and your shoulder blade squeezing back. Lower it slowly. Keep your wrist straight. Do all the reps on one side, then switch. Do the reps on your screen. Effort six to seven out of ten, never to failure. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['back', 'shoulders', 'forearms'],
+    muscleLabel: 'Upper back + lats, one side at a time',
+    steps: [
+      'Stand beside a sturdy chair, one hand flat on it, a 2 kg weight in the other hand.',
+      'Hinge forward at the hips: flat back, soft knees, long neck. Let the weight hang under the shoulder.',
+      'Row it toward your hip, elbow close to your side, shoulder blade squeezing back.',
+      'Lower slowly. All reps on one side, then switch. Do the reps on your screen.',
+    ],
+    dos: [
+      'Keep your back flat and your hips square to the floor.',
+      'Keep the elbow close to your side.',
+      'Keep your wrist straight, grip light.',
+      'Lower the weight slowly.',
+    ],
+    donts: [
+      "Don't round the low back.",
+      "Don't twist the chest open to lift the weight.",
+      "Don't lift your head to look forward — keep the neck long.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow — step back a rung.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Twisting the torso to lift the weight.',
+        fix: 'Keep the shoulders square; lift with the shoulder blade.',
+      },
+      {
+        mistake: 'Rounding the back as you tire.',
+        fix: 'Stand a little more upright, or end the set a rep earlier.',
+      },
+      {
+        mistake: 'Swinging the weight up.',
+        fix: 'Slow down: 1 second up, 2 seconds down.',
+      },
+    ],
+  },
+  'Bird dog': {
+    exercise: 'Bird dog',
+    voiceSrc: './assets/voice/bird-dog.mp3',
+    voiceScript:
+      'Bird dog. This is the full version: the opposite arm and leg reach out together. Get on your hands and knees, hands under your shoulders, knees under your hips, back long and flat. Hands flat is fine. If flat palms bother your wrist, make fists and rest on your knuckles instead. Reach one arm forward and the opposite leg back, until both are level with your body. Hold three seconds. Lower with control and switch sides. Do the reps on your screen. Keep your hips square, like balancing a cup on your lower back, your neck long, and your eyes on the floor. Do not let your low back sag. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back to the legs-only version.',
+    muscles: ['core', 'glutes', 'back', 'forearms'],
+    muscleLabel: 'Deep core + glutes + back (opposite arm and leg)',
+    steps: [
+      'On hands and knees: hands under the shoulders (flat, or on fists), knees under the hips, back long and flat.',
+      'Reach ONE arm forward and the OPPOSITE leg back until both are level with your body.',
+      'Hold 3 seconds. Lower with control and switch sides.',
+      'Hips square, neck long, eyes on the floor. Do the reps on your screen.',
+    ],
+    dos: [
+      'Move the opposite arm and leg together, slowly.',
+      'Keep the hips square — a hip bone should not roll open.',
+      'Use fists if flat palms bother the wrist.',
+      'Hold 3 seconds and lower with control.',
+    ],
+    donts: [
+      "Don't let the low back sag or the leg swing up past level.",
+      "Don't crane your neck up to look forward.",
+      "Don't rush — slow beats high.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow — step back to legs only.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Hips rolling open as the leg goes back.',
+        fix: 'Lift the leg less and keep both hip bones pointing at the floor.',
+      },
+      {
+        mistake: 'Low back sagging or arching.',
+        fix: 'Brace the belly, and reach only as high as your body line.',
+      },
+      {
+        mistake: 'Wrist discomfort on the floor.',
+        fix: 'Switch to fists, or put the hands up on a couch or low step.',
+      },
+    ],
+  },
+  'Floor press': {
+    exercise: 'Floor press',
+    voiceSrc: './assets/voice/floor-press.mp3',
+    voiceScript:
+      'Floor press. Lie on your back on the floor, knees bent and feet flat, with a two-kilo weight in each hand. Elbows bent and resting on the floor, thumbs facing in. Press the weights straight up over your chest, then lower slowly until your elbows lightly touch the floor. Keep your wrists straight, stacked over your forearms, and do not let your low back arch. Do the reps on your screen. Effort six to seven out of ten, never to failure. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['chest', 'shoulders', 'forearms'],
+    muscleLabel: 'Chest, front of shoulders, back of the arm',
+    steps: [
+      'Lie on your back, knees bent, feet flat, a 2 kg weight in each hand.',
+      'Elbows bent and resting on the floor, thumbs facing in.',
+      'Press the weights straight up over the chest.',
+      'Lower slowly until the elbows lightly touch the floor. Do the reps on your screen.',
+    ],
+    dos: [
+      'Keep your wrists straight, stacked over the forearms.',
+      'Keep thumbs facing in.',
+      'Touch the elbows to the floor lightly, then press.',
+      'Lower the weights slowly.',
+    ],
+    donts: [
+      "Don't let the low back arch off the floor.",
+      "Don't bend the wrists back under the weight.",
+      "Don't drop the elbows onto the floor.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow — step back a rung.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Wrists folding back under the weight.',
+        fix: 'Grip lightly and keep the knuckles pointing up toward the ceiling.',
+      },
+      {
+        mistake: 'Back arching to push up.',
+        fix: 'Keep your feet flat, belly braced, and use a lighter weight.',
+      },
+      {
+        mistake: 'Elbows flaring straight out.',
+        fix: 'Keep them about 45° from the body, thumbs facing in.',
+      },
+    ],
+  },
+  'Side plank on knees': {
+    exercise: 'Side plank on knees',
+    voiceSrc: './assets/voice/side-plank-on-knees.mp3',
+    voiceScript:
+      'Side plank on knees. Lie on your side with your knees bent and your forearm on the floor, elbow right under your shoulder. Lift your hips until your body is one straight line from knees to head. Hold it, breathing normally, for fifteen to twenty-five seconds. Lower and switch sides. Do not let your hips sag, and do not roll forward or back. Forearm only, with no weight through your hand. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['core', 'glutes', 'shoulders'],
+    muscleLabel: 'Side core + hip (anti-sag)',
+    steps: [
+      'Lie on your side, knees bent, forearm on the floor with the elbow right under the shoulder.',
+      'Lift the hips until the body is one line from knees to head.',
+      'Hold 15-25 seconds, breathing normally. The timer runs 20.',
+      'Lower, switch sides.',
+    ],
+    dos: [
+      'Keep the elbow right under the shoulder.',
+      'Keep the body in one line — hips, shoulders and knees stacked.',
+      'Breathe normally through the hold.',
+      'Stay on the forearm, not the hand.',
+    ],
+    donts: [
+      "Don't let the hips sag toward the floor.",
+      "Don't roll forward or backward.",
+      "Don't hold your breath.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow — step back a rung.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Hips sagging toward the floor.',
+        fix: 'Squeeze the glutes and lift the hips; shorten the hold.',
+      },
+      {
+        mistake: 'Rolling the chest toward the floor.',
+        fix: 'Stack the shoulders and open the chest to face forward.',
+      },
+      {
+        mistake: 'Shoulder complaining.',
+        fix: 'Check the elbow is right under the shoulder, and shorten the hold.',
+      },
+    ],
+  },
+  'Hammer curl': {
+    exercise: 'Hammer curl',
+    voiceSrc: './assets/voice/hammer-curl.mp3',
+    voiceScript:
+      'Hammer curl. This one is optional, for the sixty-minute path, when there is time. Stand tall with a two-kilo weight in each hand, thumbs up, palms facing each other. Keep your elbows at your sides and curl both weights up toward your shoulders. Keep your wrists straight. Then lower slowly. No swinging, and no leaning back. Do the reps on your screen. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['forearms', 'shoulders'],
+    muscleLabel: 'Biceps + forearm (thumbs-up grip)',
+    steps: [
+      'Stand tall, a 2 kg weight in each hand, thumbs up, palms facing each other.',
+      'Elbows at your sides: curl both weights up toward the shoulders.',
+      'Keep the wrists straight.',
+      'Lower slowly. Do the reps on your screen.',
+    ],
+    dos: [
+      'Keep your elbows pinned at your sides.',
+      'Keep your thumbs up and your wrists straight.',
+      'Lower the weights slowly.',
+      'Pick 1 kg or 2 kg with the chips, by how it feels.',
+    ],
+    donts: [
+      "Don't swing the weights up with your back.",
+      "Don't let the wrists bend back.",
+      "Don't let the elbows drift forward.",
+      "Don't push through pain that is sharp, climbs within a set, or is still there tomorrow — step back a rung.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Leaning back to get the weight up.',
+        fix: 'Stand tall against a wall if needed, and use the lighter weight.',
+      },
+      {
+        mistake: 'Wrists bending back.',
+        fix: 'Keep thumbs up and the wrist in line with the forearm.',
+      },
+      {
+        mistake: 'Elbows drifting forward.',
+        fix: 'Pin them to your sides.',
+      },
+    ],
+  },
+  'Chin tucks': {
+    exercise: 'Chin tucks',
+    voiceSrc: './assets/voice/chin-tucks.mp3',
+    voiceScript:
+      'Chin tucks. Lie on your back with a small towel under your head, or sit tall. Look straight ahead. Glide your chin straight back, like making a gentle double chin, without tilting your head up or down. Hold five to ten seconds, then relax. Do eight to ten slow reps. You should feel a mild stretch at the back of your neck, never a strain. A little pain is OK. Above your usual, hold. Sharp, climbing, or still there tomorrow, step back.',
+    muscles: ['neck'],
+    muscleLabel: 'Deep neck flexors (posture)',
+    steps: [
+      'Lie on your back with a small towel under the head, or sit tall. Look straight ahead.',
+      'Glide the chin straight back, like a gentle double chin. Do not tilt the head.',
+      'Hold 5-10 seconds, then relax.',
+      '8-10 slow reps.',
+    ],
+    dos: [
+      'Keep your eyes level and glide the chin straight back.',
+      'Keep it gentle — a mild stretch at the back of the neck.',
+      'Relax fully between reps.',
+    ],
+    donts: [
+      "Don't nod the head down or tip it up.",
+      "Don't strain or force the chin back.",
+      "Don't hold your breath.",
+    ],
+    mistakes: [
+      {
+        mistake: 'Nodding the head down instead of gliding back.',
+        fix: 'Keep your eyes level; the chin travels straight back, like on a rail.',
+      },
+      {
+        mistake: 'Pushing hard into the stretch.',
+        fix: 'About half effort — mild stretch only.',
       },
     ],
   },

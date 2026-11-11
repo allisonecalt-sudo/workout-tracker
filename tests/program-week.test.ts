@@ -402,20 +402,17 @@ test.describe('program-week — v62.1: round starts are Jerusalem local midnight
    *  later does not break these) for the duration of one body, then take it off again.
    *  The body gets that round's number. */
   function withNextRound<T>(start: string, body: (n: number) => T): T {
+    // v73 (Nov 11 2026): the real Round 3 starts Nov 15, AFTER the October DST-edge dates some
+    // tests below are pinned to. Those tests set the real rounds that start on/after their date
+    // aside for the length of the body (and put them back), so the pinned date can stay.
+    const saved = ROUNDS.splice(0, ROUNDS.length);
+    ROUNDS.push(...saved.filter((r) => r.start < start));
     const num = nextRoundNum();
-    const lastStart = ROUNDS[ROUNDS.length - 1]!.start;
-    if (start <= lastStart) {
-      // These tests are pinned to a calendar date (a DST edge), so the date cannot follow
-      // the round number. Fail with the fix instead of a confusing round-order error.
-      throw new Error(
-        `a real round now starts ${lastStart}, on/after this test's date ${start}: move the test's date past it`
-      );
-    }
     ROUNDS.push({ num, start });
     try {
       return body(num);
     } finally {
-      ROUNDS.pop();
+      ROUNDS.splice(0, ROUNDS.length, ...saved);
     }
   }
 

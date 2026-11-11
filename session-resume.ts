@@ -33,6 +33,7 @@ import {
 import { stopTimer } from './timer.js';
 import { stopVoiceNote } from './audio.js';
 import { ELLIPTICAL_NAME, getWorkoutById, getWorkoutD } from './workout-now.js';
+import { isPathId, workoutForPath } from './paths.js';
 
 export type ResumeHooks = {
   beginPostLogClockTick: () => void;
@@ -175,7 +176,13 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       return null;
     }
     // v54 (Sep 27 2026): D isn't in PROGRAM — getWorkoutById can't resolve it.
-    const w = snap.selectedWorkout === 'D' ? getWorkoutD() : getWorkoutById(snap.selectedWorkout);
+    // v73: judged against the workout as her saved time path cut it (the 60
+    // path has a 6th main move the plan row alone does not list).
+    const planW =
+      snap.selectedWorkout === 'D' ? getWorkoutD() : getWorkoutById(snap.selectedWorkout);
+    const w = planW
+      ? workoutForPath(planW, isPathId(snap.sessionPath) ? snap.sessionPath : null)
+      : planW;
     if (!w) {
       clearActiveSession();
       return null;
@@ -254,6 +261,7 @@ function readActiveSnapshot(): ActiveSessionSnapshot | null {
       pausedAt: typeof snap.pausedAt === 'number' ? snap.pausedAt : null,
       pausedMs: typeof snap.pausedMs === 'number' && snap.pausedMs >= 0 ? snap.pausedMs : 0,
       liteDay: snap.liteDay === true, // default false on old snapshots
+      sessionPath: isPathId(snap.sessionPath) ? snap.sessionPath : null, // v73
       // v48: pre-v48 snapshots have none of these → the plain step, no marker.
       roundBreak: snap.roundBreak === true && phase === 'main',
       finishHereLitePrev:
@@ -364,6 +372,7 @@ export function applyActiveSnapshot(snap: ActiveSessionSnapshot): void {
   state.voicePlays = snap.voicePlays;
   state.startedAt = snap.startedAt ?? new Date().toISOString();
   state.liteDay = snap.liteDay;
+  state.sessionPath = snap.sessionPath;
   state.roundBreak = snap.roundBreak;
   state.finishHereLitePrev = snap.finishHereLitePrev;
   state.stoppedEarlyAt = snap.stoppedEarlyAt;
@@ -475,6 +484,7 @@ export function resetState(): void {
   state.pausedAt = null;
   state.pausedMs = 0;
   state.liteDay = false;
+  state.sessionPath = null; // v73: the next session starts with no pick
   state.wallSitStartedAt = null;
   state.videoExpandedFor = null;
   state.howToOpenFor = null;
@@ -502,6 +512,7 @@ export function resetState(): void {
   state.hurtSteps = {}; // v63 item 3
   state.rideNumbersOpen = false; // v51
   ui.stepListOpen = false; // v50 · jump list: a closed session closes the sheet too
+  ui.postTimeSkipped = false; // v73: the next session shows its time card
   stopVoiceNote();
   clearApartmentCardio(); // the cardio lane is a per-session choice
   clearHoldStart(); // item 5: a hold's start belongs to one session

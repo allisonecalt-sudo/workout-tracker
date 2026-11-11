@@ -17,6 +17,7 @@
 // on the post-log page as before; the shared delegates are narrowed by selector.
 
 import { state } from '../state.js';
+import { ui } from '../ui.js';
 import { loadLogs } from '../state.js';
 import { requestRender } from '../bus.js';
 import { bindClick } from '../dom.js';
@@ -305,7 +306,13 @@ export function renderPostLog(): string {
     ${skippedLine}
     <p class="subtitle">Quick log — or just Save.</p>
 
-    <div class="card timing-card">
+    ${
+      /* v73 (Nov 11 2026), her 14:31 ask: the time page can be skipped. Skip saves the
+         session with her start / finish unconfirmed (as when untouched) and no break
+         answer; the rest of this page is still offered. */
+      ui.postTimeSkipped
+        ? `<p class="timing-skipped" id="time-skipped">Times skipped. <button class="back-link" id="time-unskip" type="button">Add them</button></p>`
+        : `<div class="card timing-card">
       ${renderTimeConfirmBlock({
         kind: 'end',
         label: 'Finishing',
@@ -316,7 +323,9 @@ export function renderPostLog(): string {
       ${renderBreakChips(state.breakMinutes)}
       ${finishBeforeStartWarning()}
       ${renderTimeResult()}
-    </div>
+      <button class="btn-quiet timing-skip" id="time-skip" type="button">Skip the times</button>
+    </div>`
+    }
 
     <div class="card postlog-card">
       ${renderBodyChips('cap-after', state.capacityAfter, state.capacityAfterTouched, 'Your BODY now, not your mood')}
@@ -417,6 +426,22 @@ export function attachPostLogHandlers(): void {
     requestRender();
   };
   bindClick('time-end-ok', confirmEndNow);
+  // v73: Skip the times — nothing confirmed, no break answer, the clock tick off.
+  bindClick('time-skip', () => {
+    state.herStartConfirmed = false;
+    state.herEndConfirmed = false;
+    state.herStartEditingOpen = false;
+    state.herEndEditingOpen = false;
+    state.breakMinutes = null;
+    ui.postTimeSkipped = true;
+    endPostLogClockTick();
+    requestRender();
+  });
+  bindClick('time-unskip', () => {
+    ui.postTimeSkipped = false;
+    beginPostLogClockTick();
+    requestRender();
+  });
   bindClick('time-end-fix', () => {
     state.herEndEditingOpen = true;
     endPostLogClockTick();

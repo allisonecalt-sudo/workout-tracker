@@ -49,6 +49,7 @@ import {
   type ActiveSessionSnapshot,
 } from './state.js';
 import { ui } from './ui.js';
+import { DEFAULT_PATH } from './paths.js';
 import { requestRender } from './bus.js';
 import { moveFeelString, withOverrideFeel, type SteppedMove } from './move-feel.js';
 import { pushLogToSupabase, patchLogToSupabase, syncDisabled } from './sync.js';
@@ -182,9 +183,12 @@ function saveLastDone(d: LastDone): void {
 // v55 fix r3 (Sep 28 2026): reverse of ARM_FEEL_STEPS (name -> step) — so
 // armFeelString can read state.setsDoneFor (keyed by exercise name) off a
 // step key without a third hand-copy of the same two literal strings.
-const ARM_STEP_EXERCISE_NAME: Record<keyof ArmFeelState, string> = {
-  curl: '1 kg biceps curl',
-  row: 'Prone row (bodyweight)',
+// v73 (Nov 11 2026): each step has two names now — the R1/R2 arm move and the
+// Round 3 one (Hammer curl / One-arm dumbbell row); a set marked on either
+// counts as "she was really here".
+const ARM_STEP_EXERCISE_NAMES: Record<keyof ArmFeelState, readonly string[]> = {
+  curl: ['1 kg biceps curl', 'Hammer curl'],
+  row: ['Prone row (bodyweight)', 'One-arm dumbbell row'],
 };
 
 // "curl=easy@2kg;row=right@1kg" — the LOCAL storage shape (workout-tracker:
@@ -213,7 +217,8 @@ function armFeelString(
 ): string | null {
   const part = (key: 'curl' | 'row', feel: ArmFeel | undefined): string => {
     const load = loads[key];
-    const engaged = feel !== undefined || (setsDone[ARM_STEP_EXERCISE_NAME[key]] ?? 0) > 0;
+    const engaged =
+      feel !== undefined || ARM_STEP_EXERCISE_NAMES[key].some((name) => (setsDone[name] ?? 0) > 0);
     if (!engaged) return '';
     // feel-less load: 'curl=@2kg' — the widened CHECK allows the feel half
     // to be empty (her pick still needs to be recorded).
@@ -373,6 +378,8 @@ export async function saveCompletedSession(): Promise<void> {
     ellipticalKcal: onElliptical ? ellipticalKcal() : null,
     sessionNote,
     liteDay: state.liteDay,
+    // v73: the Round 3 time path (null on D and on any workout without paths).
+    sessionPath: w?.paths ? (state.sessionPath ?? DEFAULT_PATH) : null,
     // v48 · P5 (Sep 24 2026): "curl=easy@2kg;row=right@1kg" — only the parts
     // she engaged with, null when none. v55: the "@load" suffix carries her
     // per-set weight pick, sent to Supabase as-is since fix r3 (Sep 28 2026,
@@ -733,6 +740,7 @@ export function saveActiveSession(): void {
       pausedAt: state.pausedAt,
       pausedMs: state.pausedMs,
       liteDay: state.liteDay,
+      sessionPath: state.sessionPath,
       roundBreak: state.roundBreak,
       finishHereLitePrev: state.finishHereLitePrev,
       stoppedEarlyAt: state.stoppedEarlyAt,

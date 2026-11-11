@@ -30,9 +30,14 @@ import { allSourceFiles, appSourceFiles, bundledSourceFiles, nextRoundNum } from
 // weeks" assertion in tests/screens/program-weeks.spec.ts reads the same number
 // (18): 11 round-1 weeks + R2 W1..W5 + R2 W6 (the Oct 10 light restart)
 // + R2 W7 (Oct 24, 35% of Week 5 — v65) + R2 W8 (Oct 31, 50% of Week 5 — v68)
-// + R2 W9 (Nov 7, 60% of Week 5 — v70).
+// + R2 W9 (Nov 7, 60% of Week 5 — v70) + R3 W1 (Nov 15, the new A/B/C — v73).
 // Adding a week = change this and that spec's text together.
-const PROGRAM_WEEK_COUNT = 20;
+const PROGRAM_WEEK_COUNT = 21;
+
+// v73 (Nov 11 2026): Round 3 starts on a SUNDAY by her call ("Round 3 starts Sun
+// Nov 15"), the one PROGRAM / ROUNDS date that is not a Saturday. Listed here by
+// date so any other Sunday (a typo) still fails the Saturday checks below.
+const SUNDAY_STARTS: ReadonlySet<string> = new Set(['2026-11-15']);
 
 const PHASES: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
 const WORKOUT_IDS = ['A', 'B', 'C'] as const;
@@ -53,6 +58,10 @@ function allExercises(): Row[] {
           out.push({ wp, where: `${weekTag(wp)} ${id} ${phase}`, phase, ex });
         }
       }
+      // v73: the optional moves of a time-path workout (Hammer curl) are in the program too.
+      for (const ex of wp.workouts[id].paths?.optional ?? []) {
+        out.push({ wp, where: `${weekTag(wp)} ${id} optional`, phase: 'main', ex });
+      }
     }
   }
   return out;
@@ -65,7 +74,7 @@ test.describe('PROGRAM — shape', () => {
 
   test('every startsOn is a Saturday (weeks are Sat-Fri throughout the app)', () => {
     const notSaturday = PROGRAM.filter(
-      (wp) => new Date(wp.startsOn + 'T00:00:00').getDay() !== 6
+      (wp) => new Date(wp.startsOn + 'T00:00:00').getDay() !== 6 && !SUNDAY_STARTS.has(wp.startsOn)
     ).map((wp) => `${weekTag(wp)} ${wp.startsOn}`);
     expect(notSaturday).toEqual([]);
   });
@@ -237,7 +246,9 @@ test.describe('v62.1 — ROUNDS and SKIPPED_WEEKS are real Saturdays, and every 
   });
 
   test('every ROUNDS start is a valid date AND a Saturday', () => {
-    const bad = ROUNDS.filter((r) => !isRealSaturday(r.start)).map((r) => `R${r.num} ${r.start}`);
+    const bad = ROUNDS.filter((r) => !isRealSaturday(r.start) && !SUNDAY_STARTS.has(r.start)).map(
+      (r) => `R${r.num} ${r.start}`
+    );
     expect(bad).toEqual([]);
   });
 

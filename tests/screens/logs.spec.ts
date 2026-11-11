@@ -1,7 +1,14 @@
 // Split out of tests/app.spec.ts by scripts/split-spec.mjs (code-shape step 1, Oct 13 2026);
 // the test bodies below are copied line for line.
 import { test, expect, type Page } from '@playwright/test';
-import { setupPage, mockDate, movableClock, advanceClock, NOTE_STRIP_EXTRA } from '../helpers';
+import {
+  setupPage,
+  mockDate,
+  movableClock,
+  advanceClock,
+  setLiteDay,
+  NOTE_STRIP_EXTRA,
+} from '../helpers';
 
 test.beforeEach(async ({ page, context }) => setupPage(page, context));
 
@@ -86,7 +93,7 @@ test.describe('v48 P5 logs', () => {
   test.describe('at phone size', () => {
     test.use({ viewport: { width: 412, height: 915 } });
 
-    test('(a) pre-log: blank chips, one quiet line, Start in the fold on A, B and C with Lite on and off', async ({
+    test('(a) pre-log: blank chips, one quiet line, Start and Skip in the fold on A, B and C, no Lite chip', async ({
       page,
     }) => {
       await mockDate(page, TUE_WEEK4);
@@ -109,40 +116,24 @@ test.describe('v48 P5 logs', () => {
         expect(one.width).toBeGreaterThanOrEqual(56);
         expect(one.height).toBeGreaterThanOrEqual(48);
         expect(six.y).toBeGreaterThan(one.y);
-        for (const liteOn of [false, true]) {
-          if (liteOn) await page.locator('#lite-toggle').click();
-          const begin = (await page.locator('#begin').boundingBox())!;
-          expect(begin.y + begin.height).toBeLessThanOrEqual(915);
-          // Everything she decides on sits above the pinned bar, no scroll.
-          // T1 (Sep 27 2026): the start-time "Right?" row (§3.1) added real,
-          // intended height here, enough to push the Lite chip ~17px past
-          // the exact floor below on Workout A specifically (its own longer
-          // "new tonight: X · again: Y" meta line stacked with the new row).
-          // T1 fix r1 (checker's should #3): the original commit widened
-          // this floor by +24px instead of finding the height back — that
-          // hid a real overlap (the Lite chip's bottom clipped under the
-          // action bar, see shots/T1/1). Fixed properly by tightening the
-          // pre-log's own margins (.prelog-header/.prelog-meta/
-          // .prelog-overview/.body-card in styles.css) instead: the exact
-          // floor is back, never loosened.
-          // v58 (Sep 28 2026): the new "Stepped this week: …" line (her spec
-          // item 2) is real, intended content — on a week with several
-          // stepped moves it used to run past one line and legitimately push
-          // the Lite chip past this exact floor, so round 1 loosened the
-          // assertion below to a plain visibility check whenever the line
-          // existed (checker's should #1 / R2-S1).
-          // v59 fix pass (Sep 28 2026, CHECK-v58 round 2 must #R2-S1): fixed
-          // at the source instead — steppedLineText (move-feel.ts) caps the
-          // line to one line's worth of text ("+N more" for the rest), so the
-          // line never wins back the height the exception used to excuse.
-          // R2·Week4 A (3 stepped moves) now fits: floor restored
-          // unconditionally, no exception left to take.
-          const bar = (await page.locator('.action-bar').boundingBox())!;
-          const lite = (await page.locator('#lite-toggle').boundingBox())!;
-          expect(lite.y + lite.height - NOTE_STRIP_EXTRA).toBeLessThanOrEqual(bar.y);
-          expect(await page.evaluate(() => window.scrollY)).toBe(0);
-        }
-        await expect(page.locator('#lite-toggle')).toContainText('✓ Lite');
+        const begin = (await page.locator('#begin').boundingBox())!;
+        expect(begin.y + begin.height).toBeLessThanOrEqual(915);
+        // Everything she decides on sits above the pinned bar, no scroll.
+        // T1 (Sep 27 2026): the start-time "Right?" row (§3.1) added real,
+        // intended height here; fixed properly by tightening the pre-log's own
+        // margins (.prelog-header/.prelog-meta/.prelog-overview/.body-card in
+        // styles.css), never by loosening this floor. v58/v59: the "Stepped this
+        // week" line is capped to one line (steppedLineText), so it never wins the
+        // height back. v73 (Nov 11 2026): the Lite chip that used to be the last
+        // thing above the bar is gone (the Round 3 time paths replaced it); the
+        // body card is now the last thing above the bar and keeps the same floor
+        // (Skip sits beside Start inside the bar, so it costs no page height).
+        const bar = (await page.locator('.action-bar').boundingBox())!;
+        const card = (await page.locator('.body-card').boundingBox())!;
+        expect(card.y + card.height - NOTE_STRIP_EXTRA).toBeLessThanOrEqual(bar.y);
+        await expect(page.locator('.action-bar #prelog-skip')).toBeVisible();
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        await expect(page.locator('#lite-toggle')).toHaveCount(0);
         await page.locator('#back-home').click();
       }
     });
@@ -188,19 +179,15 @@ test.describe('v48 P5 logs', () => {
     expect(blank['backPain']).toBeNull();
   });
 
-  test('(b) a body reading of 2 SUGGESTS Lite (outline) but never switches it on', async ({
+  test('(b) a body reading of 2 offers no Lite chip and never switches Lite on', async ({
     page,
   }) => {
+    // v73 (Nov 11 2026): the Lite chip (and its low-body "suggest" outline) is gone.
     await mockDate(page, TUE_WEEK4);
     await page.goto('/');
     await page.locator('button[data-workout="C"]').click();
-    await expect(page.locator('#lite-toggle')).not.toHaveClass(/lite-suggest/);
     await page.locator('#cap-before-2').click();
-    await expect(page.locator('#lite-toggle')).toHaveClass(/lite-suggest/);
-    await expect(page.locator('#lite-toggle')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.locator('#lite-toggle')).toContainText(
-      'Hard day? Lite — one round, still counts'
-    );
+    await expect(page.locator('#lite-toggle')).toHaveCount(0);
     await page.locator('#begin').click();
     await expect(page.locator('.round-indicator')).not.toContainText('lite');
     await toPostLog(page);
@@ -209,18 +196,19 @@ test.describe('v48 P5 logs', () => {
     expect(log['capacityBefore']).toBe(2);
   });
 
-  test('(b) once Lite is on, the outline goes and the chip says how to undo it', async ({
+  test('(b) Lite set before Start still reads "lite" on the workout and saves liteDay true', async ({
     page,
   }) => {
     await mockDate(page, TUE_WEEK4);
     await page.goto('/');
     await page.locator('button[data-workout="C"]').click();
     await page.locator('#cap-before-3').click();
-    await page.locator('#lite-toggle').click();
-    await expect(page.locator('#lite-toggle')).toHaveText('✓ Lite · 1 round today · tap to undo');
-    await expect(page.locator('#lite-toggle')).not.toHaveClass(/lite-suggest/);
-    await page.locator('#lite-toggle').click();
-    await expect(page.locator('#lite-toggle')).toHaveClass(/lite-suggest/);
+    await setLiteDay(page);
+    await page.locator('#begin').click();
+    await expect(page.locator('.round-indicator')).toContainText('lite');
+    await toPostLog(page);
+    const log = await saveAndRead(page);
+    expect(log['liteDay']).toBe(true);
   });
 
   test('(c) post-log on C has no wall-sit field', async ({ page }) => {
