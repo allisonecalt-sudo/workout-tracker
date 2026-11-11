@@ -31,8 +31,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Nov 11 2026: the runner's apt mirror (azure.archive.ubuntu.com) failed to
+      # resolve for hours and blocked v73.1 + v74. --with-deps needs apt; when it
+      # fails, fall back to the browser alone (ubuntu-latest already carries
+      # Chromium's system libraries).
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
 
       - name: Titles check
         run: npm run titles:check
