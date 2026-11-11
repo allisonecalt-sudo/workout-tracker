@@ -286,3 +286,11 @@ function lastUsedArmLoad(logs: LogEntry[], key: 'curl' | 'row'): ArmLoad {
 export function defaultArmLoad(logs: LogEntry[]): ArmLoadState {
   return { curl: lastUsedArmLoad(logs, 'curl'), row: lastUsedArmLoad(logs, 'row') };
 }
+
+/** v74.2: the chips a session OPENS on. She picks by pain, so on a WRIST day the optional Hammer curl
+ * starts at 1 kg (next to "go lighter") even when 2 kg was last used; every other day = last used. */
+export function startArmLoad(logs: LogEntry[], dayMode: string | null): ArmLoadState {
+  const load = defaultArmLoad(logs);
+  if (dayMode === 'wrist') load.curl = '1kg';
+  return load;
+}

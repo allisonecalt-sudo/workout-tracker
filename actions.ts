@@ -58,7 +58,14 @@ import { DEFAULT_PATH } from './paths.js';
 import { pathInForce } from './day-mode.js';
 import { requestRender } from './bus.js';
 import { moveFeelString, withOverrideFeel, type SteppedMove } from './move-feel.js';
-import { pushLogToSupabase, patchLogToSupabase, pushRestDay, syncDisabled } from './sync.js';
+import {
+  pushLogToSupabase,
+  patchLogToSupabase,
+  pushRestDay,
+  patchRestDayUndone,
+  restUndosPending,
+  syncDisabled,
+} from './sync.js';
 import { pushCyclePeriod, deleteCyclePeriod } from './sync-cycle.js';
 import { pushWeekMove, deleteWeekMove, weekMoveKey } from './sync-week-moves.js';
 import { pushWalk, fetchFitSteps } from './sync-movement.js';
@@ -566,12 +573,20 @@ export function logRestDay(mode: 'fever' | 'crohns'): void {
  * never pushed. */
 export function undoRestDay(todayIso: string): void {
   const all = loadRestDaysRaw();
-  writeRestDays(
-    all.map((d) =>
-      d.undone !== true && localIsoDate(new Date(d.date)) === todayIso ? { ...d, undone: true } : d
-    )
-  );
+  const hit = (d: RestDay): boolean =>
+    d.undone !== true && localIsoDate(new Date(d.date)) === todayIso;
+  const toMark = all.filter((d) => hit(d) && d.synced === true);
+  writeRestDays(all.map((d) => (hit(d) ? { ...d, undone: true } : d)));
   requestRender();
+  // v74.2: a row that already reached the server is re-saved there with the marker (PATCH by id,
+  // notes = 'rest day undone'), so it is not a real sick day for any reader. Unsynced: nothing to send
+  // (it is never pushed). A failed PATCH stays pending and flushPendingSyncs retries it.
+  for (const d of toMark) {
+    void patchRestDayUndone(d.id).then((ok) => {
+      state.syncStatus = ok ? 'synced' : 'offline';
+      hooks().updateSyncIndicator();
+    });
+  }
 }
 
 export async function flushPendingSyncs(): Promise<void> {
@@ -599,9 +614,11 @@ export async function flushPendingSyncs(): Promise<void> {
   const pendingWeekMoves = loadWeekMoves().filter((m) => !m.synced && !m.deleted);
   const pendingWeekMoveDeletes = loadWeekMoves().filter((m) => !m.synced && m.deleted);
   const pendingRestDays = loadRestDays().filter((d) => !d.synced);
+  const pendingRestUndos = restUndosPending(loadRestDaysRaw());
   if (
     pendingLogs.length === 0 &&
     pendingRestDays.length === 0 &&
+    pendingRestUndos.length === 0 &&
     pendingPeriods.length === 0 &&
     pendingWeekMoves.length === 0 &&
     pendingWeekMoveDeletes.length === 0
@@ -622,6 +639,9 @@ export async function flushPendingSyncs(): Promise<void> {
   }
   for (const day of pendingRestDays) {
     if (!(await pushRestDay(day))) allOk = false;
+  }
+  for (const day of pendingRestUndos) {
+    if (!(await patchRestDayUndone(day.id))) allOk = false;
   }
   for (const period of pendingPeriods) {
     await pushCyclePeriod(period); // marks synced:true in localStorage on success

@@ -191,7 +191,7 @@ if (typeof navigator !== 'undefined' && navigator.webdriver === true) {
 
 // ---------- state machine ----------
 
-function startWorkout(id: AnyWorkoutId): void {
+function startWorkout(id: AnyWorkoutId, easyDay = false): void {
   state.selectedWorkout = id;
   // WK2 (Sep 27 2026), §2.3 "pin the plan for a session in progress": fixed
   // the instant she picks it, so a session that straddles the open week's own
@@ -213,6 +213,9 @@ function startWorkout(id: AnyWorkoutId): void {
   state.liteDay = false; // fresh pick, full program until she says otherwise
   state.sessionPath = null; // v73: and no time path picked yet (Start alone = 48)
   state.dayMode = null; // v74: a normal day until she taps "Not my best day?"
+  // v74.2: the Recovery card's "Start an easy day" opens the EASY day (cold: 38 locked, 1 round, easy ride).
+  // Only a Round 3 workout has day modes (a workout with `paths`); anything else just opens as usual.
+  if (easyDay && getCurrentWorkout()?.paths) state.dayMode = 'cold';
   ui.daySheetOpen = false;
   // v74: coming back from a logged EASY / REST day, the next 2-3 Round 3 workouts open with the 38 path
   // pre-picked (she can tap another path). Only a workout with time paths (Round 3 A/B/C).
@@ -548,6 +551,14 @@ function attachHandlers(): void {
         startWorkout(id);
       }
     });
+  });
+
+  // v74.2: the Recovery card's quiet button opens an EASY day, never a normal workout.
+  document.getElementById('recovery-start')?.addEventListener('click', (e) => {
+    const id = (e.currentTarget as HTMLElement).dataset['easyStart'] as AnyWorkoutId | undefined;
+    if (!id) return;
+    unlockAudio();
+    startWorkout(id, true);
   });
 
   attachHomeHandlers();

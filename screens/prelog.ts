@@ -31,6 +31,7 @@ import {
   REST_CARD_FEVER,
   SEE_A_DOCTOR,
   SEE_A_DOCTOR_TITLE,
+  SEE_A_PHYSIO_LINE,
   comingBackActive,
   dayModeNote,
   isDayMode,
@@ -225,6 +226,7 @@ function renderDayCard(w: Workout): string {
       ${lead}
       ${swaps ? `<ul class="day-card-swaps">${swaps}</ul>` : ''}
       ${check}
+      ${isSwapMode(mode) ? `<p class="day-card-physio" id="day-card-physio">${escapeHtml(SEE_A_PHYSIO_LINE)}</p>` : ''}
     </div>`;
 }
 
@@ -275,7 +277,12 @@ export function renderPreLog(): string {
   const meta = [
     w.id === 'D' ? 'Extra' : preLogWeekLabel(),
     // v73.1: the lane word sits BEFORE the new / again lists; after them it read as one more new move.
-    hasCardio && lastCardioLane() === 'elliptical' ? 'elliptical' : '',
+    // v74.2: on a knee day the ride is the walk lane (day-mode.ts rideFor), so the line says walk.
+    hasCardio && state.dayMode === 'knee'
+      ? 'walk'
+      : hasCardio && lastCardioLane() === 'elliptical'
+        ? 'elliptical'
+        : '',
     fresh.length ? `new tonight: ${fresh.join(' · ')}` : '',
     back.length ? `again: ${back.join(' · ')}` : '',
     workoutMinutesLabel(w),

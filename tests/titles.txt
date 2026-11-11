@@ -1071,7 +1071,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v73 - the version › package.json appVersion (the one source) is v74.1
+v73 - the version › package.json appVersion (the one source) is v74.2
 v73 — Round 3 Week 1 is the written plan › A: cool-down is chin tucks, then her stretches at 45 s, and no shoulder / calf stretch
 v73 — Round 3 Week 1 is the written plan › A: the five main moves are in priority order, 2 rounds
 v73 — Round 3 Week 1 is the written plan › A: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
@@ -1199,13 +1199,30 @@ v74.1 - knee day ignores the saved last lane › last lane apartment (seeded his
 v74.1 - knee day ignores the saved last lane › last lane elliptical (seeded history): the knee day opens the Walk choice, not the elliptical
 v74.1 - rest day: start anyway and undo › Undo removes the rest day and cancels the 38 pre-pick it caused
 v74.1 - rest day: start anyway and undo › a synced rest day is undone too, and a reload keeps it undone
-v74.1 - rest day: start anyway and undo › the Recovery card offers Start anyway (rest row stays) and Undo
+v74.1 - rest day: start anyway and undo › crohns: the quiet button opens the EASY day (38 locked, 1 round), the rest row stays, Undo is there
+v74.1 - rest day: start anyway and undo › fever: the quiet button opens the EASY day (38 locked, 1 round), the rest row stays, Undo is there
+v74.1 - rest day: start anyway and undo › the easy day from the Recovery card saves as a cold day on the 38 path
 v74.1 - swap-day "Get checked if..." and the small lines › an easy day has no "Get checked if..." list
 v74.1 - swap-day "Get checked if..." and the small lines › back: the day card lists "Get checked if..."
 v74.1 - swap-day "Get checked if..." and the small lines › knee: the day card lists "Get checked if..."
 v74.1 - swap-day "Get checked if..." and the small lines › the "coming back" line hides once she taps another path
 v74.1 - swap-day "Get checked if..." and the small lines › wrist day on the 60 path: the Hammer curl page opens with its own top line
 v74.1 - swap-day "Get checked if..." and the small lines › wrist: the day card lists "Get checked if..."
+v74.2 - Undo reaches the server › Undo tapped while the first push is in flight: the row lands, then gets the marker
+v74.2 - Undo reaches the server › a PATCH that matches no server row never reads as saved
+v74.2 - Undo reaches the server › a SYNCED rest day: Undo PATCHes the same row with the marker (no POST, no DELETE)
+v74.2 - Undo reaches the server › a failed PATCH stays pending and the next flush retries it
+v74.2 - Undo reaches the server › an UNSYNCED rest day: Undo sends nothing, and a later push is a no-op
+v74.2 - Undo reaches the server › the request: PATCH by id, only notes, exactly "rest day undone"
+v74.2 - a marked row stays undone when pulled › a full pull keeps a marked rest row out of loadRestDays
+v74.2 - a marked row stays undone when pulled › another device / a reinstall: the marked row comes back hidden, an unmarked one visible
+v74.2 - a marked row stays undone when pulled › local undone + server not marked yet: stays undone and still pending
+v74.2 - the small lines › an easy day card has no physio line
+v74.2 - the small lines › back: every swap-day card ends with the physio line
+v74.2 - the small lines › knee day: the line under the workout name says walk, not elliptical
+v74.2 - the small lines › knee: every swap-day card ends with the physio line
+v74.2 - the small lines › wrist day: the Hammer curl load chip starts at 1 kg even when 2 kg was last used
+v74.2 - the small lines › wrist: every swap-day card ends with the physio line
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

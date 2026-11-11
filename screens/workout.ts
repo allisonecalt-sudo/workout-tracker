@@ -132,7 +132,7 @@ import {
   isArmFeel,
   isArmLoad,
   heavierArmLoad,
-  defaultArmLoad,
+  startArmLoad,
   markPaceRuleSeen,
   multiSetCount,
   renderArmFeel,
@@ -1661,7 +1661,7 @@ function beginExercises(): void {
   state.armFeel = {}; // v48 · P5: a feel belongs to one session
   state.moveFeel = {}; // v58: same — a feel belongs to one session
   state.rideFeel = null; // v61: same — the ride feel belongs to one session
-  state.armLoad = defaultArmLoad(loadLogs()); // v55: default = last used, else 1 kg
+  state.armLoad = startArmLoad(loadLogs(), state.dayMode); // v55: default = last used, else 1 kg (v74.2: wrist day curl = 1 kg)
   state.armLoadMax = { ...state.armLoad }; // v55 · fix r1: starts equal, then only climbs
   state.setsDoneFor = {}; // v54: sets-done belongs to one session, same as armFeel
   state.stretchTicks = {}; // v48 · P7: ticks belong to one session

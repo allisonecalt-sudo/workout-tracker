@@ -519,11 +519,7 @@ test.describe('v74.1 - swap-day "Get checked if..." and the small lines', () => 
       'fever with new back pain',
     ],
     knee: ['the knee locks', "can't put weight on it", 'big swelling'],
-    wrist: [
-      'numbness or tingling',
-      'a new lump or deformity',
-      "can't bear any load after an injury",
-    ],
+    wrist: ['numbness or tingling', 'a visible deformity', "can't bear any load after an injury"],
   };
   for (const [mode, bits] of Object.entries(expectations)) {
     test(`${mode}: the day card lists "Get checked if..."`, async ({ page }) => {
@@ -588,25 +584,49 @@ test.describe('v74.1 - swap-day "Get checked if..." and the small lines', () => 
 test.describe('v74.1 - rest day: start anyway and undo', () => {
   test.use({ viewport: { width: 412, height: 915 } });
 
-  test('the Recovery card offers Start anyway (rest row stays) and Undo', async ({ page }) => {
+  for (const [mode, label] of [
+    ['fever', '24 hours with no fever, no fever medicine? Start an easy day'],
+    ['crohns', 'Feeling better? Start an easy day'],
+  ] as const) {
+    test(`${mode}: the quiet button opens the EASY day (38 locked, 1 round), the rest row stays, Undo is there`, async ({
+      page,
+    }) => {
+      await openPreLog(page, SUN_R3, 'A');
+      await pickDay(page, mode);
+      await page.locator('#log-rest').click();
+      await expect(page.locator('#recovery-start')).toHaveText(label);
+      await expect(page.locator('#recovery-start')).toHaveClass(/btn-quiet/);
+      await expect(page.locator('#recovery-start')).not.toHaveClass(/btn-primary/);
+      await expect(page.locator('#recovery-undo')).toHaveText('Undo');
+      await page.locator('#recovery-start').click();
+      await expect(page.locator('#begin')).toBeVisible();
+      await expect(page.locator('#day-card')).toContainText('Easy day (a cold)');
+      await expect(page.locator('[data-path="38"]')).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('[data-path="48"]')).toBeDisabled();
+      expect((await readKey(page, REST_KEY)).filter((r) => r['undone'] !== true)).toHaveLength(1);
+    });
+  }
+
+  test('the easy day from the Recovery card saves as a cold day on the 38 path', async ({
+    page,
+  }) => {
     await openPreLog(page, SUN_R3, 'A');
     await pickDay(page, 'fever');
     await page.locator('#log-rest').click();
-    await expect(page.locator('#recovery-start')).toContainText('Feel better? Start');
-    await expect(page.locator('#recovery-undo')).toHaveText('Undo');
     await page.locator('#recovery-start').click();
-    await expect(page.locator('#begin')).toBeVisible();
-    expect((await readKey(page, REST_KEY)).filter((r) => r['undone'] !== true)).toHaveLength(1);
+    await page.locator('#begin').click();
+    const { swaps } = await walkToPostLog(page);
+    expect(swaps.length).toBeGreaterThanOrEqual(0);
+    await page.locator('#save-log').click();
+    const log = (await readKey(page, LOGS_KEY))[0]!;
+    expect(log['dayMode']).toBe('cold');
+    expect(log['sessionPath']).toBe('38');
   });
 
   test('Undo removes the rest day and cancels the 38 pre-pick it caused', async ({ page }) => {
     await openPreLog(page, SUN_R3, 'A');
     await pickDay(page, 'fever');
     await page.locator('#log-rest').click();
-    await page.locator('#recovery-start').click();
-    await expect(page.locator('#coming-back-line')).toBeVisible();
-    await expect(page.locator('[data-path="38"]')).toHaveAttribute('aria-pressed', 'true');
-    await page.locator('#back-home').click();
     await page.locator('#recovery-undo').click();
     await expect(page.locator('#home-recovery-card')).toHaveCount(0);
     await expect(page.locator('button[data-workout]').first()).toBeVisible();
@@ -640,5 +660,83 @@ test.describe('v74.1 - rest day: start anyway and undo', () => {
     await expect(page.locator('#home-recovery-card')).toHaveCount(0);
     await page.reload();
     await expect(page.locator('#home-recovery-card')).toHaveCount(0);
+  });
+});
+
+test.describe('v74.2 - the small lines', () => {
+  test.use({ viewport: { width: 412, height: 915 } });
+
+  for (const mode of ['back', 'knee', 'wrist']) {
+    test(`${mode}: every swap-day card ends with the physio line`, async ({ page }) => {
+      await openPreLog(page, SUN_R3, 'A');
+      await pickDay(page, mode);
+      await expect(page.locator('#day-card-physio')).toHaveText(
+        'Same joint flaring again and again, even with swaps? See a physio.'
+      );
+    });
+  }
+
+  test('an easy day card has no physio line', async ({ page }) => {
+    await openPreLog(page, SUN_R3, 'A');
+    await pickDay(page, 'cold');
+    await expect(page.locator('#day-card-physio')).toHaveCount(0);
+  });
+
+  test('knee day: the line under the workout name says walk, not elliptical', async ({ page }) => {
+    const hist: Row = {
+      id: 'h-ell',
+      date: '2026-11-13T08:00:00.000Z',
+      workout: 'A',
+      capacityBefore: null,
+      capacityAfter: null,
+      wallSitSec: 0,
+      backPain: null,
+      word: '',
+      synced: true,
+      cardioLane: 'elliptical',
+    };
+    await openPreLog(page, SUN_R3, 'any', [hist]);
+    await expect(page.locator('body')).toContainText('elliptical');
+    await pickDay(page, 'knee');
+    await expect(page.locator('body')).not.toContainText('· elliptical ·');
+    await expect(page.locator('body')).toContainText('Week 1 · walk · new tonight');
+  });
+
+  test('wrist day: the Hammer curl load chip starts at 1 kg even when 2 kg was last used', async ({
+    page,
+  }) => {
+    const hist: Row = {
+      id: 'h-2kg',
+      date: '2026-11-13T08:00:00.000Z',
+      workout: 'A',
+      capacityBefore: null,
+      capacityAfter: null,
+      wallSitSec: 0,
+      backPain: null,
+      word: '',
+      synced: true,
+      armFeel: 'curl=right@2kg',
+    };
+    await openPreLog(page, SUN_R3, 'A', [hist]);
+    await page.locator('[data-path="60"]').click();
+    await pickDay(page, 'wrist');
+    await page.locator('#begin').click();
+    let found = false;
+    for (let i = 0; i < 40 && !found; i++) {
+      const name = await page.locator('.exercise-name').first().textContent();
+      if (name?.includes('Hammer curl')) {
+        await expect(page.locator('[data-arm-load="1kg"]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('[data-arm-load="2kg"]')).toHaveAttribute(
+          'aria-pressed',
+          'false'
+        );
+        found = true;
+        break;
+      }
+      const next = page.locator('#next, #ww-skip');
+      if (!(await next.isVisible())) break;
+      await next.click();
+    }
+    expect(found).toBe(true);
   });
 });

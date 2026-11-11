@@ -155,6 +155,9 @@ export type RestDay = {
   // v74.1: "Undo" on the Recovery card. A local tombstone: every reader skips it (loadRestDays), the
   // merge keeps it so a pull cannot bring the row back, and nothing is pushed for it.
   undone?: boolean;
+  // v74.2: the server row (workout_sessions.notes = 'rest day undone') is marked too. A synced row that
+  // is undone but not undoneSynced is retried on the next flush.
+  undoneSynced?: boolean;
 };
 
 // `missing` is kept as the plain letters string ("B" / "BC", §2.2's own

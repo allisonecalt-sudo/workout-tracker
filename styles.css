@@ -7565,6 +7565,15 @@ button.wk-cell {
   display: block;
   width: 100%;
   margin-top: 14px;
+  padding: 10px 14px;
+  line-height: 1.3;
+}
+
+/* v74.2: the one line at the foot of every swap-day card. */
+.day-card-physio {
+  margin: 10px 0 0;
+  color: var(--text-dim);
+  font-size: var(--font-small);
 }
 
 .recovery-undo {

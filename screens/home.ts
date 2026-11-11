@@ -44,6 +44,7 @@ import type { ActiveSessionSnapshot } from '../state.js';
 import type { LogEntry, StoredWeekMove, LastDone } from '../types.js';
 import { ui } from '../ui.js';
 import { moveOnWithoutIt, undoWeekMove, undoRestDay } from '../actions.js';
+import { RECOVERY_START_LABEL } from '../day-mode.js';
 import {
   LAST_DONE_KEY,
   state,
@@ -703,14 +704,15 @@ function renderUpNextHero(id: WorkoutId): string {
 // 3 of 3 ✓" then "Week 6 starts now", §2.4's Done card spec), not one.
 // v74 (Nov 11 2026): a logged rest day. Not a workout: it is never "missed", never A / B / C, never
 // closes a week. Home just says so, calmly, in place of the Up-next card (the workout chips stay).
-// v74.1: the day is not lost - "Feel better? Start A anyway" opens the Up-next workout (the rest row stays
-// logged unless she taps Undo), and Undo takes the rest day back (local tombstone; see actions.ts undoRestDay).
-function renderRecoveryDayCard(id: WorkoutId): string {
+// v74.2: the day is not lost, but a sick day never leads to a normal workout (research section 12): the
+// quiet button opens the EASY day (38 locked, 1 round, easy ride), worded by rest mode (fever: 24 h with no
+// fever and no fever medicine). Undo takes the rest day back (local + the server row is marked; actions.ts).
+function renderRecoveryDayCard(id: WorkoutId, mode: 'fever' | 'crohns'): string {
   return `
     <div class="card home-recovery-card" id="home-recovery-card">
       <div class="home-done-title">Recovery day ✓</div>
       <div class="home-done-line">Rest counts. Back when you're ready.</div>
-      <button class="btn-large btn-primary recovery-start" id="recovery-start" data-workout="${id}" type="button">Feel better? Start ${id} anyway</button>
+      <button class="btn-large btn-quiet recovery-start" id="recovery-start" data-easy-start="${id}" type="button">${escapeHtml(RECOVERY_START_LABEL[mode])}</button>
       <button class="btn-quiet recovery-undo" id="recovery-undo" type="button">Undo</button>
     </div>`;
 }
@@ -817,7 +819,7 @@ export function renderHome(): string {
     (l) => l.workout === 'D' && localIsoDate(new Date(l.date)) === todayIso
   );
   // v74: a rest day logged today (its own store; never in `logs`).
-  const restToday = loadRestDays().some((d) => localIsoDate(new Date(d.date)) === todayIso);
+  const restTodayDay = loadRestDays().find((d) => localIsoDate(new Date(d.date)) === todayIso);
   const weekWalks = walksThisWeek();
   const walkStartedAt = activeWalkStart();
 
@@ -1188,7 +1190,7 @@ export function renderHome(): string {
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
     ${ui.staleSnapshot ? renderStaleSessionCard(ui.staleSnapshot) : ''}
 
-    ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : restToday ? renderRecoveryDayCard(pick) : renderUpNextHero(pick) + renderPreviewLink(pick)}
+    ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : restTodayDay ? renderRecoveryDayCard(pick, restTodayDay.mode) : renderUpNextHero(pick) + renderPreviewLink(pick)}
     ${chipsHtml}
     ${renderWorkoutDChip(dDoneToday)}
 

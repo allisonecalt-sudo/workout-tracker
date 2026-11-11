@@ -30,6 +30,7 @@ import { planForLog, completionClosingSessionIds } from './week-clock.js';
 import { legacyCardioMarker } from './cardio-notes.js';
 import { workoutHasWallSit } from './hold-sets.js';
 import type { AnyWorkoutId } from './program.js';
+import { REST_UNDONE_MARKER } from './day-mode.js';
 import type { LogEntry, RestDay } from './types.js';
 
 export const SUPABASE_URL = 'https://hpiyvnfhoqnnnotrmwaz.supabase.co';
@@ -699,12 +700,27 @@ export function mergeRestDays(local: RestDay[], remote: RemoteSession[]): RestDa
   const byId = new Map<string, RestDay>();
   for (const r of remote) {
     if (r.day_mode !== 'fever' && r.day_mode !== 'crohns') continue;
-    byId.set(r.id, { id: r.id, date: r.date, mode: r.day_mode, synced: true });
+    // v74.2: a server row carrying the undone marker is undone on every device (and after a reinstall).
+    const marked = r.notes === REST_UNDONE_MARKER;
+    byId.set(r.id, {
+      id: r.id,
+      date: r.date,
+      mode: r.day_mode,
+      synced: true,
+      ...(marked ? { undone: true, undoneSynced: true } : {}),
+    });
   }
   for (const l of local) {
-    // v74.1: an undone rest day stays undone whatever the server still says.
-    if (l.undone === true) byId.set(l.id, { ...(byId.get(l.id) ?? l), undone: true });
-    else if (!l.synced && !byId.has(l.id)) byId.set(l.id, l);
+    // v74.1: an undone rest day stays undone whatever the server still says. v74.2: and it stays
+    // "waiting to be marked on the server" until a PATCH has landed (undoneSynced).
+    if (l.undone === true) {
+      const theirs = byId.get(l.id);
+      byId.set(l.id, {
+        ...(theirs ?? l),
+        undone: true,
+        ...(theirs?.undoneSynced === true || l.undoneSynced === true ? { undoneSynced: true } : {}),
+      });
+    } else if (!l.synced && !byId.has(l.id)) byId.set(l.id, l);
     else if (!l.synced && byId.has(l.id)) byId.set(l.id, { ...l, synced: true });
   }
   return Array.from(byId.values()).sort((a, b) => b.date.localeCompare(a.date));
@@ -720,11 +736,61 @@ export async function pushRestDay(r: RestDay): Promise<boolean> {
       return false;
     }
     writeRestDays(loadRestDaysRaw().map((d) => (d.id === r.id ? { ...d, synced: true } : d)));
+    // v74.2: Undo was tapped while this POST was in flight - the row just landed, so mark it now.
+    if (loadRestDaysRaw().some((d) => d.id === r.id && d.undone === true)) {
+      return patchRestDayUndone(r.id);
+    }
     return true;
   } catch (err) {
     console.warn('[sync] rest day push threw:', err);
     return false;
   }
+}
+
+// v74.2: the PATCH that marks an already-synced rest row as undone: only `notes` is sent, set to
+// REST_UNDONE_MARKER, filtered by id (the same PATCH-by-id path as an edited session; no schema change).
+// return=representation so a PATCH that matched no row never reads as saved (patchMatchedARow).
+export function restUndoneRequest(id: string): { url: string; body: Record<string, unknown> } {
+  return {
+    url: `${SUPABASE_URL}/rest/v1/workout_sessions?id=eq.${encodeURIComponent(id)}`,
+    body: { notes: REST_UNDONE_MARKER },
+  };
+}
+
+export async function patchRestDayUndone(id: string): Promise<boolean> {
+  if (syncDisabled()) return false;
+  try {
+    const { url, body } = restUndoneRequest(id);
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      console.warn('[sync] rest day undo failed:', res.status, await res.text().catch(() => ''));
+      return false;
+    }
+    const rows: unknown = await res.json().catch(() => null);
+    if (!patchMatchedARow(rows)) {
+      console.warn('[sync] rest day undo matched no server row:', id);
+      return false;
+    }
+    writeRestDays(loadRestDaysRaw().map((d) => (d.id === id ? { ...d, undoneSynced: true } : d)));
+    return true;
+  } catch (err) {
+    console.warn('[sync] rest day undo threw:', err);
+    return false;
+  }
+}
+
+/** Undone rest days whose row already reached the server but is not marked there yet. */
+export function restUndosPending(days: readonly RestDay[]): RestDay[] {
+  return days.filter((d) => d.undone === true && d.synced === true && d.undoneSynced !== true);
 }
 
 // code-shape step 16a: the sync pill's text, moved verbatim from app.ts so Home (screens/home.ts)
@@ -736,6 +802,7 @@ export function syncIndicatorText(): string {
   const pending =
     loadLogs().filter((l) => !l.synced).length +
     loadRestDays().filter((d) => !d.synced).length +
+    restUndosPending(loadRestDaysRaw()).length +
     loadCyclePeriods().filter((p) => !p.synced).length +
     loadWeekMoves().filter((m) => !m.synced).length;
   // v63 item 1: a "Note to Claude" not yet in her inbox is named here too, in its own words; with

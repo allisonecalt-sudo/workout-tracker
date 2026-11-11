@@ -99,12 +99,22 @@ export const GET_CHECKED: Record<SwapMode, readonly string[]> = {
     'fever with new back pain',
   ],
   knee: ['the knee locks', "you can't put weight on it", 'big swelling (or swelling with a fever)'],
-  wrist: [
-    'numbness or tingling',
-    'a new lump or deformity',
-    "you can't bear any load after an injury",
-  ],
+  wrist: ['numbness or tingling', 'a visible deformity', "you can't bear any load after an injury"],
 };
+
+/** v74.2: one line on every swap-day card (research section 11). A question, not an order. */
+export const SEE_A_PHYSIO_LINE =
+  'Same joint flaring again and again, even with swaps? See a physio.';
+
+/** v74.2: the Recovery card's quiet button, by rest mode (research section 12: back only after 24 h
+ * fever-free, no fever medicine). It opens the EASY day, never a normal workout. */
+export const RECOVERY_START_LABEL: Record<'fever' | 'crohns', string> = {
+  fever: '24 hours with no fever, no fever medicine? Start an easy day',
+  crohns: 'Feeling better? Start an easy day',
+};
+
+/** v74.2: the server marker for an undone rest row (workout_sessions.notes, no schema change). */
+export const REST_UNDONE_MARKER = 'rest day undone';
 
 /** Optional Hammer curl on a wrist day: the top line (not a "Swapped for…" line). */
 export const WRIST_CURL_LINE = 'Sore wrist today: skip it, or go lighter';
