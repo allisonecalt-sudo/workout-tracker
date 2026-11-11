@@ -32,11 +32,17 @@ jobs:
         run: npm run build
 
       # Nov 11 2026: the runner's apt mirror (azure.archive.ubuntu.com) failed to
-      # resolve for hours and blocked v73.1 + v74. --with-deps needs apt; when it
-      # fails, fall back to the browser alone (ubuntu-latest already carries
-      # Chromium's system libraries).
+      # resolve for hours. A browser-only fallback skipped the FONT packages, so
+      # header glyphs rendered in a fallback font and a 412x915 layout test
+      # failed for the wrong reason. So: retry the full install (fonts included),
+      # and fail loudly if it never succeeds - never test without the fonts.
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium || npx playwright install chromium
+        run: |
+          for i in 1 2 3 4; do
+            npx playwright install --with-deps chromium && exit 0
+            echo "Playwright install failed (attempt $i), retrying in 60 s"; sleep 60
+          done
+          exit 1
 
       - name: Titles check
         run: npm run titles:check
