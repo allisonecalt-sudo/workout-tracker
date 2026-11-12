@@ -7609,3 +7609,38 @@ button.wk-cell {
   line-height: 1.25;
   white-space: normal;
 }
+
+/* v74.3: "See a doctor if…" on the EASY day and the coming-back days: a compact two-column list. */
+.see-doctor {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-strong);
+  font-size: var(--font-small);
+  text-align: left;
+}
+
+.see-doctor-title {
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+
+.see-doctor-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+  columns: 2;
+  column-gap: 22px;
+  font-size: var(--font-meta);
+  line-height: 1.3;
+}
+
+.see-doctor-list li {
+  break-inside: avoid;
+  margin-bottom: 2px;
+}
+
+/* v74.3: coming back from a sick day, D is not a to-do: the same chip, quieter. Still opens D. */
+.home-chip-d-skip {
+  opacity: 0.7;
+}

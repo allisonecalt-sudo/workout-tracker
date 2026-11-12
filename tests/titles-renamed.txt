@@ -94,3 +94,4 @@ v73 - the version › package.json appVersion (the one source) is v73.1 => v73 -
 v73 - the version › package.json appVersion (the one source) is v74 => v73 - the version › package.json appVersion (the one source) is v74.1
 v73 - the version › package.json appVersion (the one source) is v74.1 => v73 - the version › package.json appVersion (the one source) is v74.2
 v74.1 - rest day: start anyway and undo › the Recovery card offers Start anyway (rest row stays) and Undo => v74.1 - rest day: start anyway and undo › fever: the quiet button opens the EASY day (38 locked, 1 round), the rest row stays, Undo is there
+v73 - the version › package.json appVersion (the one source) is v74.2 => v73 - the version › package.json appVersion (the one source) is v74.3

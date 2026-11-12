@@ -254,12 +254,16 @@ export function weekTargetForD(dDateIso: string, model: DWeekModel): DWeekTarget
  * CLOSED span (all three of A/B/C done) reads "4 of 4 ✓" once D counted too,
  * or "complete · 3 of 4" when it didn't — the week closed on A/B/C alone,
  * exactly as week.ts's own rule says it must; D never closes or opens it. */
-export function weekCountLine(shown: { span: WeekSpan | null }, hasD = false): string {
+export function weekCountLine(
+  shown: { span: WeekSpan | null },
+  hasD = false,
+  skipD = false
+): string {
   const missing = shown.span ? shown.span.missing : (['A', 'B', 'C'] as const);
   const doneAbc = shown.span ? shown.span.done.length : 0;
   const done = doneAbc + (hasD ? 1 : 0);
   if (missing.length === 0) return hasD ? '4 of 4 ✓' : 'complete · 3 of 4';
-  return `${done} of 4 · ${weekLeftWords(missing, hasD, done)}`;
+  return `${done} of 4 · ${weekLeftWords(missing, hasD, done, skipD)}`;
 }
 
 /** "A, B, C and D to go" / "B, C and D left" / "C left" — what an OPEN week
@@ -267,8 +271,14 @@ export function weekCountLine(shown: { span: WeekSpan | null }, hasD = false): s
  * words: "there should be a D for this week" — the line counted 4 but only
  * named A, B and C, so D read as not part of the week. "to go" = nothing done
  * yet, "left" = something done. The week still closes on A/B/C alone. */
-export function weekLeftWords(missing: readonly string[], hasD: boolean, done: number): string {
-  const letters = hasD ? [...missing] : [...missing, 'D'];
+export function weekLeftWords(
+  missing: readonly string[],
+  hasD: boolean,
+  done: number,
+  skipD = false
+): string {
+  // v74.3: while she is coming back from a sick day, D is not a to-do (research section 12: no D day).
+  const letters = hasD || skipD ? [...missing] : [...missing, 'D'];
   const words =
     letters.length === 1
       ? (letters[0] as string)

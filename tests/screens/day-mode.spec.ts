@@ -354,8 +354,11 @@ test.describe('v74 - REST day', () => {
     const rest = await readKey(page, REST_KEY);
     expect(rest.length).toBe(1);
     expect(rest[0]!['mode']).toBe('crohns');
-    // the week line is what it was, and the workout chips are still there to choose
-    expect((await page.locator('#week-count').textContent()) ?? '').toBe(weekBefore);
+    // the week line is what it was (v74.3: after a rest day D is no longer named as left), and the workout
+    // chips are still there to choose
+    expect((await page.locator('#week-count').textContent()) ?? '').toBe(
+      weekBefore.replace('A, B, C and D to go', 'A, B and C to go')
+    );
     await expect(page.locator('button[data-workout]').first()).toBeVisible();
   });
 

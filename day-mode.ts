@@ -192,6 +192,12 @@ const wallSit = (reps: string, safety: string): Exercise => ({
 
 type Swap = (ex: Exercise, w: Workout) => Exercise | null;
 
+/** v74.3: the "Today's version" lines on a back day (research section 11). */
+export const BACK_PUSH_LINE =
+  "Today's version: If the position hurts your back: wall push-up instead";
+export const BACK_BIRD_DOG_LINE =
+  "Today's version: smaller reach — lift the arm or leg only as far as stays comfortable";
+
 const line = (mode: SwapMode, text: string): string => `Swapped for your ${mode} today: ${text}`;
 
 /** The same card, a different version today: the NAME stays, a label + a top line change. */
@@ -207,6 +213,11 @@ function sameCard(
 
 const SWAPS: Record<SwapMode, Record<string, Swap>> = {
   back: {
+    // v74.3 (research section 11): text only, no new card. The push-up and the floor press keep their
+    // card; the line says what to do if the position bothers the back. Bird dog: a smaller reach.
+    'Incline push-up on fists': (ex) => ({ ...ex, swap: BACK_PUSH_LINE }),
+    'Floor press': (ex) => ({ ...ex, swap: BACK_PUSH_LINE }),
+    'Bird dog': (ex) => ({ ...ex, swap: BACK_BIRD_DOG_LINE }),
     'Bodyweight hip hinge': (ex, w) =>
       w.main.some((m) => m.name === 'Glute bridges')
         ? { ...HIP_HINGE_WALL_EX, swap: line('back', `${HIP_HINGE_WALL} instead of ${ex.name}`) }
@@ -283,6 +294,48 @@ function rideFor(mode: DayMode, ex: Exercise): Exercise {
   return ex;
 }
 
+// ---- v74.3: a swap day shows about HALF the usual reps (research section 11: reps -30-50%) ----
+
+const nearest5 = (n: number): number => Math.max(5, Math.round(n / 5) * 5);
+const halfCount = (n: number): number => Math.max(1, Math.round(n / 2));
+
+/**
+ * The lower half of a reps line, from the R3 reps string. Only the numbers that are the COUNT change:
+ *   '10–15 · ...' -> '5–8 · ...'   '8–12' -> '4–6'   '6–8 each side' -> '3–4 each side'   '12 each side' -> '6 each side'
+ *   holds in seconds: '15–25 s' -> '10–15 s'   '20 sec hold' -> '10–15 sec hold'
+ *   '2 × 20 sec · ... (15–25 s each is fine)' -> '2 × 10–15 sec · ... (10–15 s each is fine)'
+ * A tempo like '2-sec hold at top', the words, a ride ('15 min') and a string with no leading number
+ * come back as they were.
+ */
+export function halveReps(reps: string): string {
+  let sawSeconds = false;
+  const withSeconds = reps.replace(
+    /(\d+)–(\d+) (s|sec)\b|(\d+) sec\b/g,
+    (_m, lo: string, hi: string, unit: string, single: string | undefined) => {
+      sawSeconds = true;
+      return single !== undefined
+        ? `${nearest5(Number(single) * 0.5)}–${nearest5(Number(single) * 0.75)} sec`
+        : `${nearest5((Number(lo) * 2) / 3)}–${nearest5(Number(hi) * 0.6)} ${unit}`;
+    }
+  );
+  if (sawSeconds) return withSeconds;
+  if (/^\d+ min\b/.test(reps)) return reps;
+  const range = /^(\d+)–(\d+)/.exec(reps);
+  if (range) {
+    return `${halfCount(Number(range[1]))}–${halfCount(Number(range[2]))}${reps.slice(range[0].length)}`;
+  }
+  const one = /^(\d+)(?![\d-])/.exec(reps);
+  if (one) return `${halfCount(Number(one[1]))}${reps.slice(one[0].length)}`;
+  return reps;
+}
+
+/** One strength move on a swap day: the reps line is the lower half; a timer follows its new top. */
+function halveExercise(ex: Exercise): Exercise {
+  const next: Exercise = ex.reps === undefined ? { ...ex } : { ...ex, reps: halveReps(ex.reps) };
+  if (ex.isTimed && ex.durationSec) next.durationSec = nearest5(ex.durationSec * 0.75);
+  return next;
+}
+
 /**
  * Today's workout for `mode`. Run AFTER paths.ts has cut the workout to her path.
  * null / a rest mode → the very same object (a rest day has no workout to change).
@@ -291,8 +344,13 @@ function rideFor(mode: DayMode, ex: Exercise): Exercise {
 export function applyDayMode(w: Workout, mode: DayMode | null): Workout {
   if (mode === null || isRestMode(mode) || !w.paths) return w;
   const table = isSwapMode(mode) ? SWAPS[mode] : {};
+  // v74.3: on a swap day every main move (swapped or kept) shows the lower half of its range. The ride,
+  // the primer and the cool-down are not in `main`, so they stay as they are; an EASY day keeps its reps.
   const swapMain = (list: Exercise[]): Exercise[] =>
-    list.map((ex) => table[ex.name]?.(ex, w) ?? ex);
+    list.map((ex) => {
+      const out = table[ex.name]?.(ex, w) ?? ex;
+      return isSwapMode(mode) ? halveExercise(out) : out;
+    });
   return {
     ...w,
     rounds: 1,

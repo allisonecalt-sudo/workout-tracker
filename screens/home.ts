@@ -44,7 +44,7 @@ import type { ActiveSessionSnapshot } from '../state.js';
 import type { LogEntry, StoredWeekMove, LastDone } from '../types.js';
 import { ui } from '../ui.js';
 import { moveOnWithoutIt, undoWeekMove, undoRestDay } from '../actions.js';
-import { RECOVERY_START_LABEL } from '../day-mode.js';
+import { RECOVERY_START_LABEL, comingBackActive } from '../day-mode.js';
 import {
   LAST_DONE_KEY,
   state,
@@ -648,7 +648,7 @@ function renderWorkoutChipsFor(ids: WorkoutId[], lead = 'or do'): string {
 // tension with the SAME sentence's "option of two" (a disabled chip is,
 // today, the only door to D on Home): worth asking her which she actually
 // wants before this goes further, not silently resolved either way.
-function renderWorkoutDChip(dDoneToday: boolean): string {
+function renderWorkoutDChip(dDoneToday: boolean, comingBack = false): string {
   const w = getWorkoutD();
   // v54 fix (Sep 27 2026): deliberately NOT .home-chips/.home-chip — those
   // classes are what dozens of existing tests (and §2.4's own spec) use to
@@ -660,6 +660,14 @@ function renderWorkoutDChip(dDoneToday: boolean): string {
       <div class="home-chips-d">
         <button class="btn-chip home-chip-d home-chip-d-done" type="button" disabled aria-label="Workout D already done today">D ✓ today</button>
       </div>`;
+  }
+  // v74.3: coming back, D is not offered as a to-do: one quiet line says so. It is still a button that
+  // opens D (nothing is blocked), and the week line stops naming D as something left.
+  if (comingBack) {
+    return `
+    <div class="home-chips-d">
+      <button class="btn-chip home-chip-d home-chip-d-skip" id="home-chip-d-skip" data-workout="D" type="button" aria-label="Workout D: skip while coming back, tap to open it anyway">D: skip while coming back</button>
+    </div>`;
   }
   return `
     <div class="home-chips-d">
@@ -818,6 +826,8 @@ export function renderHome(): string {
   const dDoneToday = logs.some(
     (l) => l.workout === 'D' && localIsoDate(new Date(l.date)) === todayIso
   );
+  // v74.3: coming back from a logged EASY / REST day = the 38-min path, no D day (research section 12).
+  const comingBack = comingBackActive(logs, loadRestDays());
   // v74: a rest day logged today (its own store; never in `logs`).
   const restTodayDay = loadRestDays().find((d) => localIsoDate(new Date(d.date)) === todayIso);
   const weekWalks = walksThisWeek();
@@ -990,7 +1000,7 @@ export function renderHome(): string {
             )
           : '';
       const openHasD = weekHasDFor(liveWeekDTarget(shown), model, dLogs);
-      weekLineText = weekCountLine(shown, openHasD);
+      weekLineText = weekCountLine(shown, openHasD, comingBack);
       if (shown.span && shown.span.done.length === 0 && !openHasD) {
         // The week before the one that opened (a calendar week back from its start).
         const before = new Date(shown.span.openedAt);
@@ -1120,7 +1130,7 @@ export function renderHome(): string {
       const done = doneAbc + (openHasD ? 1 : 0);
       const missing = shown.span?.missing ?? (['A', 'B', 'C'] as const);
       doneCardLines = [
-        `${done} of 4 in Week ${shown.key.week}${missing.length ? ` · ${weekLeftWords(missing, openHasD, done)}` : ''}`,
+        `${done} of 4 in Week ${shown.key.week}${missing.length ? ` · ${weekLeftWords(missing, openHasD, done, comingBack)}` : ''}`,
       ];
     }
 
@@ -1192,7 +1202,7 @@ export function renderHome(): string {
 
     ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : restTodayDay ? renderRecoveryDayCard(pick, restTodayDay.mode) : renderUpNextHero(pick) + renderPreviewLink(pick)}
     ${chipsHtml}
-    ${renderWorkoutDChip(dDoneToday)}
+    ${renderWorkoutDChip(dDoneToday, comingBack)}
 
     <div class="card week-card" id="open-weekly-review" role="button" tabindex="0" aria-label="Open weekly review for this week">
       <div class="week-card-head">

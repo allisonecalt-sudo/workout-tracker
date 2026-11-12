@@ -205,6 +205,21 @@ function renderDaySheet(): string {
     </div>`;
 }
 
+/**
+ * v74.3: the "See a doctor if…" list on the days she exercises while unwell or just after (the EASY day
+ * and the 2-3 coming-back sessions): chest pain, racing heart and a crash 1-2 days later matter most
+ * then. A compact two-column list inside one collapsible, open, so it costs ~90 px and Start (pinned)
+ * never moves. Same six items as the rest card (SEE_A_DOCTOR).
+ */
+function renderDoctorBlock(): string {
+  const items = SEE_A_DOCTOR.map((d) => `<li>${escapeHtml(d)}</li>`).join('');
+  return `
+    <details class="see-doctor" id="see-doctor" open>
+      <summary class="see-doctor-title">${escapeHtml(SEE_A_DOCTOR_TITLE)}</summary>
+      <ul class="see-doctor-list">${items}</ul>
+    </details>`;
+}
+
 /** The card at the top of a working (non-rest) day: what the day is, and each swap in plain words. */
 function renderDayCard(w: Workout): string {
   const mode = state.dayMode;
@@ -226,6 +241,7 @@ function renderDayCard(w: Workout): string {
       ${lead}
       ${swaps ? `<ul class="day-card-swaps">${swaps}</ul>` : ''}
       ${check}
+      ${mode === 'cold' ? renderDoctorBlock() : ''}
       ${isSwapMode(mode) ? `<p class="day-card-physio" id="day-card-physio">${escapeHtml(SEE_A_PHYSIO_LINE)}</p>` : ''}
     </div>`;
 }
@@ -350,6 +366,7 @@ export function renderPreLog(): string {
     ${steppedLine ? `<p class="prelog-stepped" id="prelog-stepped">${escapeHtml(steppedLine)}</p>` : ''}
 
     ${renderDayCard(w)}
+    ${state.dayMode !== 'cold' && w.paths && comingBackActive(loadLogs(), loadRestDays()) ? renderDoctorBlock() : ''}
 
     ${renderWorkoutOverview(w)}
 
