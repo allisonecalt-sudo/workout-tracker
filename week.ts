@@ -536,8 +536,11 @@ export function walkWeeks(
   // SATURDAY_ASK_FROM (a week long since left open before it is left alone).
   function autoCloseMs(): number {
     if (!askOn || !open || openDone.size === 0) return Infinity;
+    // The first Sunday 00:00 after the later of (the week's FIRST session, its opening + 5 days):
+    // never a Sunday that passed before any session in it (a break must not split a week), so
+    // a week can never close earlier than a session already counted in it.
     const base = new Date(open.opensFrom ?? open.openedAt);
-    const t = new Date(
+    const fivePlus = new Date(
       base.getFullYear(),
       base.getMonth(),
       base.getDate() + 5,
@@ -545,6 +548,8 @@ export function walkWeeks(
       base.getMinutes(),
       base.getSeconds()
     );
+    const first = open.sessions.length ? new Date(open.sessions[0]!.date) : fivePlus;
+    const t = first.getTime() > fivePlus.getTime() ? first : fivePlus;
     const sunday = new Date(t.getFullYear(), t.getMonth(), t.getDate());
     sunday.setDate(sunday.getDate() + ((7 - sunday.getDay()) % 7));
     if (sunday.getTime() <= t.getTime()) sunday.setDate(sunday.getDate() + 7);

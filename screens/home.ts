@@ -574,6 +574,9 @@ function homeWeekTitle(): string {
     const planName = `${planRound !== week.round && planRound > 1 ? `R${planRound} · ` : ''}Week ${plan.weekNum}`;
     return `${title}<span class="h1-plan"> · ${planName}'s plan</span>`;
   }
+  // v75: Saturday after a three-letter close, until she taps Move, is still Week N (the clock counts it there).
+  const sat = saturdaySituation();
+  if (sat && sat.kind === 'closed') return `Week ${sat.key.week}`;
   return `Week ${shownWeek().key.week}`;
 }
 
@@ -968,6 +971,13 @@ export function renderHome(): string {
     // week.ts drops D from its model entirely (its own header comment), so
     // both readers go straight to the raw logs instead.
     const dLogs = logs.filter((l) => l.workout === 'D');
+    const sat = peek ? null : saturdaySituation();
+    const satClosedSpan =
+      sat && sat.kind === 'closed'
+        ? (model.spans.find(
+            (sp) => sp.key.round === sat.key.round && sp.key.week === sat.key.week
+          ) ?? null)
+        : null;
 
     if (peek) {
       // Peeking at "‹ Week N" — a read-only look, so no "since/opens" or
@@ -1031,6 +1041,25 @@ export function renderHome(): string {
         afterBreakHtml = afterBreakLine(shown.key.week, getProgramWeek(before).skippedLabel);
       }
     }
+    if (sat && satClosedSpan) {
+      // v75: Saturday, Week N closed on three letters, no tap yet: Home stays on Week N (the clock
+      // counts Saturday there). After her Move tap the clock opens Week N+1 and this is not reached.
+      const closedHasD = weekHasDFor({ span: satClosedSpan }, model, dLogs);
+      subLineHtml = `<div class="week-sub-line" id="week-sub">Saturday still counts for Week ${sat.key.week}</div>`;
+      weekCardHeadText = escapeHtml(`Week ${sat.key.week}`);
+      dotsHtml = renderCompletionWeekDots(
+        completionWeekDots(
+          satClosedSpan,
+          dLogs,
+          weekWindowFor({ kind: 'span', key: satClosedSpan.key }, model)
+        )
+      );
+      weekLineText =
+        closedHasD || comingBack
+          ? weekCountLine({ span: satClosedSpan }, closedHasD, comingBack)
+          : '3 of 4 · D left';
+      if (!closedHasD && !comingBack) upNextD = true;
+    }
     saturdayNote = '';
 
     // WK3 (Sep 27 2026), §2.4: the quiet "Move on without it" button — only
@@ -1083,7 +1112,6 @@ export function renderHome(): string {
     // Saturday: ONE card asks "Finish Week N" / "Move to Week N+1" (default Finish, kept on this
     // phone only); after "Finish" a quiet link stays, and Up next offers what the week still lacks
     // (D) instead of 'A'. Not shown while peeking at an older week. (Sunday moves on by itself.)
-    const sat = peek ? null : saturdaySituation();
     if (sat) {
       const lettersLeft = [...sat.missing, ...(sat.hasD || comingBack ? [] : ['D'])];
       const leftWords =
@@ -1109,7 +1137,6 @@ export function renderHome(): string {
           `</div></div>`;
       } else {
         saturdayCardHtml = `<button class="week-nav-link" id="sat-move-link" type="button">Move to Week ${nextWk}</button>`;
-        if (sat.kind === 'closed' && !sat.hasD && !comingBack) upNextD = true;
       }
     }
 

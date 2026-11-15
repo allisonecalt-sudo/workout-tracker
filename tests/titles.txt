@@ -1247,6 +1247,7 @@ v74.3 - swap days show about half › every unswapped main move on back / knee /
 v74.3 - swap days show about half › named examples: chair squat 10–15 -> 5–8, incline push-up 8–12 -> 4–6, dead bug 6–8 -> 3–4
 v74.3 - swap days show about half › the ride, the primer and the cool-down are untouched; an EASY day keeps its reps
 v75 - a Saturday rest day changes neither the Saturday card nor any count › the card and the week are the same with or without a rest day that Saturday
+v75 - her real rows: the Nov 14 D is Round 2 Week 8 › real chain through weekModel: Nov 14 D = R2W8, and R3W1 does not have it
 v75 - the Saturday ask (week.ts) › (a) a Monday close, a Saturday session and no tap: it counts to Week 8, and Week 9 opens Sunday 00:00
 v75 - the Saturday ask (week.ts) › (a2) the same Saturday session before the cutover time reads the older rule (Saturday 00:00)
 v75 - the Saturday ask (week.ts) › (b) her tap Sat 19:00: an A at 10:00 is Week 8, an A at 20:00 is Week 9, opened at 19:00
@@ -1260,13 +1261,17 @@ v75 - the Saturday ask (week.ts) › (f) Sat Oct 31 (C + D opened Week 8) is unc
 v75 - the Saturday ask (week.ts) › Sunday auto move-on: a session at 23:59 Saturday is Week 1, at 00:00 Sunday is Week 2
 v75 - the Saturday ask (week.ts) › Sunday move-on and a Saturday tap on a SHORT open week are the same thing (the tap does it a day early)
 v75 - the Saturday ask (week.ts) › Sunday moves on BY ITSELF, always: a short week (1 done) closes at Sunday 00:00, the missed letters stay missed
+v75 - the Saturday ask (week.ts) › a 3-week break then A, B, C Mon-Wed is ONE week, 3 of 3 (the Sunday never splits it)
 v75 - the Saturday ask (week.ts) › a Saturday three-letter close: Saturday stays the old week until a tap, Sunday opens the next
 v75 - the Saturday ask (week.ts) › a round start opens its Week 1 exactly at the start (no stretch back to Saturday)
+v75 - the Saturday ask (week.ts) › a short week open over a break closes at its own Sunday, in time; the next session is the next week
+v75 - the Saturday ask (week.ts) › a single A after a break is that week, no empty jump; the Sunday after it advances
 v75 - the Saturday ask (week.ts) › a week with NOTHING done is never moved on by Sunday (it has nothing to leave behind)
 v75 - the Saturday ask (week.ts) › the cutover is Sat Nov 14 2026 00:00 local
 v75 - the Saturday card › Finish: the card becomes a quiet link, Up next is D, and a reload does not ask again
 v75 - the Saturday card › Fri Nov 20: no card
 v75 - the Saturday card › Move to Week 2: Week 2 starts now, the note has Undo, and Undo brings Week 1 back
+v75 - the Saturday card › Sat Nov 21 with Week 1 done: title, week card and Up next all say Week 1 (D); after Move, Week 2
 v75 - the Saturday card › Start before answering shows the two buttons first; the next Start goes through
 v75 - the Saturday card › asks "Week 1: D left." with the two answers
 video-only exercise still shows a picture, with the video one tap away

@@ -12,6 +12,8 @@
 
 import { test, expect } from '@playwright/test';
 import { walkWeeks, type SessionLite } from '../week';
+import { weekModel } from '../program-week';
+import type { LogEntry } from '../types';
 import {
   weekHasD,
   weekCountLine,
@@ -223,5 +225,46 @@ test.describe('weekHasD on a Sat/Sun close — the anchor-floor-vs-still-open wi
     expect(weekHasD({ kind: 'open' }, openModel, dLogs)).toBe(true);
     // And it must NOT also still claim a home in the already-closed Week 5.
     expect(weekHasD({ kind: 'span', key: { round: 2, week: 5 } }, openModel, dLogs)).toBe(false);
+  });
+});
+
+// v75 fix round: her real Round 2 chain (the program's own clock: launch, Oct 3 Sick week, Round 3
+// from ROUNDS) - her Sat Nov 14 D is Round 2 Week 8, 4 of 4.
+test.describe('v75 - her real rows: the Nov 14 D is Round 2 Week 8', () => {
+  test('real chain through weekModel: Nov 14 D = R2W8, and R3W1 does not have it', () => {
+    const mk = (id: string, date: string, workout: LogEntry['workout']): LogEntry => ({
+      id,
+      date,
+      workout,
+      capacityBefore: null,
+      capacityAfter: null,
+      wallSitSec: 0,
+      backPain: null,
+      word: '',
+    });
+    const logs = [
+      mk('w5a', '2026-09-28T18:00:00+03:00', 'A'),
+      mk('w5b', '2026-09-29T18:00:00+03:00', 'B'),
+      mk('w5c', '2026-09-30T18:00:00+03:00', 'C'),
+      mk('w6a', '2026-10-12T18:00:00+03:00', 'A'),
+      mk('w6b', '2026-10-13T18:00:00+03:00', 'B'),
+      mk('w6c', '2026-10-14T18:00:00+03:00', 'C'),
+      mk('w7a', '2026-10-18T10:00:00+03:00', 'A'),
+      mk('w7b', '2026-10-20T18:00:00+03:00', 'B'),
+      mk('w7c', '2026-10-26T18:00:00+02:00', 'C'),
+      mk('w8c', '2026-10-31T10:00:00+02:00', 'C'),
+      mk('w8a', '2026-11-04T18:00:00+02:00', 'A'),
+      mk('w8b', '2026-11-09T18:00:00+02:00', 'B'),
+      mk('w8x', '2026-11-13T12:00:00+02:00', 'C'),
+    ];
+    const m = weekModel({ logs, moves: [], now: new Date('2026-11-15T10:00:00+02:00') });
+    const d = '2026-11-14T16:00:00+02:00';
+    expect(m.open?.key).toEqual({ round: 3, week: 1 });
+    expect(weekTargetForD(d, m)).toEqual({ kind: 'span', key: { round: 2, week: 8 } });
+    const w8 = m.spans.find((sp) => sp.key.round === 2 && sp.key.week === 8)!;
+    expect(
+      weekCountLine({ span: w8 }, weekHasD({ kind: 'span', key: w8.key }, m, [{ date: d }]))
+    ).toBe('4 of 4 ✓');
+    expect(weekHasD({ kind: 'open' }, m, [{ date: d }])).toBe(false);
   });
 });

@@ -902,7 +902,9 @@ test.describe('#15 — sick pause as intervals: property tests (step 5b)', () =>
       ['B', 'C'],
     ] as const);
     const first = new Date(2026, 8, 27, 9);
-    const hours = Math.max(1, Math.floor((before.getTime() - first.getTime()) / 3_600_000) - 1);
+    // v75: these properties are about the older rules - keep every session in a week whose Sunday is before the Saturday-ask cutover
+    const cap = Math.min(before.getTime(), new Date(2026, 10, 7, 23).getTime());
+    const hours = Math.max(1, Math.floor((cap - first.getTime()) / 3_600_000) - 1);
     return Array.from({ length: int(r, 1, 4) }, (_, i) => ({
       id: `p${i}`,
       date: new Date(first.getTime() + int(r, 0, hours) * 3_600_000).toISOString(),
@@ -1501,6 +1503,54 @@ test.describe('v75 - the Saturday ask (week.ts)', () => {
     expect(r.spans.at(-1)?.how).toBe('moved_on');
     expect(r.open?.key).toEqual({ round: 2, week: 2 });
     expect(r.open?.opensFrom).toBe('2026-11-21T19:00:00+02:00');
+  });
+
+  test('a 3-week break then A, B, C Mon-Wed is ONE week, 3 of 3 (the Sunday never splits it)', () => {
+    const launch = { round: 3, week: 1, at: '2026-11-15T00:00:00+02:00' };
+    const s: SessionLite[] = [
+      { id: 'a0', date: '2026-11-18T18:00:00+02:00', workout: 'A' },
+      { id: 'a', date: '2026-12-14T18:00:00+02:00', workout: 'A' },
+      { id: 'b', date: '2026-12-15T18:00:00+02:00', workout: 'B' },
+      { id: 'c', date: '2026-12-16T18:00:00+02:00', workout: 'C' },
+    ];
+    const r = walkWeeks(s, [], [], launch, [], at('2026-12-17T12:00:00+02:00'));
+    expect(r.weekOf.get('a')).toEqual({ round: 3, week: 2 });
+    expect(r.weekOf.get('b')).toEqual({ round: 3, week: 2 });
+    expect(r.weekOf.get('c')).toEqual({ round: 3, week: 2 });
+    const w2 = r.spans.find((sp) => sp.key.week === 2);
+    expect(w2?.how).toBe('three');
+    expect(w2?.done).toEqual(['A', 'B', 'C']);
+  });
+
+  test('a single A after a break is that week, no empty jump; the Sunday after it advances', () => {
+    const launch = { round: 3, week: 1, at: '2026-11-15T00:00:00+02:00' };
+    const s: SessionLite[] = [
+      { id: 'a0', date: '2026-11-18T18:00:00+02:00', workout: 'A' },
+      { id: 'a', date: '2026-12-14T18:00:00+02:00', workout: 'A' },
+    ];
+    const mid = walkWeeks(s, [], [], launch, [], at('2026-12-18T12:00:00+02:00'));
+    expect(mid.weekOf.get('a')).toEqual({ round: 3, week: 2 });
+    expect(mid.open?.key).toEqual({ round: 3, week: 2 });
+    const after = walkWeeks(s, [], [], launch, [], at('2026-12-20T00:00:00+02:00'));
+    expect(after.open?.key).toEqual({ round: 3, week: 3 });
+    expect(after.spans.at(-1)?.closedAt).toBe('2026-12-20T00:00:00+02:00');
+  });
+
+  test('a short week open over a break closes at its own Sunday, in time; the next session is the next week', () => {
+    const launch = { round: 3, week: 1, at: '2026-11-15T00:00:00+02:00' };
+    const s: SessionLite[] = [
+      { id: 'a0', date: '2026-11-18T18:00:00+02:00', workout: 'A' },
+      { id: 'b', date: '2026-12-14T18:00:00+02:00', workout: 'B' },
+    ];
+    const r = walkWeeks(s, [], [], launch, [], at('2026-12-15T12:00:00+02:00'));
+    expect(r.spans[0]?.key).toEqual({ round: 3, week: 1 });
+    expect(r.spans[0]?.closedAt).toBe('2026-11-22T00:00:00+02:00');
+    expect(r.weekOf.get('b')).toEqual({ round: 3, week: 2 });
+    for (const sp of r.spans)
+      for (const ses of sp.sessions)
+        expect(new Date(sp.closedAt!).getTime()).toBeGreaterThanOrEqual(
+          new Date(ses.date).getTime()
+        );
   });
 
   test('a round start opens its Week 1 exactly at the start (no stretch back to Saturday)', () => {

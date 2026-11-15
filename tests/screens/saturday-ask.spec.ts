@@ -55,6 +55,20 @@ test.describe('v75 - the Saturday card', () => {
     await expect(page.locator('#sat-move')).toHaveText('Move to Week 2');
   });
 
+  test('Sat Nov 21 with Week 1 done: title, week card and Up next all say Week 1 (D); after Move, Week 2', async ({
+    page,
+  }) => {
+    await seed(page, SAT_NIGHT, WEEK1_CLOSED);
+    await expect(page.locator('#week-title')).toHaveText('Week 1');
+    await expect(page.locator('.week-card-range')).toHaveText('Week 1');
+    await expect(page.locator('#week-count')).toHaveText('3 of 4 · D left');
+    await expect(page.locator('#week-sub')).not.toContainText('Week 2');
+    await expect(page.locator('.home-hero')).toContainText('Workout D');
+    await page.locator('#sat-move').click();
+    await expect(page.locator('#week-title')).toHaveText('Week 2');
+    await expect(page.locator('.week-card-range')).toHaveText('Week 2');
+  });
+
   test('Finish: the card becomes a quiet link, Up next is D, and a reload does not ask again', async ({
     page,
   }) => {
@@ -84,10 +98,10 @@ test.describe('v75 - the Saturday card', () => {
     page,
   }) => {
     await seed(page, SAT_NIGHT, WEEK1_CLOSED);
-    await page.locator('button[data-workout="A"]').first().click();
+    await page.locator('.home-hero').click();
     await expect(page.locator('#saturday-ask')).toBeVisible();
     await expect(page.locator('#sat-finish')).toBeVisible();
-    await page.locator('button[data-workout="A"]').first().click();
+    await page.locator('.home-hero').click();
     await expect(page.locator('#saturday-card')).toHaveCount(0);
   });
 
