@@ -448,6 +448,7 @@ export function resetState(): void {
   // WK2 (Sep 27 2026): a "‹ Week 4" peek never survives past the session she
   // takes next — Home always opens back on the true current week.
   ui.viewingLastClosedWeek = false;
+  ui.satStartAsk = false;
   state.selectedWorkout = null;
   state.pinnedPlanDateIso = null;
   state.pinnedWeekKey = null;

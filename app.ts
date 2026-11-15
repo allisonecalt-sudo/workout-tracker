@@ -103,6 +103,7 @@ import {
   shownWeek,
   gapCountsBackToWeekKey,
   currentHowToWeekKey,
+  saturdayQuestion,
 } from './week-clock.js';
 import { attributeSessionsToWeeks } from './program-week.js';
 import {
@@ -547,6 +548,13 @@ function attachHandlers(): void {
     btn.addEventListener('click', () => {
       const id = btn.dataset['workout'] as AnyWorkoutId | undefined;
       if (id) {
+        // v75: a Saturday with the card unanswered - the first Start tap shows its two buttons
+        // first (Home says so above them); the next Start tap goes through.
+        if (state.screen === 'home' && !ui.satStartAsk && saturdayQuestion() !== null) {
+          ui.satStartAsk = true;
+          render();
+          return;
+        }
         unlockAudio(); // Group 1C: gesture-anchored audio unlock
         startWorkout(id);
       }

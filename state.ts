@@ -441,6 +441,9 @@ export const WEEK_MOVES_STORAGE_KEY = 'workout-tracker:week-moves';
 // goes in STORAGE_KEY's list - nothing that counts sessions can see it.
 export const REST_DAYS_STORAGE_KEY = 'workout-tracker:rest-days';
 export const PACE_RULE_SEEN_KEY = 'workout-tracker:pace-rule-seen';
+// v75 (Nov 15 2026): the Saturday card's "Finish Week N" answer - the local date (YYYY-MM-DD) of the
+// Saturday she tapped it, kept on THIS phone only (never synced; losing it means one repeat question).
+export const SATURDAY_FINISH_KEY = 'workout-tracker:saturday-finish';
 // v63 item 1 (Oct 19 2026): the "Note to Claude" queue - the small record of every note not yet in
 // her Brain dump inbox (text notes carry their text, voice notes carry the id of the recording in
 // IndexedDB). A localStorage mirror so the Home sync line can count unsent notes without waiting
@@ -790,7 +793,27 @@ export function weekClockInput(
   logs: LogEntry[] = loadLogs(),
   now: Date = new Date()
 ): WeekClockInput {
-  return { logs, moves: loadWeekMoves(), now };
+  return { logs, moves: loadWeekMoves(), now, finishedOn: loadSaturdayFinish() };
+}
+
+/** v75: the Saturday she tapped "Finish Week N" (local YYYY-MM-DD), or null. */
+export function loadSaturdayFinish(): string | null {
+  try {
+    const raw = localStorage.getItem(SATURDAY_FINISH_KEY);
+    return raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/** v75: remember (or, with null, forget) the Saturday's "Finish" answer. */
+export function writeSaturdayFinish(date: string | null): void {
+  try {
+    if (date === null) localStorage.removeItem(SATURDAY_FINISH_KEY);
+    else localStorage.setItem(SATURDAY_FINISH_KEY, date);
+  } catch {
+    // a full or blocked store: the card simply asks once more
+  }
 }
 
 // ---- walks + cycle periods (code-shape step 9b, Oct 14 2026: moved from app.ts verbatim; the sync modules need them) ----

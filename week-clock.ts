@@ -97,6 +97,16 @@ export function shownWeek(): ReturnType<typeof pw.shownWeek> {
   return pw.shownWeek(weekClockInput());
 }
 
+/** v75: the Saturday card's question (null unless it is Saturday, the week can be left and she has not answered). */
+export function saturdayQuestion(): ReturnType<typeof pw.saturdayQuestion> {
+  return pw.saturdayQuestion(weekClockInput());
+}
+
+/** v75: the Saturday situation, answered or not (Home's quiet "Move to Week N+1" link and Up next read it). */
+export function saturdaySituation(): ReturnType<typeof pw.saturdaySituation> {
+  return pw.saturdaySituation(weekClockInput());
+}
+
 export function gapCountsBackToWeekKey(): WeekKey | null {
   return pw.gapCountsBackToWeekKey(weekClockInput());
 }

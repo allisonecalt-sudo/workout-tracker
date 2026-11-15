@@ -37,7 +37,7 @@ import {
 } from '../day-mode';
 import { EXERCISE_DETAIL } from '../exercise-detail';
 import { EXERCISE_VISUALS } from '../exercise-visuals';
-import { shownWeek, type WeekClockInput } from '../program-week';
+import { shownWeek, saturdayQuestion, type WeekClockInput } from '../program-week';
 import {
   sessionPayload,
   legacySessionPayload,
@@ -402,6 +402,29 @@ test.describe('v74 - a rest day is never a workout', () => {
     const after = shownWeek(at('2026-11-16T09:05:00+02:00'));
     expect(after.key).toEqual(before.key);
     expect(before.key).toEqual({ round: 3, week: 1 });
+  });
+});
+
+test.describe('v75 - a Saturday rest day changes neither the Saturday card nor any count', () => {
+  test('the card and the week are the same with or without a rest day that Saturday', () => {
+    // a rest day lives in its own store, never in `logs`: the Saturday question takes only logs, moves and now
+    const logs: LogEntry[] = [
+      { id: 'a', date: '2026-11-16T18:00:00+02:00', workout: 'A' },
+      { id: 'b', date: '2026-11-17T18:00:00+02:00', workout: 'B' },
+    ].map((l) => ({
+      ...l,
+      workout: l.workout as 'A' | 'B',
+      capacityBefore: null,
+      capacityAfter: null,
+      wallSitSec: 0,
+      backPain: null,
+      word: '',
+    }));
+    const morning: WeekClockInput = { logs, moves: [], now: new Date('2026-11-21T09:00:00+02:00') };
+    const evening: WeekClockInput = { logs, moves: [], now: new Date('2026-11-21T21:00:00+02:00') };
+    expect(saturdayQuestion(evening)).toEqual(saturdayQuestion(morning));
+    expect(saturdayQuestion(morning)?.missing).toEqual(['C']);
+    expect(shownWeek(evening).key).toEqual(shownWeek(morning).key);
   });
 });
 

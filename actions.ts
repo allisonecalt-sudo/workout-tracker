@@ -41,6 +41,7 @@ import {
   writeCyclePeriods,
   loadWeekMoves,
   writeWeekMoves,
+  writeSaturdayFinish,
   loadRestDays,
   loadRestDaysRaw,
   writeRestDays,
@@ -683,6 +684,23 @@ export function moveOnWithoutIt(key: WeekKey, missing: readonly string[]): void 
     ),
   ]);
   void pushWeekMove(move);
+  requestRender();
+}
+
+/** v75 (Nov 15 2026): the Saturday card's "Move to Week N+1" - the same week_moves row as Move on
+ * (round, week = the week she is leaving, tap time; `missing` is null when A, B and C were all done),
+ * pushed and undone the same way. For a week that already closed on three letters the clock reads
+ * it as "start the next week now"; for a short open week it is the ordinary Move on, a day early. */
+export function moveToNextWeekNow(key: WeekKey, missing: readonly string[]): void {
+  writeSaturdayFinish(null);
+  ui.satStartAsk = false;
+  moveOnWithoutIt(key, missing);
+}
+
+/** v75: "Finish Week N" - she stays in the week; this phone remembers it (this Saturday only). */
+export function finishWeekThisSaturday(): void {
+  writeSaturdayFinish(localIsoDate(new Date()));
+  ui.satStartAsk = false;
   requestRender();
 }
 

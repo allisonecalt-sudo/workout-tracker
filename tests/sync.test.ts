@@ -527,6 +527,23 @@ test.describe('sync - cycle_periods, week_moves and walks (step 9b, characterisa
     }
   });
 
+  test("v75: her Saturday tap 'Move to Week N+1' (A, B, C all done) sends missing:null and waits in the queue until it syncs", async () => {
+    // moveToNextWeekNow -> moveOnWithoutIt writes a local row with missing '' (all three were done)
+    const tap = { round: 3, week: 1, at: '2026-11-21T17:00:00.000Z', missing: '', synced: false };
+    expect(weekMovePayload(tap)).toEqual({
+      round: 3,
+      week: 1,
+      moved_at: '2026-11-21T17:00:00.000Z',
+      missing: null,
+    });
+    // offline: nothing sent, the unsynced row stays and survives a pull that does not know it yet
+    writeWeekMoves([tap]);
+    expect(mergeWeekMoves([tap], [])).toEqual([tap]);
+    // and a server row for the same week reads back as a move with no missing letters
+    const back = mergeWeekMoves([], [{ round: 3, week: 1, moved_at: tap.at, missing: null }]);
+    expect(back).toEqual([{ round: 3, week: 1, at: tap.at, missing: '', synced: true }]);
+  });
+
   test('pushWalk POSTs minutes only to movement_log and marks the walk synced', async () => {
     const walk = { id: 'w1', date: '2026-10-12T09:00:00.000Z', minutes: 12, synced: false };
     writeWalks([walk]);

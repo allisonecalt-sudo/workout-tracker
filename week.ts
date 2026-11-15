@@ -181,6 +181,11 @@ function sickIntervals(sickWeeks: SickWeek[], launchAt: string, now: Date): Paus
 export type WeekSpan = {
   key: WeekKey;
   openedAt: string;
+  /** v75 (Nov 15 2026): when the week REALLY opened, set ONLY for a week opened by
+   * the Saturday-ask rules (her tap, Sunday 00:00, the Sunday auto move-on, a round
+   * start) — undefined = the older rules, nothing about the week changes. week-d.ts
+   * starts a week's D window here (no stretch back to Saturday). */
+  opensFrom?: string;
   closedAt: string | null; // null = the open week
   how: 'three' | 'moved_on' | 'round_ended' | 'sick' | null;
   sessions: SessionLite[]; // chronological
@@ -195,6 +200,19 @@ export const COMPLETION_WEEKS_FROM: { round: number; week: number; at: string } 
   week: 5,
   at: '2026-09-26T22:30:00+03:00',
 };
+
+// v75 (Nov 15 2026) — SATURDAY IS A QUESTION, SUNDAY IS AN ANSWER. Her words: "once
+// its sat night you ask if i should click move on, by sunday you do it
+// automatically - including d". From this instant (Sat Nov 14 2026 00:00 local;
+// Jerusalem is UTC+2 after the Oct 25 clock change) a Mon-Fri close by three letters
+// opens the next week at SUNDAY 00:00, not Saturday 00:00; Saturday belongs to the
+// old week until she taps "Move to Week N+1" (a week_moves row for the week that
+// just closed, made on a Saturday); and a week still open with 1+ done moves on BY
+// ITSELF at the first Sunday 00:00 at least 5 days after it opened (the missed
+// letter stays missed). Everything dated/computed before it is the older rule.
+// Like the sick weeks and round starts the rule takes effect only once `now` has
+// reached it, so a clock before it replays exactly as before.
+export const SATURDAY_ASK_FROM = '2026-11-14T00:00:00+02:00';
 
 // WK2 fix r1 (Sep 27 2026, checker's must #2): the legacy fallback below means
 // exactly ONE thing — the calendar week that closed the night before the real
@@ -257,7 +275,8 @@ function nextSaturdayBoundary(closedAtIso: string): Date {
 // landing on the boundary weekend still gives the right calendar day.
 function mondayAfter(boundary: Date): Date {
   const monday = new Date(boundary.getFullYear(), boundary.getMonth(), boundary.getDate());
-  monday.setDate(monday.getDate() + 2); // boundary is always a Saturday
+  // A Saturday boundary: +2. v75: a SUNDAY boundary (the Saturday-ask rule): +1.
+  monday.setDate(monday.getDate() + (boundary.getDay() === 0 ? 1 : 2));
   return monday;
 }
 
@@ -345,7 +364,13 @@ function timeline(sessions: SessionLite[], moves: MoveOn[], rounds: RoundStart[]
  * close) — the SAME value the eventual span's `openedAt` will carry once a
  * session finally lands (see `walkWeeks` below), so a caller reading this
  * mid-gap never disagrees with what week.ts reports once a session arrives. */
-export type PendingWeek = { key: WeekKey; opensAt: string };
+export type PendingWeek = {
+  key: WeekKey;
+  opensAt: string;
+  /** v75: true when `opensAt` is a Sunday 00:00 from the Saturday-ask rule (week-d.ts then
+   * starts this week's D window there, with no stretch back to Saturday). */
+  ask?: true;
+};
 
 /**
  * Walk sessions + moves + round starts after the launch, in time order.
@@ -386,6 +411,10 @@ export function walkWeeks(
   // Home to "Round 3 Week 1" at once.) A start takes effect at its own instant.
   // An Invalid `now` (never a real clock) keeps the plain "apply all" walk.
   const nowMs = now.getTime();
+  // v75: the Saturday-ask rules apply only once `now` has reached SATURDAY_ASK_FROM
+  // (an Invalid `now` = the plain walk), so a clock before it is byte-identical.
+  const askMs = new Date(SATURDAY_ASK_FROM).getTime();
+  const askOn = !Number.isNaN(nowMs) && nowMs >= askMs;
   const rounds = roundsIn.filter(
     (r) =>
       afterLaunch(r.at, launch.at) && (Number.isNaN(nowMs) || new Date(r.at).getTime() <= nowMs)
@@ -433,6 +462,9 @@ export function walkWeeks(
   // r2 can both compare it (getTime()) and format it (formatLocalIso) as the
   // eventual openedAt.
   let nextBoundary: Date | null = null;
+  // v75: true when nextBoundary is a SUNDAY 00:00 set by the Saturday-ask rule
+  // (a Saturday tap may open the week earlier; the D window starts at the real opening).
+  let nextBoundaryAsk = false;
 
   function closeOpen(at: string, how: 'three' | 'moved_on' | 'round_ended' | 'sick'): void {
     if (!open) return;
@@ -458,12 +490,30 @@ export function walkWeeks(
       weekNow += 1;
     } else if (how !== 'round_ended') {
       weekNow += 1;
-      if (isWeekendAnchorDay(at)) {
+      const atDate = new Date(at);
+      const asked = askOn && atDate.getTime() >= askMs;
+      if (asked && how === 'three' && atDate.getDay() === 6) {
+        // v75: a three-letter close ON a Saturday - Saturday still belongs to this week
+        // until she taps "Move to Week N+1"; otherwise the next one opens Sunday 00:00.
+        nextBoundary = new Date(atDate.getFullYear(), atDate.getMonth(), atDate.getDate() + 1);
+        nextBoundaryAsk = true;
+      } else if (isWeekendAnchorDay(at)) {
         open = freshSpan({ round: roundNow, week: weekNow }, at);
+        if (asked) open.opensFrom = at;
         openDone = new Set();
         nextBoundary = null;
+        nextBoundaryAsk = false;
       } else {
-        nextBoundary = nextSaturdayBoundary(at);
+        const sat = nextSaturdayBoundary(at);
+        if (askOn && how === 'three' && sat.getTime() >= askMs) {
+          // v75: a Mon-Fri three-letter close -> the next week opens SUNDAY 00:00.
+          nextBoundary = new Date(sat.getFullYear(), sat.getMonth(), sat.getDate() + 1);
+          nextBoundaryAsk = true;
+        } else {
+          // an older close, or a weekday Move on (she already chose): Saturday 00:00
+          nextBoundary = sat;
+          nextBoundaryAsk = false;
+        }
       }
     }
   }
@@ -478,24 +528,60 @@ export function walkWeeks(
     ...(iv.end.getTime() <= now.getTime() ? [{ at: iv.end, stops: false, until: iv.end }] : []),
   ]);
   let edgeIdx = 0;
-  function applyPauseEdgesUpTo(ms: number): void {
-    while (edgeIdx < edges.length && edges[edgeIdx]!.at.getTime() <= ms) {
+  // v75: the Sunday move-on. The instant (ms) the OPEN week closes by itself: the first
+  // Sunday 00:00 strictly after (its opening + 5 days) - so a week opened Sunday closes
+  // the Sunday 7 days on, one opened Saturday the Sunday after next Saturday. Only a
+  // week with 1+ done (a week with nothing done never needs moving on; Sick weeks pause
+  // the clock instead), only once the rule is on, and only an instant at/after
+  // SATURDAY_ASK_FROM (a week long since left open before it is left alone).
+  function autoCloseMs(): number {
+    if (!askOn || !open || openDone.size === 0) return Infinity;
+    const base = new Date(open.opensFrom ?? open.openedAt);
+    const t = new Date(
+      base.getFullYear(),
+      base.getMonth(),
+      base.getDate() + 5,
+      base.getHours(),
+      base.getMinutes(),
+      base.getSeconds()
+    );
+    const sunday = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+    sunday.setDate(sunday.getDate() + ((7 - sunday.getDay()) % 7));
+    if (sunday.getTime() <= t.getTime()) sunday.setDate(sunday.getDate() + 7);
+    return sunday.getTime() >= askMs ? sunday.getTime() : Infinity;
+  }
+  // Apply, in time order, every pause edge and every Sunday move-on at or before `ms`.
+  // `roundTie`: the event is a round start - one at exactly the Sunday instant wins the tie
+  // (the new round's Week 1 opens, no empty week in between).
+  function applyPauseEdgesUpTo(ms: number, roundTie = false): void {
+    for (;;) {
+      const edgeAt = edgeIdx < edges.length ? edges[edgeIdx]!.at.getTime() : Infinity;
+      const autoAt = autoCloseMs();
+      const edgeDue = edgeIdx < edges.length && edgeAt <= ms;
+      const autoDue = autoAt <= ms && autoAt <= nowMs && !(roundTie && autoAt === ms);
+      if (!edgeDue && !autoDue) break;
+      if (autoDue && (!edgeDue || autoAt < edgeAt)) {
+        closeOpen(formatLocalIso(new Date(autoAt)), 'moved_on');
+        continue;
+      }
       const edge = edges[edgeIdx++]!;
       if (edge.stops) {
         if (open) closeOpen(formatLocalIso(edge.at), 'sick');
         // Whether a week closed just now or one closed earlier (already in a
         // gap): nothing may open before the interval ends.
         nextBoundary = edge.until;
+        nextBoundaryAsk = false;
       } else if (!open) {
         open = freshSpan({ round: roundNow, week: weekNow }, formatLocalIso(edge.at));
         openDone = new Set();
         nextBoundary = null;
+        nextBoundaryAsk = false;
       }
     }
   }
 
   for (const ev of events) {
-    applyPauseEdgesUpTo(new Date(ev.at).getTime());
+    applyPauseEdgesUpTo(new Date(ev.at).getTime(), ev.kind === 'round');
 
     if (ev.kind === 'round') {
       // Her own call, "starts at its own moment" (rule 7) — closes whatever
@@ -505,8 +591,10 @@ export function walkWeeks(
       roundNow = ev.round.round;
       weekNow = 1;
       open = freshSpan({ round: roundNow, week: weekNow }, ev.round.at);
+      if (new Date(ev.round.at).getTime() >= askMs) open.opensFrom = ev.round.at;
       openDone = new Set();
       nextBoundary = null; // her own restart moment - no boundary to wait for
+      nextBoundaryAsk = false;
       continue;
     }
 
@@ -529,6 +617,26 @@ export function walkWeeks(
         } else {
           closeOpen(ev.move.at, 'moved_on');
         }
+      } else if (
+        askOn &&
+        !open &&
+        nextBoundary !== null &&
+        nextBoundaryAsk &&
+        lastClosed !== null &&
+        (lastClosed as WeekSpan).how === 'three' &&
+        (lastClosed as WeekSpan).key.round === ev.move.round &&
+        (lastClosed as WeekSpan).key.week === ev.move.week &&
+        new Date(ev.move.at).getDay() === 6 &&
+        new Date(ev.move.at).getTime() >= askMs &&
+        new Date(ev.move.at).getTime() < (nextBoundary as Date).getTime()
+      ) {
+        // v75: her Saturday tap "Move to Week N+1" for the week that just closed:
+        // the next week opens NOW. Sessions before the tap stay Week N's.
+        open = freshSpan({ round: roundNow, week: weekNow }, ev.move.at);
+        open.opensFrom = ev.move.at;
+        openDone = new Set();
+        nextBoundary = null;
+        nextBoundaryAsk = false;
       } else {
         // Stale: Undo, a second phone, a duplicate tap, or a move for a week
         // that already closed some other way. §2.1: warn, never throw.
@@ -576,10 +684,12 @@ export function walkWeeks(
     if (gap.opened) {
       // weekNow was already assigned at the close (8d.3) - just open now.
       open = freshSpan({ round: roundNow, week: weekNow }, gap.openedAt);
+      if (nextBoundaryAsk && nextBoundary) open.opensFrom = formatLocalIso(nextBoundary);
       open.sessions.push(session);
       openDone = new Set([session.workout]);
       weekOf.set(session.id, open.key);
       nextBoundary = null; // consumed - the week is open now
+      nextBoundaryAsk = false;
     } else if (lastClosed) {
       const closed = lastClosed as WeekSpan;
       closed.sessions.push(session);
@@ -621,7 +731,11 @@ export function walkWeeks(
   // caller to reconstruct the same rule and risk disagreeing with it.
   const pending: PendingWeek | null =
     open === null && nextBoundary !== null
-      ? { key: { round: roundNow, week: weekNow }, opensAt: formatLocalIso(nextBoundary) }
+      ? {
+          key: { round: roundNow, week: weekNow },
+          opensAt: formatLocalIso(nextBoundary),
+          ...(nextBoundaryAsk ? { ask: true as const } : {}),
+        }
       : null;
 
   return { spans, open, pending, weekOf };

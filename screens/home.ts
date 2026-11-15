@@ -43,7 +43,13 @@ import {
 import type { ActiveSessionSnapshot } from '../state.js';
 import type { LogEntry, StoredWeekMove, LastDone } from '../types.js';
 import { ui } from '../ui.js';
-import { moveOnWithoutIt, undoWeekMove, undoRestDay } from '../actions.js';
+import {
+  moveOnWithoutIt,
+  undoWeekMove,
+  undoRestDay,
+  moveToNextWeekNow,
+  finishWeekThisSaturday,
+} from '../actions.js';
 import { RECOVERY_START_LABEL, comingBackActive } from '../day-mode.js';
 import {
   LAST_DONE_KEY,
@@ -79,6 +85,7 @@ import {
   weekSubLabel,
   getWeekPlan,
   weekHasDFor,
+  saturdaySituation,
 } from '../week-clock.js';
 import {
   SESSIONS_PER_WEEK_TARGET,
@@ -705,6 +712,19 @@ function renderUpNextHero(id: WorkoutId): string {
     </button>`;
 }
 
+// v75: Up next after "Finish Week N" on a Saturday when only D is left - the week's own last piece,
+// not 'A' of a week she has not moved to. Same card, same one tap (data-workout="D").
+function renderUpNextD(): string {
+  const w = getWorkoutD();
+  return `
+    <button class="workout-card workout-card-pick home-hero" data-workout="D" type="button">
+      <span class="hero-label">Up next</span>
+      <span class="hero-title">Workout D</span>
+      <span class="hero-line">${escapeHtml(`Cardio 30 · ${w.name}`)}</span>
+      <span class="hero-start" aria-hidden="true">Start</span>
+    </button>`;
+}
+
 // After Save, until midnight: the win is witnessed instead of the next workout
 // lighting up minutes later (uxui post-log 4/5). Not sage — nothing to do here.
 // WK2 (Sep 27 2026): `weekLines` replaces the old single weekCount/weekLabel
@@ -853,6 +873,9 @@ export function renderHome(): string {
   // completion week to move on FROM.
   let moveOnHtml = '';
   let movedNoteHtml = '';
+  // v75 (Nov 15 2026): the Saturday card / its quiet link, and Up next = D after "Finish".
+  let saturdayCardHtml = '';
+  let upNextD = false;
   // v64 (Oct 20 2026, her Q2 via "just go"): after a Sick/Break week, ONE quiet line on
   // the week card - the fresh start named, no empty-circle judging. '' otherwise.
   let afterBreakHtml = '';
@@ -1038,11 +1061,56 @@ export function renderHome(): string {
             s.key.week === todaysMove.week
         ) ?? null)
       : null;
+    // v75: her Saturday tap for a week that had already CLOSED on three letters is no 'moved_on'
+    // span (the clock reads it as "start the next week now") - the same note, the same Undo.
+    const openAfterTap =
+      todaysMove && !todaysMoveSpan && model.open && model.open.opensFrom === todaysMove.at
+        ? model.open
+        : null;
+    if (todaysMove && openAfterTap) {
+      movedNoteHtml =
+        `<div class="week-moved-note" id="week-moved-note">Week ${openAfterTap.key.week} started · ` +
+        `<button class="week-undo-btn" id="week-undo" type="button">Undo</button></div>`;
+    }
     if (todaysMove && todaysMoveSpan) {
       const doneCount = 3 - todaysMove.missing.length;
       movedNoteHtml =
         `<div class="week-moved-note" id="week-moved-note">Week ${todaysMove.week} closed at ${doneCount} of 3 · ` +
         `<button class="week-undo-btn" id="week-undo" type="button">Undo</button></div>`;
+    }
+
+    // v75 (Nov 15 2026), her words: "once its sat night you ask if i should click move on".
+    // Saturday: ONE card asks "Finish Week N" / "Move to Week N+1" (default Finish, kept on this
+    // phone only); after "Finish" a quiet link stays, and Up next offers what the week still lacks
+    // (D) instead of 'A'. Not shown while peeking at an older week. (Sunday moves on by itself.)
+    const sat = peek ? null : saturdaySituation();
+    if (sat) {
+      const lettersLeft = [...sat.missing, ...(sat.hasD || comingBack ? [] : ['D'])];
+      const leftWords =
+        lettersLeft.length === 0
+          ? ''
+          : lettersLeft.length === 1
+            ? `${lettersLeft[0]} left`
+            : `${lettersLeft.slice(0, -1).join(', ')} and ${lettersLeft[lettersLeft.length - 1]} left`;
+      const nextWk = sat.nextKey.week;
+      if (!sat.answered) {
+        const headLine = leftWords
+          ? `Week ${sat.key.week}: ${leftWords}.`
+          : `Week ${sat.key.week} is done ✓ · Move to Week ${nextWk} now?`;
+        saturdayCardHtml =
+          `<div class="card saturday-card" id="saturday-card">` +
+          (ui.satStartAsk
+            ? `<div class="saturday-ask" id="saturday-ask">Before you start, which one?</div>`
+            : '') +
+          `<div class="saturday-line">${escapeHtml(headLine)}</div>` +
+          `<div class="saturday-btns">` +
+          `<button class="btn-chip saturday-btn" id="sat-finish" type="button">Finish Week ${sat.key.week}</button>` +
+          `<button class="btn-chip saturday-btn" id="sat-move" type="button">Move to Week ${nextWk}</button>` +
+          `</div></div>`;
+      } else {
+        saturdayCardHtml = `<button class="week-nav-link" id="sat-move-link" type="button">Move to Week ${nextWk}</button>`;
+        if (sat.kind === 'closed' && !sat.hasD && !comingBack) upNextD = true;
+      }
     }
 
     // Did TODAY'S save close its own week? (its week resolves to a CLOSED
@@ -1197,10 +1265,11 @@ export function renderHome(): string {
     </div>
     ${subLineHtml}
     ${movedNoteHtml}
+    ${saturdayCardHtml}
     <div id="sync-indicator" class="sync-indicator sync-${state.syncStatus}">${syncIndicatorText()}</div>
     ${ui.staleSnapshot ? renderStaleSessionCard(ui.staleSnapshot) : ''}
 
-    ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : restTodayDay ? renderRecoveryDayCard(pick, restTodayDay.mode) : renderUpNextHero(pick) + renderPreviewLink(pick)}
+    ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : restTodayDay ? renderRecoveryDayCard(pick, restTodayDay.mode) : upNextD ? renderUpNextD() : renderUpNextHero(pick) + renderPreviewLink(pick)}
     ${chipsHtml}
     ${renderWorkoutDChip(dDoneToday, comingBack)}
 
@@ -1313,6 +1382,15 @@ export function attachHomeHandlers3(): void {
     if (!shown.span) return; // button only ever renders when shown.span exists (canMoveOn needs it)
     moveOnWithoutIt(shown.key, shown.span.missing);
   });
+  // v75: the Saturday card. "Finish" stays in the week (this phone remembers it for today);
+  // "Move to Week N+1" is the same week_moves row as Move on (Undo works the same day).
+  bindClick('sat-finish', () => finishWeekThisSaturday());
+  const moveNow = (): void => {
+    const sat = saturdaySituation();
+    if (sat) moveToNextWeekNow(sat.key, sat.missing);
+  };
+  bindClick('sat-move', moveNow);
+  bindClick('sat-move-link', moveNow);
   // #week-undo sits under the header (outside .week-card), so a plain
   // bindClick is enough — no propagation to stop.
   bindClick('week-undo', () => {

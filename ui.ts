@@ -86,6 +86,10 @@ export interface Ui {
   // (§8c: "the same link becomes 'Week 5 ›' to return"). Purely a view toggle —
   // never changes what week a new session counts toward or trains.
   viewingLastClosedWeek: boolean;
+  // v75 (Nov 15 2026): she tapped Start on a Saturday before answering the Saturday card
+  // ("Finish Week N" / "Move to Week N+1"); Home then says so above the two buttons, and the next
+  // Start tap goes through. Cleared by either answer and by resetState.
+  satStartAsk: boolean;
   // ---------- per-exercise voice note (Allison Jul 9 2026) ----------
   // One <audio> plays at a time. The button toggles play/pause; button visuals
   // reflect playback and are re-synced after a re-render (opening a dropdown
@@ -129,6 +133,7 @@ export const ui: Ui = {
   reviewBackTo: 'home',
   reviewBackScroll: 0,
   viewingLastClosedWeek: false,
+  satStartAsk: false,
   voiceAudio: null,
   voiceAudioSrc: null,
   settingsDataOpen: false,

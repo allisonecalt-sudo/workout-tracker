@@ -16,6 +16,8 @@
 // half is scripts/replay-week-clock.mjs on her real rows (local only).
 //
 // (v73, Nov 11 2026: the real Round 3 is written, starts Nov 15; the golden was regenerated for it.)
+// (v75, Nov 15 2026: regenerated for the Saturday-ask rules - ONLY the part from Dec 6 changed; the
+// part before the Nov 14 cutover is pinned by replay-expected-pre-v75.json, see the test below.)
 // The hypothetical round is the one AFTER the highest real round (num omitted in the
 // fixture), so the golden's R3 labels are today's. Writing a real Round 3 changes
 // the real rounds under the replay: regenerate then (synthetic fixture only), with
@@ -60,6 +62,27 @@ test.describe('week-clock replay — synthetic golden (step 5a)', () => {
     const r = compareReplays(expected, actual);
     expect(r.diffs.slice(0, 20)).toEqual([]);
     expect(r.fields).toBeGreaterThan(5000);
+  });
+
+  // v75 (Nov 15 2026): the Saturday-ask rules take effect at Sat Nov 14 2026 00:00 (week.ts
+  // SATURDAY_ASK_FROM). Everything BEFORE it must be exactly the pre-v75 golden, kept as its own
+  // file (replay-expected-pre-v75.json, cut from the old golden, never regenerated). The
+  // regenerated replay-expected.json only differs from the old one from Dec 6 on (the
+  // hypothetical short Round 4 Week 1 now moves on by itself on Sunday).
+  test('v75: every instant before the Saturday-ask cutover equals the PRE-v75 golden', () => {
+    const old = JSON.parse(
+      fs.readFileSync(path.join(FIXTURES, 'replay-expected-pre-v75.json'), 'utf8')
+    ) as typeof actual;
+    const cut = (r: typeof actual): (typeof actual)['snapshots'] =>
+      r.snapshots.filter((s) => String(s['t']) < '2026-11-14T00:00');
+    expect(cut(old).length).toBe(147);
+    expect(cut(actual).length).toBe(147);
+    const r = compareReplays(
+      { ...old, snapshots: cut(old) },
+      { ...actual, snapshots: cut(actual) }
+    );
+    expect(r.diffs.slice(0, 20)).toEqual([]);
+    expect(r.fields).toBeGreaterThan(3000);
   });
 
   test('the comparison itself notices a change (one field flipped)', () => {
@@ -116,8 +139,12 @@ test.describe('week-clock replay — synthetic golden (step 5a)', () => {
     expect(at('2026-11-27T21:00')['week'].shown).toBe('R3W1');
     expect(at('2026-11-28T21:00')['week'].shown).toBe(`R${nextRoundNum()}W1`);
     expect(at('2026-11-28T21:00')['week'].spans.at(-1).how).toBe('round_ended');
-    expect(at('2026-12-07T21:00')['week'].canMoveOn).toBe(true);
+    expect(at('2026-12-05T21:00')['week'].canMoveOn).toBe(true);
     expect(at('2026-12-02T09:00')['week'].canMoveOn).toBe(false);
+    // v75 (Nov 15 2026): and Sunday moves that short week on BY ITSELF at 00:00
+    expect(at('2026-12-05T21:00')['week'].shown).toBe(`R${nextRoundNum()}W1`);
+    expect(at('2026-12-06T09:00')['week'].shown).toBe(`R${nextRoundNum()}W2`);
+    expect(at('2026-12-06T09:00')['week'].spans.at(-1).how).toBe('moved_on');
   });
 });
 

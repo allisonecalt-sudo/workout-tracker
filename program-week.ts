@@ -24,6 +24,7 @@ import {
   walkWeeks,
   dayOfWeek as weekDayOfWeek,
   COMPLETION_WEEKS_FROM,
+  SATURDAY_ASK_FROM,
   formatLocalIso,
   type SessionLite as WeekSessionLite,
   type MoveOn as WeekMoveOn,
@@ -31,7 +32,9 @@ import {
   type WeekSpan,
   type WeekKey,
   type PendingWeek,
+  type Letter,
 } from './week.js';
+import { weekHasD } from './week-d.js';
 import {
   ROUNDS,
   SKIPPED_WEEKS,
@@ -43,7 +46,7 @@ import {
   type Workout,
   type WeekPlan,
 } from './program.js';
-import { formatWeekdayDate, weekStartIso } from './dates.js';
+import { formatWeekdayDate, weekStartIso, localIsoDate } from './dates.js';
 import type { LogEntry, StoredWeekMove } from './types.js';
 
 /** What the week clock needs to know about "today", handed in by app.ts. */
@@ -54,6 +57,9 @@ export type WeekClockInput = {
   moves: StoredWeekMove[];
   /** The instant "now" means (app.ts: new Date(), or the test's mocked clock). */
   now: Date;
+  /** v75: the local date (YYYY-MM-DD) of the Saturday she tapped "Finish Week N" -
+   * kept on the phone only (state.ts), so the card doesn't ask twice. */
+  finishedOn?: string | null;
 };
 
 export function getProgramWeek(date: Date): {
@@ -539,4 +545,73 @@ export function currentHowToWeekKey(input: WeekClockInput): { num: number; round
   const shown = shownWeek(input);
   const key = shown.pending ? (gapCountsBackToWeekKey(input) ?? shown.key) : shown.key;
   return { num: key.week, round: key.round };
+}
+
+// ---------------------------------------------------------------------------
+// v75 (Nov 15 2026) - SATURDAY IS A QUESTION. Her words: "once its sat night you
+// ask if i should click move on, by sunday you do it automatically - including d".
+// ---------------------------------------------------------------------------
+
+/** What Home's Saturday card is about: the week she is leaving (`key`), the one
+ * she could move to (`nextKey`), what that week still lacks, and whether she
+ * already answered "Finish" today. */
+export type SaturdaySituation = {
+  /** 'closed' = A, B and C are done (the week closed); 'short' = still open with 1-2 done. */
+  kind: 'closed' | 'short';
+  key: WeekKey;
+  nextKey: WeekKey;
+  /** the A/B/C letters Week N is still missing (empty for 'closed') */
+  missing: Letter[];
+  /** a D already counts for Week N */
+  hasD: boolean;
+  /** she tapped "Finish Week N" this Saturday (phone only) */
+  answered: boolean;
+};
+
+/** The Saturday situation, answered or not - null when it is not Saturday, the cutover
+ * has not been reached, a round starts tomorrow (Saturday is the old week, no card), the
+ * week opened this weekend (today), nothing of the open week is done, or there is no
+ * week to leave. Pure. */
+export function saturdaySituation(input: WeekClockInput): SaturdaySituation | null {
+  const now = input.now;
+  if (now.getTime() < new Date(SATURDAY_ASK_FROM).getTime()) return null;
+  if (now.getDay() !== 6) return null;
+  const today = localIsoDate(now);
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  if (ROUNDS.some((r) => r.start === localIsoDate(tomorrow))) return null;
+  const model = weekModel(input);
+  const dLogs = input.logs.filter((l) => l.workout === 'D');
+  const answered = input.finishedOn === today;
+  if (model.open) {
+    const open = model.open;
+    if (open.done.length === 0) return null;
+    if (localIsoDate(new Date(open.opensFrom ?? open.openedAt)) === today) return null;
+    return {
+      kind: 'short',
+      key: open.key,
+      nextKey: { round: open.key.round, week: open.key.week + 1 },
+      missing: [...open.missing],
+      hasD: weekHasD({ kind: 'open' }, model, dLogs),
+      answered,
+    };
+  }
+  const last = model.spans.length ? model.spans[model.spans.length - 1]! : null;
+  const pending = model.pending;
+  if (!last || !pending || pending.ask !== true || last.how !== 'three') return null;
+  if (now.getTime() >= new Date(pending.opensAt).getTime()) return null;
+  return {
+    kind: 'closed',
+    key: last.key,
+    nextKey: pending.key,
+    missing: [],
+    hasD: weekHasD({ kind: 'span', key: last.key }, model, dLogs),
+    answered,
+  };
+}
+
+/** The question Home asks on a Saturday - `saturdaySituation` while she has not answered
+ * it, else null (v75). */
+export function saturdayQuestion(input: WeekClockInput): SaturdaySituation | null {
+  const sit = saturdaySituation(input);
+  return sit && !sit.answered ? sit : null;
 }

@@ -17,6 +17,7 @@ import {
   dayOfWeek,
   canMoveOn,
   COMPLETION_WEEKS_FROM,
+  SATURDAY_ASK_FROM,
   type SessionLite,
   type MoveOn,
   type RoundStart,
@@ -1305,5 +1306,207 @@ test.describe('v62.1 — a future round start takes effect on its date, not at o
     const { weekOf, open } = walkWeeks(s, [], R3, COMPLETION_WEEKS_FROM, [], now);
     expect(weekOf.get('x1')).toEqual({ round: 2, week: 5 });
     expect(open?.key).toEqual({ round: 3, week: 1 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v75 (Nov 15 2026) - SATURDAY IS A QUESTION, SUNDAY IS AN ANSWER. Her words:
+// "once its sat night you ask if i should click move on, by sunday you do it
+// automatically - including d". Cutover = Sat Nov 14 2026 00:00 local.
+// Her real shape: Round 2 Week 8 = C Sat Oct 31, A Wed Nov 4, B Mon Nov 9 (closes).
+// Jerusalem is UTC+2 from Oct 25 (+02:00 below).
+// ---------------------------------------------------------------------------
+test.describe('v75 - the Saturday ask (week.ts)', () => {
+  const LAUNCH_W8 = { round: 2, week: 8, at: '2026-10-31T00:00:00+02:00' };
+  const W8: SessionLite[] = [
+    { id: 'c1', date: '2026-10-31T10:00:00+02:00', workout: 'C' },
+    { id: 'a1', date: '2026-11-04T18:00:00+02:00', workout: 'A' },
+    { id: 'b1', date: '2026-11-09T18:00:00+02:00', workout: 'B' }, // closes Week 8 on a Monday
+  ];
+  const at = (iso: string): Date => new Date(iso);
+  const run = (
+    extra: SessionLite[],
+    moves: MoveOn[],
+    now: string,
+    base: SessionLite[] = W8,
+    launch = LAUNCH_W8
+  ): ReturnType<typeof walkWeeks> => walkWeeks([...base, ...extra], moves, [], launch, [], at(now));
+
+  test('the cutover is Sat Nov 14 2026 00:00 local', () => {
+    expect(SATURDAY_ASK_FROM).toBe('2026-11-14T00:00:00+02:00');
+  });
+
+  test('(a) a Monday close, a Saturday session and no tap: it counts to Week 8, and Week 9 opens Sunday 00:00', () => {
+    const sat: SessionLite = { id: 'sat', date: '2026-11-14T10:00:00+02:00', workout: 'C' };
+    const r = run([sat], [], '2026-11-14T20:00:00+02:00');
+    expect(r.weekOf.get('sat')).toEqual({ round: 2, week: 8 });
+    expect(r.open).toBeNull();
+    expect(r.pending).toEqual({
+      key: { round: 2, week: 9 },
+      opensAt: '2026-11-15T00:00:00+02:00',
+      ask: true,
+    });
+  });
+
+  test('(a2) the same Saturday session before the cutover time reads the older rule (Saturday 00:00)', () => {
+    const r = run([], [], '2026-11-13T20:00:00+02:00');
+    expect(r.pending?.opensAt).toBe('2026-11-14T00:00:00+02:00');
+    expect(r.pending?.ask).toBeUndefined();
+  });
+
+  test('(b) her tap Sat 19:00: an A at 10:00 is Week 8, an A at 20:00 is Week 9, opened at 19:00', () => {
+    const tap: MoveOn = { round: 2, week: 8, at: '2026-11-14T19:00:00+02:00' };
+    const before: SessionLite = { id: 'a-am', date: '2026-11-14T10:00:00+02:00', workout: 'A' };
+    const after: SessionLite = { id: 'a-pm', date: '2026-11-14T20:00:00+02:00', workout: 'A' };
+    const r = run([before, after], [tap], '2026-11-14T21:00:00+02:00');
+    expect(r.weekOf.get('a-am')).toEqual({ round: 2, week: 8 });
+    expect(r.weekOf.get('a-pm')).toEqual({ round: 2, week: 9 });
+    expect(r.open?.key).toEqual({ round: 2, week: 9 });
+    expect(r.open?.opensFrom).toBe('2026-11-14T19:00:00+02:00');
+    expect(r.open?.openedAt).toBe('2026-11-14T19:00:00+02:00');
+    // the tap alone (no session yet) opens Week 9 right then
+    const tapOnly = run([], [tap], '2026-11-14T19:30:00+02:00');
+    expect(tapOnly.open?.key).toEqual({ round: 2, week: 9 });
+    expect(tapOnly.pending).toBeNull();
+  });
+
+  test('(b2) undo: the tap row gone = Week 8 again, the later session an extra for Week 8', () => {
+    const after: SessionLite = { id: 'a-pm', date: '2026-11-14T20:00:00+02:00', workout: 'A' };
+    const r = run([after], [], '2026-11-14T21:00:00+02:00');
+    expect(r.weekOf.get('a-pm')).toEqual({ round: 2, week: 8 });
+    expect(r.open).toBeNull();
+  });
+
+  test('(c) a Sunday session with no tap opens Week 9, opened Sunday 00:00', () => {
+    const sun: SessionLite = { id: 'sun', date: '2026-11-15T09:00:00+02:00', workout: 'A' };
+    const r = run([sun], [], '2026-11-15T12:00:00+02:00');
+    expect(r.weekOf.get('sun')).toEqual({ round: 2, week: 9 });
+    expect(r.open?.opensFrom).toBe('2026-11-15T00:00:00+02:00');
+    expect(r.open?.openedAt).toBe('2026-11-15T09:00:00+02:00');
+  });
+
+  test('(c2) a session on the Tuesday after freezes the opening at Sunday 00:00 (mondayAfter +1)', () => {
+    const tue: SessionLite = { id: 'tue', date: '2026-11-17T09:00:00+02:00', workout: 'A' };
+    const r = run([tue], [], '2026-11-17T12:00:00+02:00');
+    expect(r.open?.openedAt).toBe('2026-11-15T00:00:00+02:00');
+    // and one on the MONDAY after the opening Sunday is already past "that weekend"
+    const mon: SessionLite = { id: 'mon', date: '2026-11-16T09:00:00+02:00', workout: 'A' };
+    const r2 = run([mon], [], '2026-11-16T12:00:00+02:00');
+    expect(r2.open?.openedAt).toBe('2026-11-15T00:00:00+02:00');
+  });
+
+  test('(d) a move tapped on a WEEKDAY between weeks is still ignored', () => {
+    withWarnSpy((warnings) => {
+      const wed: MoveOn = { round: 2, week: 8, at: '2026-11-11T12:00:00+02:00' };
+      const r = run([], [wed], '2026-11-14T20:00:00+02:00');
+      expect(r.open).toBeNull();
+      expect(r.pending?.key).toEqual({ round: 2, week: 9 });
+      expect(warnings.some((w) => w.includes('stale'))).toBe(true);
+    });
+  });
+
+  test('(d2) a tap after Sunday 00:00 for the old week is stale too (Week 9 already opened by itself)', () => {
+    withWarnSpy(() => {
+      const late: MoveOn = { round: 2, week: 8, at: '2026-11-15T08:00:00+02:00' };
+      const sun: SessionLite = { id: 'sun', date: '2026-11-15T07:00:00+02:00', workout: 'A' };
+      const r = run([sun], [late], '2026-11-15T12:00:00+02:00');
+      expect(r.open?.key).toEqual({ round: 2, week: 9 });
+      expect(r.open?.sessions.map((s) => s.id)).toEqual(['sun']);
+    });
+  });
+
+  test('(e) a WEEKDAY Move on close still opens Saturday 00:00 (she already chose)', () => {
+    const launch = { round: 2, week: 8, at: '2026-10-31T00:00:00+02:00' };
+    const two = W8.slice(0, 2); // C, A done
+    const move: MoveOn = { round: 2, week: 8, at: '2026-11-12T12:00:00+02:00' };
+    const r = walkWeeks(two, [move], [], launch, [], at('2026-11-13T12:00:00+02:00'));
+    expect(r.spans.at(-1)?.how).toBe('moved_on');
+    const r2 = walkWeeks(two, [move], [], launch, [], at('2026-11-14T12:00:00+02:00'));
+    expect(r2.pending?.opensAt).toBe('2026-11-14T00:00:00+02:00');
+    expect(r2.pending?.ask).toBeUndefined();
+  });
+
+  test('(f) Sat Oct 31 (C + D opened Week 8) is unchanged: the same walk with a clock before and after the cutover', () => {
+    const w7: SessionLite[] = [
+      { id: 'w7a', date: '2026-10-26T10:00:00+02:00', workout: 'A' },
+      { id: 'w7b', date: '2026-10-27T10:00:00+02:00', workout: 'B' },
+      { id: 'w7c', date: '2026-10-28T10:00:00+02:00', workout: 'C' }, // closes Week 7 on a Wednesday
+      { id: 'w8c', date: '2026-10-31T10:00:00+02:00', workout: 'C' }, // Saturday: opens Week 8
+    ];
+    const launch = { round: 2, week: 7, at: '2026-10-24T00:00:00+03:00' };
+    const early = walkWeeks(w7, [], [], launch, [], at('2026-11-02T12:00:00+02:00'));
+    const late = walkWeeks(w7, [], [], launch, [], at('2026-11-13T12:00:00+02:00'));
+    const later = walkWeeks(w7, [], [], launch, [], at('2026-11-20T12:00:00+02:00'));
+    expect(early.open?.key).toEqual({ round: 2, week: 8 });
+    expect(early.open?.openedAt).toBe('2026-10-31T10:00:00+02:00');
+    expect(late.open).toEqual(early.open);
+    expect(late.spans).toEqual(early.spans);
+    expect(later.spans).toEqual(early.spans);
+    // a week long left open BEFORE the cutover is never moved on by the new Sunday rule
+    expect(later.open?.key).toEqual({ round: 2, week: 8 });
+    expect(later.open?.opensFrom).toBeUndefined();
+  });
+
+  test('a Saturday three-letter close: Saturday stays the old week until a tap, Sunday opens the next', () => {
+    const launch = { round: 2, week: 8, at: '2026-11-08T00:00:00+02:00' };
+    const s: SessionLite[] = [
+      { id: 'x1', date: '2026-11-09T10:00:00+02:00', workout: 'A' },
+      { id: 'x2', date: '2026-11-11T10:00:00+02:00', workout: 'B' },
+      { id: 'x3', date: '2026-11-14T10:00:00+02:00', workout: 'C' }, // Saturday, closes
+      { id: 'x4', date: '2026-11-14T21:00:00+02:00', workout: 'A' }, // still Week 8 (extra)
+    ];
+    const r = walkWeeks(s, [], [], launch, [], at('2026-11-14T22:00:00+02:00'));
+    expect(r.spans.at(-1)?.how).toBe('three');
+    expect(r.weekOf.get('x4')).toEqual({ round: 2, week: 8 });
+    expect(r.pending?.opensAt).toBe('2026-11-15T00:00:00+02:00');
+  });
+
+  test('Sunday moves on BY ITSELF, always: a short week (1 done) closes at Sunday 00:00, the missed letters stay missed', () => {
+    const launch = { round: 2, week: 1, at: '2026-11-15T00:00:00+02:00' }; // a Sunday opening
+    const s: SessionLite[] = [{ id: 'a', date: '2026-11-16T10:00:00+02:00', workout: 'A' }];
+    const sat = walkWeeks(s, [], [], launch, [], at('2026-11-21T23:59:00+02:00'));
+    expect(sat.open?.key).toEqual({ round: 2, week: 1 });
+    const sun = walkWeeks(s, [], [], launch, [], at('2026-11-22T00:00:00+02:00'));
+    expect(sun.spans.at(-1)?.key).toEqual({ round: 2, week: 1 });
+    expect(sun.spans.at(-1)?.how).toBe('moved_on');
+    expect(sun.spans.at(-1)?.missing).toEqual(['B', 'C']);
+    expect(sun.spans.at(-1)?.closedAt).toBe('2026-11-22T00:00:00+02:00');
+    expect(sun.open?.key).toEqual({ round: 2, week: 2 });
+    expect(sun.open?.opensFrom).toBe('2026-11-22T00:00:00+02:00');
+  });
+
+  test('Sunday auto move-on: a session at 23:59 Saturday is Week 1, at 00:00 Sunday is Week 2', () => {
+    const launch = { round: 2, week: 1, at: '2026-11-15T00:00:00+02:00' };
+    const s: SessionLite[] = [
+      { id: 'a', date: '2026-11-16T10:00:00+02:00', workout: 'A' },
+      { id: 'late', date: '2026-11-21T23:59:00+02:00', workout: 'B' },
+      { id: 'next', date: '2026-11-22T00:00:00+02:00', workout: 'B' },
+    ];
+    const r = walkWeeks(s, [], [], launch, [], at('2026-11-22T12:00:00+02:00'));
+    expect(r.weekOf.get('late')).toEqual({ round: 2, week: 1 });
+    expect(r.weekOf.get('next')).toEqual({ round: 2, week: 2 });
+  });
+
+  test('a week with NOTHING done is never moved on by Sunday (it has nothing to leave behind)', () => {
+    const launch = { round: 2, week: 1, at: '2026-11-15T00:00:00+02:00' };
+    const r = walkWeeks([], [], [], launch, [], at('2026-11-30T12:00:00+02:00'));
+    expect(r.open?.key).toEqual({ round: 2, week: 1 });
+  });
+
+  test('Sunday move-on and a Saturday tap on a SHORT open week are the same thing (the tap does it a day early)', () => {
+    const launch = { round: 2, week: 1, at: '2026-11-15T00:00:00+02:00' };
+    const s: SessionLite[] = [{ id: 'a', date: '2026-11-16T10:00:00+02:00', workout: 'A' }];
+    const tap: MoveOn = { round: 2, week: 1, at: '2026-11-21T19:00:00+02:00' };
+    const r = walkWeeks(s, [tap], [], launch, [], at('2026-11-21T20:00:00+02:00'));
+    expect(r.spans.at(-1)?.how).toBe('moved_on');
+    expect(r.open?.key).toEqual({ round: 2, week: 2 });
+    expect(r.open?.opensFrom).toBe('2026-11-21T19:00:00+02:00');
+  });
+
+  test('a round start opens its Week 1 exactly at the start (no stretch back to Saturday)', () => {
+    const rounds: RoundStart[] = [{ round: 3, at: '2026-11-15T00:00:00+02:00' }];
+    const r = walkWeeks(W8, [], rounds, LAUNCH_W8, [], at('2026-11-15T10:00:00+02:00'));
+    expect(r.open?.key).toEqual({ round: 3, week: 1 });
+    expect(r.open?.opensFrom).toBe('2026-11-15T00:00:00+02:00');
   });
 });

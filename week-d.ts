@@ -110,11 +110,19 @@ function spanByKey(spans: readonly WeekSpan[], key: WeekKey): WeekSpan | null {
 /** The raw ISO this target's window starts from (before the anchor-weekend
  * floor and the prev-close clamp below), or null when the target doesn't
  * exist in `model` (a stale key, or `{kind: 'pending'}` with no actual gap
- * right now) — null means "no window, never has D" rather than guessing. */
-function rawStartIso(target: DWeekTarget, model: DWeekModel): string | null {
-  if (target.kind === 'pending') return model.pending?.opensAt ?? null;
-  if (target.kind === 'open') return model.open?.openedAt ?? null;
-  return spanByKey(model.spans, target.key)?.openedAt ?? null;
+ * right now) — null means "no window, never has D" rather than guessing.
+ * `exact` (v75): the week was opened by the Saturday-ask rules (her tap,
+ * Sunday 00:00, the Sunday move-on, a round start), so the start is that real
+ * opening instant and is NOT floored back to Saturday. */
+function rawStart(target: DWeekTarget, model: DWeekModel): { iso: string; exact: boolean } | null {
+  if (target.kind === 'pending') {
+    return model.pending ? { iso: model.pending.opensAt, exact: model.pending.ask === true } : null;
+  }
+  const span = target.kind === 'open' ? model.open : spanByKey(model.spans, target.key);
+  if (!span) return null;
+  return span.opensFrom !== undefined
+    ? { iso: span.opensFrom, exact: true }
+    : { iso: span.openedAt, exact: false };
 }
 
 /** The target whose own window ENDS where this target's begins — the
@@ -198,11 +206,14 @@ export function weekWindowFor(
   target: DWeekTarget,
   model: DWeekModel
 ): { start: number; end: number | null } | null {
-  const startIso = rawStartIso(target, model);
-  if (startIso === null) return null;
+  const raw = rawStart(target, model);
+  if (raw === null) return null;
   const prevTarget = previousTargetFor(target, model);
   const prevClosedAtMs = prevTarget ? closedAtMsFor(prevTarget, model) : null;
-  const start = Math.max(weekWindowStart(startIso), prevClosedAtMs ?? -Infinity);
+  // v75 (Nov 15 2026): a week the Saturday-ask rules opened starts exactly where it
+  // opened - Saturday D belongs to the week she was still in until Sunday 00:00 / her tap.
+  const floor = raw.exact ? new Date(raw.iso).getTime() : weekWindowStart(raw.iso);
+  const start = Math.max(floor, prevClosedAtMs ?? -Infinity);
   if (target.kind === 'open' || target.kind === 'pending') return { start, end: null };
   const nextTarget = nextTargetFor(target, model);
   if (nextTarget === null) return { start, end: null };

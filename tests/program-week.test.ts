@@ -27,6 +27,8 @@ import {
   planForLog,
   planKeyForLog,
   roundStartsForWeekModel,
+  saturdayQuestion,
+  saturdaySituation,
   shownWeek,
   sickWeeksForWeekModel,
   weekModel,
@@ -472,5 +474,132 @@ test.describe('program-week — v62.1: a round with no plan rows shows the last 
     } finally {
       ROUNDS.pop();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v75 (Nov 15 2026) - the Saturday ask. Her real shape on the REAL program data:
+// Round 2 Week 8 = C Sat Oct 31, A Wed Nov 4, B Mon Nov 9 (closes); Round 3 starts
+// Sun Nov 15 (ROUNDS). Saturday Nov 14 is the day before it: no card.
+// ---------------------------------------------------------------------------
+test.describe('program-week - v75: saturdayQuestion / saturdaySituation', () => {
+  const R2: LogEntry[] = [
+    log('w5a', '2026-09-28T18:00:00+03:00', 'A'),
+    log('w5b', '2026-09-29T18:00:00+03:00', 'B'),
+    log('w5c', '2026-09-30T18:00:00+03:00', 'C'), // closes Week 5
+    log('w6a', '2026-10-12T18:00:00+03:00', 'A'),
+    log('w6b', '2026-10-13T18:00:00+03:00', 'B'),
+    log('w6c', '2026-10-14T18:00:00+03:00', 'C'), // closes Week 6
+    log('w7a', '2026-10-18T10:00:00+03:00', 'A'),
+    log('w7b', '2026-10-20T18:00:00+03:00', 'B'),
+    log('w7c', '2026-10-26T18:00:00+02:00', 'C'), // closes Week 7
+    log('w8c', '2026-10-31T10:00:00+02:00', 'C'),
+    log('w8a', '2026-11-04T18:00:00+02:00', 'A'),
+    log('w8b', '2026-11-09T18:00:00+02:00', 'B'), // closes Week 8
+  ];
+  const at = (iso: string): Date => new Date(iso);
+
+  test('the real rows: Week 8 closes Mon Nov 9, Week 9 is pending for SUNDAY Nov 15', () => {
+    const i: WeekClockInput = { logs: R2, moves: [], now: at('2026-11-13T12:00:00+02:00') };
+    expect(weekModel(i).spans.at(-1)?.key).toEqual({ round: 2, week: 8 });
+    expect(weekModel({ ...i, now: at('2026-11-14T12:00:00+02:00') }).pending?.opensAt).toBe(
+      '2026-11-15T00:00:00+02:00'
+    );
+  });
+
+  test('Sat Nov 14 (Round 3 starts tomorrow): no card; Saturday is Week 8, and counts back to it', () => {
+    const i: WeekClockInput = { logs: R2, moves: [], now: at('2026-11-14T20:00:00+02:00') };
+    expect(saturdayQuestion(i)).toBeNull();
+    expect(saturdaySituation(i)).toBeNull();
+    expect(gapCountsBackToWeekKey(i)).toEqual({ round: 2, week: 8 });
+  });
+
+  test('a Saturday after a three-letter close asks (Week 1 -> Week 2), and Saturday counts back until the tap', () => {
+    const r3 = [
+      log('r1a', '2026-11-16T18:00:00+02:00', 'A'),
+      log('r1b', '2026-11-17T18:00:00+02:00', 'B'),
+      log('r1c', '2026-11-18T18:00:00+02:00', 'C'),
+    ];
+    const i: WeekClockInput = {
+      logs: [...R2, ...r3],
+      moves: [],
+      now: at('2026-11-21T20:00:00+02:00'),
+    };
+    const q = saturdayQuestion(i);
+    expect(q).toEqual({
+      kind: 'closed',
+      key: { round: 3, week: 1 },
+      nextKey: { round: 3, week: 2 },
+      missing: [],
+      hasD: false,
+      answered: false,
+    });
+    expect(gapCountsBackToWeekKey(i)).toEqual({ round: 3, week: 1 });
+    // a D this week is seen
+    const withD = { ...i, logs: [...i.logs, log('r1d', '2026-11-19T18:00:00+02:00', 'D')] };
+    expect(saturdayQuestion(withD)?.hasD).toBe(true);
+  });
+
+  test('her tap opens the next week at once: Week 2 shown, no more question, the old week closed', () => {
+    const r3 = [
+      log('r1a', '2026-11-16T18:00:00+02:00', 'A'),
+      log('r1b', '2026-11-17T18:00:00+02:00', 'B'),
+      log('r1c', '2026-11-18T18:00:00+02:00', 'C'),
+    ];
+    const tap = { round: 3, week: 1, at: '2026-11-21T19:00:00+02:00', missing: '', synced: false };
+    const i: WeekClockInput = {
+      logs: [...R2, ...r3],
+      moves: [tap],
+      now: at('2026-11-21T20:00:00+02:00'),
+    };
+    expect(shownWeek(i).key).toEqual({ round: 3, week: 2 });
+    expect(gapCountsBackToWeekKey(i)).toBeNull();
+    expect(saturdayQuestion(i)).toBeNull(); // the week opened this weekend
+    expect(saturdaySituation(i)).toBeNull();
+  });
+
+  test('"Finish" (phone only) answers the question, the situation stays for Up next', () => {
+    const r3 = [
+      log('r1a', '2026-11-16T18:00:00+02:00', 'A'),
+      log('r1b', '2026-11-17T18:00:00+02:00', 'B'),
+      log('r1c', '2026-11-18T18:00:00+02:00', 'C'),
+    ];
+    const base: WeekClockInput = {
+      logs: [...R2, ...r3],
+      moves: [],
+      now: at('2026-11-21T20:00:00+02:00'),
+    };
+    expect(saturdayQuestion({ ...base, finishedOn: '2026-11-21' })).toBeNull();
+    expect(saturdaySituation({ ...base, finishedOn: '2026-11-21' })?.answered).toBe(true);
+    // yesterday's answer does not answer today
+    expect(saturdayQuestion({ ...base, finishedOn: '2026-11-14' })).not.toBeNull();
+  });
+
+  test('a short OPEN week on a Saturday asks too (Move to the next week now), with what it lacks', () => {
+    const i: WeekClockInput = {
+      logs: [...R2, log('r1a', '2026-11-16T18:00:00+02:00', 'A')],
+      moves: [],
+      now: at('2026-11-21T20:00:00+02:00'),
+    };
+    expect(saturdayQuestion(i)).toEqual({
+      kind: 'short',
+      key: { round: 3, week: 1 },
+      nextKey: { round: 3, week: 2 },
+      missing: ['B', 'C'],
+      hasD: false,
+      answered: false,
+    });
+  });
+
+  test('no card: not a Saturday, or a week with nothing done, or before the cutover', () => {
+    const base = { logs: [...R2, log('r1a', '2026-11-16T18:00:00+02:00', 'A')], moves: [] };
+    expect(saturdayQuestion({ ...base, now: at('2026-11-20T20:00:00+02:00') })).toBeNull(); // Friday
+    expect(saturdayQuestion({ ...base, now: at('2026-11-22T12:00:00+02:00') })).toBeNull(); // Sunday
+    expect(
+      saturdayQuestion({ logs: R2, moves: [], now: at('2026-11-21T20:00:00+02:00') })
+    ).toBeNull(); // R3W1: 0 done
+    expect(
+      saturdayQuestion({ logs: R2, moves: [], now: at('2026-11-07T20:00:00+02:00') })
+    ).toBeNull(); // before Nov 14
   });
 });
