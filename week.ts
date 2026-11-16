@@ -372,6 +372,26 @@ export type PendingWeek = {
   ask?: true;
 };
 
+/** v76: the first Sunday 00:00 at/after which an open week with ZERO sessions is ASKED about
+ * ("Move on to Week N+1?") instead of moved on by itself: the first Sunday after the week's
+ * opening + 5 days (the same Sunday a short week would close on). Infinity before the cutover. */
+export function emptyWeekAskFromMs(open: WeekSpan): number {
+  const askMsLocal = new Date(SATURDAY_ASK_FROM).getTime();
+  const base = new Date(open.opensFrom ?? open.openedAt);
+  const t = new Date(
+    base.getFullYear(),
+    base.getMonth(),
+    base.getDate() + 5,
+    base.getHours(),
+    base.getMinutes(),
+    base.getSeconds()
+  );
+  const sunday = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  sunday.setDate(sunday.getDate() + ((7 - sunday.getDay()) % 7));
+  if (sunday.getTime() <= t.getTime()) sunday.setDate(sunday.getDate() + 7);
+  return sunday.getTime() >= askMsLocal ? sunday.getTime() : Infinity;
+}
+
 /**
  * Walk sessions + moves + round starts after the launch, in time order.
  * Pure: same inputs always give the same spans (a real Undo/delete is just a
@@ -614,7 +634,20 @@ export function walkWeeks(
         // boundary, or a resurrected (un-tombstoned) remote row could. Ignore
         // it exactly like a stale move: warn, never throw, never close an
         // empty week.
-        if (openDone.size === 0) {
+        if (
+          openDone.size === 0 &&
+          askOn &&
+          new Date(ev.move.at).getTime() >= emptyWeekAskFromMs(open)
+        ) {
+          // v76: an EMPTY week (zero sessions) is never moved on by itself; from its ending
+          // Sunday the app ASKS, and her tap is this move. The next week opens right then.
+          closeOpen(ev.move.at, 'moved_on');
+          open = freshSpan({ round: roundNow, week: weekNow }, ev.move.at);
+          open.opensFrom = ev.move.at;
+          openDone = new Set();
+          nextBoundary = null;
+          nextBoundaryAsk = false;
+        } else if (openDone.size === 0) {
           console.warn(
             `[week] ignoring a "move on" for R${ev.move.round}W${ev.move.week} at ${ev.move.at}` +
               ` — the week has 0 done (never needs moving on)`

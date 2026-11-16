@@ -1079,7 +1079,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v73 - the version › package.json appVersion (the one source) is v75
+v73 - the version › package.json appVersion (the one source) is v76
 v73 — Round 3 Week 1 is the written plan › A: cool-down is chin tucks, then her stretches at 45 s, and no shoulder / calf stretch
 v73 — Round 3 Week 1 is the written plan › A: the five main moves are in priority order, 2 rounds
 v73 — Round 3 Week 1 is the written plan › A: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
@@ -1268,12 +1268,30 @@ v75 - the Saturday ask (week.ts) › a short week open over a break closes at it
 v75 - the Saturday ask (week.ts) › a single A after a break is that week, no empty jump; the Sunday after it advances
 v75 - the Saturday ask (week.ts) › a week with NOTHING done is never moved on by Sunday (it has nothing to leave behind)
 v75 - the Saturday ask (week.ts) › the cutover is Sat Nov 14 2026 00:00 local
+v75 - the Saturday ask (week.ts) › v76 - an empty week asks, never auto-advances › Undo (the row gone): Week 1 again
+v75 - the Saturday ask (week.ts) › v76 - an empty week asks, never auto-advances › a session logged instead keeps her in Week 1; the ordinary Sunday move-on then reads it
+v75 - the Saturday ask (week.ts) › v76 - an empty week asks, never auto-advances › a tap BEFORE the ending Sunday is ignored (an empty week is not asked about yet)
+v75 - the Saturday ask (week.ts) › v76 - an empty week asks, never auto-advances › her tap from that Sunday: Week 1 closes moved_on with A, B, C missing and Week 2 opens at the tap
+v75 - the Saturday ask (week.ts) › v76 - an empty week asks, never auto-advances › no session: still Week 1 the Sunday after (no auto-advance); the ask starts that Sunday 00:00
+v75 - the Saturday ask (week.ts) › v76 a session logged INSIDE a sick week after the cutover counts back to the week that closed
+v75 - the Saturday ask (week.ts) › v76 a skipped week (sick mark the Saturday after the cutover) and a one-session week: Sunday moves it on, then the sick week holds the clock
+v75 - the Saturday ask (week.ts) › v76 sick after a three-letter close: Week 8 stays closed on three, and Week 9 waits for the end of the sick week
+v75 - the Saturday ask (week.ts) › v76 sick after the cutover: a short Week 8 closes "sick" at the sick Saturday and Week 9 opens the Saturday after
+v75 - the Saturday ask (week.ts) › v76 sick after the cutover: inside the sick week the next week is pending, not open, and has no ask
 v75 - the Saturday card › Finish: the card becomes a quiet link, Up next is D, and a reload does not ask again
 v75 - the Saturday card › Fri Nov 20: no card
 v75 - the Saturday card › Move to Week 2: Week 2 starts now, the note has Undo, and Undo brings Week 1 back
 v75 - the Saturday card › Sat Nov 21 with Week 1 done: title, week card and Up next all say Week 1 (D); after Move, Week 2
 v75 - the Saturday card › Start before answering shows the two buttons first; the next Start goes through
 v75 - the Saturday card › asks "Week 1: D left." with the two answers
+v75 - the Saturday card › v76: Sunday Nov 15 is Round 3 Week 1 (the Saturday wording is gone)
+v75 - the Saturday card › v76: pre-log of D that makes the week 4 of 4 says it counts for this week, not "an extra rep"
+v75 - the Saturday card › v76: the Saturday before a round starts names the week the session counts for (not the next one)
+v75 - the Saturday card › v76: when the week already has its D, the same pre-log is an extra rep
+v76 - the empty-week card › Saturday before it: no card yet
+v76 - the empty-week card › Sunday, nothing done: the card asks and the week does not auto-advance
+v76 - the empty-week card › a session logged instead: no card, still Week 1
+v76 - the empty-week card › tap: a week_moves row is written, Week 2 starts, and Undo brings Week 1 back
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

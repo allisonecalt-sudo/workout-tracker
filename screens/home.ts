@@ -23,6 +23,7 @@ import { periodLogUrgency } from '../cycle.js';
 import {
   canMoveOn as weekCanMoveOn,
   COMPLETION_WEEKS_FROM,
+  SATURDAY_ASK_FROM,
   LEGACY_LAST_CLOSED_WEEK_INSTANT,
   type WeekSpan,
 } from '../week.js';
@@ -82,10 +83,12 @@ import {
   weekModel,
   shownWeek,
   gapCountsBackToWeekNum,
+  gapCountsBackToWeekKey,
   weekSubLabel,
   getWeekPlan,
   weekHasDFor,
   saturdaySituation,
+  emptyWeekAsk,
 } from '../week-clock.js';
 import {
   SESSIONS_PER_WEEK_TARGET,
@@ -560,6 +563,15 @@ function renderCompletionWeekDots(cols: CompletionWeekDot[]): string {
 // peek feature itself (shot 04). The page title is what she reads as "the
 // week I'm in"; a peek is a read-only LOOK at a past week, so it changes only
 // the week CARD's own head (renderHome's weekCardHeadText), never this H1.
+// v76: a Saturday (from the cutover) in a gap with no Saturday card (a round starts tomorrow):
+// the week a session today counts for, else null.
+function saturdayBackWeek(): { round: number; week: number } | null {
+  const now = new Date();
+  if (now.getDay() !== 6 || now.getTime() < new Date(SATURDAY_ASK_FROM).getTime()) return null;
+  if (saturdaySituation()) return null;
+  return gapCountsBackToWeekKey();
+}
+
 function homeWeekTitle(): string {
   if (!isNowAfterCompletionLaunch()) {
     // Pre-launch (or a test mocking an earlier date): the original calendar
@@ -577,6 +589,10 @@ function homeWeekTitle(): string {
   // v75: Saturday after a three-letter close, until she taps Move, is still Week N (the clock counts it there).
   const sat = saturdaySituation();
   if (sat && sat.kind === 'closed') return `Week ${sat.key.week}`;
+  // v76: the Saturday before a round starts has no card, but a session still counts for the
+  // week that is open (the one that just closed): the title names that week, not the next.
+  const satBack = saturdayBackWeek();
+  if (satBack) return `Week ${satBack.week}`;
   return `Week ${shownWeek().key.week}`;
 }
 
@@ -987,8 +1003,9 @@ export function renderHome(): string {
       dotsHtml = peek.dotsHtml;
       weekLineText = peek.countText;
     } else {
+      const satBack = saturdayBackWeek();
       subLineHtml =
-        `<div class="week-sub-line" id="week-sub">${escapeHtml(weekSubLabel(shown))}</div>` +
+        `<div class="week-sub-line" id="week-sub">${escapeHtml(satBack ? `Saturday still counts for Week ${satBack.week}` : weekSubLabel(shown))}</div>` +
         (planInfo.noPlanForRound !== null
           ? // v62.1: a round with no plan rows yet - say so (fail loud), not "same moves"
             `<div class="week-sub-line week-sub-noplan" id="no-plan-note">${escapeHtml(noPlanLine(planInfo.noPlanForRound))}</div>`
@@ -1104,8 +1121,11 @@ export function renderHome(): string {
     if (todaysMove && todaysMoveSpan) {
       const doneCount = 3 - todaysMove.missing.length;
       movedNoteHtml =
-        `<div class="week-moved-note" id="week-moved-note">Week ${todaysMove.week} closed at ${doneCount} of 3 · ` +
-        `<button class="week-undo-btn" id="week-undo" type="button">Undo</button></div>`;
+        doneCount === 0 && model.open
+          ? `<div class="week-moved-note" id="week-moved-note">Week ${model.open.key.week} started · ` +
+            `<button class="week-undo-btn" id="week-undo" type="button">Undo</button></div>`
+          : `<div class="week-moved-note" id="week-moved-note">Week ${todaysMove.week} closed at ${doneCount} of 3 · ` +
+            `<button class="week-undo-btn" id="week-undo" type="button">Undo</button></div>`;
     }
 
     // v75 (Nov 15 2026), her words: "once its sat night you ask if i should click move on".
@@ -1138,6 +1158,19 @@ export function renderHome(): string {
       } else {
         saturdayCardHtml = `<button class="week-nav-link" id="sat-move-link" type="button">Move to Week ${nextWk}</button>`;
       }
+    }
+
+    // v76 (her "a", Sun Nov 15 2026): a week that ended Sunday with ZERO sessions is not moved on
+    // by itself - the app asks. Same card pattern as Saturday; her tap is the same week_moves row
+    // (Undo works), a logged session simply keeps her in the week.
+    const emptyAsk = peek || sat ? null : emptyWeekAsk();
+    if (emptyAsk) {
+      saturdayCardHtml =
+        `<div class="card saturday-card" id="empty-week-card">` +
+        `<div class="saturday-line">Week ${emptyAsk.key.week} had no sessions. Move on to Week ${emptyAsk.nextKey.week}?</div>` +
+        `<div class="saturday-btns">` +
+        `<button class="btn-chip saturday-btn" id="empty-move" type="button">Move on to Week ${emptyAsk.nextKey.week}</button>` +
+        `</div></div>`;
     }
 
     // Did TODAY'S save close its own week? (its week resolves to a CLOSED
@@ -1418,6 +1451,11 @@ export function attachHomeHandlers3(): void {
   };
   bindClick('sat-move', moveNow);
   bindClick('sat-move-link', moveNow);
+  // v76: the empty-week card - the same move row as every move.
+  bindClick('empty-move', () => {
+    const ask = emptyWeekAsk();
+    if (ask) moveOnWithoutIt(ask.key, ['A', 'B', 'C']);
+  });
   // #week-undo sits under the header (outside .week-card), so a plain
   // bindClick is enough — no propagation to stop.
   bindClick('week-undo', () => {

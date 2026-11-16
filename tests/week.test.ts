@@ -18,6 +18,7 @@ import {
   canMoveOn,
   COMPLETION_WEEKS_FROM,
   SATURDAY_ASK_FROM,
+  emptyWeekAskFromMs,
   type SessionLite,
   type MoveOn,
   type RoundStart,
@@ -1558,5 +1559,137 @@ test.describe('v75 - the Saturday ask (week.ts)', () => {
     const r = walkWeeks(W8, [], rounds, LAUNCH_W8, [], at('2026-11-15T10:00:00+02:00'));
     expect(r.open?.key).toEqual({ round: 3, week: 1 });
     expect(r.open?.opensFrom).toBe('2026-11-15T00:00:00+02:00');
+  });
+
+  // v76: sick / skipped weeks AFTER the Nov 14 cutover, under the v75 rules (the older sick tests stop at Nov 7).
+  test('v76 sick after the cutover: a short Week 8 closes "sick" at the sick Saturday and Week 9 opens the Saturday after', () => {
+    const r = run([], [], '2026-11-29T12:00:00+02:00', W8.slice(0, 2));
+    expect(r.spans).toHaveLength(0); // control: no sick mark, the short week is simply left open until Sunday
+    const s = walkWeeks(
+      W8.slice(0, 2),
+      [],
+      [],
+      LAUNCH_W8,
+      ['2026-11-21'],
+      at('2026-11-29T12:00:00+02:00')
+    );
+    expect(s.spans[0]?.how).toBe('sick');
+    expect(s.spans[0]?.closedAt).toBe('2026-11-21T00:00:00+02:00');
+    expect(s.spans[0]?.done).toEqual(['A', 'C']);
+    expect(s.spans[0]?.missing).toEqual(['B']);
+    expect(s.open?.key).toEqual({ round: 2, week: 9 });
+    expect(s.open?.openedAt).toBe('2026-11-28T00:00:00+02:00');
+  });
+
+  test('v76 sick after the cutover: inside the sick week the next week is pending, not open, and has no ask', () => {
+    const r = walkWeeks(
+      W8.slice(0, 2),
+      [],
+      [],
+      LAUNCH_W8,
+      ['2026-11-21'],
+      at('2026-11-22T12:00:00+02:00')
+    );
+    expect(r.open).toBeNull();
+    expect(r.pending?.key).toEqual({ round: 2, week: 9 });
+    expect(r.pending?.opensAt).toBe('2026-11-28T00:00:00+02:00');
+    expect(r.pending?.ask).toBeUndefined();
+  });
+
+  test('v76 sick after a three-letter close: Week 8 stays closed on three, and Week 9 waits for the end of the sick week', () => {
+    const r = walkWeeks(W8, [], [], LAUNCH_W8, ['2026-11-21'], at('2026-11-22T12:00:00+02:00'));
+    expect(r.spans[0]?.how).toBe('three');
+    expect(r.pending?.key).toEqual({ round: 2, week: 9 });
+    expect(r.pending?.opensAt).toBe('2026-11-28T00:00:00+02:00');
+    const later = walkWeeks(W8, [], [], LAUNCH_W8, ['2026-11-21'], at('2026-11-29T12:00:00+02:00'));
+    expect(later.open?.key).toEqual({ round: 2, week: 9 });
+    expect(later.open?.openedAt).toBe('2026-11-28T00:00:00+02:00');
+  });
+
+  test('v76 a skipped week (sick mark the Saturday after the cutover) and a one-session week: Sunday moves it on, then the sick week holds the clock', () => {
+    const wk9: SessionLite = { id: 'x', date: '2026-11-17T10:00:00+02:00', workout: 'A' };
+    const r = walkWeeks(
+      [...W8, wk9],
+      [],
+      [],
+      LAUNCH_W8,
+      ['2026-11-21'],
+      at('2026-11-29T12:00:00+02:00')
+    );
+    expect(r.spans.map((sp) => [sp.key.week, sp.how])).toEqual([
+      [8, 'three'],
+      [9, 'sick'],
+    ]);
+    expect(r.spans[1]?.done).toEqual(['A']);
+    expect(r.open?.key).toEqual({ round: 2, week: 10 });
+    expect(r.open?.openedAt).toBe('2026-11-28T00:00:00+02:00');
+  });
+
+  test('v76 a session logged INSIDE a sick week after the cutover counts back to the week that closed', () => {
+    const inSick: SessionLite = { id: 'z', date: '2026-11-23T09:00:00+02:00', workout: 'B' };
+    const r = walkWeeks(
+      [...W8.slice(0, 2), inSick],
+      [],
+      [],
+      LAUNCH_W8,
+      ['2026-11-21'],
+      at('2026-11-24T12:00:00+02:00')
+    );
+    expect(r.weekOf.get('z')).toEqual({ round: 2, week: 8 });
+    expect(r.spans[0]?.done).toEqual(['A', 'B', 'C']);
+  });
+
+  // v76 (her "a", Sun Nov 15): an EMPTY week is never moved on by itself - the app asks.
+  test.describe('v76 - an empty week asks, never auto-advances', () => {
+    const R3 = { round: 3, week: 1, at: '2026-11-15T00:00:00+02:00' };
+    const walk = (
+      extra: SessionLite[],
+      moves: MoveOn[],
+      now: string
+    ): ReturnType<typeof walkWeeks> => walkWeeks(extra, moves, [], R3, [], at(now));
+
+    test('no session: still Week 1 the Sunday after (no auto-advance); the ask starts that Sunday 00:00', () => {
+      const r = walk([], [], '2026-11-29T12:00:00+02:00');
+      expect(r.spans).toHaveLength(0);
+      expect(r.open?.key).toEqual({ round: 3, week: 1 });
+      expect(new Date(emptyWeekAskFromMs(r.open!)).toISOString()).toBe(
+        new Date('2026-11-22T00:00:00+02:00').toISOString()
+      );
+    });
+
+    test('her tap from that Sunday: Week 1 closes moved_on with A, B, C missing and Week 2 opens at the tap', () => {
+      const tap: MoveOn = { round: 3, week: 1, at: '2026-11-22T10:00:00+02:00' };
+      const r = walk([], [tap], '2026-11-22T10:05:00+02:00');
+      expect(r.spans[0]?.how).toBe('moved_on');
+      expect(r.spans[0]?.missing).toEqual(['A', 'B', 'C']);
+      expect(r.open?.key).toEqual({ round: 3, week: 2 });
+      expect(r.open?.opensFrom).toBe('2026-11-22T10:00:00+02:00');
+    });
+
+    test('Undo (the row gone): Week 1 again', () => {
+      const r = walk([], [], '2026-11-22T10:05:00+02:00');
+      expect(r.open?.key).toEqual({ round: 3, week: 1 });
+      expect(r.spans).toHaveLength(0);
+    });
+
+    test('a tap BEFORE the ending Sunday is ignored (an empty week is not asked about yet)', () => {
+      withWarnSpy(() => {
+        const tap: MoveOn = { round: 3, week: 1, at: '2026-11-20T10:00:00+02:00' };
+        const r = walk([], [tap], '2026-11-21T10:00:00+02:00');
+        expect(r.open?.key).toEqual({ round: 3, week: 1 });
+        expect(r.spans).toHaveLength(0);
+      });
+    });
+
+    test('a session logged instead keeps her in Week 1; the ordinary Sunday move-on then reads it', () => {
+      const a: SessionLite = { id: 'a', date: '2026-11-22T09:00:00+02:00', workout: 'A' };
+      const r = walk([a], [], '2026-11-24T12:00:00+02:00');
+      expect(r.weekOf.get('a')).toEqual({ round: 3, week: 1 });
+      expect(r.open?.key).toEqual({ round: 3, week: 1 });
+      const later = walk([a], [], '2026-11-30T12:00:00+02:00');
+      expect(later.spans[0]?.how).toBe('moved_on');
+      expect(later.spans[0]?.closedAt).toBe('2026-11-29T00:00:00+02:00');
+      expect(later.open?.key).toEqual({ round: 3, week: 2 });
+    });
   });
 });

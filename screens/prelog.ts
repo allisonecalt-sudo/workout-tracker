@@ -54,6 +54,9 @@ import {
   isNowAfterCompletionLaunch,
   shownWeek,
   gapCountsBackToWeekNum,
+  gapCountsBackToWeekKey,
+  weekModel,
+  weekHasDFor,
   getWeekPlan,
 } from '../week-clock.js';
 import { renderBodyChips, renderBackWristControl, renderTimeConfirmBlock } from '../log-fields.js';
@@ -112,11 +115,26 @@ function workoutNeedsWristLine(w: Workout): boolean {
   );
 }
 
+// v76: during a gap, does the session she is about to start fill a slot the week that just
+// closed still lacks? A missing A/B/C letter, or D when that week has no D yet.
+function backWeekCountsFor(workoutId: string): boolean {
+  const key = gapCountsBackToWeekKey();
+  if (!key) return false;
+  const model = weekModel();
+  const span = model.spans.find((sp) => sp.key.round === key.round && sp.key.week === key.week);
+  if (!span) return false;
+  if (workoutId === 'D') {
+    const dLogs = loadLogs().filter((l) => l.workout === 'D');
+    return !weekHasDFor({ span }, model, dLogs);
+  }
+  return (span.missing as readonly string[]).includes(workoutId);
+}
+
 // "R2 · Week 4" from the calendar; when the loaded plan is a different week
 // it names the plan instead — the same fail-loud as the home header (DECISIONS
 // §5). Swing fix (Sep 26 2026): mirrors homeWeekTitle's viewed-week choice, so
 // a swing-Saturday pre-log reads last week's label, not the calendar's.
-function preLogWeekLabel(): string {
+function preLogWeekLabel(workoutId: string): string {
   if (!isNowAfterCompletionLaunch()) {
     // Pre-launch — original logic, untouched (see homeWeekTitle's comment).
     const week = homeWeekOffset() === 1 ? getViewedProgramWeek(1) : getProgramWeek();
@@ -134,7 +152,13 @@ function preLogWeekLabel(): string {
   // pending week's number (see gapCountsBackToWeekNum's own comment).
   const backWeek = gapCountsBackToWeekNum();
   if (backWeek !== null) {
-    return `Week ${backWeek} · an extra rep, Week ${shown.key.week} opens ${formatWeekdayDate(shown.pending!.opensAt)}`;
+    // v76: say "counts for this week" when this session fills a slot the week still lacks
+    // (a missing A/B/C letter, or D when the week has no D yet); "an extra rep" only when the
+    // week's planned set is already done.
+    const opens = `Week ${shown.key.week} opens ${formatWeekdayDate(shown.pending!.opensAt)}`;
+    return backWeekCountsFor(workoutId)
+      ? `Week ${backWeek} · counts for this week · ${opens}`
+      : `Week ${backWeek} · an extra rep, ${opens}`;
   }
   const planInfo = planForWeekKey(shown.key);
   if (planInfo.noPlanForRound !== null) return `Week ${shown.key.week} · no plan written yet`;
@@ -291,7 +315,7 @@ export function renderPreLog(): string {
   // counted toward the week (it never does — see postLogWitnessLine's own
   // D branch). "Extra" says the true thing here too.
   const meta = [
-    w.id === 'D' ? 'Extra' : preLogWeekLabel(),
+    w.id === 'D' && gapCountsBackToWeekNum() === null ? 'Extra' : preLogWeekLabel(w.id),
     // v73.1: the lane word sits BEFORE the new / again lists; after them it read as one more new move.
     // v74.2: on a knee day the ride is the walk lane (day-mode.ts rideFor), so the line says walk.
     hasCardio && state.dayMode === 'knee'

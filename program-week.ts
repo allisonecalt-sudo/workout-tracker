@@ -25,6 +25,7 @@ import {
   dayOfWeek as weekDayOfWeek,
   COMPLETION_WEEKS_FROM,
   SATURDAY_ASK_FROM,
+  emptyWeekAskFromMs,
   formatLocalIso,
   type SessionLite as WeekSessionLite,
   type MoveOn as WeekMoveOn,
@@ -607,6 +608,26 @@ export function saturdaySituation(input: WeekClockInput): SaturdaySituation | nu
     hasD: weekHasD({ kind: 'span', key: last.key }, model, dLogs),
     answered,
   };
+}
+
+export type EmptyWeekAsk = {
+  key: WeekKey;
+  nextKey: WeekKey;
+};
+
+/** v76 (her "a", Sun Nov 15 2026): an open week with ZERO sessions (no A/B/C, no D) is never moved
+ * on by itself. From the Sunday that ends it, Home asks "Move on to Week N+1?" until she taps
+ * (the same week_moves row as every move, Undo works) or logs a session (then it stays Week N,
+ * and the ordinary Sunday move-on rules read it). Null before that Sunday, with any session in
+ * the week, or before the cutover. Pure. */
+export function emptyWeekAsk(input: WeekClockInput): EmptyWeekAsk | null {
+  const model = weekModel(input);
+  const open = model.open;
+  if (!open || open.sessions.length > 0) return null;
+  if (input.now.getTime() < emptyWeekAskFromMs(open)) return null;
+  const dLogs = input.logs.filter((l) => l.workout === 'D');
+  if (weekHasD({ kind: 'open' }, model, dLogs)) return null;
+  return { key: open.key, nextKey: { round: open.key.round, week: open.key.week + 1 } };
 }
 
 /** The question Home asks on a Saturday - `saturdaySituation` while she has not answered

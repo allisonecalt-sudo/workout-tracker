@@ -102,6 +102,11 @@ export function saturdayQuestion(): ReturnType<typeof pw.saturdayQuestion> {
   return pw.saturdayQuestion(weekClockInput());
 }
 
+/** v76: the empty-week question (null unless the open week has no sessions and its ending Sunday has come). */
+export function emptyWeekAsk(): ReturnType<typeof pw.emptyWeekAsk> {
+  return pw.emptyWeekAsk(weekClockInput());
+}
+
 /** v75: the Saturday situation, answered or not (Home's quiet "Move to Week N+1" link and Up next read it). */
 export function saturdaySituation(): ReturnType<typeof pw.saturdaySituation> {
   return pw.saturdaySituation(weekClockInput());
