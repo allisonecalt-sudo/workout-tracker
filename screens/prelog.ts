@@ -41,7 +41,7 @@ import {
 import { requestRender } from '../bus.js';
 import { bindClick } from '../dom.js';
 import { escapeHtml } from '../format.js';
-import { formatClock, formatWeekdayDate, combineDateAndClock } from '../dates.js';
+import { formatClock, combineDateAndClock } from '../dates.js';
 import { renderActionBar } from '../action-bar.js';
 import { PATH_IDS, PATH_MOVE_COUNT, isPathId, pathLabel } from '../paths.js';
 import { painFromFeel } from '../pain-feel.js';
@@ -57,6 +57,7 @@ import {
   gapCountsBackToWeekKey,
   weekModel,
   weekHasDFor,
+  pendingOpensPhrase,
   getWeekPlan,
 } from '../week-clock.js';
 import { renderBodyChips, renderBackWristControl, renderTimeConfirmBlock } from '../log-fields.js';
@@ -155,7 +156,7 @@ function preLogWeekLabel(workoutId: string): string {
     // v76: say "counts for this week" when this session fills a slot the week still lacks
     // (a missing A/B/C letter, or D when the week has no D yet); "an extra rep" only when the
     // week's planned set is already done.
-    const opens = `Week ${shown.key.week} opens ${formatWeekdayDate(shown.pending!.opensAt)}`;
+    const opens = pendingOpensPhrase(shown.pending!);
     return backWeekCountsFor(workoutId)
       ? `Week ${backWeek} · counts for this week · ${opens}`
       : `Week ${backWeek} · an extra rep, ${opens}`;

@@ -66,7 +66,7 @@ import { escapeHtml, formatWeekRange } from '../format.js';
 import { sinceFullWeeksLine } from '../number-rules.js';
 import { rideLevel, rideKm, rideTimeSec } from '../cardio-notes.js';
 import { buildWeekRows, fullWeeksSummary } from '../weeks-grid.js';
-import { formatDate, formatWeekdayDate, localIsoDate, formatDateLong } from '../dates.js';
+import { formatDate, localIsoDate, formatDateLong } from '../dates.js';
 import { requestRender } from '../bus.js';
 import { activeWalkStart, walkLiveText, walkStepMinutes } from '../walk.js';
 import { bindClick } from '../dom.js';
@@ -89,6 +89,7 @@ import {
   weekHasDFor,
   saturdaySituation,
   emptyWeekAsk,
+  pendingOpensPhrase,
 } from '../week-clock.js';
 import {
   SESSIONS_PER_WEEK_TARGET,
@@ -1077,6 +1078,27 @@ export function renderHome(): string {
           : '3 of 4 · D left';
       if (!closedHasD && !comingBack) upNextD = true;
     }
+    // v76: the Saturday before a round starts (no Saturday card): the week card head, strip and count
+    // read the SAME week as the title (the one a session counts for), not the pending next one.
+    const satBackKey = peek ? null : saturdayBackWeek();
+    if (!sat && satBackKey) {
+      const backSpan =
+        model.spans.find(
+          (sp) => sp.key.round === satBackKey.round && sp.key.week === satBackKey.week
+        ) ?? null;
+      weekCardHeadText = escapeHtml(`Week ${satBackKey.week}`);
+      if (backSpan) {
+        const backHasD = weekHasDFor({ span: backSpan }, model, dLogs);
+        dotsHtml = renderCompletionWeekDots(
+          completionWeekDots(
+            backSpan,
+            dLogs,
+            weekWindowFor({ kind: 'span', key: backSpan.key }, model)
+          )
+        );
+        weekLineText = weekCountLine({ span: backSpan }, backHasD, comingBack);
+      }
+    }
     saturdayNote = '';
 
     // WK3 (Sep 27 2026), §2.4: the quiet "Move on without it" button — only
@@ -1084,7 +1106,11 @@ export function renderHome(): string {
     // week.ts's own canMoveOn says so (1-2 done, open 8+ days). The app
     // never moves on by itself — this only ever renders a button; the write
     // happens on her explicit tap (moveOnWithoutIt, bound below).
-    if (!peek && shown.span && weekCanMoveOn(shown.span, new Date())) {
+    if (
+      !peek &&
+      shown.span &&
+      weekCanMoveOn(shown.span, new Date(), weekHasDFor({ open: shown.span }, model, dLogs))
+    ) {
       moveOnHtml =
         `<button class="week-move-on-btn" id="week-move-on" type="button">` +
         `Move on to Week ${shown.key.week + 1} without ${joinMissingLetters(shown.span.missing)}</button>`;
@@ -1232,7 +1258,7 @@ export function renderHome(): string {
       const nextLine = shown.span
         ? `Week ${shown.key.week} starts now`
         : shown.pending
-          ? `Week ${shown.key.week} opens ${formatWeekdayDate(shown.pending.opensAt)}`
+          ? pendingOpensPhrase(shown.pending)
           : '';
       doneCardLines = [
         `Week ${legacyWeek.num} done · ${legacyCount} of 3${legacyCount >= SESSIONS_PER_WEEK_TARGET ? ' ✓' : ''}`,
@@ -1242,7 +1268,7 @@ export function renderHome(): string {
       const nextLine = shown.span
         ? `Week ${shown.key.week} starts now`
         : shown.pending
-          ? `Week ${shown.key.week} opens ${formatWeekdayDate(shown.pending.opensAt)}`
+          ? pendingOpensPhrase(shown.pending)
           : '';
       // v61 (Sep 28 2026), spec item d: A/B/C alone still closes the week
       // (week.ts's own rule, untouched) — but the Done card's own line now

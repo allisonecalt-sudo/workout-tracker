@@ -435,6 +435,15 @@ program-week - v75: saturdayQuestion / saturdaySituation › a short OPEN week o
 program-week - v75: saturdayQuestion / saturdaySituation › her tap opens the next week at once: Week 2 shown, no more question, the old week closed
 program-week - v75: saturdayQuestion / saturdaySituation › no card: not a Saturday, or a week with nothing done, or before the cutover
 program-week - v75: saturdayQuestion / saturdaySituation › the real rows: Week 8 closes Mon Nov 9, Week 9 is pending for SUNDAY Nov 15
+program-week - v76: the empty-week ask, D-only weeks, round-eve wording › must-fix 1: Home never says "opens <a past date>" - it says since + the day
+program-week - v76: the empty-week ask, D-only weeks, round-eve wording › must-fix 1: Week 2 pending after a three-letter close, nothing logged: the card asks from its ending Sunday
+program-week - v76: the empty-week ask, D-only weeks, round-eve wording › must-fix 1: her tap on the pending empty week writes the move; Week 3 opens at the tap (a late Wednesday tap too)
+program-week - v76: the empty-week ask, D-only weeks, round-eve wording › must-fix 2: a D in a PENDING week (after a three-letter close) also moves on at its Sunday
+program-week - v76: the empty-week ask, D-only weeks, round-eve wording › must-fix 2: a D logged the Monday AFTER the empty-week card does not leave her stuck
+program-week - v76: the empty-week ask, D-only weeks, round-eve wording › must-fix 2: a week with only a D moves on by itself at its Sunday (Dec 6 is not still Week 1 day 22)
+program-week - v76: the empty-week ask, D-only weeks, round-eve wording › must-fix 2: the Saturday card works with just a D, and the tap moves on
+program-week - v76: the empty-week ask, D-only weeks, round-eve wording › must-fix 4: the round-eve phrase names what really opens
+program-week - v76: the empty-week ask, D-only weeks, round-eve wording › nice: the empty-week card is hidden on the eve of a round (no phantom one-night week)
 program-week — before the launch the calendar model is kept › a pre-launch "now" uses the calendar: planDateNow is just now; the how-to week is the calendar week
 program-week — before the launch the calendar model is kept › a pre-launch session has no completion-model week key and its plan comes from the calendar lookup
 program-week — before the launch the calendar model is kept › isNowAfterCompletionLaunch: Sep 1 is before, Oct 13 is after
@@ -1284,9 +1293,13 @@ v75 - the Saturday card › Move to Week 2: Week 2 starts now, the note has Undo
 v75 - the Saturday card › Sat Nov 21 with Week 1 done: title, week card and Up next all say Week 1 (D); after Move, Week 2
 v75 - the Saturday card › Start before answering shows the two buttons first; the next Start goes through
 v75 - the Saturday card › asks "Week 1: D left." with the two answers
+v75 - the Saturday card › v76: Sat Nov 14 (Round 3 starts tomorrow): title, week card head, sub-line and pre-log all name Week 8
 v75 - the Saturday card › v76: Sunday Nov 15 is Round 3 Week 1 (the Saturday wording is gone)
+v75 - the Saturday card › v76: Week 2 left empty after a three-letter close: from its ending Sunday the card asks, a tap moves on, Undo returns
+v75 - the Saturday card › v76: a past "opens" date never shows: Week 2 pending since Sun Nov 22 reads since + day
+v75 - the Saturday card › v76: a week with only a D moves on at its Sunday (no card, not stuck on Week 1)
 v75 - the Saturday card › v76: pre-log of D that makes the week 4 of 4 says it counts for this week, not "an extra rep"
-v75 - the Saturday card › v76: the Saturday before a round starts names the week the session counts for (not the next one)
+v75 - the Saturday card › v76: the same Saturday, an A (the week already has A, B, C): "an extra rep", Round 3 starts Sun Nov 15
 v75 - the Saturday card › v76: when the week already has its D, the same pre-log is an extra rep
 v76 - the empty-week card › Saturday before it: no card yet
 v76 - the empty-week card › Sunday, nothing done: the card asks and the week does not auto-advance

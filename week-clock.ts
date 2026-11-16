@@ -102,6 +102,11 @@ export function saturdayQuestion(): ReturnType<typeof pw.saturdayQuestion> {
   return pw.saturdayQuestion(weekClockInput());
 }
 
+/** v76: "Round 3 starts Sun Nov 15" / "Week 2 opens Sun Nov 22" for a pending week. */
+export function pendingOpensPhrase(pending: PendingWeek): string {
+  return pw.pendingOpensPhrase(pending);
+}
+
 /** v76: the empty-week question (null unless the open week has no sessions and its ending Sunday has come). */
 export function emptyWeekAsk(): ReturnType<typeof pw.emptyWeekAsk> {
   return pw.emptyWeekAsk(weekClockInput());

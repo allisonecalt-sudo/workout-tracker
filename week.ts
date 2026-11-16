@@ -416,7 +416,8 @@ export function walkWeeks(
   roundsIn: RoundStart[],
   launch: { round: number; week: number; at: string } = COMPLETION_WEEKS_FROM,
   sickWeeksIn: SickWeek[] = [],
-  now: Date = new Date()
+  now: Date = new Date(),
+  dDatesIn: string[] = []
 ): {
   spans: WeekSpan[];
   open: WeekSpan | null;
@@ -424,6 +425,13 @@ export function walkWeeks(
   weekOf: Map<string, WeekKey>;
 } {
   const sessions = sessionsIn.filter((s) => afterLaunch(s.date, launch.at));
+  // v76: Workout D never counts toward closing a week, but it IS a session: a week with a D (and
+  // no A/B/C) still moves on by itself at its Sunday, and may be moved on by her tap.
+  const dMs = dDatesIn
+    .filter((d) => afterLaunch(d, launch.at))
+    .map((d) => new Date(d).getTime())
+    .sort((a, b) => a - b);
+  const firstDFrom = (fromMs: number): number | null => dMs.find((t) => t >= fromMs) ?? null;
   const moves = movesIn.filter((m) => afterLaunch(m.at, launch.at));
   // v62.1 (Oct 14 2026): a round start dated AFTER `now` has not happened yet - it
   // must not move the clock. (Before, every start past the launch was applied
@@ -554,12 +562,31 @@ export function walkWeeks(
   // week with 1+ done (a week with nothing done never needs moving on; Sick weeks pause
   // the clock instead), only once the rule is on, and only an instant at/after
   // SATURDAY_ASK_FROM (a week long since left open before it is left alone).
+  // v76: the week the Sunday move-on reads: the open one, or - when only a D has landed in a week
+  // that has not been opened by an A/B/C yet - the pending one (opened at its boundary).
+  function autoSpan(): WeekSpan | null {
+    if (open) return open;
+    if (!askOn || nextBoundary === null) return null;
+    const sp = freshSpan({ round: roundNow, week: weekNow }, formatLocalIso(nextBoundary));
+    if (nextBoundaryAsk) sp.opensFrom = sp.openedAt;
+    return sp;
+  }
+  const pendingMs = (): number =>
+    nextBoundary === null ? Infinity : (nextBoundary as Date).getTime();
   function autoCloseMs(): number {
-    if (!askOn || !open || openDone.size === 0) return Infinity;
+    if (!askOn) return Infinity;
+    const sp = autoSpan();
+    if (!sp) return Infinity;
+    const base = new Date(sp.opensFrom ?? sp.openedAt);
+    const firstD = firstDFrom(base.getTime());
+    const firstAbc =
+      open && open.sessions.length ? new Date(open.sessions[0]!.date).getTime() : null;
+    const firstAny =
+      firstAbc !== null && firstD !== null ? Math.min(firstAbc, firstD) : (firstAbc ?? firstD);
+    if (firstAny === null) return Infinity;
     // The first Sunday 00:00 after the later of (the week's FIRST session, its opening + 5 days):
     // never a Sunday that passed before any session in it (a break must not split a week), so
     // a week can never close earlier than a session already counted in it.
-    const base = new Date(open.opensFrom ?? open.openedAt);
     const fivePlus = new Date(
       base.getFullYear(),
       base.getMonth(),
@@ -568,12 +595,20 @@ export function walkWeeks(
       base.getMinutes(),
       base.getSeconds()
     );
-    const first = open.sessions.length ? new Date(open.sessions[0]!.date) : fivePlus;
-    const t = first.getTime() > fivePlus.getTime() ? first : fivePlus;
+    const t = firstAny > fivePlus.getTime() ? new Date(firstAny) : fivePlus;
     const sunday = new Date(t.getFullYear(), t.getMonth(), t.getDate());
     sunday.setDate(sunday.getDate() + ((7 - sunday.getDay()) % 7));
     if (sunday.getTime() <= t.getTime()) sunday.setDate(sunday.getDate() + 7);
     return sunday.getTime() >= askMs ? sunday.getTime() : Infinity;
+  }
+  // v76: open the pending week at its boundary (a D-only or an asked-about empty week), so it can close.
+  function openPendingAtBoundary(): void {
+    if (open || nextBoundary === null) return;
+    open = freshSpan({ round: roundNow, week: weekNow }, formatLocalIso(nextBoundary));
+    if (nextBoundaryAsk) open.opensFrom = open.openedAt;
+    openDone = new Set();
+    nextBoundary = null;
+    nextBoundaryAsk = false;
   }
   // Apply, in time order, every pause edge and every Sunday move-on at or before `ms`.
   // `roundTie`: the event is a round start - one at exactly the Sunday instant wins the tie
@@ -586,6 +621,7 @@ export function walkWeeks(
       const autoDue = autoAt <= ms && autoAt <= nowMs && !(roundTie && autoAt === ms);
       if (!edgeDue && !autoDue) break;
       if (autoDue && (!edgeDue || autoAt < edgeAt)) {
+        openPendingAtBoundary();
         closeOpen(formatLocalIso(new Date(autoAt)), 'moved_on');
         continue;
       }
@@ -634,10 +670,12 @@ export function walkWeeks(
         // boundary, or a resurrected (un-tombstoned) remote row could. Ignore
         // it exactly like a stale move: warn, never throw, never close an
         // empty week.
+        const moveMs = new Date(ev.move.at).getTime();
+        const hasD = firstDFrom(new Date(open.opensFrom ?? open.openedAt).getTime()) !== null;
         if (
           openDone.size === 0 &&
           askOn &&
-          new Date(ev.move.at).getTime() >= emptyWeekAskFromMs(open)
+          (moveMs >= emptyWeekAskFromMs(open) || (hasD && dMs.some((t) => t <= moveMs)))
         ) {
           // v76: an EMPTY week (zero sessions) is never moved on by itself; from its ending
           // Sunday the app ASKS, and her tap is this move. The next week opens right then.
@@ -655,6 +693,25 @@ export function walkWeeks(
         } else {
           closeOpen(ev.move.at, 'moved_on');
         }
+      } else if (
+        askOn &&
+        !open &&
+        nextBoundary !== null &&
+        ev.move.round === roundNow &&
+        ev.move.week === weekNow &&
+        new Date(ev.move.at).getTime() >= pendingMs() &&
+        (new Date(ev.move.at).getTime() >= emptyWeekAskFromMs(autoSpan()!) ||
+          dMs.some((t) => t >= pendingMs() && t <= new Date(ev.move.at).getTime()))
+      ) {
+        // v76: the PENDING week (a gap after a close) reached its ending Sunday with no A/B/C: the
+        // same ask, the same move. It opens at its boundary and closes at her tap; the next opens at the tap.
+        openPendingAtBoundary();
+        closeOpen(ev.move.at, 'moved_on');
+        open = freshSpan({ round: roundNow, week: weekNow }, ev.move.at);
+        open.opensFrom = ev.move.at;
+        openDone = new Set();
+        nextBoundary = null;
+        nextBoundaryAsk = false;
       } else if (
         askOn &&
         !open &&
@@ -789,7 +846,7 @@ export function dayOfWeek(open: WeekSpan, now: Date): number {
 }
 
 /** Only when 1 or 2 of A/B/C are done AND the week has been open 8+ days. */
-export function canMoveOn(open: WeekSpan, now: Date): boolean {
+export function canMoveOn(open: WeekSpan, now: Date, hasD = false): boolean {
   if (open.closedAt !== null) return false;
-  return open.done.length > 0 && open.done.length < 3 && dayOfWeek(open, now) >= 8;
+  return (open.done.length > 0 || hasD) && open.done.length < 3 && dayOfWeek(open, now) >= 8;
 }

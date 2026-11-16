@@ -123,14 +123,88 @@ test.describe('v75 - the Saturday card', () => {
     row('w8b', '2026-11-09T16:00:00.000Z', 'B'),
   ];
 
-  test('v76: the Saturday before a round starts names the week the session counts for (not the next one)', async ({
+  // Her real rows through Week 8 (closed Mon Nov 9): Week 8 is the week Saturday Nov 14 counts for.
+  const REAL_R2: Row[] = [
+    ['w5a', '2026-09-28T15:00:00.000Z', 'A'],
+    ['w5b', '2026-09-29T15:00:00.000Z', 'B'],
+    ['w5c', '2026-09-30T15:00:00.000Z', 'C'],
+    ['w6a', '2026-10-12T15:00:00.000Z', 'A'],
+    ['w6b', '2026-10-13T15:00:00.000Z', 'B'],
+    ['w6c', '2026-10-14T15:00:00.000Z', 'C'],
+    ['w7a', '2026-10-18T07:00:00.000Z', 'A'],
+    ['w7b', '2026-10-20T15:00:00.000Z', 'B'],
+    ['w7c', '2026-10-26T16:00:00.000Z', 'C'],
+    ['w8c', '2026-10-31T08:00:00.000Z', 'C'],
+    ['w8a', '2026-11-04T16:00:00.000Z', 'A'],
+    ['w8b', '2026-11-09T16:00:00.000Z', 'B'],
+  ].map(([id, d, w]) => row(id!, d!, w!));
+
+  test('v76: Sat Nov 14 (Round 3 starts tomorrow): title, week card head, sub-line and pre-log all name Week 8', async ({
     page,
   }) => {
-    await seed(page, SAT_NOV14, WEEK8_CLOSED);
-    const title = (await page.locator('#week-title').textContent()) ?? '';
-    expect(title).toMatch(/^Week \d+$/);
-    expect(title).not.toBe('Week 1'); // Round 3 Week 1 is the pending week, not the one a session counts for
-    await expect(page.locator('#week-sub')).toHaveText(`Saturday still counts for ${title}`);
+    await seed(page, SAT_NOV14, REAL_R2);
+    await expect(page.locator('#week-title')).toHaveText('Week 8');
+    await expect(page.locator('.week-card-range')).toHaveText('Week 8');
+    await expect(page.locator('#week-sub')).toHaveText('Saturday still counts for Week 8');
+    await expect(page.locator('#week-count')).not.toContainText('0 of 4');
+    await page.locator('.home-chip-d').click();
+    await expect(page.locator('.prelog-meta')).toContainText(
+      'Week 8 · counts for this week · Round 3 starts Sun Nov 15'
+    );
+    await expect(page.locator('.prelog-meta')).not.toContainText('Week 9');
+  });
+
+  test('v76: the same Saturday, an A (the week already has A, B, C): "an extra rep", Round 3 starts Sun Nov 15', async ({
+    page,
+  }) => {
+    await seed(page, SAT_NOV14, REAL_R2);
+    await page.locator('.home-hero').click();
+    await expect(page.locator('.prelog-meta')).toContainText(
+      'Week 8 · an extra rep, Round 3 starts Sun Nov 15'
+    );
+  });
+
+  test('v76: a past "opens" date never shows: Week 2 pending since Sun Nov 22 reads since + day', async ({
+    page,
+  }) => {
+    const W1 = [
+      row('r1a', '2026-11-16T16:00:00.000Z', 'A'),
+      row('r1b', '2026-11-17T16:00:00.000Z', 'B'),
+      row('r1c', '2026-11-18T16:00:00.000Z', 'C'),
+    ];
+    await seed(page, '2026-11-25T10:00:00.000Z', [...REAL_R2, ...W1]);
+    await expect(page.locator('#week-title')).toHaveText('Week 2');
+    await expect(page.locator('#week-sub')).toHaveText('since Sun Nov 22 · day 4');
+  });
+
+  test('v76: Week 2 left empty after a three-letter close: from its ending Sunday the card asks, a tap moves on, Undo returns', async ({
+    page,
+  }) => {
+    const W1 = [
+      row('r1a', '2026-11-16T16:00:00.000Z', 'A'),
+      row('r1b', '2026-11-17T16:00:00.000Z', 'B'),
+      row('r1c', '2026-11-18T16:00:00.000Z', 'C'),
+    ];
+    await seed(page, '2026-11-29T09:00:00.000Z', [...REAL_R2, ...W1]);
+    await expect(page.locator('#empty-week-card .saturday-line')).toHaveText(
+      'Week 2 had no sessions. Move on to Week 3?'
+    );
+    await page.locator('#empty-move').click();
+    await expect(page.locator('#week-title')).toHaveText('Week 3');
+    await page.locator('#week-undo').click();
+    await expect(page.locator('#week-title')).toHaveText('Week 2');
+    await expect(page.locator('#empty-week-card')).toHaveCount(1);
+  });
+
+  test('v76: a week with only a D moves on at its Sunday (no card, not stuck on Week 1)', async ({
+    page,
+  }) => {
+    await seed(page, '2026-11-24T09:00:00.000Z', [
+      ...REAL_R2,
+      row('d1', '2026-11-17T08:00:00.000Z', 'D'),
+    ]);
+    await expect(page.locator('#week-title')).toHaveText('Week 2');
+    await expect(page.locator('#empty-week-card')).toHaveCount(0);
   });
 
   test('v76: Sunday Nov 15 is Round 3 Week 1 (the Saturday wording is gone)', async ({ page }) => {

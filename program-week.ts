@@ -414,8 +414,14 @@ export function weekModel(input: WeekClockInput): ReturnType<typeof walkWeeks> {
     roundStartsForWeekModel(),
     COMPLETION_WEEKS_FROM,
     sickWeeksForWeekModel(),
-    input.now
+    input.now,
+    dDatesForWeekModel(input.logs)
   );
+}
+
+/** v76: the dates of her D sessions (D never closes a week, but a week with one still moves on). */
+function dDatesForWeekModel(logs: readonly LogEntry[]): string[] {
+  return logs.filter((l) => l.workout === 'D').map((l) => l.date);
 }
 
 /** WK2 fix r2 (Sep 27 2026, checker's must #1 / GATE 1): which session ids are
@@ -524,6 +530,17 @@ export function weekSubLabel(
     return `since ${formatWeekdayDate(shown.span.openedAt)} · day ${weekDayOfWeek(shown.span, input.now)}`;
   }
   if (shown.pending) {
+    // v76: a boundary already in the past is not "opens <date>": the week is under way, empty so far.
+    if (
+      input.now.getTime() >= new Date(SATURDAY_ASK_FROM).getTime() &&
+      input.now.getTime() >= new Date(shown.pending.opensAt).getTime()
+    ) {
+      const start = new Date(shown.pending.opensAt);
+      const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+      const nowDay = new Date(input.now.getFullYear(), input.now.getMonth(), input.now.getDate());
+      const day = Math.round((nowDay.getTime() - startDay.getTime()) / 86_400_000) + 1;
+      return `since ${formatWeekdayDate(shown.pending.opensAt)} · day ${day}`;
+    }
     const opens = `opens ${formatWeekdayDate(shown.pending.opensAt)}`;
     const backWeek = gapCountsBackToWeekNum(input);
     return backWeek === null
@@ -585,14 +602,15 @@ export function saturdaySituation(input: WeekClockInput): SaturdaySituation | nu
   const answered = input.finishedOn === today;
   if (model.open) {
     const open = model.open;
-    if (open.done.length === 0) return null;
+    const openHasD = weekHasD({ kind: 'open' }, model, dLogs);
+    if (open.done.length === 0 && !openHasD) return null;
     if (localIsoDate(new Date(open.opensFrom ?? open.openedAt)) === today) return null;
     return {
       kind: 'short',
       key: open.key,
       nextKey: { round: open.key.round, week: open.key.week + 1 },
       missing: [...open.missing],
-      hasD: weekHasD({ kind: 'open' }, model, dLogs),
+      hasD: openHasD,
       answered,
     };
   }
@@ -622,12 +640,38 @@ export type EmptyWeekAsk = {
  * the week, or before the cutover. Pure. */
 export function emptyWeekAsk(input: WeekClockInput): EmptyWeekAsk | null {
   const model = weekModel(input);
-  const open = model.open;
-  if (!open || open.sessions.length > 0) return null;
-  if (input.now.getTime() < emptyWeekAskFromMs(open)) return null;
+  // The week can be open (zero sessions since it opened) or only PENDING (a gap after a close that
+  // nobody has logged into): once its boundary has passed it is the same empty week.
+  const pending = model.pending;
+  const span: { key: WeekKey; start: string } | null = model.open
+    ? model.open.sessions.length > 0
+      ? null
+      : { key: model.open.key, start: model.open.opensFrom ?? model.open.openedAt }
+    : pending && input.now.getTime() >= new Date(pending.opensAt).getTime()
+      ? { key: pending.key, start: pending.opensAt }
+      : null;
+  if (!span) return null;
+  const asSpan = {
+    key: span.key,
+    openedAt: span.start,
+    opensFrom: span.start,
+  } as unknown as WeekSpan;
+  if (input.now.getTime() < emptyWeekAskFromMs(asSpan)) return null;
+  // The eve of a new round: no phantom one-night week (the same hide as the Saturday card).
+  const tomorrow = new Date(input.now.getFullYear(), input.now.getMonth(), input.now.getDate() + 1);
+  if (ROUNDS.some((r) => r.start === localIsoDate(tomorrow))) return null;
   const dLogs = input.logs.filter((l) => l.workout === 'D');
-  if (weekHasD({ kind: 'open' }, model, dLogs)) return null;
-  return { key: open.key, nextKey: { round: open.key.round, week: open.key.week + 1 } };
+  if (weekHasD({ kind: model.open ? 'open' : 'pending' }, model, dLogs)) return null;
+  return { key: span.key, nextKey: { round: span.key.round, week: span.key.week + 1 } };
+}
+
+/** v76: what the pending week really does at its boundary - "Round 3 starts Sun Nov 15" when a
+ * round starts that day (it replaces the pending week), else "Week N opens Sun Nov 22". */
+export function pendingOpensPhrase(pending: PendingWeek): string {
+  const day = localIsoDate(new Date(pending.opensAt));
+  const round = ROUNDS.find((r) => r.start === day);
+  const when = formatWeekdayDate(pending.opensAt);
+  return round ? `Round ${round.num} starts ${when}` : `Week ${pending.key.week} opens ${when}`;
 }
 
 /** The question Home asks on a Saturday - `saturdaySituation` while she has not answered

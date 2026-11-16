@@ -97,3 +97,4 @@ v74.1 - rest day: start anyway and undo › the Recovery card offers Start anywa
 v73 - the version › package.json appVersion (the one source) is v74.2 => v73 - the version › package.json appVersion (the one source) is v74.3
 v73 - the version › package.json appVersion (the one source) is v74.3 => v73 - the version › package.json appVersion (the one source) is v75
 v73 - the version › package.json appVersion (the one source) is v75 => v73 - the version › package.json appVersion (the one source) is v76
+v75 - the Saturday card › v76: the Saturday before a round starts names the week the session counts for (not the next one) => v75 - the Saturday card › v76: Sat Nov 14 (Round 3 starts tomorrow): title, week card head, sub-line and pre-log all name Week 8

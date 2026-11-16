@@ -27,6 +27,8 @@ import {
   planForLog,
   planKeyForLog,
   roundStartsForWeekModel,
+  emptyWeekAsk,
+  pendingOpensPhrase,
   saturdayQuestion,
   saturdaySituation,
   shownWeek,
@@ -601,5 +603,133 @@ test.describe('program-week - v75: saturdayQuestion / saturdaySituation', () => 
     expect(
       saturdayQuestion({ logs: R2, moves: [], now: at('2026-11-07T20:00:00+02:00') })
     ).toBeNull(); // before Nov 14
+  });
+});
+
+// v76 fix round: empty weeks after a gap, D-only weeks, the round-eve wording.
+test.describe('program-week - v76: the empty-week ask, D-only weeks, round-eve wording', () => {
+  const at = (iso: string): Date => new Date(iso);
+  const R2: LogEntry[] = [
+    log('w5a', '2026-09-28T18:00:00+03:00', 'A'),
+    log('w5b', '2026-09-29T18:00:00+03:00', 'B'),
+    log('w5c', '2026-09-30T18:00:00+03:00', 'C'),
+    log('w6a', '2026-10-12T18:00:00+03:00', 'A'),
+    log('w6b', '2026-10-13T18:00:00+03:00', 'B'),
+    log('w6c', '2026-10-14T18:00:00+03:00', 'C'),
+    log('w7a', '2026-10-18T10:00:00+03:00', 'A'),
+    log('w7b', '2026-10-20T18:00:00+03:00', 'B'),
+    log('w7c', '2026-10-26T18:00:00+02:00', 'C'),
+    log('w8c', '2026-10-31T10:00:00+02:00', 'C'),
+    log('w8a', '2026-11-04T18:00:00+02:00', 'A'),
+    log('w8b', '2026-11-09T18:00:00+02:00', 'B'),
+  ];
+  const W1_CLOSED = [
+    log('r1a', '2026-11-16T18:00:00+02:00', 'A'),
+    log('r1b', '2026-11-17T18:00:00+02:00', 'B'),
+    log('r1c', '2026-11-18T18:00:00+02:00', 'C'),
+  ];
+  const mk = (
+    logs: LogEntry[],
+    now: string,
+    moves: WeekClockInput['moves'] = []
+  ): WeekClockInput => ({
+    logs,
+    moves,
+    now: at(now),
+  });
+
+  test('must-fix 1: Week 2 pending after a three-letter close, nothing logged: the card asks from its ending Sunday', () => {
+    const logs = [...R2, ...W1_CLOSED];
+    expect(weekModel(mk(logs, '2026-11-25T12:00:00+02:00')).open).toBeNull(); // still pending, nothing logged
+    expect(emptyWeekAsk(mk(logs, '2026-11-25T12:00:00+02:00'))).toBeNull(); // not its ending Sunday yet
+    expect(emptyWeekAsk(mk(logs, '2026-11-29T12:00:00+02:00'))).toEqual({
+      key: { round: 3, week: 2 },
+      nextKey: { round: 3, week: 3 },
+    });
+  });
+
+  test('must-fix 1: Home never says "opens <a past date>" - it says since + the day', () => {
+    const i = mk([...R2, ...W1_CLOSED], '2026-11-25T12:00:00+02:00');
+    const label = weekSubLabel(shownWeek(i), i);
+    expect(label).toBe('since Sun Nov 22 · day 4');
+    expect(label).not.toContain('opens');
+    const eve = mk([...R2, ...W1_CLOSED], '2026-11-21T12:00:00+02:00');
+    expect(weekSubLabel(shownWeek(eve), eve)).toContain('opens Sun Nov 22'); // still ahead: unchanged
+  });
+
+  test('must-fix 1: her tap on the pending empty week writes the move; Week 3 opens at the tap (a late Wednesday tap too)', () => {
+    const logs = [...R2, ...W1_CLOSED];
+    const tap = (iso: string): WeekClockInput['moves'] =>
+      [{ round: 3, week: 2, at: iso, missing: 'ABC', synced: false }] as WeekClockInput['moves'];
+    const sun = weekModel(mk(logs, '2026-11-29T10:05:00+02:00', tap('2026-11-29T10:00:00+02:00')));
+    expect(sun.spans.at(-1)?.key).toEqual({ round: 3, week: 2 });
+    expect(sun.spans.at(-1)?.how).toBe('moved_on');
+    expect(sun.open?.key).toEqual({ round: 3, week: 3 });
+    expect(sun.open?.opensFrom).toBe('2026-11-29T10:00:00+02:00');
+    const wed = weekModel(mk(logs, '2026-12-02T10:05:00+02:00', tap('2026-12-02T10:00:00+02:00')));
+    expect(wed.open?.key).toEqual({ round: 3, week: 3 });
+    expect(wed.open?.opensFrom).toBe('2026-12-02T10:00:00+02:00');
+  });
+
+  test('must-fix 2: a week with only a D moves on by itself at its Sunday (Dec 6 is not still Week 1 day 22)', () => {
+    const logs = [...R2, log('d1', '2026-11-17T10:00:00+02:00', 'D')];
+    const dec = weekModel(mk(logs, '2026-12-06T09:00:00+02:00'));
+    const w1 = dec.spans.find((sp) => sp.key.round === 3 && sp.key.week === 1);
+    expect(w1?.how).toBe('moved_on');
+    expect(w1?.closedAt).toBe('2026-11-22T00:00:00+02:00');
+    expect(dec.open?.key.week).toBeGreaterThan(1);
+  });
+
+  test('must-fix 2: a D logged the Monday AFTER the empty-week card does not leave her stuck', () => {
+    const logs = [...R2, log('d2', '2026-11-23T10:00:00+02:00', 'D')];
+    expect(emptyWeekAsk(mk(R2, '2026-11-22T12:00:00+02:00'))).not.toBeNull(); // the Sunday card (D not logged yet)
+    expect(emptyWeekAsk(mk(logs, '2026-11-23T12:00:00+02:00'))).toBeNull(); // a session: no card
+    const later = weekModel(mk(logs, '2026-11-30T12:00:00+02:00'));
+    expect(later.spans.at(-1)?.closedAt).toBe('2026-11-29T00:00:00+02:00');
+    expect(later.open?.key).toEqual({ round: 3, week: 2 });
+  });
+
+  test('must-fix 2: a D in a PENDING week (after a three-letter close) also moves on at its Sunday', () => {
+    const logs = [...R2, ...W1_CLOSED, log('d3', '2026-11-23T10:00:00+02:00', 'D')];
+    const m = weekModel(mk(logs, '2026-11-30T12:00:00+02:00'));
+    expect(m.spans.at(-1)?.key).toEqual({ round: 3, week: 2 });
+    expect(m.spans.at(-1)?.how).toBe('moved_on');
+    expect(m.open?.key).toEqual({ round: 3, week: 3 });
+  });
+
+  test('must-fix 2: the Saturday card works with just a D, and the tap moves on', () => {
+    const logs = [...R2, log('d1', '2026-11-17T10:00:00+02:00', 'D')];
+    const i = mk(logs, '2026-11-21T20:00:00+02:00');
+    expect(saturdaySituation(i)).toMatchObject({
+      kind: 'short',
+      key: { round: 3, week: 1 },
+      hasD: true,
+    });
+    const tapped = weekModel(
+      mk(logs, '2026-11-21T20:05:00+02:00', [
+        { round: 3, week: 1, at: '2026-11-21T20:00:00+02:00', missing: 'ABC', synced: false },
+      ] as WeekClockInput['moves'])
+    );
+    expect(tapped.spans.at(-1)?.key).toEqual({ round: 3, week: 1 });
+    expect(tapped.spans.at(-1)?.how).toBe('moved_on');
+    expect(tapped.open?.key).toEqual({ round: 3, week: 2 });
+  });
+
+  test('nice: the empty-week card is hidden on the eve of a round (no phantom one-night week)', () => {
+    const extra = { num: 99, start: '2026-11-30' };
+    ROUNDS.push(extra);
+    try {
+      expect(emptyWeekAsk(mk(R2, '2026-11-29T12:00:00+02:00'))).toBeNull(); // a round starts tomorrow
+    } finally {
+      ROUNDS.pop();
+    }
+    expect(emptyWeekAsk(mk(R2, '2026-11-29T12:00:00+02:00'))).not.toBeNull();
+  });
+
+  test('must-fix 4: the round-eve phrase names what really opens', () => {
+    const eve = mk(R2, '2026-11-14T20:00:00+02:00');
+    expect(pendingOpensPhrase(shownWeek(eve).pending!)).toBe('Round 3 starts Sun Nov 15');
+    const w2 = mk([...R2, ...W1_CLOSED], '2026-11-21T20:00:00+02:00');
+    expect(pendingOpensPhrase(shownWeek(w2).pending!)).toBe('Week 2 opens Sun Nov 22');
   });
 });
