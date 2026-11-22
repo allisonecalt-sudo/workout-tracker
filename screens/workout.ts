@@ -525,7 +525,13 @@ export function renderWorkout(): string {
               ${state.dayMode === 'knee' ? '' : `<button class="cardio-half" id="ww-start" type="button"><span class="cardio-half-main">🚶 Walk outside</span><span class="cardio-half-sub">tap as you head out</span></button>`}
               <button class="cardio-half" id="ww-apartment" type="button"><span class="cardio-half-main">🏠 Apartment</span></button>
             </div>
-            <button class="back-link cardio-skip" id="ww-skip" type="button">Skip cardio today</button>
+            ${
+              /* v77.1 (her "hide", Nov 22 2026): on Workout C, the long ride, there is no "Skip cardio today" - the
+                 ride is the whole point of C, and a knee day already swaps it to a walk. A, B, D and every old week keep it. */
+              isRideDay(w)
+                ? ''
+                : `<button class="back-link cardio-skip" id="ww-skip" type="button">Skip cardio today</button>`
+            }
           </div>
         </div>
       </div>

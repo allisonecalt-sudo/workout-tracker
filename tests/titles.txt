@@ -1088,7 +1088,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v73 - the version › package.json appVersion (the one source) is v77
+v73 - the version › package.json appVersion (the one source) is v77.1
 v73 — Round 3 Week 1 is the written plan › A: cool-down is chin tucks, then her stretches at 45 s, and no shoulder / calf stretch
 v73 — Round 3 Week 1 is the written plan › A: the five main moves are in priority order, 2 rounds
 v73 — Round 3 Week 1 is the written plan › A: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
@@ -1349,6 +1349,11 @@ v77 — which weeks count out of 3 › Round 3 Week 2 and a later repeat week do
 v77 — which weeks count out of 3 › a closed week reads "3 of 3 ✓", D or not
 v77 — which weeks count out of 3 › a week before the flag reads exactly as today ("N of 4", D named)
 v77 — which weeks count out of 3 › the open week reads "N of 3", names only A / B / C, and D never enters the number
+v77.1 — Skip cardio today is hidden on Workout C only › Round 3 Week 1's C (a strength C) keeps it
+v77.1 — Skip cardio today is hidden on Workout C only › Week 2 A keeps "Skip cardio today"
+v77.1 — Skip cardio today is hidden on Workout C only › Week 2 B keeps "Skip cardio today"
+v77.1 — Skip cardio today is hidden on Workout C only › Week 2 C on a knee day (the ride is the walk lane): no skip either
+v77.1 — Skip cardio today is hidden on Workout C only › Week 2 C: the lane picker has no skip, on any day mode; the lanes are still there
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

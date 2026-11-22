@@ -68,7 +68,12 @@ async function walkCToPostLog(page: Page): Promise<string[]> {
     const label = (await page.locator('#app').innerText()).replace(/\s+/g, ' ');
     seen.push(label);
     expect(await page.locator('#start-round-2').count()).toBe(0); // no round break on C, ever
-    const next = page.locator('#next, #ww-skip');
+    // v77.1: C has no "Skip cardio today": she picks a lane (the elliptical), then Done, then skips the numbers
+    if (await page.locator('#ww-elliptical').isVisible()) {
+      await page.locator('#ww-elliptical').click();
+      continue;
+    }
+    const next = page.locator('#next, #ww-skip, #ride-numbers-skip');
     if (!(await next.first().isVisible())) break;
     await next.first().click();
   }
@@ -171,8 +176,8 @@ test.describe('v77 — Workout C, the long ride (full flow)', () => {
     // the ride page names the 45-minute ride and the long-ride note; the next page is the stretch list
     expect(seen[0]).toContain('45 min');
     expect(seen[0]).toContain('The long ride.');
-    expect(seen[1]).toContain('Stretch');
-    expect(seen.length).toBe(2);
+    expect(seen[seen.length - 1]).toContain('Stretch');
+    for (const screen of seen) expect(screen).not.toContain('Supported split squat');
     await expect(page.locator('#app')).toContainText('1 round · 1 of 3 in Week 2');
     await page.locator('#save-log').click();
     const logs = await readLogs(page);
@@ -223,7 +228,9 @@ test.describe('v77 — Workout C, the long ride (full flow)', () => {
     await page.reload();
     await expect(page.locator('#app')).toContainText('The long ride.');
     await expect(page.locator('#app')).toContainText('45 min');
-    await page.locator('#next, #ww-skip').first().click();
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#next').click();
+    await page.locator('#ride-numbers-skip').click();
     await expect(page.locator('#app')).toContainText('Stretch');
   });
 
@@ -412,5 +419,52 @@ test.describe('v77 fix round', () => {
     await page.locator('#day-link').click();
     await page.locator('[data-day-mode="back"]').click();
     await expect(page.locator('#app')).toContainText('About half your usual reps');
+  });
+});
+
+// ---- v77.1 (her "hide", Nov 22 2026): no "Skip cardio today" on the long ride -----------------------
+test.describe('v77.1 — Skip cardio today is hidden on Workout C only', () => {
+  test.use({ viewport: { width: 412, height: 915 } });
+
+  const startRide = async (page: Page, iso: string, seed: Row[], letter: string): Promise<void> => {
+    await open(page, iso, seed);
+    await page.locator(`button[data-workout="${letter}"]`).first().click();
+    await page.locator('#begin').click();
+    await expect(page.locator('#ww-apartment')).toBeVisible(); // the lane picker is up
+  };
+
+  test('Week 2 C: the lane picker has no skip, on any day mode; the lanes are still there', async ({
+    page,
+  }) => {
+    await startRide(page, SUN_W2, WEEK1, 'C');
+    await expect(page.locator('#ww-skip')).toHaveCount(0);
+    await expect(page.locator('#app')).not.toContainText('Skip cardio today');
+    await expect(page.locator('#ww-elliptical')).toBeVisible();
+    // back to the picker after a lane: still no skip
+    await page.locator('#ww-elliptical').click();
+    await page.locator('#step-back').click();
+    await expect(page.locator('#ww-skip')).toHaveCount(0);
+  });
+
+  test('Week 2 C on a knee day (the ride is the walk lane): no skip either', async ({ page }) => {
+    await open(page, SUN_W2, WEEK1);
+    await page.locator('button[data-workout="C"]').first().click();
+    await page.locator('#day-link').click();
+    await page.locator('[data-day-mode="knee"]').click();
+    await page.locator('#begin').click();
+    await expect(page.locator('#ww-start')).toBeVisible();
+    await expect(page.locator('#ww-skip')).toHaveCount(0);
+  });
+
+  for (const letter of ['A', 'B']) {
+    test(`Week 2 ${letter} keeps "Skip cardio today"`, async ({ page }) => {
+      await startRide(page, SUN_W2, WEEK1, letter);
+      await expect(page.locator('#ww-skip')).toHaveText('Skip cardio today');
+    });
+  }
+
+  test("Round 3 Week 1's C (a strength C) keeps it", async ({ page }) => {
+    await startRide(page, SUN_W1, [], 'C');
+    await expect(page.locator('#ww-skip')).toHaveText('Skip cardio today');
   });
 });
