@@ -268,10 +268,18 @@ export function weekTargetForD(dDateIso: string, model: DWeekModel): DWeekTarget
 export function weekCountLine(
   shown: { span: WeekSpan | null },
   hasD = false,
-  skipD = false
+  skipD = false,
+  outOf3 = false
 ): string {
   const missing = shown.span ? shown.span.missing : (['A', 'B', 'C'] as const);
   const doneAbc = shown.span ? shown.span.done.length : 0;
+  // v77 (Nov 22 2026): from Round 3 Week 2 on, C is the elliptical day and D is not a to-do: the week
+  // counts out of 3 and names only A / B / C. (`outOf3` = the plan row's `cIsRide`; every older week
+  // keeps the "of 4" read below, exactly as before.)
+  if (outOf3) {
+    if (missing.length === 0) return '3 of 3 ✓';
+    return `${doneAbc} of 3 · ${weekLeftWords(missing, true, doneAbc, true)}`;
+  }
   const done = doneAbc + (hasD ? 1 : 0);
   if (missing.length === 0) return hasD ? '4 of 4 ✓' : 'complete · 3 of 4';
   return `${done} of 4 · ${weekLeftWords(missing, hasD, done, skipD)}`;

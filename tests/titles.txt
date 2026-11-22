@@ -68,7 +68,7 @@ PROGRAM — names resolve where the app looks them up › move-feel slugs: every
 PROGRAM — names resolve where the app looks them up › the exceptions list holds no stale name (every listed name is still in the program)
 PROGRAM — shape › (round, weekNum) is unique and ascending; startsOn strictly ascends with it
 PROGRAM — shape › every startsOn is a Saturday (weeks are Sat-Fri throughout the app)
-PROGRAM — shape › has exactly 21 weeks (the Settings "Program weeks" number)
+PROGRAM — shape › has exactly 22 weeks (the Settings "Program weeks" number)
 PROGRAM — the Jul 8 timer rule › every sustained hold has durationSec AND isTimed (except the named Round-1 W1-W4 stretches)
 PROGRAM — the Jul 8 timer rule › isTimed and durationSec always travel together (never one without the other)
 PROGRAM — the Jul 8 timer rule › the exceptions list holds no stale name (each listed stretch still occurs in Round 1 weeks 1-4)
@@ -365,7 +365,7 @@ moveFeelString / parseMoveFeelString — tap saves the right slug/qty › parseM
 moveFeelSummary: the Session screen line › a slug the plan no longer has stays as saved; nothing saved is an empty string
 moveFeelSummary: the Session screen line › every move's feel, with its seconds / minutes spaced
 multi-week: "Coming next week" preview renders in Progress with diff
-multi-week: Settings About shows Program weeks count (21) — pre-launch, unchanged
+multi-week: Settings About shows Program weeks count (22) — pre-launch, unchanged
 multi-week: Week 4 content active for May 25 (Session A holds — squats 12, plank 1x15s)
 multi-week: home week-banner reads Week 3 for May 16-22 range
 multi-week: pre-log overview shows Week 3 badge in May 16-22 range
@@ -1088,7 +1088,7 @@ v64 what grew (pure) › wall sit: honest readings only (pre Sep 24 prescribed h
 v64.1 - a partial week never reads like a full one by its number alone › partial squares show count/target, full squares just the number (filled)
 v64.1 - at 360px a value never breaks mid-value › "10 min → 30 min" and the wrist sequence stay on one line; no sideways scroll
 v64.1 - the non-tappable Sick square is the same box as the buttons › same height and width floor, same baseline row, as a tappable square
-v73 - the version › package.json appVersion (the one source) is v76
+v73 - the version › package.json appVersion (the one source) is v77
 v73 — Round 3 Week 1 is the written plan › A: cool-down is chin tucks, then her stretches at 45 s, and no shoulder / calf stretch
 v73 — Round 3 Week 1 is the written plan › A: the five main moves are in priority order, 2 rounds
 v73 — Round 3 Week 1 is the written plan › A: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
@@ -1099,7 +1099,7 @@ v73 — Round 3 Week 1 is the written plan › C: cool-down is chin tucks, then 
 v73 — Round 3 Week 1 is the written plan › C: the five main moves are in priority order, 2 rounds
 v73 — Round 3 Week 1 is the written plan › C: warm-up is the ride ('Outdoor walk', exact name) then the 1-minute primer
 v73 — Round 3 Week 1 is the written plan › Hammer curl is the optional last step of the 60 path in A, B and C
-v73 — Round 3 Week 1 is the written plan › Weeks 2+ are not written: Round 3 Week 2 repeats Week 1 (she decides each week)
+v73 — Round 3 Week 1 is the written plan › Week 1 stays as written; Round 3 Week 2 is its own row (v77) and Week 3 repeats it (she decides each week)
 v73 — Round 3 Week 1 is the written plan › the row exists: round 3, week 1, from Sun Nov 15, with her label
 v73 — Round 3 starts Sun Nov 15 and not before › ROUNDS carries Round 3 at 2026-11-15 (Sunday)
 v73 — Round 3 starts Sun Nov 15 and not before › Wed Nov 11 .. Sat Nov 14 23:59 is still Round 2; Sun Nov 15 00:00 is Round 3 Week 1
@@ -1305,6 +1305,40 @@ v76 - the empty-week card › Saturday before it: no card yet
 v76 - the empty-week card › Sunday, nothing done: the card asks and the week does not auto-advance
 v76 - the empty-week card › a session logged instead: no card, still Week 1
 v76 - the empty-week card › tap: a week_moves row is written, Week 2 starts, and Undo brings Week 1 back
+v77 — A and B in Week 2 › A and B chips say 3 / 4 / 6+ moves; the 60 path lists all six and the curl
+v77 — A and B in Week 2 › Week 1's own A still lists its five moves with the 5-move chip (nothing changed for old weeks)
+v77 — C's ride counts in the week's ride minutes › a C log with an elliptical ride lands in its week row beside A and B
+v77 — Home: the week counts out of 3 from Week 2 › Round 3 Week 1 reads exactly as before: "of 4", D named, the D chip shown
+v77 — Home: the week counts out of 3 from Week 2 › Week 2 (her real Week 1 behind her): "0 of 3 · A, B and C to go", no D chip, C is named
+v77 — Home: the week counts out of 3 from Week 2 › a week closes on A + B + C(ride): the Done card says "Week 2 done · 3 of 3 ✓"
+v77 — Home: the week counts out of 3 from Week 2 › one done: "1 of 3 · B and C left"; two done: "2 of 3 · C left" (no D in the letters)
+v77 — Round 3 Week 2 is written › A / B ride note: Week 2's own text; Week 1's R3_RIDE_NOTE is unchanged
+v77 — Round 3 Week 2 is written › A and B reuse Week 1 moves unchanged (reps, notes, the split squat note / safety / detailKey)
+v77 — Round 3 Week 2 is written › A: 6 moves in priority order; 38 = first 3, 48 = first 4, 60 = all 6 + hammer curl
+v77 — Round 3 Week 2 is written › B: 6 moves in priority order; 38 = first 3, 48 = first 4, 60 = all 6 + hammer curl
+v77 — Round 3 Week 2 is written › C by path: the ride is 20 / 30 / 45 min, no pick = 45; the description reads the path
+v77 — Round 3 Week 2 is written › C's default path is 60 (her usual 45-min ride); A and B keep 48
+v77 — Round 3 Week 2 is written › C: the long ride + her stretches. 1 round, no primer, no main, exact ride name
+v77 — Round 3 Week 2 is written › Week 1 is untouched: its A / B / C names and move lists are exactly what they were
+v77 — Round 3 Week 2 is written › the row: Round 3 Week 2, starts Sun Nov 22, flagged cIsRide; Week 1 is not flagged
+v77 — Workout C, the long ride (full flow) › "Log what I did" on C goes to the post-log and saves a C
+v77 — Workout C, the long ride (full flow) › C: ride lane -> straight to the stretches -> post-log -> Save (no strength page, no round 2)
+v77 — Workout C, the long ride (full flow) › coming back from an easy day: C opens with 38 pre-picked, a 20-min easy ride
+v77 — Workout C, the long ride (full flow) › pre-log: the path picker says the ride and "stretches" (no moves), nothing lit; Start = 60
+v77 — Workout C, the long ride (full flow) › resume mid-C: closing the app on the ride and reopening lands back on the ride
+v77 — Workout C, the long ride (full flow) › tapping the 38 path: the ride is 20 min; the 48 path: 30 min
+v77 — Workout C, the long ride (full flow) › the step list (☰) on C lists the ride and the cool-down, no strength moves
+v77 — the day modes on C (nothing crashes; what each one does) › back: the ride keeps its minutes and its note gets the back-day line
+v77 — the day modes on C (nothing crashes; what each one does) › cold (easy day): the 38 path, so a 20-min easy ride; 1 round
+v77 — the day modes on C (nothing crashes; what each one does) › coming back from an easy day still pre-picks 38 for the next workout (C included)
+v77 — the day modes on C (nothing crashes; what each one does) › every ride note C and A / B can show is on the allow-list the ride page reads
+v77 — the day modes on C (nothing crashes; what each one does) › knee: the ride becomes the walk lane, same minutes (the elliptical sits this one out)
+v77 — the day modes on C (nothing crashes; what each one does) › no mode: the long ride as written
+v77 — the day modes on C (nothing crashes; what each one does) › wrist: nothing in C touches the wrist, so nothing changes
+v77 — which weeks count out of 3 › Round 3 Week 2 and a later repeat week do; Round 3 Week 1 and every older week do not
+v77 — which weeks count out of 3 › a closed week reads "3 of 3 ✓", D or not
+v77 — which weeks count out of 3 › a week before the flag reads exactly as today ("N of 4", D named)
+v77 — which weeks count out of 3 › the open week reads "N of 3", names only A / B / C, and D never enters the number
 video-only exercise still shows a picture, with the video one tap away
 voice-note ↔ variant sweep: no voiceScript names a kg/kilo number its own reps text lacks
 voice-note ↔ variant: a LOAD CHIP move states no fixed kilogram number › "1 kg biceps curl"'s voiceScript says "one or two kilos", never a fixed "one kilogram"/"1 kg"

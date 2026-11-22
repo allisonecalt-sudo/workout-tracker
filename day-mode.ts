@@ -17,7 +17,14 @@
 // What's next: nothing queued. Links: paths.ts (the path cut this runs after), workout-now.ts
 // (getCurrentWorkout calls applyDayMode), migrations/2026-11-11-v74-day-mode.sql.
 
-import { R3_RIDE_NOTE, type Exercise, type PathId, type Workout } from './program.js';
+import {
+  R3_RIDE_NOTE,
+  R3W2_C_RIDE_NOTE,
+  R3W2_RIDE_NOTE,
+  type Exercise,
+  type PathId,
+  type Workout,
+} from './program.js';
 import type { DayMode, LogEntry, RestDay } from './types.js';
 
 export type { DayMode };
@@ -124,14 +131,17 @@ export const COMING_BACK_LINE = 'Coming back from being sick: easy for 2–3 wor
 export const COMING_BACK_SESSIONS = 3;
 
 export const EASY_RIDE_NOTE = 'Easy — short sentences or easier.';
-const BACK_RIDE_NOTE = `${R3_RIDE_NOTE} If standing tall hurts, use the walk lane for 5–10 min instead.`;
+// v77: a back day adds its line to WHICHEVER ride note the workout carries (Week 1's, Week 2's A/B, C's long ride).
+const backRideNote = (base: string): string =>
+  `${base} If standing tall hurts, use the walk lane for 5–10 min instead.`;
 const KNEE_RIDE_NOTE =
   'Walk on flat ground at an easy pace, talking in short sentences. The elliptical sits this one out.';
 /** Every text the ride step can carry as a note (screens/workout.ts shows it under the ride). */
+const BASE_RIDE_NOTES: readonly string[] = [R3_RIDE_NOTE, R3W2_RIDE_NOTE, R3W2_C_RIDE_NOTE];
 export const RIDE_NOTES: readonly string[] = [
-  R3_RIDE_NOTE,
+  ...BASE_RIDE_NOTES,
   EASY_RIDE_NOTE,
-  BACK_RIDE_NOTE,
+  ...BASE_RIDE_NOTES.map(backRideNote),
   KNEE_RIDE_NOTE,
 ];
 
@@ -283,7 +293,7 @@ const SWAPS: Record<SwapMode, Record<string, Swap>> = {
 function rideFor(mode: DayMode, ex: Exercise): Exercise {
   if (ex.name !== 'Outdoor walk') return ex;
   if (mode === 'cold') return { ...ex, notes: EASY_RIDE_NOTE };
-  if (mode === 'back') return { ...ex, notes: BACK_RIDE_NOTE };
+  if (mode === 'back') return { ...ex, notes: backRideNote(ex.notes ?? R3_RIDE_NOTE) };
   if (mode === 'knee') {
     return {
       ...ex,

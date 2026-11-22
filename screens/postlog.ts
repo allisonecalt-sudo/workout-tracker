@@ -27,7 +27,7 @@ import { renderActionBar } from '../action-bar.js';
 import { painFromFeel } from '../pain-feel.js';
 import { workoutHasWallSit } from '../hold-sets.js';
 import { trainingMinutes } from '../timing.js';
-import type { Workout } from '../program.js';
+import { weekCountsOutOf3, type Workout } from '../program.js';
 import {
   getCurrentWorkout,
   effectiveRounds,
@@ -147,8 +147,12 @@ function postLogWitnessLine(w: Workout): string {
       const lastSpan = spans.length ? spans[spans.length - 1] : null;
       const closedDone = lastSpan ? lastSpan.done.length : 3;
       const closedHasD = weekHasDFor(lastSpan ? { span: lastSpan } : null, model, dLogs);
+      // v77: a week that counts out of 3 (C is the ride) has no D in its count.
+      const outOf3 = lastSpan ? weekCountsOutOf3(lastSpan.key) : false;
       parts.push(
-        `an extra for Week ${backWeek} (already ${closedDone + (closedHasD ? 1 : 0)} of 4)`
+        outOf3
+          ? `an extra for Week ${backWeek} (already ${closedDone} of 3)`
+          : `an extra for Week ${backWeek} (already ${closedDone + (closedHasD ? 1 : 0)} of 4)`
       );
     } else {
       // WK2 fix r1 (Sep 27 2026, checker's should #2): `.done.length + 1`
@@ -160,7 +164,11 @@ function postLogWitnessLine(w: Workout): string {
       const doneLetters = new Set<string>(shown.span?.done ?? []);
       if (state.selectedWorkout) doneLetters.add(state.selectedWorkout);
       const hasD = weekHasDFor(liveWeekDTarget(shown), model, dLogs);
-      parts.push(`${doneLetters.size + (hasD ? 1 : 0)} of 4 in Week ${shown.key.week}`);
+      parts.push(
+        weekCountsOutOf3(shown.key)
+          ? `${doneLetters.size} of 3 in Week ${shown.key.week}`
+          : `${doneLetters.size + (hasD ? 1 : 0)} of 4 in Week ${shown.key.week}`
+      );
     }
   }
   return parts.join(' · ');

@@ -98,3 +98,7 @@ v73 - the version › package.json appVersion (the one source) is v74.2 => v73 -
 v73 - the version › package.json appVersion (the one source) is v74.3 => v73 - the version › package.json appVersion (the one source) is v75
 v73 - the version › package.json appVersion (the one source) is v75 => v73 - the version › package.json appVersion (the one source) is v76
 v75 - the Saturday card › v76: the Saturday before a round starts names the week the session counts for (not the next one) => v75 - the Saturday card › v76: Sat Nov 14 (Round 3 starts tomorrow): title, week card head, sub-line and pre-log all name Week 8
+PROGRAM — shape › has exactly 21 weeks (the Settings "Program weeks" number) => PROGRAM — shape › has exactly 22 weeks (the Settings "Program weeks" number)
+multi-week: Settings About shows Program weeks count (21) — pre-launch, unchanged => multi-week: Settings About shows Program weeks count (22) — pre-launch, unchanged
+v73 - the version › package.json appVersion (the one source) is v76 => v73 - the version › package.json appVersion (the one source) is v77
+v73 — Round 3 Week 1 is the written plan › Weeks 2+ are not written: Round 3 Week 2 repeats Week 1 (she decides each week) => v73 — Round 3 Week 1 is the written plan › Week 1 stays as written; Round 3 Week 2 is its own row (v77) and Week 3 repeats it (she decides each week)

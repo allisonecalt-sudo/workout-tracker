@@ -37,6 +37,7 @@ import {
 import {
   planForWeekKey,
   noPlanLine,
+  weekCountsOutOf3,
   type WorkoutId,
   type AnyWorkoutId,
   type Workout,
@@ -327,7 +328,12 @@ function lastClosedWeekForPeek(): WeekPeek | null {
     return {
       weekNum: lastSpan.key.week,
       dotsHtml: renderCompletionWeekDots(completionWeekDots(lastSpan, dLogs, lastSpanWindow)),
-      countText: weekCountLine({ span: lastSpan }, weekHasDFor({ span: lastSpan }, model, dLogs)),
+      countText: weekCountLine(
+        { span: lastSpan },
+        weekHasDFor({ span: lastSpan }, model, dLogs),
+        false,
+        weekCountsOutOf3(lastSpan.key)
+      ),
     };
   }
   return legacyLastClosedWeekPeek();
@@ -896,6 +902,8 @@ export function renderHome(): string {
   // v75 (Nov 15 2026): the Saturday card / its quiet link, and Up next = D after "Finish".
   let saturdayCardHtml = '';
   let upNextD = false;
+  // v77: the live week counts out of 3 (Round 3 Week 2 on): no D chip, no D in the letters left.
+  let hideD = false;
   // v64 (Oct 20 2026, her Q2 via "just go"): after a Sick/Break week, ONE quiet line on
   // the week card - the fresh start named, no empty-circle judging. '' otherwise.
   let afterBreakHtml = '';
@@ -989,6 +997,7 @@ export function renderHome(): string {
     // both readers go straight to the raw logs instead.
     const dLogs = logs.filter((l) => l.workout === 'D');
     const sat = peek ? null : saturdaySituation();
+    hideD = weekCountsOutOf3(sat ? sat.key : shown.key);
     const satClosedSpan =
       sat && sat.kind === 'closed'
         ? (model.spans.find(
@@ -1051,7 +1060,7 @@ export function renderHome(): string {
             )
           : '';
       const openHasD = weekHasDFor(liveWeekDTarget(shown), model, dLogs);
-      weekLineText = weekCountLine(shown, openHasD, comingBack);
+      weekLineText = weekCountLine(shown, openHasD, comingBack, weekCountsOutOf3(shown.key));
       if (shown.span && shown.span.done.length === 0 && !openHasD) {
         // The week before the one that opened (a calendar week back from its start).
         const before = new Date(shown.span.openedAt);
@@ -1072,11 +1081,12 @@ export function renderHome(): string {
           weekWindowFor({ kind: 'span', key: satClosedSpan.key }, model)
         )
       );
+      const satOutOf3 = weekCountsOutOf3(satClosedSpan.key);
       weekLineText =
-        closedHasD || comingBack
-          ? weekCountLine({ span: satClosedSpan }, closedHasD, comingBack)
+        closedHasD || comingBack || satOutOf3
+          ? weekCountLine({ span: satClosedSpan }, closedHasD, comingBack, satOutOf3)
           : '3 of 4 · D left';
-      if (!closedHasD && !comingBack) upNextD = true;
+      if (!closedHasD && !comingBack && !satOutOf3) upNextD = true;
     }
     // v76: the Saturday before a round starts (no Saturday card): the week card head, strip and count
     // read the SAME week as the title (the one a session counts for), not the pending next one.
@@ -1087,6 +1097,7 @@ export function renderHome(): string {
           (sp) => sp.key.round === satBackKey.round && sp.key.week === satBackKey.week
         ) ?? null;
       weekCardHeadText = escapeHtml(`Week ${satBackKey.week}`);
+      hideD = weekCountsOutOf3(satBackKey);
       if (backSpan) {
         const backHasD = weekHasDFor({ span: backSpan }, model, dLogs);
         dotsHtml = renderCompletionWeekDots(
@@ -1096,7 +1107,12 @@ export function renderHome(): string {
             weekWindowFor({ kind: 'span', key: backSpan.key }, model)
           )
         );
-        weekLineText = weekCountLine({ span: backSpan }, backHasD, comingBack);
+        weekLineText = weekCountLine(
+          { span: backSpan },
+          backHasD,
+          comingBack,
+          weekCountsOutOf3(satBackKey)
+        );
       }
     }
     saturdayNote = '';
@@ -1159,7 +1175,10 @@ export function renderHome(): string {
     // phone only); after "Finish" a quiet link stays, and Up next offers what the week still lacks
     // (D) instead of 'A'. Not shown while peeking at an older week. (Sunday moves on by itself.)
     if (sat) {
-      const lettersLeft = [...sat.missing, ...(sat.hasD || comingBack ? [] : ['D'])];
+      const lettersLeft = [
+        ...sat.missing,
+        ...(sat.hasD || comingBack || weekCountsOutOf3(sat.key) ? [] : ['D']),
+      ];
       const leftWords =
         lettersLeft.length === 0
           ? ''
@@ -1275,16 +1294,17 @@ export function renderHome(): string {
       // says "of 4", and whether D rode inside this closing week too.
       const closedHasD = weekHasDFor({ span: doneTodayClosedSpan }, model, dLogs);
       doneCardLines = [
-        `Week ${doneTodayClosedSpan.key.week} done · ${closedHasD ? '4 of 4 ✓' : '3 of 4 · D optional'}`,
+        `Week ${doneTodayClosedSpan.key.week} done · ${weekCountsOutOf3(doneTodayClosedSpan.key) ? '3 of 3 ✓' : closedHasD ? '4 of 4 ✓' : '3 of 4 · D optional'}`,
         ...(nextLine ? [nextLine] : []),
       ];
     } else {
       const doneAbc = shown.span?.done.length ?? 0;
       const openHasD = weekHasDFor(liveWeekDTarget(shown), model, dLogs);
-      const done = doneAbc + (openHasD ? 1 : 0);
+      const outOf3 = weekCountsOutOf3(shown.key);
+      const done = outOf3 ? doneAbc : doneAbc + (openHasD ? 1 : 0);
       const missing = shown.span?.missing ?? (['A', 'B', 'C'] as const);
       doneCardLines = [
-        `${done} of 4 in Week ${shown.key.week}${missing.length ? ` · ${weekLeftWords(missing, openHasD, done, comingBack)}` : ''}`,
+        `${done} of ${outOf3 ? 3 : 4} in Week ${shown.key.week}${missing.length ? ` · ${weekLeftWords(missing, openHasD || outOf3, done, comingBack || outOf3)}` : ''}`,
       ];
     }
 
@@ -1357,7 +1377,7 @@ export function renderHome(): string {
 
     ${doneToday ? renderDoneTodayCard(doneToday, doneCardLines) : restTodayDay ? renderRecoveryDayCard(pick, restTodayDay.mode) : upNextD ? renderUpNextD() : renderUpNextHero(pick) + renderPreviewLink(pick)}
     ${chipsHtml}
-    ${renderWorkoutDChip(dDoneToday, comingBack)}
+    ${hideD ? '' : renderWorkoutDChip(dDoneToday, comingBack)}
 
     <div class="card week-card" id="open-weekly-review" role="button" tabindex="0" aria-label="Open weekly review for this week">
       <div class="week-card-head">

@@ -55,7 +55,7 @@ import {
   type ActiveSessionSnapshot,
 } from './state.js';
 import { ui } from './ui.js';
-import { DEFAULT_PATH } from './paths.js';
+import { defaultPathFor } from './paths.js';
 import { pathInForce } from './day-mode.js';
 import { requestRender } from './bus.js';
 import { moveFeelString, withOverrideFeel, type SteppedMove } from './move-feel.js';
@@ -395,7 +395,9 @@ export async function saveCompletedSession(): Promise<void> {
     sessionNote,
     liteDay: state.liteDay,
     // v73: the Round 3 time path (null on D and on any workout without paths).
-    sessionPath: w?.paths ? (pathInForce(state.sessionPath, state.dayMode) ?? DEFAULT_PATH) : null,
+    sessionPath: w?.paths
+      ? (pathInForce(state.sessionPath, state.dayMode) ?? defaultPathFor(w))
+      : null, // v77: C's no-tap Start is 60
     // v74: the "Not my best day?" pick (null on a normal day, on D and on Round 2).
     dayMode: w?.paths ? state.dayMode : null,
     // v48 · P5 (Sep 24 2026): "curl=easy@2kg;row=right@1kg" — only the parts

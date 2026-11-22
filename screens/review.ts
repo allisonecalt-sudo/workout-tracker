@@ -36,6 +36,7 @@ import {
   firstProgramSaturday,
 } from '../week-clock.js';
 import { sessionsAttributedTo } from '../program-week.js';
+import { weekCountsOutOf3 } from '../program.js';
 import { logsNewestFirst, renderSessionRow } from '../session-row.js';
 
 type WeekSession = {
@@ -234,6 +235,8 @@ function reviewCompletionPages(): WeekSpan[] {
 // already computes for this exact span (reviewWeekViewAt below) — one
 // D-detection, never a second one that could disagree with it.
 function completionReviewTitle(span: WeekSpan, hasD: boolean): string {
+  // v77: a week whose plan has C as the ride counts out of 3 (A, B, C); D is not in the number.
+  const outOf3 = weekCountsOutOf3(span.key);
   // No "R{n} ·" prefix — unlike the legacy title below, §2.4's own literal
   // strings ("Week 5 · Sep 26 – Oct 1 · 3 of 3", "since Sep 26") never carry
   // one; Home already dropped "Round 2" the same way (§2.4: "It shows on
@@ -244,9 +247,14 @@ function completionReviewTitle(span: WeekSpan, hasD: boolean): string {
     return `${week} · since ${formatWeekdayDate(span.openedAt)}`;
   }
   const range = formatWeekRange(new Date(span.openedAt), new Date(span.closedAt));
-  const done = span.done.length + (hasD ? 1 : 0);
-  const doneLine =
-    span.how === 'moved_on'
+  const done = span.done.length + (hasD && !outOf3 ? 1 : 0);
+  const doneLine = outOf3
+    ? span.how === 'moved_on'
+      ? `moved on at ${done} of 3`
+      : span.missing.length === 0
+        ? '3 of 3 ✓'
+        : `${done} of 3`
+    : span.how === 'moved_on'
       ? `moved on at ${done} of 4`
       : span.missing.length === 0
         ? hasD
@@ -325,7 +333,7 @@ function reviewWeekViewAt(offset: number): ReviewWeekView {
       sessions: getWeekSessionsForSpan(span),
       prevSessions: reviewSessionsAt(offset + 1),
       extraSessions,
-      countsD: true,
+      countsD: !weekCountsOutOf3(span.key),
       isLiveOpen: offset === 0 && span.closedAt === null,
     };
   }

@@ -52,7 +52,7 @@ import { bindClick, setVoiceBtnPlaying, showToast, wireHoldToSkip } from '../dom
 import { escapeHtml } from '../format.js';
 import { renderActionBar } from '../action-bar.js';
 import { flattenSteps, nextUndoneStep, type WorkoutStep } from '../step-list.js';
-import { DEFAULT_PATH } from '../paths.js';
+import { defaultPathFor } from '../paths.js';
 import { RIDE_NOTES, dayModeNote, pathInForce } from '../day-mode.js';
 import { setsPrescribed, holdSetsFace, formatHeldSeconds } from '../hold-sets.js';
 import { honestWallSitLogs } from '../viz.js';
@@ -1638,8 +1638,10 @@ function beginExercises(): void {
   endPreLogClockTick();
   // v73: Start without a path pick means 48 — kept on state so it is saved and
   // survives a close (only a workout that has paths).
-  if (state.sessionPath === null && getCurrentWorkout()?.paths) {
-    state.sessionPath = pathInForce(null, state.dayMode) ?? DEFAULT_PATH; // v74: an easy day is 38
+  const startWorkoutNow = getCurrentWorkout();
+  if (state.sessionPath === null && startWorkoutNow?.paths) {
+    // v74: an easy day is 38. v77: no tap = the workout's own default (C, the long ride, is 60).
+    state.sessionPath = pathInForce(null, state.dayMode) ?? defaultPathFor(startWorkoutNow);
   }
   state.screen = 'workout';
   state.currentRound = 1;

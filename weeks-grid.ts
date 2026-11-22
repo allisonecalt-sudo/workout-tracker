@@ -12,7 +12,7 @@
 // Shared layer: strings and numbers out, no DOM, never imports app.ts or a screen.
 
 import { COMPLETION_WEEKS_FROM, LEGACY_LAST_CLOSED_WEEK_INSTANT } from './week.js';
-import { getRoundFor } from './program.js';
+import { getRoundFor, weekCountsOutOf3 } from './program.js';
 import type { LogEntry } from './types.js';
 import {
   getProgramWeek,
@@ -174,8 +174,9 @@ export function buildWeekRows(logs: LogEntry[]): WeekRow[] {
           skipLabel: null,
           suffix: span.how === 'moved_on' ? 'moved on' : undefined,
           cutShort: span.how === 'sick' || span.how === 'round_ended',
-          displayValue: span.done.length + (hasD ? 1 : 0),
-          displayTarget: 4,
+          // v77: a week with C as the ride counts out of 3, D not in the number.
+          displayValue: span.done.length + (hasD && !weekCountsOutOf3(span.key) ? 1 : 0),
+          displayTarget: weekCountsOutOf3(span.key) ? 3 : 4,
           offset: (open ? 1 : 0) + (spans.length - 1 - i),
         },
       });
@@ -193,8 +194,8 @@ export function buildWeekRows(logs: LogEntry[]): WeekRow[] {
           skipped: false,
           skipLabel: null,
           suffix: 'open',
-          displayValue: open.done.length + (openHasD ? 1 : 0),
-          displayTarget: 4,
+          displayValue: open.done.length + (openHasD && !weekCountsOutOf3(open.key) ? 1 : 0),
+          displayTarget: weekCountsOutOf3(open.key) ? 3 : 4,
           offset: 0,
         },
       });

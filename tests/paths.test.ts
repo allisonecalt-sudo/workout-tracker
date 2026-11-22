@@ -39,9 +39,11 @@ test.describe('v73 — Round 3 Week 1 is the written plan', () => {
     expect(R3W1.label).toBe('Round 3 — Week 1 · new A/B/C, pick your path');
   });
 
-  test('Weeks 2+ are not written: Round 3 Week 2 repeats Week 1 (she decides each week)', () => {
-    expect(PROGRAM.filter((wp) => wp.round === 3).length).toBe(1);
-    expect(planForWeekKey({ round: 3, week: 2 }).repeatsWeek).toBe(1);
+  test('Week 1 stays as written; Round 3 Week 2 is its own row (v77) and Week 3 repeats it (she decides each week)', () => {
+    expect(PROGRAM.filter((wp) => wp.round === 3).length).toBe(2);
+    expect(planForWeekKey({ round: 3, week: 1 }).repeatsWeek).toBeNull();
+    expect(planForWeekKey({ round: 3, week: 2 }).repeatsWeek).toBeNull();
+    expect(planForWeekKey({ round: 3, week: 3 }).repeatsWeek).toBe(2);
   });
 
   for (const id of LETTERS) {

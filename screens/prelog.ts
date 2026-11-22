@@ -66,6 +66,7 @@ import {
   displayName,
   getCurrentWorkout,
   lastCardioLane,
+  planWorkoutForNow,
   tonightNames,
   workoutMinutesLabel,
 } from '../workout-now.js';
@@ -176,12 +177,21 @@ function renderPathPicker(w: Workout): string {
   const spec = w.paths;
   if (!spec) return '';
   const locked = state.dayMode === 'cold';
+  // v77: Workout C (the long ride) has no strength moves at any path: its chips say the ride + her
+  // stretches, never "5 moves". `w` is cut, but an empty `main` stays empty at every path.
+  const rideOnly = w.main.length === 0;
+  const planMoveCount = planWorkoutForNow()?.main.length ?? 5;
   const comingBack = !state.dayMode && comingBackActive(loadLogs(), loadRestDays());
   const chips = PATH_IDS.map((p) => {
     // v74: an EASY day locks the 38 path (it is the only one lit and the others are off).
     const on = locked ? p === '38' : state.sessionPath === p;
-    const moves = Math.min(PATH_MOVE_COUNT[p], 5);
-    return `<button class="path-chip${on ? ' path-chip-on' : ''}" type="button" data-path="${p}" aria-pressed="${on ? 'true' : 'false'}"${locked ? ' disabled' : ''}><span class="path-chip-main">${pathLabel(p)}</span><span class="path-chip-sub">ride ${spec.rideMin[p]} · ${moves} moves${p === '60' ? '+' : ''}</span></button>`;
+    // v77: A / B list 6 moves in Week 2 (38 = 3, 48 = 4, 60 = all 6 + the optional curl), 5 in Week 1:
+    // the chip counts the moves the plan row really has, not a fixed 5.
+    const moves = Math.min(PATH_MOVE_COUNT[p], planMoveCount);
+    const sub = rideOnly
+      ? `ride ${spec.rideMin[p]} · stretches`
+      : `ride ${spec.rideMin[p]} · ${moves} moves${p === '60' ? '+' : ''}`;
+    return `<button class="path-chip${on ? ' path-chip-on' : ''}" type="button" data-path="${p}" aria-pressed="${on ? 'true' : 'false'}"${locked ? ' disabled' : ''}><span class="path-chip-main">${pathLabel(p)}</span><span class="path-chip-sub">${sub}</span></button>`;
   }).join('');
   return `
     <div class="path-picker" id="path-picker" role="group" aria-label="Which path today?">
@@ -482,7 +492,10 @@ function renderWorkoutOverview(w: Workout): string {
       : []),
     { key: 'cooldown', label: 'Stretch', emoji: '🧘', items: w.cooldown },
   ];
+  // v77: Workout C (the long ride) has no strength moves: its empty Main row ("0") is not shown. Only a
+  // Round 3 workout (it has `paths`); Workout D keeps its old overview exactly as it was.
   const rows = phases
+    .filter((p) => p.items.length > 0 || p.key !== 'main' || !w.paths)
     .map((p) => {
       const count = p.items.length;
       // v46: the warm-up step is a three-way pick now (her Sep 24: "no more

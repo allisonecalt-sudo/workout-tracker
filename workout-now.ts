@@ -170,7 +170,8 @@ export function getCurrentWorkout(): Workout | null {
     : null;
 }
 
-function planWorkoutForNow(): Workout | null {
+/** v77: the plan row's workout for now BEFORE the path / day mode cut it (the pre-log chips count its moves). */
+export function planWorkoutForNow(): Workout | null {
   if (!state.selectedWorkout) return null;
   // v54 (Sep 27 2026): D is fixed, not week-programmed — resolve it straight
   // off getWorkoutD() and skip every plan/week lookup below (they're all

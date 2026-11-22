@@ -31,14 +31,15 @@ import { allSourceFiles, appSourceFiles, bundledSourceFiles, nextRoundNum } from
 // weeks" assertion in tests/screens/program-weeks.spec.ts reads the same number
 // (18): 11 round-1 weeks + R2 W1..W5 + R2 W6 (the Oct 10 light restart)
 // + R2 W7 (Oct 24, 35% of Week 5 — v65) + R2 W8 (Oct 31, 50% of Week 5 — v68)
-// + R2 W9 (Nov 7, 60% of Week 5 — v70) + R3 W1 (Nov 15, the new A/B/C — v73).
+// + R2 W9 (Nov 7, 60% of Week 5 — v70) + R3 W1 (Nov 15, the new A/B/C — v73)
+// + R3 W2 (Nov 22, C folds into A and B, C is the elliptical day — v77).
 // Adding a week = change this and that spec's text together.
-const PROGRAM_WEEK_COUNT = 21;
+const PROGRAM_WEEK_COUNT = 22;
 
 // v73 (Nov 11 2026): Round 3 starts on a SUNDAY by her call ("Round 3 starts Sun
-// Nov 15"), the one PROGRAM / ROUNDS date that is not a Saturday. Listed here by
+// Nov 15"), and so does its Week 2 (v77, Nov 22): the only PROGRAM / ROUNDS dates that are not a Saturday. Listed here by
 // date so any other Sunday (a typo) still fails the Saturday checks below.
-const SUNDAY_STARTS: ReadonlySet<string> = new Set(['2026-11-15']);
+const SUNDAY_STARTS: ReadonlySet<string> = new Set(['2026-11-15', '2026-11-22']);
 
 const PHASES: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
 const WORKOUT_IDS = ['A', 'B', 'C'] as const;

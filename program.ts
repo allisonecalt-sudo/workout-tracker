@@ -109,7 +109,13 @@ export type Workout = {
   // workoutForPath: 38 -> first 3, 48 -> first 4, 60 -> all + `optional`) and
   // the ride minutes (the 'Outdoor walk' step's reps). Absent = no picker
   // (every R1/R2 week, and Workout D).
-  paths?: { rideMin: Record<PathId, number>; optional?: Exercise[] };
+  paths?: {
+    rideMin: Record<PathId, number>;
+    optional?: Exercise[];
+    // v77 (Nov 22 2026): the path a no-tap Start means for THIS workout. Absent = the global 48
+    // (paths.ts DEFAULT_PATH). Workout C (the long ride) sets '60': her usual 45-min ride.
+    defaultPath?: PathId;
+  };
 };
 
 export type Phase = 'warmup' | 'main' | 'upperBack' | 'cooldown';
@@ -159,6 +165,11 @@ export type WeekPlan = {
   // the last week NOT marked light, so coming back from one doesn't badge every
   // move. Her note (Oct 27): "Why does squats say again tonight?"
   light?: true;
+  // v77 (Nov 22 2026): from Round 3 Week 2 on, Workout C is the elliptical day and D is no longer a
+  // to-do: the week counts out of 3 (A, B, C) and Home shows no D chip. Weeks before the flag read
+  // exactly as they always did ("N of 4", D shown). A later week with no row of its own repeats the
+  // highest earlier row (planForWeekKey), so it carries the flag along (`weekCountsOutOf3`).
+  cIsRide?: true;
   workouts: Record<WorkoutId, Workout>;
 };
 
@@ -2777,6 +2788,60 @@ const R3_COOLDOWN: Exercise[] = [
     return name === 'Neck stretch' ? { ...found, reps: '45 sec each side' } : found;
   }),
 ];
+// v77 (Nov 22 2026): the moves Round 3 Week 1 wrote inline are named once here, so Week 2's new A / B
+// can reuse the very same objects (names, reps, notes unchanged: voice notes, detail cards and
+// move_feel slugs key off the names). Same values as before, only lifted out of the Week 1 row.
+const R3_CHAIR_SQUAT: Exercise = {
+  name: 'Chair squat',
+  reps: '10–15 · sit back to a chair · 2 kg at the chest when easy',
+  notes:
+    'Sit back to a chair and stand up. Knees over the toes, not past. Hold 2 kg at your chest when it feels easy. ' +
+    R3_STRENGTH_NOTE,
+};
+const R3_INCLINE_PUSHUP: Exercise = {
+  name: 'Incline push-up on fists',
+  reps: '8–12 · hands on a counter, on fists',
+  notes:
+    'Hands on a counter, in fists, so the wrist stays straight. Body in one line, lower the chest toward the counter, push back up. No sagging in the low back.',
+};
+const R3_DEAD_BUG: Exercise = R3_EXISTING('Full dead bug', { reps: '6–8 each side' });
+const R3_HINGE: Exercise = R3_EXISTING('Bodyweight hip hinge', {
+  reps: '10–15 · holding 2 kg',
+  notes:
+    'Hinge at the hips, soft knees, flat back: hands slide down the thighs (holding 2 kg), feel it in the hamstrings and glutes. Do NOT round the low back. ' +
+    R3_STRENGTH_NOTE,
+});
+const R3_DB_ROW: Exercise = {
+  name: 'One-arm dumbbell row',
+  reps: '10–12 each side · 2 kg · other hand on a chair',
+  notes:
+    'Hinge forward with a flat back, one hand on a chair. Row the weight toward your hip, elbow close to your side, shoulder blade back. Lower slowly. Wrist straight.',
+};
+const R3_GLUTE_BRIDGES: Exercise = R3_EXISTING('Glute bridges', {
+  reps: '12–15 reps · 2-sec hold at top',
+});
+const R3_IWYT: Exercise = R3_EXISTING('IWYT raises', { reps: '6–8 each letter (I, W, Y, T)' });
+const R3_BIRD_DOG: Exercise = {
+  name: 'Bird dog',
+  reps: '6–8 each side · 3-sec hold',
+  notes:
+    'Hands and knees: opposite arm and leg reach out together, level with your body. Hold 3 sec, switch. Hands flat, or on fists if flat bothers the wrist. Hips square, neck long, no sagging.',
+};
+const R3_SPLIT_SQUAT: Exercise = R3_EXISTING('Supported split squat', {
+  reps: '8–10 each side · shallow, hold a chair',
+  // v73.1: Round 2's note was a wrist rule (fingertips only, no gripping) and a knee-ceiling
+  // rule; her wrist is fine now (Nov 11: "writs ti s good") and the pain rule is hers.
+  notes: R3_SPLIT_SQUAT_NOTE,
+  safety: R3_SPLIT_SQUAT_SAFETY,
+  detailKey: R3_SPLIT_SQUAT_DETAIL_KEY,
+});
+const R3_FLOOR_PRESS: Exercise = {
+  name: 'Floor press',
+  reps: '10–15 · 2 kg · thumbs facing in',
+  notes:
+    'Lying on the floor, knees bent, 2 kg in each hand. Thumbs face in. Press up, lower until the elbows touch the floor. Wrists straight. ' +
+    R3_STRENGTH_NOTE,
+};
 const R3_RIDE_MIN: Record<PathId, number> = { '38': 10, '48': 12, '60': 15 };
 const R3_DESCRIPTION = (what: string): string =>
   `${what} · pick your path (38 / 48 / 60 min) · 2 rounds · ~48 min`;
@@ -2792,24 +2857,7 @@ PROGRAM.push({
       name: 'Lower + Pull + Push',
       description: R3_DESCRIPTION('Chair squat, rows, push-up, dead bug'),
       warmup: [R3_RIDE, R3_PRIMER],
-      main: [
-        {
-          name: 'Chair squat',
-          reps: '10–15 · sit back to a chair · 2 kg at the chest when easy',
-          notes:
-            'Sit back to a chair and stand up. Knees over the toes, not past. Hold 2 kg at your chest when it feels easy. ' +
-            R3_STRENGTH_NOTE,
-        },
-        R3_BAND_ROW,
-        {
-          name: 'Incline push-up on fists',
-          reps: '8–12 · hands on a counter, on fists',
-          notes:
-            'Hands on a counter, in fists, so the wrist stays straight. Body in one line, lower the chest toward the counter, push back up. No sagging in the low back.',
-        },
-        R3_EXISTING('Full dead bug', { reps: '6–8 each side' }),
-        R3_PULL_APART,
-      ],
+      main: [R3_CHAIR_SQUAT, R3_BAND_ROW, R3_INCLINE_PUSHUP, R3_DEAD_BUG, R3_PULL_APART],
       cooldown: R3_COOLDOWN,
       rounds: 2,
       paths: { rideMin: R3_RIDE_MIN, optional: [R3_HAMMER_CURL] },
@@ -2819,28 +2867,7 @@ PROGRAM.push({
       name: 'Hinge + Pull + Glutes',
       description: R3_DESCRIPTION('Hip hinge, rows, bridges, bird dog'),
       warmup: [R3_RIDE, R3_PRIMER],
-      main: [
-        R3_EXISTING('Bodyweight hip hinge', {
-          reps: '10–15 · holding 2 kg',
-          notes:
-            'Hinge at the hips, soft knees, flat back: hands slide down the thighs (holding 2 kg), feel it in the hamstrings and glutes. Do NOT round the low back. ' +
-            R3_STRENGTH_NOTE,
-        }),
-        {
-          name: 'One-arm dumbbell row',
-          reps: '10–12 each side · 2 kg · other hand on a chair',
-          notes:
-            'Hinge forward with a flat back, one hand on a chair. Row the weight toward your hip, elbow close to your side, shoulder blade back. Lower slowly. Wrist straight.',
-        },
-        R3_EXISTING('Glute bridges', { reps: '12–15 reps · 2-sec hold at top' }),
-        R3_EXISTING('IWYT raises', { reps: '6–8 each letter (I, W, Y, T)' }),
-        {
-          name: 'Bird dog',
-          reps: '6–8 each side · 3-sec hold',
-          notes:
-            'Hands and knees: opposite arm and leg reach out together, level with your body. Hold 3 sec, switch. Hands flat, or on fists if flat bothers the wrist. Hips square, neck long, no sagging.',
-        },
-      ],
+      main: [R3_HINGE, R3_DB_ROW, R3_GLUTE_BRIDGES, R3_IWYT, R3_BIRD_DOG],
       cooldown: R3_COOLDOWN,
       rounds: 2,
       paths: { rideMin: R3_RIDE_MIN, optional: [R3_HAMMER_CURL] },
@@ -2851,22 +2878,9 @@ PROGRAM.push({
       description: R3_DESCRIPTION('Split squat, pull-apart, floor press, side plank'),
       warmup: [R3_RIDE, R3_PRIMER],
       main: [
-        R3_EXISTING('Supported split squat', {
-          reps: '8–10 each side · shallow, hold a chair',
-          // v73.1: Round 2's note was a wrist rule (fingertips only, no gripping) and a knee-ceiling
-          // rule; her wrist is fine now (Nov 11: "writs ti s good") and the pain rule is hers.
-          notes: R3_SPLIT_SQUAT_NOTE,
-          safety: R3_SPLIT_SQUAT_SAFETY,
-          detailKey: R3_SPLIT_SQUAT_DETAIL_KEY,
-        }),
+        R3_SPLIT_SQUAT,
         R3_PULL_APART,
-        {
-          name: 'Floor press',
-          reps: '10–15 · 2 kg · thumbs facing in',
-          notes:
-            'Lying on the floor, knees bent, 2 kg in each hand. Thumbs face in. Press up, lower until the elbows touch the floor. Wrists straight. ' +
-            R3_STRENGTH_NOTE,
-        },
+        R3_FLOOR_PRESS,
         {
           name: 'Side plank on knees',
           reps: '2 × 20 sec · left side, then right (15–25 s each is fine)',
@@ -2880,6 +2894,75 @@ PROGRAM.push({
       cooldown: R3_COOLDOWN,
       rounds: 2,
       paths: { rideMin: R3_RIDE_MIN, optional: [R3_HAMMER_CURL] },
+    },
+  },
+});
+
+// v77 (Nov 22 2026) — Round 3, Week 2: the new A / B / C. C folds into A and B and the elliptical day
+// becomes Workout C; D stops being a to-do (`cIsRide`).
+// WHAT: A = Lower + Pull + Push, B = Hinge + Pull + Push (6 moves each, in PRIORITY order: 38 = the
+// first 3, 48 = 4, 60 = all 6 + hammer curl). C = ONE long ride (20 / 30 / 45 min) and her stretches,
+// no strength moves, no primer, 1 round; its default path is 60 (her usual 45-min ride).
+// WHY: her design Sun Nov 22 2026 (second-brain self/health/research-2026-11-11-workout/README.md
+// section 10 v4), build spec projects/workout-tracker/R3-v77-SPEC-2026-11-22.md. Round 3 Week 1 above
+// stays EXACTLY as it was (history). Every move name is Week 1's (voice notes, detail cards, slugs).
+// Exported: screens/workout.ts shows a ride note only if day-mode.ts RIDE_NOTES lists it.
+export const R3W2_RIDE_NOTE =
+  'Ride first. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Stays 10 / 12 / 15 min: the long ride is Workout C.';
+const R3W2_RIDE: Exercise = { name: 'Outdoor walk', reps: '12 min', notes: R3W2_RIDE_NOTE };
+// Workout C's ride: the SAME exact name ('Outdoor walk') so the lane picker, the ride numbers, the ride
+// minutes and paths.ts all work as on A and B.
+export const R3W2_C_RIDE_NOTE =
+  'The long ride. Easy for the first 2–3 min, then a pace where you can talk in short sentences. Your usual is 45 min. It only grows when you decide, and only if your knee is fine the next morning.';
+const R3W2_C_RIDE: Exercise = { name: 'Outdoor walk', reps: '45 min', notes: R3W2_C_RIDE_NOTE };
+const R3W2_DESCRIPTION = (what: string): string =>
+  `${what} · pick your path (38 / 48 / 60 min) · 2 rounds · ~48 min`;
+
+PROGRAM.push({
+  round: 3,
+  weekNum: 2,
+  startsOn: '2026-11-22',
+  label: 'Round 3 — Week 2 · new A/B/C · C is the elliptical day',
+  cIsRide: true,
+  workouts: {
+    A: {
+      id: 'A',
+      name: 'Lower + Pull + Push',
+      description: R3W2_DESCRIPTION('Chair squat, rows, push-up, dead bug, bridges, pull-apart'),
+      warmup: [R3W2_RIDE, R3_PRIMER],
+      main: [
+        R3_CHAIR_SQUAT,
+        R3_BAND_ROW,
+        R3_INCLINE_PUSHUP,
+        R3_DEAD_BUG,
+        R3_GLUTE_BRIDGES,
+        R3_PULL_APART,
+      ],
+      cooldown: R3_COOLDOWN,
+      rounds: 2,
+      paths: { rideMin: R3_RIDE_MIN, optional: [R3_HAMMER_CURL] },
+    },
+    B: {
+      id: 'B',
+      name: 'Hinge + Pull + Push',
+      description: R3W2_DESCRIPTION('Hip hinge, rows, IWYT, floor press, bird dog, split squat'),
+      warmup: [R3W2_RIDE, R3_PRIMER],
+      main: [R3_HINGE, R3_DB_ROW, R3_IWYT, R3_FLOOR_PRESS, R3_BIRD_DOG, R3_SPLIT_SQUAT],
+      cooldown: R3_COOLDOWN,
+      rounds: 2,
+      paths: { rideMin: R3_RIDE_MIN, optional: [R3_HAMMER_CURL] },
+    },
+    C: {
+      id: 'C',
+      name: 'Elliptical + stretches',
+      // `~60 min` is rewritten to the path in force (paths.ts): ride + her stretches ≈ the path's minutes.
+      description:
+        'The long ride, then your stretches · pick your path (38 / 48 / 60 min) · ~60 min',
+      warmup: [R3W2_C_RIDE],
+      main: [],
+      cooldown: R3_COOLDOWN,
+      rounds: 1,
+      paths: { rideMin: { '38': 20, '48': 30, '60': 45 }, defaultPath: '60' },
     },
   },
 });
@@ -3306,6 +3389,12 @@ export function injectMarkerProgramWeek(
   // "Outdoor walk" → "Cardio" swap).
   if (firstEx) firstEx.label = marker;
   PROGRAM.push(clone);
+}
+
+/** v77: does this week count out of 3 (A, B, C) with no D? True when its plan row carries `cIsRide`
+ * (Round 3 Week 2 and any later week that repeats it). Every older week is false: it reads as before. */
+export function weekCountsOutOf3(key: WeekKey): boolean {
+  return planForWeekKey(key).plan.cIsRide === true;
 }
 
 /** The line Home shows when a round has no plan rows (see planForWeekKey). */
