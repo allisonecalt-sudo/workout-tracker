@@ -33,6 +33,7 @@ import type { WeekSpan, PendingWeek } from './week.js';
 import { sessionsAttributedTo } from './program-week.js';
 import {
   saturdayForOffset,
+  planForLog,
   getWeekPlan,
   isNowAfterCompletionLaunch,
   gapCountsBackToWeekKey,
@@ -148,7 +149,19 @@ function steppedMovesForWorkoutId(id: AnyWorkoutId | null): SteppedMove[] {
   // week reads like the very first encoded week above: no stepped line (every move still asks
   // its own Easy / Right / Hard, and "new tonight" still names what is new).
   if (prev && (prev.round ?? 1) !== (current.round ?? 1)) return [];
-  return steppedMovesForWorkout(prev?.workouts[id], current.workouts[id], excludeNames);
+  // v77 fix round: the first week C is the elliptical day, C is a NEW workout (one long ride + her
+  // stretches), not a step up from Week 1's strength C: no "Stepped this week: ride 45 min" line.
+  if (id === 'C' && current.cIsRide && !prev?.cIsRide) return [];
+  // v77 fix round: only moves in TODAY's path can have stepped (A at 48 listed glute bridges, move 5,
+  // which 48 does not show). Today's workout is cut to the path she is on (null = what Start means).
+  // Last week's moves stay whole (a move that merely changed place in the list is not new), but its
+  // ride is cut to the same path so the ride minutes compare like with like. No `paths` = untouched.
+  const path = pathInForce(state.sessionPath, state.dayMode);
+  const today = workoutForPath(current.workouts[id], path);
+  const before = prev
+    ? { ...prev.workouts[id], warmup: workoutForPath(prev.workouts[id], path).warmup }
+    : undefined;
+  return steppedMovesForWorkout(before, today, excludeNames);
 }
 
 // The live session's own stepped-moves list — the one call site every render
@@ -348,15 +361,32 @@ function isNewTonight(ex: Exercise, id: AnyWorkoutId): boolean {
   return !loadLogs().some((l) => l.workout === id && new Date(l.date).getTime() >= startMs);
 }
 
-function wasInEarlierWeek(name: string): boolean {
-  const idx = PROGRAM.indexOf(getWeekPlan());
-  if (idx <= 0) return false;
+// v77 fix round (Nov 22 2026): "again" / "back" must be TRUE. It used to mean "the move sat in ANY
+// earlier PLAN row", so a move she had never done (floor press, only ever written into Week 1's
+// Workout C, which she never logged) read "Again tonight". Now a move is a return only if it was in the
+// plan of a session she actually LOGGED: each logged A / B / C session is resolved to the plan it was
+// done under (planForLog: its week key, or its date before the completion launch), cut to the time path
+// she picked that day (a 38-min session did not do move 5), and the names in it are what she has done.
+// Never done = it reads as new. Cached on the logs' own ids / dates / paths (it runs per move per render).
+let doneMovesCache: { key: string; names: Set<string> } | null = null;
+function movesSheHasDone(): Set<string> {
+  const logs = loadLogs().filter((l) => l.workout !== 'D');
+  const key = logs
+    .map((l) => `${l.id ?? ''}|${l.date}|${l.workout}|${l.sessionPath ?? ''}`)
+    .join(';');
+  if (doneMovesCache && doneMovesCache.key === key) return doneMovesCache.names;
+  const names = new Set<string>();
   const phases: Phase[] = ['warmup', 'main', 'upperBack', 'cooldown'];
-  return PROGRAM.slice(0, idx).some((week) =>
-    (['A', 'B', 'C'] as WorkoutId[]).some((wid) =>
-      phases.some((p) => (week.workouts[wid][p] ?? []).some((e) => e.name === name))
-    )
-  );
+  for (const l of logs) {
+    const done = workoutForPath(planForLog(l), l.sessionPath ?? null);
+    for (const p of phases) for (const e of done[p] ?? []) names.add(e.name);
+  }
+  doneMovesCache = { key, names };
+  return names;
+}
+
+function wasInEarlierWeek(name: string): boolean {
+  return movesSheHasDone().has(name);
 }
 
 export function tonightKind(ex: Exercise, id: AnyWorkoutId): TonightKind | null {

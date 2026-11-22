@@ -19,8 +19,15 @@ import {
   type Workout,
   type WorkoutId,
 } from '../program';
-import { defaultPathFor, workoutForPath } from '../paths';
-import { applyDayMode, RIDE_NOTES, comingBackActive, type DayMode } from '../day-mode';
+import { defaultPathFor, isRideDay, workoutForPath } from '../paths';
+import {
+  applyDayMode,
+  RIDE_NOTES,
+  comingBackActive,
+  dayModeNote,
+  DAY_MODE_SHORT,
+  type DayMode,
+} from '../day-mode';
 import { weekCountLine } from '../week-d';
 import { walkWeeks, type SessionLite } from '../week';
 import { ellipticalRideRecords } from '../cardio-notes';
@@ -225,8 +232,9 @@ test.describe('v77 — the day modes on C (nothing crashes; what each one does)'
   test('back: the ride keeps its minutes and its note gets the back-day line', () => {
     const w = c('back');
     expect(ride(w).reps).toBe('45 min');
+    // v77 fix round: on C the back-day line is the research line, exactly
     expect(ride(w).notes).toBe(
-      `${R3W2_C_RIDE_NOTE} If standing tall hurts, use the walk lane for 5–10 min instead.`
+      'Back day: ride if standing tall on it is comfortable. If not, switch to a 5–10 min walk.'
     );
     expect(RIDE_NOTES).toContain(ride(w).notes);
     expect(w.main).toEqual([]);
@@ -253,7 +261,8 @@ test.describe('v77 — the day modes on C (nothing crashes; what each one does)'
   });
 
   test('every ride note C and A / B can show is on the allow-list the ride page reads', () => {
-    for (const note of [R3_RIDE_NOTE, R3W2_RIDE_NOTE, R3W2_C_RIDE_NOTE]) {
+    expect(RIDE_NOTES).toContain(R3W2_C_RIDE_NOTE);
+    for (const note of [R3_RIDE_NOTE, R3W2_RIDE_NOTE]) {
       expect(RIDE_NOTES).toContain(note);
       expect(RIDE_NOTES).toContain(
         `${note} If standing tall hurts, use the walk lane for 5–10 min instead.`
@@ -274,6 +283,26 @@ test.describe('v77 — the day modes on C (nothing crashes; what each one does)'
       sessionPath: '38',
     } as LogEntry;
     expect(comingBackActive([easy], [])).toBe(true);
+  });
+});
+
+test.describe('v77 fix round — a ride day says no reps', () => {
+  test('dayModeNote on a ride day never says "About half your usual reps" (any mode); a lifting day still does', () => {
+    for (const mode of ['back', 'knee', 'wrist'] as const) {
+      expect(dayModeNote(mode, true)).not.toContain('About half');
+      expect(dayModeNote(mode, true)).toBe(DAY_MODE_SHORT[mode]);
+      expect(dayModeNote(mode)).toContain('About half your usual reps');
+    }
+    expect(dayModeNote('cold', true)).toBe(dayModeNote('cold'));
+  });
+
+  test('isRideDay: C in Week 2 at every path; never A, B, Week 1 C, or D', () => {
+    for (const p of ['38', '48', '60'] as const) {
+      expect(isRideDay(workoutForPath(W2.workouts.C, p))).toBe(true);
+    }
+    expect(isRideDay(W2.workouts.A)).toBe(false);
+    expect(isRideDay(W2.workouts.B)).toBe(false);
+    expect(isRideDay(W1.workouts.C)).toBe(false);
   });
 });
 

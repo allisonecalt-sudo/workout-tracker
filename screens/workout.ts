@@ -52,7 +52,7 @@ import { bindClick, setVoiceBtnPlaying, showToast, wireHoldToSkip } from '../dom
 import { escapeHtml } from '../format.js';
 import { renderActionBar } from '../action-bar.js';
 import { flattenSteps, nextUndoneStep, type WorkoutStep } from '../step-list.js';
-import { defaultPathFor } from '../paths.js';
+import { defaultPathFor, isRideDay } from '../paths.js';
 import { RIDE_NOTES, dayModeNote, pathInForce } from '../day-mode.js';
 import { setsPrescribed, holdSetsFace, formatHeldSeconds } from '../hold-sets.js';
 import { honestWallSitLogs } from '../viz.js';
@@ -444,7 +444,8 @@ function swapLineHtml(ex: Exercise | null): string {
   return text ? `<p class="swap-line" id="swap-line">${escapeHtml(text)}</p>` : '';
 }
 function dayModeLineHtml(): string {
-  const note = dayModeNote(state.dayMode);
+  const cur = getCurrentWorkout();
+  const note = dayModeNote(state.dayMode, cur !== null && isRideDay(cur));
   return note ? `<p class="day-mode-line" id="day-mode-line">${escapeHtml(note)}</p>` : '';
 }
 

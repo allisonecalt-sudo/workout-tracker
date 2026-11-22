@@ -33,6 +33,12 @@ export function defaultPathFor(w: Workout | null | undefined): PathId {
   return w?.paths?.defaultPath ?? DEFAULT_PATH;
 }
 
+/** v77 fix round: a ride day = a Round 3 workout with no strength moves (Workout C from Round 3 Week 2:
+ * the long ride + her stretches). It reads "Ride" not "Warm-up", has no reps line and never "steps". */
+export function isRideDay(w: Workout): boolean {
+  return w.paths !== undefined && w.main.length === 0;
+}
+
 /** How many of the priority-ordered `main` moves each path shows (60 = all). */
 export const PATH_MOVE_COUNT: Record<PathId, number> = { '38': 3, '48': 4, '60': Infinity };
 

@@ -137,11 +137,17 @@ const backRideNote = (base: string): string =>
 const KNEE_RIDE_NOTE =
   'Walk on flat ground at an easy pace, talking in short sentences. The elliptical sits this one out.';
 /** Every text the ride step can carry as a note (screens/workout.ts shows it under the ride). */
-const BASE_RIDE_NOTES: readonly string[] = [R3_RIDE_NOTE, R3W2_RIDE_NOTE, R3W2_C_RIDE_NOTE];
+/** v77 fix round (research section 11: "Ride OK if upright is comfortable, else a 5–10 min walk"): on Workout C,
+ * the long ride, a back day replaces the ride note with this one line. */
+export const BACK_C_RIDE_NOTE =
+  'Back day: ride if standing tall on it is comfortable. If not, switch to a 5–10 min walk.';
+const BASE_RIDE_NOTES: readonly string[] = [R3_RIDE_NOTE, R3W2_RIDE_NOTE];
 export const RIDE_NOTES: readonly string[] = [
   ...BASE_RIDE_NOTES,
+  R3W2_C_RIDE_NOTE,
   EASY_RIDE_NOTE,
   ...BASE_RIDE_NOTES.map(backRideNote),
+  BACK_C_RIDE_NOTE,
   KNEE_RIDE_NOTE,
 ];
 
@@ -293,7 +299,13 @@ const SWAPS: Record<SwapMode, Record<string, Swap>> = {
 function rideFor(mode: DayMode, ex: Exercise): Exercise {
   if (ex.name !== 'Outdoor walk') return ex;
   if (mode === 'cold') return { ...ex, notes: EASY_RIDE_NOTE };
-  if (mode === 'back') return { ...ex, notes: backRideNote(ex.notes ?? R3_RIDE_NOTE) };
+  if (mode === 'back') {
+    return {
+      ...ex,
+      notes:
+        ex.notes === R3W2_C_RIDE_NOTE ? BACK_C_RIDE_NOTE : backRideNote(ex.notes ?? R3_RIDE_NOTE),
+    };
+  }
   if (mode === 'knee') {
     return {
       ...ex,
@@ -370,8 +382,10 @@ export function applyDayMode(w: Workout, mode: DayMode | null): Workout {
 }
 
 /** The one line on the workout screen and the pre-workout card for a working (non-rest) day. */
-export function dayModeNote(mode: DayMode | null): string {
-  if (isSwapMode(mode)) return `${DAY_MODE_SHORT[mode]} · ${SWAP_NOTE}`;
+export function dayModeNote(mode: DayMode | null, rideDay = false): string {
+  // v77 fix round: Workout C (a ride day) has no reps, so no "About half your usual reps" on any mode.
+  if (isSwapMode(mode))
+    return rideDay ? DAY_MODE_SHORT[mode] : `${DAY_MODE_SHORT[mode]} · ${SWAP_NOTE}`;
   if (mode === 'cold') return `${DAY_MODE_SHORT[mode]} · 38 min path · 1 round · effort 5–6`;
   return '';
 }

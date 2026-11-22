@@ -13,6 +13,7 @@
 import { state } from './state.js';
 import type { Exercise, Workout } from './program.js';
 import { reachedCount, flattenSteps } from './step-list.js';
+import { isRideDay } from './paths.js';
 import { renderActionBar } from './action-bar.js';
 import { effectiveRounds, toStepWorkout, canGoBack, currentStepKey } from './workout-now.js';
 
@@ -85,7 +86,7 @@ function phaseLabelFor(w: Workout): string {
   const base =
     // v55 (Sep 27 2026) — CHECK N1/N3: Workout D's one step is the ride
     // itself, not a "Warm-up" leading up to something else. "Ride · 1 of 1".
-    w.id === 'D' && state.currentPhase === 'warmup'
+    (w.id === 'D' || isRideDay(w)) && state.currentPhase === 'warmup'
       ? 'Ride'
       : state.currentPhase === 'main'
         ? `Main · Round ${state.currentRound} of ${effectiveRounds(w)}`

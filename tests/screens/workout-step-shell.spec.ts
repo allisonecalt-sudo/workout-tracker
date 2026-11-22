@@ -239,7 +239,12 @@ test.describe('v48 P2 shell', () => {
     page,
   }) => {
     await mockDate(page, TUE_WEEK4);
-    await seedLogs(page, [aLog('last-week-a', '2026-09-17T15:00:00.000Z', 43)]);
+    // v77 fix round: "again" means she LOGGED it. The 1 kg curl sat in Round 1 Week 7's plan, so an A she
+    // logged in that week (Jun 15) is what makes it a return; without it the curl would read "New tonight".
+    await seedLogs(page, [
+      aLog('r1w7-a', '2026-06-15T15:00:00.000Z', 43),
+      aLog('last-week-a', '2026-09-17T15:00:00.000Z', 43),
+    ]);
     await page.goto('/');
     await startA(page);
     await goToStep(page, 'Biceps curl'); // v55 fix r2: label, not the raw name key
@@ -259,6 +264,8 @@ test.describe('v48 P2 shell', () => {
       aLog('light-week-a', '2026-10-13T15:00:00.000Z', 0),
       { ...aLog('light-week-b', '2026-10-15T15:00:00.000Z', 0), workout: 'B' },
       { ...aLog('light-week-c', '2026-10-18T15:00:00.000Z', 0), workout: 'C' },
+      // v77 fix round: a move is "again" only if she logged it - Round 1 Week 1's A had the squats.
+      aLog('r1w1-a', '2026-05-04T15:00:00.000Z', 0),
     ]);
     await page.goto('/');
     await startA(page);

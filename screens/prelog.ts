@@ -43,7 +43,7 @@ import { bindClick } from '../dom.js';
 import { escapeHtml } from '../format.js';
 import { formatClock, combineDateAndClock } from '../dates.js';
 import { renderActionBar } from '../action-bar.js';
-import { PATH_IDS, PATH_MOVE_COUNT, isPathId, pathLabel } from '../paths.js';
+import { PATH_IDS, PATH_MOVE_COUNT, isPathId, isRideDay, pathLabel } from '../paths.js';
 import { painFromFeel } from '../pain-feel.js';
 import { steppedLineText, steppedLineFor, type SteppedMove } from '../move-feel.js';
 import { planForWeekKey, type Exercise, type Workout, type Phase } from '../program.js';
@@ -179,7 +179,7 @@ function renderPathPicker(w: Workout): string {
   const locked = state.dayMode === 'cold';
   // v77: Workout C (the long ride) has no strength moves at any path: its chips say the ride + her
   // stretches, never "5 moves". `w` is cut, but an empty `main` stays empty at every path.
-  const rideOnly = w.main.length === 0;
+  const rideOnly = isRideDay(w);
   const planMoveCount = planWorkoutForNow()?.main.length ?? 5;
   const comingBack = !state.dayMode && comingBackActive(loadLogs(), loadRestDays());
   const chips = PATH_IDS.map((p) => {
@@ -272,7 +272,7 @@ function renderDayCard(w: Workout): string {
   const lead = mode === 'cold' ? `<p class="day-card-text">${escapeHtml(EASY_CARD)}</p>` : '';
   return `
     <div class="card day-card" id="day-card">
-      <div class="day-card-title">${escapeHtml(dayModeNote(mode))}</div>
+      <div class="day-card-title">${escapeHtml(dayModeNote(mode, isRideDay(w)))}</div>
       ${lead}
       ${swaps ? `<ul class="day-card-swaps">${swaps}</ul>` : ''}
       ${check}

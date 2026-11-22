@@ -1305,6 +1305,16 @@ v76 - the empty-week card › Saturday before it: no card yet
 v76 - the empty-week card › Sunday, nothing done: the card asks and the week does not auto-advance
 v76 - the empty-week card › a session logged instead: no card, still Week 1
 v76 - the empty-week card › tap: a week_moves row is written, Week 2 starts, and Undo brings Week 1 back
+v77 fix round — a ride day says no reps › dayModeNote on a ride day never says "About half your usual reps" (any mode); a lifting day still does
+v77 fix round — a ride day says no reps › isRideDay: C in Week 2 at every path; never A, B, Week 1 C, or D
+v77 fix round › "Stepped this week" lists only moves in today's path
+v77 fix round › "again" is true: floor press and split squat were never logged, so B reads them as NEW
+v77 fix round › ...and once she has LOGGED Week 1's C (it had both), B reads them "again"
+v77 fix round › A on a back day still says "About half your usual reps" (lifting days unchanged)
+v77 fix round › C (a new workout, not a step): no "Stepped this week" line at any path
+v77 fix round › C: the ride page says "Ride", not "Warm-up", and so does the ride-numbers page
+v77 fix round › a move cut by the path she logged is not "done": a 38-path C never did the floor press
+v77 fix round › day modes on C: no "About half your usual reps" line anywhere; back day has the one ride line
 v77 — A and B in Week 2 › A and B chips say 3 / 4 / 6+ moves; the 60 path lists all six and the curl
 v77 — A and B in Week 2 › Week 1's own A still lists its five moves with the 5-move chip (nothing changed for old weeks)
 v77 — C's ride counts in the week's ride minutes › a C log with an elliptical ride lands in its week row beside A and B

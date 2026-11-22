@@ -94,7 +94,12 @@ test.describe('v48 P4 home', () => {
       page,
     }) => {
       await mockDate(page, THU_WEEK4);
-      await seedLogs(page, thirtyNine());
+      // v77 fix round: "again" means she LOGGED it: the arm moves sat in Round 1 Week 7, so one logged A from
+      // that week (Jun 15) is part of her history here.
+      await seedLogs(page, [
+        ...thirtyNine(),
+        { ...thirtyNine()[0]!, id: 'r1w7-a', date: '2026-06-15T15:00:00.000Z', workout: 'A' },
+      ]);
       await page.goto('/');
       const hero = page.locator('button.workout-card.workout-card-pick[data-workout="A"]');
       await expect(hero).toContainText('Up next');
@@ -249,6 +254,10 @@ test.describe('v48 P4 home', () => {
     context,
   }) => {
     await movableClock(page, TUE_WEEK4);
+    // v77 fix round: the arm moves are returns only because she logged Round 1 Week 7 (Jun 15).
+    await seedLogs(page, [
+      { ...thirtyNine()[0]!, id: 'r1w7-a', date: '2026-06-15T15:00:00.000Z', workout: 'A' },
+    ]);
     await page.goto('/');
     await page.locator('button[data-workout="A"]').click();
     await page.locator('#begin').click();

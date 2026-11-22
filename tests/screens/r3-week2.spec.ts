@@ -291,3 +291,126 @@ test.describe('v77 — A and B in Week 2', () => {
     ]);
   });
 });
+
+// ---- v77 fix round (Nov 22 2026): the blind check's five fixes -------------------------------------
+test.describe('v77 fix round', () => {
+  test.use({ viewport: { width: 412, height: 915 } });
+
+  const meta = (page: Page) => page.locator('.prelog-meta');
+
+  test('"again" is true: floor press and split squat were never logged, so B reads them as NEW', async ({
+    page,
+  }) => {
+    await open(page, SUN_W2, WEEK1);
+    await page.locator('button[data-workout="B"]').first().click();
+    await page.locator('[data-path="60"]').click();
+    await expect(meta(page)).toContainText('new tonight:');
+    await expect(meta(page)).toContainText('floor press');
+    await expect(meta(page)).toContainText('supported split squat');
+    await expect(meta(page)).not.toContainText('again');
+  });
+
+  test('...and once she has LOGGED Week 1\'s C (it had both), B reads them "again"', async ({
+    page,
+  }) => {
+    await open(page, SUN_W2, [...WEEK1, row('c1', '2026-11-20T17:00:00.000Z', 'C')]);
+    await page.locator('button[data-workout="B"]').first().click();
+    await page.locator('[data-path="60"]').click();
+    await expect(meta(page)).toContainText('again: floor press · supported split squat');
+    await expect(meta(page)).toContainText('new tonight: hammer curl');
+  });
+
+  test('a move cut by the path she logged is not "done": a 38-path C never did the floor press', async ({
+    page,
+  }) => {
+    // Week 1's C at 38 = split squat, pull-apart, floor press (3 moves) -> floor press WAS done;
+    // use the 38 path of Week 1's B to prove cutting: bird dog is move 5, so it was not done at 38.
+    await open(page, SUN_W2, [row('b0', '2026-11-19T17:00:00.000Z', 'B', { sessionPath: '38' })]);
+    await page.locator('button[data-workout="A"]').first().click();
+    await page.locator('[data-path="60"]').click();
+    // glute bridges (Week 1 B, move 3) were done at 38: "again"; the rest of A is as before
+    await expect(meta(page)).toContainText('again: glute bridges');
+  });
+
+  test('C: the ride page says "Ride", not "Warm-up", and so does the ride-numbers page', async ({
+    page,
+  }) => {
+    await open(page, SUN_W2, WEEK1);
+    await page.locator('button[data-workout="C"]').first().click();
+    await page.locator('#begin').click();
+    await expect(page.locator('.round-indicator')).toHaveText('Ride');
+    await expect(page.locator('#app')).not.toContainText('Warm-up');
+    await page.locator('#ww-elliptical').click();
+    await expect(page.locator('.round-indicator')).toHaveText('Ride');
+    await page.locator('#next').click();
+    await expect(page.locator('#ride-numbers-skip')).toBeVisible();
+    await expect(page.locator('.round-indicator')).toHaveText('Ride');
+    await expect(page.locator('#app')).not.toContainText('Warm-up');
+  });
+
+  test('"Stepped this week" lists only moves in today\'s path', async ({ page }) => {
+    await open(page, SUN_W2, WEEK1);
+    // A: glute bridges is move 5, so at 48 (and 38) nothing stepped; at 60 it did
+    await page.locator('button[data-workout="A"]').first().click();
+    await expect(page.locator('#app')).not.toContainText('Stepped this week');
+    await page.locator('[data-path="38"]').click();
+    await expect(page.locator('#app')).not.toContainText('Stepped this week');
+    await page.locator('[data-path="60"]').click();
+    await expect(page.locator('#app')).toContainText('Stepped this week: glute bridges 12–15');
+    // B: floor press is move 4 (in 48), split squat move 6 (60 only)
+    await page.goto('/');
+    await page.locator('button[data-workout="B"]').first().click();
+    await page.locator('[data-path="48"]').click();
+    await expect(page.locator('#app')).toContainText('Stepped this week: floor press 10–15');
+    await expect(page.locator('#app')).not.toContainText('more');
+    await page.locator('[data-path="38"]').click();
+    await expect(page.locator('#app')).not.toContainText('Stepped this week');
+    await page.locator('[data-path="60"]').click();
+    await expect(page.locator('#app')).toContainText('+1 more');
+  });
+
+  test('C (a new workout, not a step): no "Stepped this week" line at any path', async ({
+    page,
+  }) => {
+    await open(page, SUN_W2, WEEK1);
+    await page.locator('button[data-workout="C"]').first().click();
+    for (const p of ['38', '48', '60']) {
+      await page.locator(`[data-path="${p}"]`).click();
+      await expect(page.locator('#app')).not.toContainText('Stepped this week');
+    }
+  });
+
+  test('day modes on C: no "About half your usual reps" line anywhere; back day has the one ride line', async ({
+    page,
+  }) => {
+    for (const mode of ['back', 'knee', 'wrist', 'cold']) {
+      await open(page, SUN_W2, WEEK1);
+      await page.locator('button[data-workout="C"]').first().click();
+      await page.locator('#day-link').click();
+      await page.locator(`[data-day-mode="${mode}"]`).click();
+      await expect(page.locator('#app')).not.toContainText('About half');
+      await page.locator('#begin').click();
+      await expect(page.locator('#app')).not.toContainText('About half');
+      if (mode === 'back') {
+        await expect(page.locator('.ride-note')).toHaveText(
+          'Back day: ride if standing tall on it is comfortable. If not, switch to a 5–10 min walk.'
+        );
+        await expect(page.locator('#app')).not.toContainText('The long ride.');
+      }
+      if (mode === 'knee')
+        await expect(page.locator('#app')).toContainText('the walk lane instead');
+      await page.goto('/');
+      await page.evaluate(() => sessionStorage.clear());
+    }
+  });
+
+  test('A on a back day still says "About half your usual reps" (lifting days unchanged)', async ({
+    page,
+  }) => {
+    await open(page, SUN_W2, WEEK1);
+    await page.locator('button[data-workout="A"]').first().click();
+    await page.locator('#day-link').click();
+    await page.locator('[data-day-mode="back"]').click();
+    await expect(page.locator('#app')).toContainText('About half your usual reps');
+  });
+});
